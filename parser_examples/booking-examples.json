@@ -1,0 +1,890 @@
+[
+  {
+    "category": "MNG airport arrival",
+    "id": "mng-whatsapp-alson-sq377",
+    "input": "[11/5/26, 13:33:10] Alson Chua UOB: Hi kindly arrange airport pick up to home on 14 May Thursday 0740 SQ377. Thank you\n\n[11/5/26, 13:33:16] Alson Chua UOB: Lim Yeow Beng",
+    "expected": {
+      "name": "Lim Yeow Beng",
+      "company": "UOB",
+      "booker": "Alson Chua",
+      "bookingType": "MNG",
+      "time": "0740hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "home",
+      "flight": "SQ377",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "mng-bny-rohan-arrival",
+    "input": "[12/5/26, 09:12:01] Nicole Yap BNY: arrival pickup 0815 SQ322 for Mr Rohan Singh from Changi Airport T1 to Ritz Carlton",
+    "expected": {
+      "name": "Mr Rohan Singh",
+      "company": "BNY",
+      "booker": "Nicole Yap",
+      "bookingType": "MNG",
+      "time": "0815hrs",
+      "pickup": "Changi Airport T1",
+      "dropoff": "Ritz Carlton",
+      "flight": "SQ322",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "mng-clara-meet-greet",
+    "input": "MNG for Ms Clara Teo 0930hrs flight SQ11 from Changi Airport T3 to Fullerton Hotel",
+    "expected": {
+      "name": "Ms Clara Teo",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "0930hrs",
+      "pickup": "Changi Airport T3",
+      "dropoff": "Fullerton Hotel",
+      "flight": "SQ11",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "mng-vinu-direct-quoted-child-seat",
+    "input": "PG961 > 61 Grange Road\n\nMr. Vinu. $80 + $10\n\n8mth old child seat",
+    "expected": {
+      "name": "Mr Vinu",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "pickup": "Changi Airport",
+      "dropoff": "61 Grange Road",
+      "flight": "PG961",
+      "vehicle": "",
+      "childSeatCount": "1",
+      "childSeatType": "infant seat / 8mth old",
+      "customerPriceOverride": "90",
+      "customerPriceOverrideReason": "Parsed from message: $80 + $10"
+    }
+  },
+  {
+    "category": "DEP airport departure",
+    "id": "dep-sarah-tan",
+    "input": "Departure transfer for Sarah Tan on 15 May 2026 7:30pm from Ritz Carlton to Changi Airport T2.",
+    "expected": {
+      "name": "Sarah Tan",
+      "company": "",
+      "booker": "",
+      "bookingType": "DEP",
+      "time": "1930hrs",
+      "pickup": "Ritz Carlton",
+      "dropoff": "Changi Airport T2",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DEP airport departure",
+    "id": "dep-mr-koh-shorthand",
+    "input": "DEP for Mr Koh 0630 frm St Regis to arpt T2",
+    "expected": {
+      "name": "Mr Koh",
+      "company": "",
+      "booker": "",
+      "bookingType": "DEP",
+      "time": "0630hrs",
+      "pickup": "St Regis",
+      "dropoff": "Changi Airport T2",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DEP airport departure",
+    "id": "dep-whatsapp-shiseido",
+    "input": "[13/5/26, 18:22:04] Sharron Shiseido: kindly arrange departure for Ms Aiko Tanaka 2215 from Four Seasons to Changi Airport T1",
+    "expected": {
+      "name": "Ms Aiko Tanaka",
+      "company": "Shiseido",
+      "booker": "Sharron",
+      "bookingType": "DEP",
+      "time": "2215hrs",
+      "pickup": "Four Seasons",
+      "dropoff": "Changi Airport T1",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "TRF transfer",
+    "id": "trf-michael-lee",
+    "input": "Transfer for Michael Lee on 17 May 2026 1430 from Marina Bay Sands to Fullerton Hotel.",
+    "expected": {
+      "name": "Michael Lee",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "1430hrs",
+      "pickup": "Marina Bay Sands",
+      "dropoff": "Fullerton Hotel",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "TRF transfer",
+    "id": "trf-arrow-route",
+    "input": "TRF for Priya Shah 1145hrs Capella Singapore -> National Gallery Singapore",
+    "expected": {
+      "name": "Priya Shah",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "1145hrs",
+      "pickup": "Capella Singapore",
+      "dropoff": "National Gallery Singapore",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "TRF transfer",
+    "id": "trf-whatsapp-apollo",
+    "input": "[14/5/26, 10:01:17] Polly Wong Apollo: pls do transfer for Mr Jason Wu 1600 from One Raffles Quay to Sentosa Golf Club AVF",
+    "expected": {
+      "name": "Mr Jason Wu",
+      "company": "Apollo",
+      "booker": "Polly Wong",
+      "bookingType": "TRF",
+      "time": "1600hrs",
+      "pickup": "One Raffles Quay",
+      "dropoff": "Sentosa Golf Club",
+      "flight": "",
+      "vehicle": "AVF"
+    }
+  },
+  {
+    "category": "DSP/hourly/standby",
+    "id": "dsp-hourly-mr-ng",
+    "input": "DSP hourly for Mr Ng 0900 at Suntec back to office",
+    "expected": {
+      "name": "Mr Ng",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "0900hrs",
+      "pickup": "Suntec",
+      "dropoff": "office",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DSP/hourly/standby",
+    "id": "dsp-hourly-suling",
+    "input": "DSP hourly for Su Ling 1400 at Paragon, send her back to Nassim after meeting",
+    "expected": {
+      "name": "Su Ling",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "1400hrs",
+      "pickup": "Paragon",
+      "dropoff": "Nassim",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DSP/hourly/standby",
+    "id": "dsp-standby-mr-lee",
+    "input": "standby for Mr Lee 1730 at St Regis back to Holland Village",
+    "expected": {
+      "name": "Mr Lee",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "1730hrs",
+      "pickup": "St Regis",
+      "dropoff": "Holland Village",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "dinner/event standby",
+    "id": "event-dinner-richard-drew",
+    "input": "Hi William, please get Richard standby for Drew, there is a dinner in the evening 6pm at ION Orchard, #04-12A, 2 Orchard Turn, Singapore 238801 and please send him back to Ritz Carlton after the dinner. thanks.",
+    "expected": {
+      "name": "Drew",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "1800hrs",
+      "pickup": "ION Orchard",
+      "dropoff": "Ritz Carlton",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "dinner/event standby",
+    "id": "event-wedding-stregis",
+    "input": "standby for Mr Lee 1730 at St Regis for wedding event and send him back to Holland Village",
+    "expected": {
+      "name": "Mr Lee",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "1730hrs",
+      "pickup": "St Regis",
+      "dropoff": "Holland Village",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "dinner/event standby",
+    "id": "event-esplanade-stanley",
+    "input": "event standby for Mr Stanley 8pm at Esplanade, send boss back to office after",
+    "expected": {
+      "name": "Mr Stanley",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "2000hrs",
+      "pickup": "Esplanade",
+      "dropoff": "office",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "return trips",
+    "id": "return-gardens-ritz",
+    "input": "Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.",
+    "expected": {
+      "name": "Drew",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "",
+      "pickup": "Gardens by the Bay",
+      "dropoff": "Ritz Carlton",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "return trips",
+    "id": "return-mbs-capella",
+    "input": "Dinner standby for Ms Lim 1900 at MBS and back to Capella after dinner",
+    "expected": {
+      "name": "Ms Lim",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "1900hrs",
+      "pickup": "MBS",
+      "dropoff": "Capella",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "return trips",
+    "id": "return-boss-back-office",
+    "input": "event standby for Mr Stanley 8pm at Esplanade, send boss back to office after",
+    "expected": {
+      "name": "Mr Stanley",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "2000hrs",
+      "pickup": "Esplanade",
+      "dropoff": "office",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "multiline WhatsApp",
+    "id": "multi-labeled-fields",
+    "input": "[14/5/26, 08:11:00] June Aw Tiger: Booking please\nName: Mr Deep\nType: MNG\nTime: 1015\nFlight: SQ305\nPickup: Changi Airport T3\nDropoff: Mandarin Oriental",
+    "expected": {
+      "name": "Mr Deep",
+      "company": "Tiger",
+      "booker": "June Aw",
+      "bookingType": "MNG",
+      "time": "1015hrs",
+      "pickup": "Changi Airport T3",
+      "dropoff": "Mandarin Oriental",
+      "flight": "SQ305",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "multiline WhatsApp",
+    "id": "multi-name-next-line",
+    "input": "[14/5/26, 12:00:01] Alson Chua UOB: airport pick up to Fullerton 1540 SQ833\n\n[14/5/26, 12:00:04] Alson Chua UOB: Lim Yeow Beng",
+    "expected": {
+      "name": "Lim Yeow Beng",
+      "company": "UOB",
+      "booker": "Alson Chua",
+      "bookingType": "MNG",
+      "time": "1540hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "Fullerton",
+      "flight": "SQ833",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "multiline WhatsApp",
+    "id": "multi-driver-standby",
+    "input": "[15/5/26, 09:00:00] William Ops: get Richard standby for Drew\n6pm at ION Orchard\nback to Ritz Carlton",
+    "expected": {
+      "name": "Drew",
+      "company": "",
+      "booker": "William Ops",
+      "bookingType": "DSP",
+      "time": "1800hrs",
+      "pickup": "ION Orchard",
+      "dropoff": "Ritz Carlton",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "blank-line WhatsApp",
+    "id": "blank-line-alson-sq377",
+    "input": "[11/5/26, 13:33:10] Alson Chua UOB: Hi kindly arrange airport pick up to home on 14 May Thursday 0740 SQ377. Thank you\n\n[11/5/26, 13:33:16] Alson Chua UOB: Lim Yeow Beng",
+    "expected": {
+      "name": "Lim Yeow Beng",
+      "company": "UOB",
+      "booker": "Alson Chua",
+      "bookingType": "MNG",
+      "time": "0740hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "home",
+      "flight": "SQ377",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "blank-line WhatsApp",
+    "id": "blank-line-bny-arrival",
+    "input": "[12/5/26, 09:12:01] Nicole Yap BNY: arrival pickup 0815 SQ322 from Changi Airport T1 to Ritz Carlton\n\n[12/5/26, 09:12:09] Nicole Yap BNY: Mr Rohan Singh",
+    "expected": {
+      "name": "Mr Rohan Singh",
+      "company": "BNY",
+      "booker": "Nicole Yap",
+      "bookingType": "MNG",
+      "time": "0815hrs",
+      "pickup": "Changi Airport T1",
+      "dropoff": "Ritz Carlton",
+      "flight": "SQ322",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "blank-line WhatsApp",
+    "id": "blank-line-trf-apollo",
+    "input": "[14/5/26, 10:01:17] Polly Wong Apollo: pls do transfer 1600 from One Raffles Quay to Sentosa Golf Club AVF\n\n[14/5/26, 10:01:21] Polly Wong Apollo: Mr Jason Wu",
+    "expected": {
+      "name": "Mr Jason Wu",
+      "company": "Apollo",
+      "booker": "Polly Wong",
+      "bookingType": "TRF",
+      "time": "1600hrs",
+      "pickup": "One Raffles Quay",
+      "dropoff": "Sentosa Golf Club",
+      "flight": "",
+      "vehicle": "AVF"
+    }
+  },
+  {
+    "category": "copied group chats",
+    "id": "messy-forwarded-chat",
+    "input": "Forwarded many times\n[15/5/26, 10:15:11] Alice Tan Citi: can help airport pickup pls, 0845 BA15 to Raffles Hotel\n[15/5/26, 10:15:21] Alice Tan Citi: passenger Mr Oliver Smith",
+    "expected": {
+      "name": "Mr Oliver Smith",
+      "company": "Citi",
+      "booker": "Alice Tan",
+      "bookingType": "MNG",
+      "time": "0845hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "Raffles Hotel",
+      "flight": "BA15",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "copied group chats",
+    "id": "messy-with-chatter",
+    "input": "Client said urgent thanks\n[15/5/26, 11:00:00] Mei Lin DBS: pls arrange transfer for Victor Ng 1330 from MBFC to Jewel\nok?",
+    "expected": {
+      "name": "Victor Ng",
+      "company": "DBS",
+      "booker": "Mei Lin",
+      "bookingType": "TRF",
+      "time": "1330hrs",
+      "pickup": "MBFC",
+      "dropoff": "Jewel",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "copied group chats",
+    "id": "messy-group-chat",
+    "input": "[16/5/26, 07:00:00] Ops Team: noted\n[16/5/26, 07:01:00] Karen Lim OCBC: departure for Mr Chan 0900 from Tanglin Club to Changi Airport T4\n[16/5/26, 07:02:00] Driver: ok",
+    "expected": {
+      "name": "Mr Chan",
+      "company": "OCBC",
+      "booker": "Karen Lim",
+      "bookingType": "DEP",
+      "time": "0900hrs",
+      "pickup": "Tanglin Club",
+      "dropoff": "Changi Airport T4",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "shorthand messages",
+    "id": "short-trf",
+    "input": "trf for Ben Ong 1030 frm MBS to Raffles City",
+    "expected": {
+      "name": "Ben Ong",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "1030hrs",
+      "pickup": "MBS",
+      "dropoff": "Raffles City",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "shorthand messages",
+    "id": "short-arrival",
+    "input": "arr p/u for Hana Lee 0720 SQ12 arpt T3 to Sofitel",
+    "expected": {
+      "name": "Hana Lee",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "0720hrs",
+      "pickup": "Changi Airport T3",
+      "dropoff": "Sofitel",
+      "flight": "SQ12",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "shorthand messages",
+    "id": "short-dsp",
+    "input": "dsp for Mr Ho 2pm at Raffles Place back to Dempsey",
+    "expected": {
+      "name": "Mr Ho",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "1400hrs",
+      "pickup": "Raffles Place",
+      "dropoff": "Dempsey",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "typo messages",
+    "id": "typo-depature",
+    "input": "depature for Mr Wong 0715 from Conrad to airport T1",
+    "expected": {
+      "name": "Mr Wong",
+      "company": "",
+      "booker": "",
+      "bookingType": "DEP",
+      "time": "0715hrs",
+      "pickup": "Conrad",
+      "dropoff": "Changi Airport T1",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "typo messages",
+    "id": "typo-tranfer",
+    "input": "tranfer for Lisa Park 1500 from Ngee Ann City to Shangri La",
+    "expected": {
+      "name": "Lisa Park",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "1500hrs",
+      "pickup": "Ngee Ann City",
+      "dropoff": "Shangri La",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "typo messages",
+    "id": "typo-standy",
+    "input": "standy for Mr Adam 6pm at Suntec back to Ritz",
+    "expected": {
+      "name": "Mr Adam",
+      "company": "",
+      "booker": "",
+      "bookingType": "DSP",
+      "time": "1800hrs",
+      "pickup": "Suntec",
+      "dropoff": "Ritz",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "landmark-only locations",
+    "id": "landmark-orchard",
+    "input": "TRF for Rachel Lim 1200 ION Orchard -> Capella",
+    "expected": {
+      "name": "Rachel Lim",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "1200hrs",
+      "pickup": "ION Orchard",
+      "dropoff": "Capella",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "landmark-only locations",
+    "id": "landmark-jewel",
+    "input": "transfer for Mr Lau 1745 from Jewel to MBS",
+    "expected": {
+      "name": "Mr Lau",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "1745hrs",
+      "pickup": "Jewel",
+      "dropoff": "MBS",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "landmark-only locations",
+    "id": "landmark-sentosa",
+    "input": "for Audrey Tan 0915 from Sentosa Cove to National Gallery",
+    "expected": {
+      "name": "Audrey Tan",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "0915hrs",
+      "pickup": "Sentosa Cove",
+      "dropoff": "National Gallery",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "multiple passengers",
+    "id": "multi-passenger-couple",
+    "input": "arrival 1010 SQ21 for Mr and Mrs Tan from Changi Airport T3 to St Regis",
+    "expected": {
+      "name": "Mr and Mrs Tan",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "1010hrs",
+      "pickup": "Changi Airport T3",
+      "dropoff": "St Regis",
+      "flight": "SQ21",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "multiple passengers",
+    "id": "multi-passenger-family",
+    "input": "TRF passenger Lim Family 1300 from Botanic Gardens to Mandarin Oriental",
+    "expected": {
+      "name": "Lim Family",
+      "company": "",
+      "booker": "",
+      "bookingType": "TRF",
+      "time": "1300hrs",
+      "pickup": "Botanic Gardens",
+      "dropoff": "Mandarin Oriental",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "multiple passengers",
+    "id": "multi-passenger-next-lines",
+    "input": "[15/5/26, 20:00:00] Elaine HSBC: airport pickup 0645 SQ26 to Andaz\n[15/5/26, 20:00:10] Elaine HSBC: Mr Chan and daughter",
+    "expected": {
+      "name": "Mr Chan and daughter",
+      "company": "HSBC",
+      "booker": "Elaine",
+      "bookingType": "MNG",
+      "time": "0645hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "Andaz",
+      "flight": "SQ26",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "boss/booker separation",
+    "id": "boss-june-mrdeep",
+    "input": "[15/5/26, 08:45:00] June Aw Tiger: please arrange arrival for Mr Deep 0830 SQ305 from Changi Airport T3 to office",
+    "expected": {
+      "name": "Mr Deep",
+      "company": "Tiger",
+      "booker": "June Aw",
+      "bookingType": "MNG",
+      "time": "0830hrs",
+      "pickup": "Changi Airport T3",
+      "dropoff": "office",
+      "flight": "SQ305",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "boss/booker separation",
+    "id": "boss-nicole-rohan",
+    "input": "[15/5/26, 09:30:00] Nicole Yap BNY: departure for boss Mr Rohan Singh 2130 from BNY office to Changi Airport T2",
+    "expected": {
+      "name": "Mr Rohan Singh",
+      "company": "BNY",
+      "booker": "Nicole Yap",
+      "bookingType": "DEP",
+      "time": "2130hrs",
+      "pickup": "BNY office",
+      "dropoff": "Changi Airport T2",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "boss/booker separation",
+    "id": "boss-assistant-booker",
+    "input": "[15/5/26, 10:30:00] Assistant Amy ACME: transfer for CEO Ms Park 1100 from HQ to Four Seasons",
+    "expected": {
+      "name": "Ms Park",
+      "company": "ACME",
+      "booker": "Assistant Amy",
+      "bookingType": "TRF",
+      "time": "1100hrs",
+      "pickup": "HQ",
+      "dropoff": "Four Seasons",
+      "flight": "",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "boss/booker separation",
+    "id": "booker-brent-wife-arrival",
+    "input": "Good afternoon William, my name is Brent Johnston, and my mom Sheila forwarded me your contact information regarding booking a pickup for my wife and I this week. Can we reserve a pickup with you or your colleagues for Friday night this week? Our flight from Tokyo SQ 633 arrives at Changi at 11:05pm 15-May, and we will be staying at the V Bencoolen Hotel. Thank you so much.",
+    "expected": {
+      "name": "Brent Johnston and wife",
+      "company": "",
+      "booker": "Brent Johnston",
+      "bookingType": "MNG",
+      "date": "2026-05-15",
+      "time": "2305hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "V Bencoolen Hotel",
+      "flight": "SQ633",
+      "vehicle": "",
+      "pax": "2"
+    }
+  },
+  {
+    "category": "boss/booker separation",
+    "id": "booker-nicole-here-bny",
+    "referenceDate": "2026-05-14T12:00:00+08:00",
+    "input": "Hi William, Nicole here from BNY.\n\nPlease arrange AVF for Mr Rohan Singh tomorrow morning.\nPickup 7:15am from Fullerton Hotel to Changi Airport T3.\nFlight NH844.\n1 pax.",
+    "expected": {
+      "name": "Mr Rohan Singh",
+      "company": "BNY",
+      "booker": "Nicole",
+      "bookingType": "DEP",
+      "date": "2026-05-15",
+      "time": "0715hrs",
+      "pickup": "Fullerton Hotel",
+      "dropoff": "Changi Airport T3",
+      "flight": "NH844",
+      "vehicle": "AVF",
+      "pax": "1"
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "airline-sq377-mng-route",
+    "input": "Lim Yeow Beng 0740 SQ377 > 2C Anamalai Ave",
+    "expected": {
+      "name": "Lim Yeow Beng",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "0740hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "2C Anamalai Ave",
+      "flight": "SQ377",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "airline-qr948-mng-space",
+    "input": "Airport pickup for Ms Nadia 0920 QR 948 to Shangri-La",
+    "expected": {
+      "name": "Ms Nadia",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "0920hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "Shangri-La",
+      "flight": "QR948",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "airline-ba15-mng",
+    "input": "Flight arrives BA15 eta 1715 passenger Mr Oliver Smith to Raffles Hotel",
+    "expected": {
+      "name": "Mr Oliver Smith",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "1715hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "Raffles Hotel",
+      "flight": "BA15",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "airline-qf1-mng",
+    "input": "Landing QF 1 2030 for Mr Alan Jones airport pick up to Capella",
+    "expected": {
+      "name": "Mr Alan Jones",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "2030hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "Capella",
+      "flight": "QF1",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "airline-tr485-mng",
+    "input": "arriving tr485 at 2330 for Hana Lee, airport pickup to Sofitel",
+    "expected": {
+      "name": "Hana Lee",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "2330hrs",
+      "pickup": "Changi Airport",
+      "dropoff": "Sofitel",
+      "flight": "TR485",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DEP airport departure",
+    "id": "airline-sq878-dep",
+    "input": "DEP for Mr Chen 0615 from home to airport T3 taking flight SQ878",
+    "expected": {
+      "name": "Mr Chen",
+      "company": "",
+      "booker": "",
+      "bookingType": "DEP",
+      "time": "0615hrs",
+      "pickup": "home",
+      "dropoff": "Changi Airport T3",
+      "flight": "SQ878",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DEP airport departure",
+    "id": "airline-mu546-dep",
+    "input": "Ms Liu 1430 Four Seasons > MU 546",
+    "expected": {
+      "name": "Ms Liu",
+      "company": "",
+      "booker": "",
+      "bookingType": "DEP",
+      "time": "1430hrs",
+      "pickup": "Four Seasons",
+      "dropoff": "Changi Airport",
+      "flight": "MU546",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DEP airport departure",
+    "id": "airline-nh844-dep",
+    "input": "Airport drop off for Kenji 2130 from Mandarin Oriental to T2 flight NH844",
+    "expected": {
+      "name": "Kenji",
+      "company": "",
+      "booker": "",
+      "bookingType": "DEP",
+      "time": "2130hrs",
+      "pickup": "Mandarin Oriental",
+      "dropoff": "Changi Airport T2",
+      "flight": "NH844",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "MNG airport arrival",
+    "id": "airline-ek355-arrival",
+    "input": "Arrival EK355 1505 for Mr Ahmed, Terminal 1 to Ritz Carlton",
+    "expected": {
+      "name": "Mr Ahmed",
+      "company": "",
+      "booker": "",
+      "bookingType": "MNG",
+      "time": "1505hrs",
+      "pickup": "Changi Airport T1",
+      "dropoff": "Ritz Carlton",
+      "flight": "EK355",
+      "vehicle": ""
+    }
+  },
+  {
+    "category": "DEP airport departure",
+    "id": "airline-cx734-departure",
+    "input": "Departure for Ms Wong 1845 from Andaz to Changi Airport T4 CX 734",
+    "expected": {
+      "name": "Ms Wong",
+      "company": "",
+      "booker": "",
+      "bookingType": "DEP",
+      "time": "1845hrs",
+      "pickup": "Andaz",
+      "dropoff": "Changi Airport T4",
+      "flight": "CX734",
+      "vehicle": ""
+    }
+  }
+]

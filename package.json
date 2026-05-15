@@ -4,11 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "reset:dev": "rm -rf .next && npm run dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:parser": "node --experimental-strip-types scripts/test-booking-parser.mjs",
+    "test:pricing": "node --experimental-strip-types scripts/test-child-seat-pricing.mjs",
+    "test:browser": "node scripts/test-booking-browser.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"

@@ -201,6 +201,8 @@ export function resolvePricing(
   const bookingType = normalizeBookingType(bookingValue.bookingType);
   const isMidnight = isMidnightPickup(bookingValue.time);
   const extraStopCount = normalizeExtraStopCount(bookingValue.extraStopCount);
+  const extraStopSurcharge = bookingType === "DSP" ? 0 : settings.extraStopSurcharge;
+  const extraStopPayout = bookingType === "DSP" ? 0 : settings.extraStopPayout;
   const childSeatCount = normalizeChildSeatCount(
     bookingValue.childSeatRequired,
     bookingValue.childSeatCount,
@@ -248,10 +250,10 @@ export function resolvePricing(
     midnightSurcharge: isMidnight ? settings.midnightSurcharge : 0,
     midnightPayout: isMidnight ? settings.midnightPayout : 0,
     extraStopCount,
-    extraStopSurcharge: settings.extraStopSurcharge,
-    extraStopCustomerAmount: extraStopCount * settings.extraStopSurcharge,
-    extraStopPayout: settings.extraStopPayout,
-    extraStopDriverAmount: extraStopCount * settings.extraStopPayout,
+    extraStopSurcharge,
+    extraStopCustomerAmount: extraStopCount * extraStopSurcharge,
+    extraStopPayout,
+    extraStopDriverAmount: extraStopCount * extraStopPayout,
     childSeatCount,
     childSeatCustomerSurcharge: settings.childSeatCustomerSurcharge,
     childSeatCustomerAmount: childSeatCount * settings.childSeatCustomerSurcharge,

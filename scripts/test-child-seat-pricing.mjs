@@ -70,4 +70,56 @@ assert.deepEqual(
   },
 );
 
-console.log("Child seat pricing tests passed.");
+const dspItineraryPricing = resolvePricing(
+  {
+    bookingType: "DSP",
+    time: "0930hrs",
+    extraStopCount: "3",
+    childSeatRequired: "",
+    childSeatCount: "",
+  },
+  { customer_rates: {}, driver_payout_rules: {} },
+  null,
+  initialRateSettings,
+  null,
+);
+
+assert.equal(dspItineraryPricing.extraStopCount, 3);
+assert.equal(dspItineraryPricing.extraStopSurcharge, 0);
+assert.equal(dspItineraryPricing.extraStopCustomerAmount, 0);
+assert.equal(dspItineraryPricing.extraStopPayout, 0);
+assert.equal(dspItineraryPricing.extraStopDriverAmount, 0);
+assert.deepEqual(
+  calculateProfit(dspItineraryPricing),
+  {
+    customerPrice: 65,
+    driverPayout: 50,
+    profit: 15,
+    customerPriceSource: "default",
+    driverPayoutSource: "default",
+  },
+);
+
+for (const bookingType of ["MNG", "DEP", "TRF"]) {
+  const nonDspPricing = resolvePricing(
+    {
+      bookingType,
+      time: "1030hrs",
+      extraStopCount: "2",
+      childSeatRequired: "",
+      childSeatCount: "",
+    },
+    { customer_rates: {}, driver_payout_rules: {} },
+    null,
+    initialRateSettings,
+    null,
+  );
+
+  assert.equal(nonDspPricing.extraStopCount, 2, `${bookingType} should keep extra stop count`);
+  assert.equal(nonDspPricing.extraStopSurcharge, 15, `${bookingType} should keep customer extra stop surcharge`);
+  assert.equal(nonDspPricing.extraStopCustomerAmount, 30, `${bookingType} should charge customer extra stops`);
+  assert.equal(nonDspPricing.extraStopPayout, 10, `${bookingType} should keep driver extra stop payout`);
+  assert.equal(nonDspPricing.extraStopDriverAmount, 20, `${bookingType} should pay driver extra stops`);
+}
+
+console.log("Pricing tests passed.");

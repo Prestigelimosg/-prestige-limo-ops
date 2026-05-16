@@ -433,12 +433,14 @@ function formatItineraryTimeForDispatch(value: string) {
 
 function formatDriverItineraryLocation(value: string) {
   const sanitized = clean(value)
-    .replace(/\s*,?\s*#\s*[a-z0-9]+(?:[-/][a-z0-9]+)?.*$/i, "")
+    .replace(/\s*,?\s*#\s*[a-z0-9]+(?:[-/][a-z0-9]+)?\s*,?\s*/gi, ", ")
     .replace(/\bSingapore\s+\d{5,6}\b/gi, "")
     .replace(/\b\d{5,6}\b/g, "")
     .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
     .replace(/\s+/g, " ")
     .replace(/,\s*$/g, "")
+    .replace(/^,\s*/g, "")
     .trim();
   const parts = sanitized
     .split(",")
@@ -449,7 +451,7 @@ function formatDriverItineraryLocation(value: string) {
     return parts[0] || sanitized;
   }
 
-  if (/^\d+[a-z]?\b/i.test(parts[0]) && /\b(?:tower|square|hotel|office|atrium|sands|bay)\b/i.test(parts[1])) {
+  if (/^\d+[a-z]?\b/i.test(parts[0]) && /\b(?:square|hotel|office|atrium|sands)\b/i.test(parts[1])) {
     return `${parts[1]}, ${parts[0]}`;
   }
 
@@ -947,8 +949,10 @@ function calculateSavedDriverPayout(
   const bookingType = normalizeBookingType(bookingRecord.booking_type);
   const midnightPayout = numericRate(bookingRecord.midnight_payout);
   const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count);
+  const extraStopPayout =
+    bookingType === "DSP" ? 0 : numericRate(bookingRecord.extra_stop_payout ?? settings.extraStopPayout);
   const extraStopDriverAmount =
-    extraStopCount * numericRate(bookingRecord.extra_stop_payout ?? settings.extraStopPayout);
+    extraStopCount * extraStopPayout;
   const childSeatDriverAmount = numericRate(bookingRecord.child_seat_driver_payout);
   const storedBasePayout =
     numericRate(bookingRecord.driver_payout_max) ||

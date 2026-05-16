@@ -43,6 +43,7 @@ type BookingForm = {
   childSeatType: string;
   extraStopCount: string;
   extraStopLocation: string;
+  driverId: string;
   driverName: string;
   driverContact: string;
   customerPriceOverride: string;
@@ -303,6 +304,7 @@ function createInitialBooking(): BookingForm {
     childSeatType: "",
     extraStopCount: "",
     extraStopLocation: "",
+    driverId: "",
     driverName: "",
     driverContact: "",
     customerPriceOverride: "",
@@ -341,6 +343,7 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   childSeatType: "Child seat type",
   extraStopCount: "Extra stops",
   extraStopLocation: "Extra stop location",
+  driverId: "Driver",
   driverName: "Driver Name",
   driverContact: "Driver Contact",
   customerPriceOverride: "Customer price override",
@@ -839,6 +842,7 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
     bookerEmail: clean(bookingRecord.bookers?.email),
     name: getBookingName(bookingRecord),
     pax: String(bookingRecord.pax || 1),
+    driverId: bookingRecord.driver_id ? String(bookingRecord.driver_id) : "",
     driverName: clean(bookingRecord.driver_name),
     driverContact: clean(bookingRecord.driver_contact),
     childSeatRequired: childSeatRequired ? "yes" : "",
@@ -850,6 +854,13 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
         ? ""
         : String(bookingRecord.customer_rate_override),
     customerPriceOverrideReason: clean(bookingRecord.customer_price_override_reason),
+    driverPayoutOverride:
+      bookingRecord.driver_payout_override === null || bookingRecord.driver_payout_override === undefined
+        ? ""
+        : String(bookingRecord.driver_payout_override),
+    driverPayoutReason: clean(bookingRecord.driver_payout_reason),
+    driverNotes: clean(bookingRecord.driver_notes),
+    driverIncludePayout: bookingRecord.driver_dispatch_include_payout ? "yes" : "",
   };
 }
 
@@ -994,8 +1005,12 @@ export default function Home() {
     const matchingTraveler = rateTravelers.find(
       (traveler) => clean(traveler.traveler_name).toLowerCase() === clean(booking.name).toLowerCase(),
     );
+    const bookingDriverId = clean(booking.driverId);
+    const bookingDriverName = clean(booking.driverName).toLowerCase();
     const matchingDriver = drivers.find(
-      (driver) => clean(driver.driver_name).toLowerCase() === clean(booking.driverName).toLowerCase(),
+      (driver) =>
+        (bookingDriverId && String(driver.id) === bookingDriverId) ||
+        (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
     );
     const pricing = resolvePricing(
       booking,
@@ -1024,8 +1039,24 @@ export default function Home() {
     return [...childSeatTypeOptions];
   }, [booking.childSeatType]);
 
+  const assignedDriverId = clean(booking.driverId);
+  const assignedDriverName = clean(booking.driverName).toLowerCase();
+  const assignedDriverRecord = drivers.find(
+    (driver) =>
+      (assignedDriverId && String(driver.id) === assignedDriverId) ||
+      (assignedDriverName && clean(driver.driver_name).toLowerCase() === assignedDriverName),
+  );
+  const assignedDriverSelectValue = assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : "");
+  const showSavedAssignedDriverOption = Boolean(assignedDriverId && !assignedDriverRecord);
+
   const draftDriverDispatchCard = useMemo(() => {
-    const selectedDriver = drivers.find((driver) => clean(driver.driver_name) === clean(booking.driverName));
+    const bookingDriverId = clean(booking.driverId);
+    const bookingDriverName = clean(booking.driverName).toLowerCase();
+    const selectedDriver = drivers.find(
+      (driver) =>
+        (bookingDriverId && String(driver.id) === bookingDriverId) ||
+        (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
+    );
     const driverPayout = draftPricing.driverPayout;
     const childSeatLine =
       clean(booking.childSeatRequired) === "yes"
@@ -1222,14 +1253,30 @@ export default function Home() {
   }
 
   function applyDriverToBooking(driverId: string) {
+    if (!driverId) {
+      setBooking((current) => ({
+        ...current,
+        driverId: "",
+        driverName: "",
+        driverContact: "",
+        driverNotes: "",
+      }));
+      return;
+    }
+
     const selectedDriver = drivers.find((driver) => String(driver.id) === driverId);
 
     if (!selectedDriver) {
+      setBooking((current) => ({
+        ...current,
+        driverId,
+      }));
       return;
     }
 
     setBooking((current) => ({
       ...current,
+      driverId,
       driverName: clean(selectedDriver.driver_name),
       driverContact: clean(selectedDriver.contact_number),
       driverNotes: clean(selectedDriver.notes),
@@ -2274,9 +2321,16 @@ export default function Home() {
         crmErrorMessage = error instanceof Error ? error.message : "Unknown CRM update error.";
       }
 
+      const bookingDriverId = clean(booking.driverId);
+      const bookingDriverName = clean(booking.driverName).toLowerCase();
       const selectedDriver = drivers.find(
-        (driver) => clean(driver.driver_name).toLowerCase() === clean(booking.driverName).toLowerCase(),
+        (driver) =>
+          (bookingDriverId && String(driver.id) === bookingDriverId) ||
+          (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
       ) ?? null;
+      const fallbackDriverId = Number(bookingDriverId);
+      const resolvedDriverId =
+        selectedDriver?.id ?? (Number.isFinite(fallbackDriverId) && fallbackDriverId > 0 ? fallbackDriverId : null);
       const pricing = resolvePricing(
         booking,
         company,
@@ -2303,7 +2357,7 @@ export default function Home() {
         route,
         pax: Number(clean(booking.pax)) || 1,
         job_card: jobCard,
-        driver_id: selectedDriver?.id ?? null,
+        driver_id: resolvedDriverId,
         driver_name: clean(booking.driverName) || null,
         driver_contact: clean(booking.driverContact) || clean(selectedDriver?.contact_number) || null,
         driver_plate_number: clean(selectedDriver?.plate_number) || null,
@@ -2473,7 +2527,7 @@ export default function Home() {
 
     setMessage({
       tone: "success",
-      text: "Driver assigned for this draft. Dispatch copy is ready; save to CRM when confirmed.",
+      text: "Driver assigned for this draft. Save Booking + CRM will store driver details.",
     });
   }
 
@@ -3079,11 +3133,14 @@ export default function Home() {
                   <select
                     className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => applyDriverToBooking(event.target.value)}
-                    value={
-                      drivers.find((driver) => clean(driver.driver_name) === clean(booking.driverName))?.id ?? ""
-                    }
+                    value={assignedDriverSelectValue}
                   >
                     <option value="">Select driver</option>
+                    {showSavedAssignedDriverOption ? (
+                      <option value={assignedDriverId}>
+                        Saved: {clean(booking.driverName) || `Driver ${assignedDriverId}`}
+                      </option>
+                    ) : null}
                     {drivers.map((driver) => (
                       <option key={driver.id} value={driver.id}>
                         {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}

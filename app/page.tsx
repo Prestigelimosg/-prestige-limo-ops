@@ -377,6 +377,43 @@ function clean(value: string | null | undefined) {
   return (value ?? "").trim();
 }
 
+function formatPrivacySafePlace(value: string | null | undefined, fallback: string) {
+  const text = clean(value);
+
+  if (!text) {
+    return fallback;
+  }
+
+  const sanitized = text
+    .replace(/(?:^|[,\s])#\s*[a-z0-9]+(?:[-/][a-z0-9]+)?/gi, " ")
+    .replace(/\b(?:unit|floor|level|lvl)\s*#?\s*[a-z0-9]+(?:[-/][a-z0-9]+)?/gi, " ")
+    .replace(/\b(?:blk|block)\s*\d+[a-z]?\b/gi, " ")
+    .replace(/\b(?:postal|singapore)\s*\d{5,6}\b/gi, " ")
+    .replace(/\b\d{5,6}\b/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .replace(/^,+\s*/, "")
+    .replace(/^\d+[a-z]?(?:[-/]\d+[a-z]?)?\s+/i, "")
+    .replace(/^,+\s*/, "")
+    .trim();
+  const firstSafeSegment = sanitized
+    .split(",")
+    .map((part) => clean(part))
+    .find(Boolean);
+
+  return firstSafeSegment || fallback;
+}
+
+function formatPrivacySafeRoute(bookingValue: Pick<BookingForm, "pickup" | "extraStopLocation" | "dropoff">) {
+  const pickup = formatPrivacySafePlace(bookingValue.pickup, "Pickup");
+  const extraStop = clean(bookingValue.extraStopLocation)
+    ? formatPrivacySafePlace(bookingValue.extraStopLocation, "Extra stop")
+    : "";
+  const dropoff = formatPrivacySafePlace(bookingValue.dropoff, "Drop-off");
+
+  return [pickup, extraStop, dropoff].filter(Boolean).join(" > ");
+}
+
 function hasParsedValue(value: unknown) {
   if (Array.isArray(value)) {
     return value.length > 0;
@@ -1108,6 +1145,29 @@ export default function Home() {
       .filter(Boolean)
       .join("\n");
   }, [booking, route]);
+
+  const jobCardPreview = useMemo(() => {
+    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}\n` : "";
+    const companyLine = clean(booking.company) ? `Company: ${clean(booking.company)}\n` : "";
+    const childSeatLine =
+      clean(booking.childSeatRequired) === "yes"
+        ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
+        : "";
+
+    return [
+      `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
+      formatPickupDateTime(booking.date, booking.time),
+      "",
+      `${flightLine}${formatPrivacySafeRoute(booking)}`,
+      "",
+      companyLine.trimEnd(),
+      "Guest details hidden for privacy",
+      `Pax: ${Number(clean(booking.pax)) || 1}`,
+      childSeatLine,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }, [booking]);
 
   const draftPricing = useMemo(() => {
     const matchingCompany = rateCompanies.find(
@@ -2683,7 +2743,7 @@ export default function Home() {
 
   async function copyJobCard() {
     try {
-      await navigator.clipboard.writeText(jobCard);
+      await navigator.clipboard.writeText(jobCardPreview);
       setMessage({ tone: "success", text: "Job card copied." });
     } catch {
       setMessage({ tone: "error", text: "Copy failed. Select the preview text manually." });
@@ -3016,6 +3076,86 @@ export default function Home() {
     );
   }
 
+  const pricingPanel = (
+    <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+      <h2 className="text-xl font-semibold">Pricing</h2>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
+          <p className="text-xs text-slate-500">Customer</p>
+          <p className="text-lg font-semibold">${formatMoney(draftPricing.customerPrice)}</p>
+        </div>
+        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
+          <p className="text-xs text-slate-500">Driver</p>
+          <p className="text-lg font-semibold">${formatMoney(draftPricing.driverPayout)}</p>
+        </div>
+        <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
+          <p className="text-xs text-slate-500">Profit</p>
+          <p className="text-lg font-semibold">${formatMoney(draftPricing.profit)}</p>
+        </div>
+      </div>
+      <p className="mt-3 text-sm text-slate-600">
+        Source: {draftPricing.customerPriceSource}; customer rate ${formatMoney(draftPricing.customerRate)}/
+        {draftPricing.customerRateUnit}; driver payout ${formatMoney(draftPricing.driverPayoutMin)}
+        {draftPricing.driverPayoutMax !== draftPricing.driverPayoutMin
+          ? `-${formatMoney(draftPricing.driverPayoutMax)}`
+          : ""}
+        /{draftPricing.driverPayoutUnit} ({draftPricing.driverPayoutSource})
+      </p>
+      {draftPricing.midnightSurcharge ||
+      draftPricing.midnightPayout ||
+      draftPricing.extraStopCount ||
+      draftPricing.childSeatCount ? (
+        <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-slate-700">
+          {draftPricing.midnightSurcharge || draftPricing.midnightPayout ? (
+            <p>
+              Midnight: customer +${formatMoney(draftPricing.midnightSurcharge)} / driver +$
+              {formatMoney(draftPricing.midnightPayout)}
+            </p>
+          ) : null}
+          {draftPricing.extraStopCount ? (
+            <p>
+              Extra stops: {draftPricing.extraStopCount} x customer +$
+              {formatMoney(draftPricing.extraStopSurcharge)} / driver +${formatMoney(draftPricing.extraStopPayout)}
+            </p>
+          ) : null}
+          {draftPricing.childSeatCount ? (
+            <p>
+              Child seat: {draftPricing.childSeatCount} x customer +$
+              {formatMoney(draftPricing.childSeatCustomerSurcharge)} / driver +$
+              {formatMoney(draftPricing.childSeatDriverPayout)}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label>
+          <span className="mb-1 block text-sm font-medium text-slate-700">
+            Customer Price Override
+          </span>
+          <input
+            className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+            min={0}
+            onChange={(event) => update("customerPriceOverride", event.target.value)}
+            placeholder={formatMoney(draftPricing.customerPrice)}
+            type="number"
+            value={booking.customerPriceOverride}
+          />
+        </label>
+        <label className="sm:col-span-2">
+          <span className="mb-1 block text-sm font-medium text-slate-700">
+            Override Reason
+          </span>
+          <input
+            className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+            onChange={(event) => update("customerPriceOverrideReason", event.target.value)}
+            placeholder="Custom quote / VIP / account rule"
+            value={booking.customerPriceOverrideReason}
+          />
+        </label>
+      </div>
+    </div>
+  );
+
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -3199,6 +3339,10 @@ export default function Home() {
                   />
                 </label>
               ))}
+            </div>
+
+            <div className="mt-5">
+              {pricingPanel}
             </div>
 
             <div className="mt-5 rounded-md border border-stone-200 bg-stone-50 p-3">
@@ -3503,7 +3647,7 @@ export default function Home() {
                 </button>
               </div>
               <pre className="whitespace-pre-wrap rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm">
-                {jobCard}
+                {jobCardPreview}
               </pre>
             </div>
 
@@ -3524,84 +3668,6 @@ export default function Home() {
               <pre className="whitespace-pre-wrap rounded-lg bg-sky-50 p-4 text-sm leading-6 text-slate-900 shadow-sm">
                 {draftDriverDispatchCard}
               </pre>
-            </div>
-
-            <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-              <h2 className="text-xl font-semibold">Pricing</h2>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
-                  <p className="text-xs text-slate-500">Customer</p>
-                  <p className="text-lg font-semibold">${formatMoney(draftPricing.customerPrice)}</p>
-                </div>
-                <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
-                  <p className="text-xs text-slate-500">Driver</p>
-                  <p className="text-lg font-semibold">${formatMoney(draftPricing.driverPayout)}</p>
-                </div>
-                <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
-                  <p className="text-xs text-slate-500">Profit</p>
-                  <p className="text-lg font-semibold">${formatMoney(draftPricing.profit)}</p>
-                </div>
-              </div>
-              <p className="mt-3 text-sm text-slate-600">
-                Source: {draftPricing.customerPriceSource}; customer rate ${formatMoney(draftPricing.customerRate)}/
-                {draftPricing.customerRateUnit}; driver payout ${formatMoney(draftPricing.driverPayoutMin)}
-                {draftPricing.driverPayoutMax !== draftPricing.driverPayoutMin
-                  ? `-${formatMoney(draftPricing.driverPayoutMax)}`
-                  : ""}
-                /{draftPricing.driverPayoutUnit} ({draftPricing.driverPayoutSource})
-              </p>
-              {draftPricing.midnightSurcharge ||
-              draftPricing.midnightPayout ||
-              draftPricing.extraStopCount ||
-              draftPricing.childSeatCount ? (
-                <div className="mt-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-slate-700">
-                  {draftPricing.midnightSurcharge || draftPricing.midnightPayout ? (
-                    <p>
-                      Midnight: customer +${formatMoney(draftPricing.midnightSurcharge)} / driver +$
-                      {formatMoney(draftPricing.midnightPayout)}
-                    </p>
-                  ) : null}
-                  {draftPricing.extraStopCount ? (
-                    <p>
-                      Extra stops: {draftPricing.extraStopCount} x customer +$
-                      {formatMoney(draftPricing.extraStopSurcharge)} / driver +${formatMoney(draftPricing.extraStopPayout)}
-                    </p>
-                  ) : null}
-                  {draftPricing.childSeatCount ? (
-                    <p>
-                      Child seat: {draftPricing.childSeatCount} x customer +$
-                      {formatMoney(draftPricing.childSeatCustomerSurcharge)} / driver +$
-                      {formatMoney(draftPricing.childSeatDriverPayout)}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
-                    Customer Price Override
-                  </span>
-                  <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                    min={0}
-                    onChange={(event) => update("customerPriceOverride", event.target.value)}
-                    placeholder={formatMoney(draftPricing.customerPrice)}
-                    type="number"
-                    value={booking.customerPriceOverride}
-                  />
-                </label>
-                <label className="sm:col-span-2">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
-                    Override Reason
-                  </span>
-                  <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                    onChange={(event) => update("customerPriceOverrideReason", event.target.value)}
-                    placeholder="Custom quote / VIP / account rule"
-                    value={booking.customerPriceOverrideReason}
-                  />
-                </label>
-              </div>
             </div>
 
             <div className={`rounded-md border px-4 py-3 text-sm ${statusClass(message.tone)}`}>

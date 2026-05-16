@@ -2978,10 +2978,32 @@ export default function Home() {
 
             <div className="mt-5 rounded-md border border-stone-200 bg-stone-50 p-3">
               <div className="mb-3">
-                <h3 className="text-base font-semibold text-slate-900">Child Seat</h3>
-                <p className="text-sm text-slate-600">Internal seat requirement and surcharge tracking.</p>
+                <h3 className="text-base font-semibold text-slate-900">Route Extras & Child Seat</h3>
+                <p className="text-sm text-slate-600">Review extra stops and child seat requirements together.</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <label className="sm:col-span-2 lg:col-span-2">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra stop location</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    onChange={(event) => update("extraStopLocation", event.target.value)}
+                    placeholder="Marina Bay Sands"
+                    value={booking.extraStopLocation}
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra Stops</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    inputMode="numeric"
+                    min={0}
+                    onChange={(event) => update("extraStopCount", event.target.value)}
+                    placeholder="0"
+                    step={1}
+                    type="number"
+                    value={booking.extraStopCount}
+                  />
+                </label>
                 <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Child seat required</span>
                   <select
@@ -3019,7 +3041,7 @@ export default function Home() {
                     value={booking.childSeatCount}
                   />
                 </label>
-                <label>
+                <label className="sm:col-span-2 lg:col-span-5">
                   <span className="mb-1 block text-sm font-medium text-slate-700">Child seat type / note</span>
                   <select
                     className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -3327,22 +3349,6 @@ export default function Home() {
                 </div>
               ) : null}
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label>
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra Stops</span>
-                  <input
-                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                    inputMode="numeric"
-                    min={0}
-                    onChange={(event) => update("extraStopCount", event.target.value)}
-                    placeholder="0"
-                    step={1}
-                    type="number"
-                    value={booking.extraStopCount}
-                  />
-                  <span className="mt-1 block text-xs text-slate-500">
-                    +${formatMoney(rateSettings.extraStopSurcharge)} customer / +${formatMoney(rateSettings.extraStopPayout)} driver per stop
-                  </span>
-                </label>
                 <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">
                     Customer Price Override

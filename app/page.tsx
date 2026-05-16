@@ -404,12 +404,121 @@ function formatPrivacySafePlace(value: string | null | undefined, fallback: stri
   return firstSafeSegment || fallback;
 }
 
-function formatPrivacySafeRoute(bookingValue: Pick<BookingForm, "pickup" | "extraStopLocation" | "dropoff">) {
+type ItineraryDisplayStop = {
+  location: string;
+  time: string;
+};
+
+function formatItineraryTimeForDispatch(value: string) {
+  const compactTime = clean(value).replace(/\s+/g, "").toLowerCase();
+  const amPmMatch = compactTime.match(/^(\d{1,2})(?::?(\d{2}))?(am|pm)$/);
+
+  if (amPmMatch) {
+    let hour = Number(amPmMatch[1]);
+    const minute = amPmMatch[2] || "00";
+
+    if (amPmMatch[3] === "pm" && hour < 12) {
+      hour += 12;
+    }
+
+    if (amPmMatch[3] === "am" && hour === 12) {
+      hour = 0;
+    }
+
+    return `${String(hour).padStart(2, "0")}${minute}hrs`;
+  }
+
+  return formatPickupTime(compactTime);
+}
+
+function formatDriverItineraryLocation(value: string) {
+  const sanitized = clean(value)
+    .replace(/\s*,?\s*#\s*[a-z0-9]+(?:[-/][a-z0-9]+)?.*$/i, "")
+    .replace(/\bSingapore\s+\d{5,6}\b/gi, "")
+    .replace(/\b\d{5,6}\b/g, "")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .replace(/,\s*$/g, "")
+    .trim();
+  const parts = sanitized
+    .split(",")
+    .map((part) => clean(part))
+    .filter((part) => part && !/^singapore$/i.test(part));
+
+  if (parts.length <= 1) {
+    return parts[0] || sanitized;
+  }
+
+  if (/^\d+[a-z]?\b/i.test(parts[0]) && /\b(?:tower|square|hotel|office|atrium|sands|bay)\b/i.test(parts[1])) {
+    return `${parts[1]}, ${parts[0]}`;
+  }
+
+  const namedLandmark =
+    parts.find((part, index) => index > 0 && part.includes("@")) ||
+    parts.find((part, index) => index > 0 && /\b(?:tower|square|hotel|atrium|sands|bay)\b/i.test(part));
+
+  if (namedLandmark) {
+    return `${parts[0]}, ${namedLandmark}`;
+  }
+
+  return parts.slice(0, 2).join(", ");
+}
+
+function parseItineraryDisplayStops(value: string) {
+  const rawStops = clean(value)
+    .split(/\s*>\s*/g)
+    .map((part) => clean(part))
+    .filter(Boolean);
+
+  if (rawStops.length < 2) {
+    return [];
+  }
+
+  const stops = rawStops
+    .map((rawStop): ItineraryDisplayStop => {
+      const stopMatch = rawStop.match(/^(.+?)\s+(?:at|by)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{3,4}\s*hrs?)$/i);
+
+      if (!stopMatch?.[1] || !stopMatch[2]) {
+        return {
+          location: formatDriverItineraryLocation(rawStop),
+          time: "",
+        };
+      }
+
+      return {
+        location: formatDriverItineraryLocation(stopMatch[1]),
+        time: formatItineraryTimeForDispatch(stopMatch[2]),
+      };
+    })
+    .filter((stop) => clean(stop.location));
+  const timedStopCount = stops.filter((stop) => clean(stop.time)).length;
+
+  return timedStopCount >= 2 ? stops : [];
+}
+
+function isDspMultiStopItineraryBooking(
+  bookingValue: Pick<BookingForm, "bookingType" | "extraStopCount" | "extraStopLocation">,
+  itineraryStops = parseItineraryDisplayStops(bookingValue.extraStopLocation),
+) {
+  return clean(bookingValue.bookingType).toUpperCase() === "DSP" &&
+    normalizeExtraStopCount(bookingValue.extraStopCount) >= 2 &&
+    itineraryStops.length >= 2;
+}
+
+function formatPrivacySafeRoute(
+  bookingValue: Pick<BookingForm, "bookingType" | "pickup" | "extraStopCount" | "extraStopLocation" | "dropoff">,
+) {
   const pickup = formatPrivacySafePlace(bookingValue.pickup, "Pickup");
+  const dropoff = formatPrivacySafePlace(bookingValue.dropoff, "Drop-off");
+  const itineraryStops = parseItineraryDisplayStops(bookingValue.extraStopLocation);
+
+  if (isDspMultiStopItineraryBooking(bookingValue, itineraryStops)) {
+    return [pickup, "Multi-stop itinerary hidden for privacy", dropoff].filter(Boolean).join(" > ");
+  }
+
   const extraStop = clean(bookingValue.extraStopLocation)
     ? formatPrivacySafePlace(bookingValue.extraStopLocation, "Extra stop")
     : "";
-  const dropoff = formatPrivacySafePlace(bookingValue.dropoff, "Drop-off");
 
   return [pickup, extraStop, dropoff].filter(Boolean).join(" > ");
 }
@@ -514,7 +623,7 @@ function mergeParsedBookingIntoForm(
 ): BookingForm {
   const parsedName = clean(parsedBooking.name);
   const parsedExtraStopLocation = clean(parsedBooking.extraStopLocation);
-  const parsedExtraStopCount = parsedExtraStopLocation ? "1" : parsedBooking.extraStopCount;
+  const parsedExtraStopCount = parsedExtraStopLocation ? clean(parsedBooking.extraStopCount) || "1" : parsedBooking.extraStopCount;
   const bookingFields = Object.fromEntries(
     Object.entries(parsedBooking).filter(
       ([key]) => !["success", "cleanedLines", "extractedBookingsPreview", "parserWarning", "multipleBookingsDetected", "standbyUntil", "returnDestination"].includes(key),
@@ -1137,6 +1246,12 @@ export default function Home() {
     ].filter(Boolean).join(" > ");
   }, [booking.dropoff, booking.extraStopLocation, booking.pickup]);
 
+  const itineraryDisplayStops = useMemo(
+    () => parseItineraryDisplayStops(booking.extraStopLocation),
+    [booking.extraStopLocation],
+  );
+  const isDspItinerary = isDspMultiStopItineraryBooking(booking, itineraryDisplayStops);
+
   const jobCard = useMemo(() => {
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}\n` : "";
     const companyLine = clean(booking.company) ? `Company: ${clean(booking.company)}\n` : "";
@@ -1256,28 +1371,44 @@ export default function Home() {
       clean(booking.childSeatRequired) === "yes"
         ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
         : "";
+    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
+    const routeLines = isDspItinerary
+      ? [
+          flightLine,
+          `Pickup: ${clean(booking.pickup) || "Pickup"}`,
+          "",
+          "Itinerary:",
+          ...itineraryDisplayStops.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
+        ]
+      : [
+          flightLine,
+          route,
+        ];
+    const sections = [
+      ["DRIVER DISPATCH"],
+      [
+        `Driver: ${clean(booking.driverName) || "Driver TBC"}`,
+        clean(booking.driverContact) ? `Contact: ${clean(booking.driverContact)}` : "",
+        clean(selectedDriver?.plate_number) ? `Plate: ${clean(selectedDriver?.plate_number)}` : "",
+      ],
+      [
+        `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
+        formatPickupDateTime(booking.date, booking.time),
+      ],
+      routeLines,
+      [
+        clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "",
+        `Pax: ${Number(clean(booking.pax)) || 1}`,
+        childSeatLine,
+        booking.driverIncludePayout && driverPayout ? `Payout: $${driverPayout}` : "",
+      ],
+    ];
 
-    return [
-      "DRIVER DISPATCH",
-      "",
-      `Driver: ${clean(booking.driverName) || "Driver TBC"}`,
-      clean(booking.driverContact) ? `Contact: ${clean(booking.driverContact)}` : "",
-      clean(selectedDriver?.plate_number) ? `Plate: ${clean(selectedDriver?.plate_number)}` : "",
-      "",
-      `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
-      formatPickupDateTime(booking.date, booking.time),
-      "",
-      clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "",
-      route,
-      "",
-      clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "",
-      `Pax: ${Number(clean(booking.pax)) || 1}`,
-      childSeatLine,
-      booking.driverIncludePayout && driverPayout ? `Payout: $${driverPayout}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }, [booking, draftPricing.driverPayout, drivers, route]);
+    return sections
+      .filter((section) => section.some((line) => clean(line)))
+      .map((section) => section.join("\n").trim())
+      .join("\n\n");
+  }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
 
   const dashboardBookings = useMemo(() => {
     const query = clean(searchTerm).toLowerCase();
@@ -1319,6 +1450,16 @@ export default function Home() {
   const multiBookingPreviewItems = Array.isArray(multiBookingNotice?.extractedBookingsPreview)
     ? multiBookingNotice.extractedBookingsPreview.filter(Boolean)
     : [];
+  const parsedDebugPreviewItems = Array.isArray(parsedDebugBooking?.extractedBookingsPreview)
+    ? parsedDebugBooking.extractedBookingsPreview.filter(Boolean)
+    : [];
+  const shouldShowParserDebugPanel = Boolean(
+    parsedDebugBooking &&
+      (showParserDebug ||
+        parsedDebugBooking.parserWarning ||
+        parsedDebugPreviewItems.length > 0 ||
+        parsedDebugBooking.multipleBookingsDetected),
+  );
 
   const todayKey = toDateKey(new Date());
   const todayBookings = dashboardBookings.filter(
@@ -3470,6 +3611,22 @@ export default function Home() {
                   </select>
                 </label>
               </div>
+              {isDspItinerary ? (
+                <div className="mt-3 border-t border-stone-200 pt-3 text-sm text-slate-800">
+                  <p className="font-medium text-slate-900">Itinerary preview</p>
+                  <div className="mt-2 space-y-1">
+                    {itineraryDisplayStops.map((stop, index) => (
+                      <div
+                        className="grid gap-1 sm:grid-cols-[5rem_1fr]"
+                        key={`${stop.time}-${stop.location}-${index}`}
+                      >
+                        <span className="font-mono text-xs text-slate-600">{stop.time || "Time TBC"}</span>
+                        <span>{stop.location}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-5 rounded-md border border-sky-200 bg-sky-50 p-3">
@@ -3547,17 +3704,16 @@ export default function Home() {
               </div>
             </div>
 
-            {parsedDebugBooking ? (
+            {shouldShowParserDebugPanel && parsedDebugBooking ? (
               <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-3">
                 {parsedDebugBooking.parserWarning ? (
                   <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
                     {parsedDebugBooking.parserWarning}
                   </div>
                 ) : null}
-                {Array.isArray(parsedDebugBooking.extractedBookingsPreview) &&
-                parsedDebugBooking.extractedBookingsPreview.length > 0 ? (
+                {parsedDebugPreviewItems.length > 0 ? (
                   <div className="mb-3 grid gap-2">
-                    {parsedDebugBooking.extractedBookingsPreview.map((preview, index) => {
+                    {parsedDebugPreviewItems.map((preview, index) => {
                       const safePreview = preview ?? {};
 
                       return (
@@ -3594,13 +3750,6 @@ export default function Home() {
                     No extracted booking preview available. Split the message and parse one booking at a time.
                   </div>
                 ) : null}
-                <button
-                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                  onClick={() => setShowParserDebug((current) => !current)}
-                  type="button"
-                >
-                  {showParserDebug ? "Hide parser debug" : "Show parser debug"}
-                </button>
                 {showParserDebug ? (
                   <div className="mt-3">
                     <p className="mb-2 text-sm font-semibold text-slate-800">Parsed booking state</p>
@@ -3609,6 +3758,22 @@ export default function Home() {
                     </pre>
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+
+            {parsedDebugBooking ? (
+              <div className="mt-5 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Parser debug</p>
+                  <p className="text-xs text-slate-500">Hidden by default for daily operations.</p>
+                </div>
+                <button
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => setShowParserDebug((current) => !current)}
+                  type="button"
+                >
+                  {showParserDebug ? "Hide parser debug" : "Show parser debug"}
+                </button>
               </div>
             ) : null}
 
@@ -3698,13 +3863,24 @@ export default function Home() {
                   <h2 className="text-xl font-semibold">Job Card Preview</h2>
                   <p className="text-sm text-slate-500">WhatsApp-ready driver message.</p>
                 </div>
-                <button
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                  onClick={copyJobCard}
-                  type="button"
-                >
-                  Copy
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {parsedDebugBooking ? (
+                    <button
+                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      onClick={() => setShowParserDebug((current) => !current)}
+                      type="button"
+                    >
+                      {showParserDebug ? "Hide parser debug" : "Show parser debug"}
+                    </button>
+                  ) : null}
+                  <button
+                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    onClick={copyJobCard}
+                    type="button"
+                  >
+                    Copy
+                  </button>
+                </div>
               </div>
               <pre className="whitespace-pre-wrap rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm">
                 {jobCardPreview}

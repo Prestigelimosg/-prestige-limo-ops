@@ -26,6 +26,8 @@ Pax: 2
 Child seat: 2 booster seat
 Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
+const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
+From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
 const browserErrors = [];
 const browserConsoleErrors = [];
 const forbiddenRuntimeText = [
@@ -414,6 +416,7 @@ async function runChromeTest() {
       const pres = [...document.querySelectorAll("pre")].map((pre) => pre.innerText);
       const fields = {
         company: fieldValue("Company / Account"),
+        bookingType: fieldValue("Booking type"),
         flight: fieldValue("Flight number"),
         pickup: fieldValue("Pickup"),
         extraStopLocation: fieldValue("Extra stop location"),
@@ -458,6 +461,87 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertBookingUiState(state);
+
+    const focusedDspTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(focusedDspTextarea, true, "Expected booking message textarea to be focused for DSP sample");
+
+    await client.send("Input.insertText", { text: dspItinerarySample });
+
+    const filledDspTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(dspItinerarySample)}`,
+    );
+    assert.equal(filledDspTextarea, true, "Expected DSP itinerary booking message textarea to be filled");
+
+    const clickedDspParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDspParse, true, "Expected Parse Booking button to parse DSP itinerary sample");
+
+    const dspState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.bookingType === "DSP" &&
+          candidateState?.fields?.pickup === "Grand Hyatt" &&
+          candidateState?.fields?.extraStopCount === "5"
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed DSP itinerary UI state",
+    );
+    dspState.errors = [...browserErrors, ...(dspState.errors || [])];
+    dspState.consoleErrors = [...browserConsoleErrors, ...(dspState.consoleErrors || [])];
+
+    assert.deepEqual(dspState.errors, [], `Expected no browser runtime errors, got ${dspState.errors.join("\n")}`);
+    assert.deepEqual(
+      dspState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${dspState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(dspState.fields.dropoff, "Ritz-Carlton");
+    assert.match(
+      dspState.jobCardPreview,
+      /Grand Hyatt > Multi-stop itinerary hidden for privacy > Ritz-Carlton/,
+    );
+    assert.doesNotMatch(dspState.jobCardPreview, /Temasek Office|Asia Square|60B Orchard|#37-01|018960/);
+    assert.match(dspState.visibleText, /Itinerary preview/);
+    assert.match(dspState.driverDispatch, /Pickup: Grand Hyatt/);
+    assert.match(dspState.driverDispatch, /Itinerary:/);
+    assert.match(dspState.driverDispatch, /1000hrs - Ritz-Carlton Singapore/);
+    assert.match(dspState.driverDispatch, /1200hrs - BDC office/);
+    assert.match(dspState.driverDispatch, /1330hrs - Temasek Office, The Atrium@Orchard/);
+    assert.match(dspState.driverDispatch, /1530hrs - Asia Square Tower 1, 8 Marina View/);
+    assert.match(dspState.driverDispatch, /1800hrs - Ritz-Carlton/);
+    assert.doesNotMatch(dspState.driverDispatch, /Grand Hyatt > .*Ritz-Carlton/s);
+    assert.equal(
+      (dspState.driverDispatch.match(/1800hrs - Ritz-Carlton/g) || []).length,
+      1,
+      "Expected final Ritz-Carlton to appear once in the driver itinerary",
+    );
+
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {
     let pageSnapshot = "";

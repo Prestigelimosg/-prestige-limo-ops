@@ -12,6 +12,7 @@
     "test:pricing": "node --experimental-strip-types scripts/test-child-seat-pricing.mjs",
     "test:browser": "node scripts/test-booking-browser.mjs",
     "test:app-smoke-browser": "node scripts/test-app-smoke-browser.mjs",
+    "test:booking-ui-browser": "node scripts/test-booking-ui-browser.mjs",
     "test:rates-browser": "node scripts/test-rates-browser.mjs"
   },
   "dependencies": {

@@ -1096,6 +1096,7 @@ export default function Home() {
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
   const [parsedDebugBooking, setParsedDebugBooking] = useState<ParsedDebugBooking | null>(null);
+  const [showParserDebug, setShowParserDebug] = useState(false);
   const [multiBookingNotice, setMultiBookingNotice] = useState<ParsedBooking | null>(null);
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -1339,6 +1340,7 @@ export default function Home() {
 
   function clearParseArtifacts() {
     setParsedDebugBooking(null);
+    setShowParserDebug(false);
     setMultiBookingNotice(null);
     setMessage({
       tone: "info",
@@ -2774,6 +2776,7 @@ export default function Home() {
   function loadSelectedBooking(bookingRecord: BookingRecord) {
     setBooking(() => bookingRecordToForm(bookingRecord));
     setParsedDebugBooking(null);
+    setShowParserDebug(false);
     setMultiBookingNotice(null);
     setMessage({
       tone: "success",
@@ -3591,10 +3594,21 @@ export default function Home() {
                     No extracted booking preview available. Split the message and parse one booking at a time.
                   </div>
                 ) : null}
-                <p className="mb-2 text-sm font-semibold text-slate-800">Parsed booking state</p>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-700">
-                  {JSON.stringify(parsedDebugBooking, null, 2)}
-                </pre>
+                <button
+                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => setShowParserDebug((current) => !current)}
+                  type="button"
+                >
+                  {showParserDebug ? "Hide parser debug" : "Show parser debug"}
+                </button>
+                {showParserDebug ? (
+                  <div className="mt-3">
+                    <p className="mb-2 text-sm font-semibold text-slate-800">Parsed booking state</p>
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-700">
+                      {JSON.stringify(parsedDebugBooking, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

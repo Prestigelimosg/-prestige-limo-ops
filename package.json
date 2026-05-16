@@ -10,7 +10,8 @@
     "lint": "eslint",
     "test:parser": "node --experimental-strip-types scripts/test-booking-parser.mjs",
     "test:pricing": "node --experimental-strip-types scripts/test-child-seat-pricing.mjs",
-    "test:browser": "node scripts/test-booking-browser.mjs"
+    "test:browser": "node scripts/test-booking-browser.mjs",
+    "test:rates-browser": "node scripts/test-rates-browser.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",

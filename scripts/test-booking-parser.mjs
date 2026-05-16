@@ -286,6 +286,34 @@ assert.deepEqual(parseBookingForTest(eventReturnTripSample), {
   cleanedLines: [eventReturnTripSample],
 });
 
+const multiStopItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
+From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
+assert.deepEqual(parseBookingForTest(multiStopItinerarySample), {
+  success: true,
+  company: '',
+  bookingType: 'DSP',
+  vehicle: '',
+  date: '2026-05-14',
+  time: '1000hrs',
+  flight: '',
+  pickup: 'Grand Hyatt',
+  dropoff: 'Ritz-Carlton',
+  booker: '',
+  bookerEmail: '',
+  name: 'Drew',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  extraStopCount: '5',
+  extraStopLocation:
+    'Ritz-Carlton Singapore by 10am > BDC office at 12pm > Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore at 1:30pm > 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960 at 3:30pm > Ritz-Carlton at 6pm',
+  bookerContact: '',
+  cleanedLines: [
+    'Hi William, we need a car for Drew tomorrow, please refer to the below schedule:',
+    'From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton',
+  ],
+});
+
 const liveBugSamples = [
   {
     input: `Hi William.

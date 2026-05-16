@@ -46,6 +46,20 @@ type ParseBookingOptions = {
   referenceDate?: Date;
 };
 
+type MultiStopItineraryStop = {
+  location: string;
+  time: string;
+  timeQualifier: "at" | "by";
+};
+
+type MultiStopItineraryDetails = {
+  pickup: string;
+  dropoff: string;
+  pickupTime: string;
+  extraStopCount: string;
+  extraStopLocation: string;
+};
+
 export const alsonSq377Sample = `[11/5/26, 13:33:10] Alson Chua UOB: Hi kindly arrange airport pick up to home on 14 May Thursday 0740 SQ377. Thank you
 [11/5/26, 13:33:16] Alson Chua UOB: Lim Yeow Beng`;
 
@@ -1026,6 +1040,96 @@ function cleanLocation(value: string) {
     .trim());
 }
 
+function cleanItineraryLocation(value: string) {
+  return clean(value)
+    .replace(/^\s*(?:from|to|at)\s+/i, "")
+    .replace(/\s*\(\s*(?:by|at)?\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\)\s*$/i, "")
+    .replace(/\s+(?:by|at)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*$/i, "")
+    .replace(/[.;]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatItineraryDisplayTime(value: string) {
+  return clean(value).replace(/\s+/g, "").toLowerCase();
+}
+
+function formatItineraryStop(stop: MultiStopItineraryStop) {
+  const displayTime = formatItineraryDisplayTime(stop.time);
+
+  return displayTime ? `${stop.location} ${stop.timeQualifier} ${displayTime}` : stop.location;
+}
+
+function detectMultiStopItinerary(text: string): MultiStopItineraryDetails | null {
+  const normalizedText = clean(text.replace(/\n+/g, " "));
+  const timedSegmentCount = (normalizedText.match(/(?:^|;)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi) ?? []).length;
+  const looksLikeSchedule = /\b(?:schedule|itinerary)\b/i.test(normalizedText) || timedSegmentCount >= 2;
+
+  if (!looksLikeSchedule || !/;\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(normalizedText)) {
+    return null;
+  }
+
+  const firstRouteMatch = normalizedText.match(
+    /\bfrom\s+(.+?)\s+to\s+(.+?)(?:\s*\(\s*by\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm))\s*\))?(?=;|\.|\n|$)/i,
+  );
+
+  if (!firstRouteMatch?.[1] || !firstRouteMatch[2]) {
+    return null;
+  }
+
+  const pickup = cleanLocation(firstRouteMatch[1]);
+  const firstStopLocation = cleanItineraryLocation(firstRouteMatch[2]);
+  const firstStopTime = firstRouteMatch[3] || firstMatch(firstRouteMatch[2], [
+    /\bby\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b/i,
+  ]);
+  const stops: MultiStopItineraryStop[] = [];
+
+  if (firstStopLocation) {
+    stops.push({
+      location: firstStopLocation,
+      time: firstStopTime,
+      timeQualifier: firstStopTime ? "by" : "at",
+    });
+  }
+
+  const afterFirstRoute = normalizedText.slice((firstRouteMatch.index ?? 0) + firstRouteMatch[0].length);
+  for (const rawSegment of afterFirstRoute.split(";")) {
+    const segment = clean(rawSegment);
+    const stopMatch = segment.match(/^(\d{1,2}(?::\d{2})?\s*(?:am|pm))\s+(.+)$/i);
+
+    if (!stopMatch?.[1] || !stopMatch[2]) {
+      continue;
+    }
+
+    const location = cleanItineraryLocation(stopMatch[2]);
+
+    if (!location) {
+      continue;
+    }
+
+    stops.push({
+      location,
+      time: stopMatch[1],
+      timeQualifier: "at",
+    });
+  }
+
+  if (!pickup || stops.length < 2) {
+    return null;
+  }
+
+  const pickupTime = parseTimeFromText(stops[0].time);
+  const dropoff = stops[stops.length - 1]?.location || "";
+
+  return {
+    pickup,
+    dropoff,
+    pickupTime,
+    extraStopCount: String(stops.length),
+    extraStopLocation: stops.map(formatItineraryStop).join(" > "),
+  };
+}
+
 function detectStandbyRoute(text: string) {
   const pickup = cleanLocation(
     firstMatch(text, [
@@ -1353,8 +1457,11 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const bookerCompanyContext = detectBookerCompanyContext(operationalText);
   const dateText = lineValue(operationalText, ["date", "pickup date", "p/u date", "pu date"]);
   const flight = detectFlight(operationalText);
-  const routeValues = detectRoute(operationalText, flight);
-  const standbyRouteDetails = isStandbyBooking(operationalText)
+  const multiStopItinerary = detectMultiStopItinerary(operationalText);
+  const routeValues = multiStopItinerary
+    ? { pickup: multiStopItinerary.pickup, dropoff: multiStopItinerary.dropoff }
+    : detectRoute(operationalText, flight);
+  const standbyRouteDetails = !multiStopItinerary && isStandbyBooking(operationalText)
     ? detectStandbyRoute(operationalText)
     : { pickup: "", dropoff: "", returnDestination: "", standbyUntil: "" };
   const name =
@@ -1365,13 +1472,13 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     detectNameFromNextWhatsAppLine(whatsappTranscript) ||
     "";
   const standbyDriver = detectStandbyDriver(operationalText);
-  const rawTime = parseTimeFromText(operationalText);
+  const rawTime = multiStopItinerary?.pickupTime || parseTimeFromText(operationalText);
   const childSeatType = detectChildSeatType(operationalText);
   const childSeatCount = detectChildSeatCount(operationalText);
-  const extraStopDetails = detectExtraStopDetails(operationalText);
+  const extraStopDetails = multiStopItinerary || detectExtraStopDetails(operationalText);
   const bookingType =
     lineValue(operationalText, ["booking type", "type", "job type"]) ||
-    detectBookingType(operationalText, flight, routeValues);
+    (multiStopItinerary ? "DSP" : detectBookingType(operationalText, flight, routeValues));
 
   const parsedBooking: ParsedBooking = {
     success: true,

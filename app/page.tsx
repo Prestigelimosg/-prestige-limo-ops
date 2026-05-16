@@ -18,6 +18,7 @@ import {
   numericRate,
   payoutAmountFromRule,
   resolvePricing,
+  type DriverPayoutRule,
   type DriverPayoutRules,
   type RateRules,
   type RateSettings,
@@ -434,7 +435,7 @@ function isRatesSetupErrorMessage(value: string) {
 
 function formatRatesSetupError(value: string, fallbackPrefix: string) {
   return isRatesSetupErrorMessage(value)
-    ? "Rates database not set up. Run Supabase migration."
+    ? `${fallbackPrefix}Rates database not set up. Run Supabase migration.`
     : `${fallbackPrefix}${value}`;
 }
 
@@ -541,6 +542,115 @@ function formatDate(value: string) {
 
 function formatMoney(value: string | number | null | undefined) {
   return numericRate(value).toFixed(2);
+}
+
+function finiteNumber(value: unknown) {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "boolean" ||
+    (typeof value === "string" && !clean(value))
+  ) {
+    return null;
+  }
+
+  const parsedValue = typeof value === "number" ? value : Number(value);
+
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
+function normalizeCustomerRateRules(rules: RateRules | null | undefined) {
+  const source = (rules ?? {}) as Record<string, unknown>;
+  const normalizedRules: RateRules = {};
+
+  for (const bookingType of rateBookingTypes) {
+    const numericValue = finiteNumber(source[bookingType]);
+
+    if (numericValue !== null) {
+      normalizedRules[bookingType] = numericValue;
+    }
+  }
+
+  return normalizedRules;
+}
+
+function normalizeDriverPayoutRules(rules: DriverPayoutRules | null | undefined) {
+  const source = (rules ?? {}) as Record<string, DriverPayoutRule | number | string | null | undefined>;
+  const normalizedRules: DriverPayoutRules = {};
+
+  for (const bookingType of rateBookingTypes) {
+    const rule = source[bookingType];
+
+    if (rule === null || rule === undefined) {
+      continue;
+    }
+
+    if (typeof rule !== "object") {
+      const amount = finiteNumber(rule);
+
+      if (amount !== null) {
+        normalizedRules[bookingType] =
+          bookingType === "DSP" ? { amount, perHour: true } : { min: amount, max: amount };
+      }
+
+      continue;
+    }
+
+    const amount = finiteNumber(rule.amount);
+    const min = finiteNumber(rule.min);
+    const max = finiteNumber(rule.max);
+    const normalizedRule: DriverPayoutRule = {};
+
+    if (amount !== null) {
+      normalizedRule.amount = amount;
+    }
+
+    if (min !== null) {
+      normalizedRule.min = min;
+    }
+
+    if (max !== null) {
+      normalizedRule.max = max;
+    }
+
+    if (rule.perHour !== undefined) {
+      normalizedRule.perHour = Boolean(rule.perHour);
+    }
+
+    if (Object.keys(normalizedRule).length > 0) {
+      normalizedRules[bookingType] = normalizedRule;
+    }
+  }
+
+  return normalizedRules;
+}
+
+function formatOverrideSummary(
+  customerRates: RateRules | null | undefined,
+  driverPayoutRules: DriverPayoutRules | null | undefined,
+) {
+  const normalizedCustomerRates = normalizeCustomerRateRules(customerRates);
+  const normalizedDriverPayoutRules = normalizeDriverPayoutRules(driverPayoutRules);
+  const customerLabels = rateBookingTypes
+    .filter((bookingType) => normalizedCustomerRates[bookingType] !== undefined)
+    .map((bookingType) => `${bookingType} ${formatMoney(normalizedCustomerRates[bookingType])}`);
+  const driverLabels = rateBookingTypes
+    .filter((bookingType) => normalizedDriverPayoutRules[bookingType] !== undefined)
+    .map((bookingType) => {
+      const payoutRule = normalizedDriverPayoutRules[bookingType]!;
+
+      return `${bookingType} ${formatMoney(payoutAmountFromRule(payoutRule))}`;
+    });
+
+  return {
+    customerText: customerLabels.length > 0 ? `Customer: ${customerLabels.join(", ")}` : "Customer: None",
+    driverText: driverLabels.length > 0 ? `Driver: ${driverLabels.join(", ")}` : "Driver: None",
+    hasOverrides: customerLabels.length > 0 || driverLabels.length > 0,
+  };
+}
+
+function hasRateOverrideValues(record: Pick<CompanyRecord, "customer_rates" | "driver_payout_rules">) {
+  return formatOverrideSummary(record.customer_rates, record.driver_payout_rules).hasOverrides;
 }
 
 function statusClass(tone: Message["tone"]) {
@@ -953,6 +1063,7 @@ export default function Home() {
     useState<RateOverrideDraft>(initialRateOverrideDraft);
   const [rateCompanies, setRateCompanies] = useState<CompanyRecord[]>([]);
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
+  const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
   const [message, setMessage] = useState<Message>({
     tone: "info",
@@ -1038,6 +1149,15 @@ export default function Home() {
 
     return [...childSeatTypeOptions];
   }, [booking.childSeatType]);
+
+  const companyOverrideRecords = useMemo(
+    () => rateCompanies.filter((companyRecord) => hasRateOverrideValues(companyRecord)),
+    [rateCompanies],
+  );
+  const bossOverrideRecords = useMemo(
+    () => rateTravelers.filter((travelerRecord) => hasRateOverrideValues(travelerRecord)),
+    [rateTravelers],
+  );
 
   const assignedDriverId = clean(booking.driverId);
   const assignedDriverName = clean(booking.driverName).toLowerCase();
@@ -1947,7 +2067,7 @@ export default function Home() {
     if (!supabase) {
       setMessage({
         tone: "error",
-        text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Load failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
       });
       return;
     }
@@ -1955,70 +2075,90 @@ export default function Home() {
     setSavingRates(true);
     setMessage({ tone: "info", text: "Loading rates..." });
 
-    const [settingsResult, companiesResult, travelersResult] = await Promise.all([
-      supabase
-        .from("rate_settings")
-        .select("customer_rates, driver_payout_rules, midnight_surcharge, extra_stop_surcharge, midnight_payout, extra_stop_payout, child_seat_customer_surcharge, child_seat_driver_payout")
-        .eq("id", "default")
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("companies")
-        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
-        .order("company_name", { ascending: true }),
-      supabase
-        .from("travelers")
-        .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
-        .order("traveler_name", { ascending: true }),
-    ]);
+    try {
+      const [settingsResult, companiesResult, travelersResult] = await Promise.all([
+        supabase
+          .from("rate_settings")
+          .select("customer_rates, driver_payout_rules, midnight_surcharge, extra_stop_surcharge, midnight_payout, extra_stop_payout, child_seat_customer_surcharge, child_seat_driver_payout")
+          .eq("id", "default")
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("companies")
+          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
+          .order("company_name", { ascending: true }),
+        supabase
+          .from("travelers")
+          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
+          .order("traveler_name", { ascending: true }),
+      ]);
 
-    if (settingsResult.error || companiesResult.error || travelersResult.error) {
-      const errorMessage =
-        settingsResult.error?.message || companiesResult.error?.message || travelersResult.error?.message || "Unknown rate load error.";
+      const loadError = settingsResult.error || companiesResult.error || travelersResult.error;
 
-      setMessage({
-        tone: "error",
-        text: formatRatesSetupError(errorMessage, "Rate load failed: "),
-      });
-      setSavingRates(false);
-      return;
-    }
+      if (loadError) {
+        throw new Error(formatSupabaseError(loadError));
+      }
 
-    const settings = settingsResult.data;
-    if (settings) {
+      const settings = settingsResult.data;
+      const loadedCustomerRates = normalizeCustomerRateRules(settings?.customer_rates as RateRules | null | undefined);
+      const loadedDriverPayoutRules = normalizeDriverPayoutRules(
+        settings?.driver_payout_rules as DriverPayoutRules | null | undefined,
+      );
+
       setRateSettings({
         customerRates: {
           ...defaultCustomerRates,
-          ...(settings.customer_rates as RateRules),
+          ...loadedCustomerRates,
         },
         driverPayoutRules: {
           ...defaultDriverPayoutRules,
-          ...(settings.driver_payout_rules as DriverPayoutRules),
+          ...loadedDriverPayoutRules,
         },
-        midnightSurcharge: numericRate(settings.midnight_surcharge),
-        extraStopSurcharge: numericRate(settings.extra_stop_surcharge),
-        midnightPayout: numericRate(settings.midnight_payout),
-        extraStopPayout: numericRate(settings.extra_stop_payout),
-        childSeatCustomerSurcharge: settings.child_seat_customer_surcharge === undefined
+        midnightSurcharge: settings ? numericRate(settings.midnight_surcharge) : initialRateSettings.midnightSurcharge,
+        extraStopSurcharge: settings ? numericRate(settings.extra_stop_surcharge) : initialRateSettings.extraStopSurcharge,
+        midnightPayout: settings ? numericRate(settings.midnight_payout) : initialRateSettings.midnightPayout,
+        extraStopPayout: settings ? numericRate(settings.extra_stop_payout) : initialRateSettings.extraStopPayout,
+        childSeatCustomerSurcharge: settings?.child_seat_customer_surcharge === undefined
           ? defaultChildSeatCustomerSurcharge
           : numericRate(settings.child_seat_customer_surcharge),
-        childSeatDriverPayout: settings.child_seat_driver_payout === undefined
+        childSeatDriverPayout: settings?.child_seat_driver_payout === undefined
           ? defaultChildSeatDriverPayout
           : numericRate(settings.child_seat_driver_payout),
       });
-    }
 
-    setRateCompanies((companiesResult.data ?? []) as CompanyRecord[]);
-    setRateTravelers((travelersResult.data ?? []) as TravelerRecord[]);
-    setMessage({ tone: "success", text: successText });
-    setSavingRates(false);
+      setRateCompanies(
+        ((companiesResult.data ?? []) as CompanyRecord[]).map((companyRecord) => ({
+          ...companyRecord,
+          customer_rates: normalizeCustomerRateRules(companyRecord.customer_rates),
+          driver_payout_rules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
+        })),
+      );
+      setRateTravelers(
+        ((travelersResult.data ?? []) as TravelerRecord[]).map((travelerRecord) => ({
+          ...travelerRecord,
+          customer_rates: normalizeCustomerRateRules(travelerRecord.customer_rates),
+          driver_payout_rules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
+        })),
+      );
+      setRatesLoaded(true);
+      setMessage({ tone: "success", text: successText });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown rate load error.";
+
+      setMessage({
+        tone: "error",
+        text: formatRatesSetupError(errorMessage, "Load failed: "),
+      });
+    } finally {
+      setSavingRates(false);
+    }
   }
 
   async function saveDefaultRates() {
     if (!supabase) {
       setMessage({
         tone: "error",
-        text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Save failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
       });
       return;
     }
@@ -2026,45 +2166,70 @@ export default function Home() {
     setSavingRates(true);
     setMessage({ tone: "info", text: "Saving default rates..." });
 
-    const { error } = await supabase.from("rate_settings").upsert({
-      id: "default",
-      customer_rates: rateSettings.customerRates,
-      driver_payout_rules: rateSettings.driverPayoutRules,
-      midnight_surcharge: rateSettings.midnightSurcharge,
-      extra_stop_surcharge: rateSettings.extraStopSurcharge,
-      midnight_payout: rateSettings.midnightPayout,
-      extra_stop_payout: rateSettings.extraStopPayout,
-      child_seat_customer_surcharge: rateSettings.childSeatCustomerSurcharge,
-      child_seat_driver_payout: rateSettings.childSeatDriverPayout,
-      updated_at: new Date().toISOString(),
-    });
+    try {
+      const customerRates = {
+        ...defaultCustomerRates,
+        ...normalizeCustomerRateRules(rateSettings.customerRates),
+      };
+      const driverPayoutRules = {
+        ...defaultDriverPayoutRules,
+        ...normalizeDriverPayoutRules(rateSettings.driverPayoutRules),
+      };
+      const { error } = await supabase
+        .from("rate_settings")
+        .upsert({
+          id: "default",
+          customer_rates: customerRates,
+          driver_payout_rules: driverPayoutRules,
+          midnight_surcharge: rateSettings.midnightSurcharge,
+          extra_stop_surcharge: rateSettings.extraStopSurcharge,
+          midnight_payout: rateSettings.midnightPayout,
+          extra_stop_payout: rateSettings.extraStopPayout,
+          child_seat_customer_surcharge: rateSettings.childSeatCustomerSurcharge,
+          child_seat_driver_payout: rateSettings.childSeatDriverPayout,
+          updated_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
 
-    if (error) {
+      if (error) {
+        throw new Error(formatSupabaseError(error));
+      }
+
+      setRateSettings((current) => ({
+        ...current,
+        customerRates,
+        driverPayoutRules,
+      }));
+      setMessage({ tone: "success", text: "Default rates saved." });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown default rate save error.";
+
       setMessage({
         tone: "error",
-        text: formatRatesSetupError(error.message, "Default rate save failed: "),
+        text: formatRatesSetupError(errorMessage, "Save failed: "),
       });
-    } else {
-      setMessage({ tone: "success", text: "Default Prestige rates saved." });
+    } finally {
+      setSavingRates(false);
     }
-
-    setSavingRates(false);
   }
 
   async function saveRateOverride() {
     if (!supabase) {
       setMessage({
         tone: "error",
-        text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Save failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
       });
       return;
     }
 
     const companyName = clean(rateOverrideDraft.companyName);
     const bossName = clean(rateOverrideDraft.bossName);
+    const overrideCustomerRates = normalizeCustomerRateRules(rateOverrideDraft.customerRates);
+    const overrideDriverPayoutRules = normalizeDriverPayoutRules(rateOverrideDraft.driverPayoutRules);
 
     if (!companyName && !bossName) {
-      setMessage({ tone: "error", text: "Enter a company/account or boss/name before saving overrides." });
+      setMessage({ tone: "error", text: "Save failed: Enter a company/account or boss/name before saving overrides." });
       return;
     }
 
@@ -2096,8 +2261,8 @@ export default function Home() {
           .from("companies")
           .insert({
             company_name: companyName || "Internal Account",
-            customer_rates: {},
-            driver_payout_rules: {},
+            customer_rates: bossName ? {} : overrideCustomerRates,
+            driver_payout_rules: bossName ? {} : overrideDriverPayoutRules,
             transzend_excel_privacy: rateOverrideDraft.transzendExcelPrivacy,
           })
           .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
@@ -2111,16 +2276,16 @@ export default function Home() {
       }
 
       const mergedCompanyRates = bossName
-        ? company.customer_rates ?? {}
+        ? normalizeCustomerRateRules(company.customer_rates)
         : {
-            ...(company.customer_rates ?? {}),
-            ...rateOverrideDraft.customerRates,
+            ...normalizeCustomerRateRules(company.customer_rates),
+            ...overrideCustomerRates,
           };
       const mergedCompanyPayouts = bossName
-        ? company.driver_payout_rules ?? {}
+        ? normalizeDriverPayoutRules(company.driver_payout_rules)
         : {
-            ...(company.driver_payout_rules ?? {}),
-            ...rateOverrideDraft.driverPayoutRules,
+            ...normalizeDriverPayoutRules(company.driver_payout_rules),
+            ...overrideDriverPayoutRules,
           };
 
       const companyUpdate = await supabase
@@ -2158,12 +2323,12 @@ export default function Home() {
             .from("travelers")
             .update({
               customer_rates: {
-                ...(traveler.customer_rates ?? {}),
-                ...rateOverrideDraft.customerRates,
+                ...normalizeCustomerRateRules(traveler.customer_rates),
+                ...overrideCustomerRates,
               },
               driver_payout_rules: {
-                ...(traveler.driver_payout_rules ?? {}),
-                ...rateOverrideDraft.driverPayoutRules,
+                ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
+                ...overrideDriverPayoutRules,
               },
               updated_at: new Date().toISOString(),
             })
@@ -2176,8 +2341,8 @@ export default function Home() {
           const travelerInsert = await supabase.from("travelers").insert({
             company_id: company.id,
             traveler_name: bossName,
-            customer_rates: rateOverrideDraft.customerRates,
-            driver_payout_rules: rateOverrideDraft.driverPayoutRules,
+            customer_rates: overrideCustomerRates,
+            driver_payout_rules: overrideDriverPayoutRules,
           });
 
           if (travelerInsert.error) {
@@ -2186,13 +2351,19 @@ export default function Home() {
         }
       }
 
-      setRateOverrideDraft(initialRateOverrideDraft);
-      await loadRates("Rate override saved.");
+      setRateOverrideDraft({
+        companyName: companyName || "Internal Account",
+        bossName,
+        customerRates: overrideCustomerRates,
+        driverPayoutRules: overrideDriverPayoutRules,
+        transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
+      });
+      await loadRates("Override saved.");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown rate save error.";
       setMessage({
         tone: "error",
-        text: formatRatesSetupError(errorMessage, "Rate override save failed: "),
+        text: formatRatesSetupError(errorMessage, "Save failed: "),
       });
       setSavingRates(false);
     }
@@ -3880,73 +4051,91 @@ export default function Home() {
               })}
             </div>
 
-            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                <h4 className="text-sm font-semibold text-slate-800">Company Overrides</h4>
-                <div className="mt-2 max-h-48 space-y-2 overflow-auto">
-                  {rateCompanies.length === 0 ? (
-                    <p className="text-sm text-slate-500">Load rates to view company overrides.</p>
-                  ) : (
-                    rateCompanies.map((companyRecord) => (
-                      <button
-                        className="w-full rounded-md border border-stone-200 bg-white p-2 text-left text-sm transition hover:bg-stone-50"
-                        key={companyRecord.id}
-                        onClick={() =>
-                          setRateOverrideDraft({
-                            companyName: clean(companyRecord.company_name),
-                            bossName: "",
-                            customerRates: companyRecord.customer_rates ?? {},
-                            driverPayoutRules: companyRecord.driver_payout_rules ?? {},
-                            transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
-                          })
-                        }
-                        type="button"
-                      >
-                        <span className="font-medium">{companyRecord.company_name}</span>
-                        <span className="ml-2 text-xs text-slate-500">
-                          {Object.keys(companyRecord.customer_rates ?? {}).join(", ") || "No customer overrides"}
-                        </span>
-                      </button>
-                    ))
-                  )}
+            <div className="mt-5 border-t border-stone-200 pt-5">
+              <h3 className="text-base font-semibold">Saved Rate Overrides</h3>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+                  <h4 className="text-sm font-semibold text-slate-800">Company Overrides</h4>
+                  <div className="mt-2 max-h-56 space-y-2 overflow-auto">
+                    {!ratesLoaded ? (
+                      <p className="text-sm text-slate-500">Load rates to view saved company overrides.</p>
+                    ) : companyOverrideRecords.length === 0 ? (
+                      <p className="text-sm text-slate-500">No company overrides found.</p>
+                    ) : (
+                      companyOverrideRecords.map((companyRecord) => {
+                        const summary = formatOverrideSummary(
+                          companyRecord.customer_rates,
+                          companyRecord.driver_payout_rules,
+                        );
+
+                        return (
+                          <button
+                            className="w-full rounded-md border border-stone-200 bg-white p-3 text-left text-sm transition hover:bg-stone-50"
+                            key={companyRecord.id}
+                            onClick={() =>
+                              setRateOverrideDraft({
+                                companyName: clean(companyRecord.company_name),
+                                bossName: "",
+                                customerRates: normalizeCustomerRateRules(companyRecord.customer_rates),
+                                driverPayoutRules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
+                                transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
+                              })
+                            }
+                            type="button"
+                          >
+                            <p className="font-medium">{companyRecord.company_name}</p>
+                            <p className="text-xs text-slate-600">{summary.customerText}</p>
+                            <p className="text-xs text-slate-600">{summary.driverText}</p>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                <h4 className="text-sm font-semibold text-slate-800">Boss / Name Overrides</h4>
-                <div className="mt-2 max-h-48 space-y-2 overflow-auto">
-                  {rateTravelers.length === 0 ? (
-                    <p className="text-sm text-slate-500">Load rates to view boss/name overrides.</p>
-                  ) : (
-                    rateTravelers.map((travelerRecord) => {
-                      const companyRecord = rateCompanies.find(
-                        (company) => company.id === travelerRecord.company_id,
-                      );
+                <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+                  <h4 className="text-sm font-semibold text-slate-800">Boss / Name Overrides</h4>
+                  <div className="mt-2 max-h-56 space-y-2 overflow-auto">
+                    {!ratesLoaded ? (
+                      <p className="text-sm text-slate-500">Load rates to view saved boss/name overrides.</p>
+                    ) : bossOverrideRecords.length === 0 ? (
+                      <p className="text-sm text-slate-500">No boss/name overrides found.</p>
+                    ) : (
+                      bossOverrideRecords.map((travelerRecord) => {
+                        const companyRecord = rateCompanies.find(
+                          (company) => company.id === travelerRecord.company_id,
+                        );
+                        const summary = formatOverrideSummary(
+                          travelerRecord.customer_rates,
+                          travelerRecord.driver_payout_rules,
+                        );
 
-                      return (
-                        <button
-                          className="w-full rounded-md border border-stone-200 bg-white p-2 text-left text-sm transition hover:bg-stone-50"
-                          key={travelerRecord.id}
-                          onClick={() =>
-                            setRateOverrideDraft({
-                              companyName: clean(companyRecord?.company_name),
-                              bossName: clean(travelerRecord.traveler_name),
-                              customerRates: travelerRecord.customer_rates ?? {},
-                              driverPayoutRules: travelerRecord.driver_payout_rules ?? {},
-                              transzendExcelPrivacy: Boolean(companyRecord?.transzend_excel_privacy),
-                            })
-                          }
-                          type="button"
-                        >
-                          <span className="font-medium">{travelerRecord.traveler_name}</span>
-                          <span className="ml-2 text-xs text-slate-500">
-                            {clean(companyRecord?.company_name) || "Internal Account"} /{" "}
-                            {Object.keys(travelerRecord.customer_rates ?? {}).join(", ") || "No customer overrides"}
-                          </span>
-                        </button>
-                      );
-                    })
-                  )}
+                        return (
+                          <button
+                            className="w-full rounded-md border border-stone-200 bg-white p-3 text-left text-sm transition hover:bg-stone-50"
+                            key={travelerRecord.id}
+                            onClick={() =>
+                              setRateOverrideDraft({
+                                companyName: clean(companyRecord?.company_name),
+                                bossName: clean(travelerRecord.traveler_name),
+                                customerRates: normalizeCustomerRateRules(travelerRecord.customer_rates),
+                                driverPayoutRules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
+                                transzendExcelPrivacy: Boolean(companyRecord?.transzend_excel_privacy),
+                              })
+                            }
+                            type="button"
+                          >
+                            <p className="font-medium">{travelerRecord.traveler_name}</p>
+                            <p className="text-xs text-slate-500">
+                              {clean(companyRecord?.company_name) || "Internal Account"}
+                            </p>
+                            <p className="text-xs text-slate-600">{summary.customerText}</p>
+                            <p className="text-xs text-slate-600">{summary.driverText}</p>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

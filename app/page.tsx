@@ -581,6 +581,12 @@ function formatMoney(value: string | number | null | undefined) {
   return numericRate(value).toFixed(2);
 }
 
+function formatCompactMoney(value: string | number | null | undefined) {
+  const formattedValue = formatMoney(value);
+
+  return formattedValue.endsWith(".00") ? formattedValue.slice(0, -3) : formattedValue;
+}
+
 function finiteNumber(value: unknown) {
   if (
     value === null ||
@@ -594,6 +600,12 @@ function finiteNumber(value: unknown) {
   const parsedValue = typeof value === "number" ? value : Number(value);
 
   return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
+function positiveRateOrDefault(value: unknown, fallback: number) {
+  const numericValue = finiteNumber(value);
+
+  return numericValue !== null && numericValue > 0 ? numericValue : fallback;
 }
 
 function normalizeCustomerRateRules(rules: RateRules | null | undefined) {
@@ -1102,6 +1114,7 @@ export default function Home() {
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
+  const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
   const [message, setMessage] = useState<Message>({
     tone: "info",
     text: "Ready for dispatch.",
@@ -2175,15 +2188,19 @@ export default function Home() {
           ...loadedDriverPayoutRules,
         },
         midnightSurcharge: settings ? numericRate(settings.midnight_surcharge) : initialRateSettings.midnightSurcharge,
-        extraStopSurcharge: settings ? numericRate(settings.extra_stop_surcharge) : initialRateSettings.extraStopSurcharge,
+        extraStopSurcharge: settings
+          ? positiveRateOrDefault(settings.extra_stop_surcharge, initialRateSettings.extraStopSurcharge)
+          : initialRateSettings.extraStopSurcharge,
         midnightPayout: settings ? numericRate(settings.midnight_payout) : initialRateSettings.midnightPayout,
-        extraStopPayout: settings ? numericRate(settings.extra_stop_payout) : initialRateSettings.extraStopPayout,
+        extraStopPayout: settings
+          ? positiveRateOrDefault(settings.extra_stop_payout, initialRateSettings.extraStopPayout)
+          : initialRateSettings.extraStopPayout,
         childSeatCustomerSurcharge: settings?.child_seat_customer_surcharge === undefined
           ? defaultChildSeatCustomerSurcharge
-          : numericRate(settings.child_seat_customer_surcharge),
+          : positiveRateOrDefault(settings.child_seat_customer_surcharge, defaultChildSeatCustomerSurcharge),
         childSeatDriverPayout: settings?.child_seat_driver_payout === undefined
           ? defaultChildSeatDriverPayout
-          : numericRate(settings.child_seat_driver_payout),
+          : positiveRateOrDefault(settings.child_seat_driver_payout, defaultChildSeatDriverPayout),
       });
 
       setRateCompanies(
@@ -2519,20 +2536,29 @@ export default function Home() {
   }
 
   async function saveBooking() {
+    setBookingSaveMessage(null);
+
     if (!validateBooking()) {
       return;
     }
 
     if (!supabase) {
-      setMessage({
+      const saveMessage = {
         tone: "error",
-        text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Booking save failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      } satisfies Message;
+
+      setMessage({
+        tone: saveMessage.tone,
+        text: saveMessage.text,
       });
+      setBookingSaveMessage(saveMessage);
       return;
     }
 
     setSaving(true);
     setMessage({ tone: "info", text: "Saving booking + CRM..." });
+    setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
 
     try {
       const fallbackCompanyName =
@@ -2626,10 +2652,13 @@ export default function Home() {
       const { data: savedBooking, error } = await supabase.from("bookings").insert(bookingPayload).select("id").single();
 
       if (error || !savedBooking) {
-        setMessage({
+        const saveMessage = {
           tone: "error",
           text: `Booking save failed: ${error ? formatSupabaseError(error) : "No saved booking id returned."}`,
-        });
+        } satisfies Message;
+
+        setMessage(saveMessage);
+        setBookingSaveMessage(saveMessage);
       } else {
         if (!crmUpdateFailed) {
           try {
@@ -2643,12 +2672,18 @@ export default function Home() {
         const savedBookingResult = await fetchSavedBookingById(savedBooking.id);
 
         if (savedBookingResult.error || !savedBookingResult.data) {
+          const saveMessage = {
+            tone: "success",
+            text: `Booking saved successfully: ${savedBooking.id}`,
+          } satisfies Message;
+
           setMessage({
-            tone: "error",
-            text: `Booking ${savedBooking.id} was inserted, but could not be loaded back: ${
+            tone: saveMessage.tone,
+            text: `${saveMessage.text}. Recent booking reload failed: ${
               savedBookingResult.error ? formatSupabaseError(savedBookingResult.error) : "No booking row returned."
             }`,
           });
+          setBookingSaveMessage(saveMessage);
           return;
         }
 
@@ -2659,16 +2694,21 @@ export default function Home() {
             ...currentBookings.filter((currentBooking) => String(currentBooking.id) !== String(savedBookingRecord.id)),
           ]),
         );
-        setMessage({
+        const saveMessage = {
           tone: crmUpdateFailed ? "error" : "success",
           text: crmUpdateFailed
-            ? `Booking saved successfully: ${savedBooking.id}. CRM update failed: ${crmErrorMessage || "Unknown CRM error."}`
-            : `Booking saved successfully: ${savedBooking.id}.`,
-        });
+            ? `Booking saved successfully. CRM update failed: ${crmErrorMessage || "Unknown CRM error."}`
+            : `Booking saved successfully: ${savedBooking.id}`,
+        } satisfies Message;
+
+        setMessage(saveMessage);
+        setBookingSaveMessage(saveMessage);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown save error.";
-      setMessage({ tone: "error", text: `Booking save failed: ${errorMessage}` });
+      const saveMessage = { tone: "error", text: `Booking save failed: ${errorMessage}` } satisfies Message;
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
     } finally {
       setSaving(false);
     }
@@ -3115,14 +3155,15 @@ export default function Home() {
           {draftPricing.extraStopCount ? (
             <p>
               Extra stops: {draftPricing.extraStopCount} x customer +$
-              {formatMoney(draftPricing.extraStopSurcharge)} / driver +${formatMoney(draftPricing.extraStopPayout)}
+              {formatCompactMoney(draftPricing.extraStopSurcharge)} / driver +$
+              {formatCompactMoney(draftPricing.extraStopPayout)}
             </p>
           ) : null}
           {draftPricing.childSeatCount ? (
             <p>
               Child seat: {draftPricing.childSeatCount} x customer +$
-              {formatMoney(draftPricing.childSeatCustomerSurcharge)} / driver +$
-              {formatMoney(draftPricing.childSeatDriverPayout)}
+              {formatCompactMoney(draftPricing.childSeatCustomerSurcharge)} / driver +$
+              {formatCompactMoney(draftPricing.childSeatDriverPayout)}
             </p>
           ) : null}
         </div>
@@ -3582,6 +3623,11 @@ export default function Home() {
                 {loading ? "Loading..." : "Load Bookings"}
               </button>
             </div>
+            {bookingSaveMessage ? (
+              <div className={`mt-3 rounded-md border px-4 py-3 text-sm ${statusClass(bookingSaveMessage.tone)}`}>
+                {bookingSaveMessage.text}
+              </div>
+            ) : null}
 
             {bookings.length > 0 ? (
               <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">

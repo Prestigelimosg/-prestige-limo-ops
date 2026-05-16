@@ -21,14 +21,14 @@ const defaultPricing = resolvePricing(
 
 assert.equal(defaultPricing.childSeatCount, 2);
 assert.equal(defaultPricing.childSeatCustomerAmount, 30);
-assert.equal(defaultPricing.childSeatDriverAmount, 0);
+assert.equal(defaultPricing.childSeatDriverAmount, 20);
 
 assert.deepEqual(
   calculateProfit(defaultPricing),
   {
     customerPrice: 105,
-    driverPayout: 65,
-    profit: 40,
+    driverPayout: 85,
+    profit: 20,
     customerPriceSource: "default",
     driverPayoutSource: "default",
   },
@@ -54,6 +54,7 @@ const configuredPricing = resolvePricing(
 
 assert.equal(configuredPricing.midnightSurcharge, 15);
 assert.equal(configuredPricing.midnightPayout, 10);
+assert.equal(configuredPricing.extraStopCustomerAmount, 15);
 assert.equal(configuredPricing.extraStopDriverAmount, 10);
 assert.equal(configuredPricing.childSeatCustomerAmount, 20);
 assert.equal(configuredPricing.childSeatDriverAmount, 5);
@@ -61,9 +62,9 @@ assert.equal(configuredPricing.childSeatDriverAmount, 5);
 assert.deepEqual(
   calculateProfit(configuredPricing),
   {
-    customerPrice: 120,
+    customerPrice: 135,
     driverPayout: 100,
-    profit: 20,
+    profit: 35,
     customerPriceSource: "default",
     driverPayoutSource: "default",
   },

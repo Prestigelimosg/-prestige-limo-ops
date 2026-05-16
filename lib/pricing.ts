@@ -73,10 +73,10 @@ export const defaultDriverPayoutRules: Required<DriverPayoutRules> = {
 
 export const defaultMidnightSurcharge = 15;
 export const defaultMidnightPayout = 10;
-export const defaultExtraStopSurcharge = 0;
+export const defaultExtraStopSurcharge = 15;
 export const defaultExtraStopPayout = 10;
 export const defaultChildSeatCustomerSurcharge = 15;
-export const defaultChildSeatDriverPayout = 0;
+export const defaultChildSeatDriverPayout = 10;
 
 export const initialRateSettings: RateSettings = {
   customerRates: defaultCustomerRates,

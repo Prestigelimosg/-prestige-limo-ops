@@ -770,6 +770,7 @@ function detectExtraStopDetails(text: string) {
     "extra stop address",
   ]));
   const narratedExtraStop = cleanLocation(firstMatch(text, [
+    /\b(?:one|a|an|\d{1,2})\s+stops?\s+(?:at|to|via)\s+(.+?)(?=\s+(?:with|then|and\s+then|before|after)\b|\.|,|\n|$)/i,
     /\bextra\s+stops?\s+(?:at|to|via)\s+(.+?)(?=\.|,|\n|$)/i,
     /\b(?:via|stopover\s+at)\s+(.+?)(?=\.|,|\n|$)/i,
   ]));
@@ -1013,6 +1014,7 @@ function cleanLocation(value: string) {
     .replace(/\s+(?:taking\s+flight|flight|flt)\s+[A-Z]{2}\s?\d{1,4}.*$/i, "")
     .replace(/\s+(?:at|on)\s+\d{1,2}(?::?\d{2})?\s*(?:am|pm|hrs?)?.*$/i, "")
     .replace(/\s+\d{1,2}(?::?\d{2})?\s*(?:am|pm|hrs?)\b.*$/i, "")
+    .replace(/\s+(?:one|a|an|\d{1,2})\s+stops?\s+(?:at|to|via)\s+.*$/i, "")
     .replace(/\s+(?:with|plus)\s+(?:an?\s+|one\s+|\d{1,2}\s+)?(?:child|baby|booster|infant|toddler)\s+seats?\b.*$/i, "")
     .replace(/\s+for\s+(?:dinner|wedding|event|meeting).*/i, "")
     .replace(/\s+for\s+(?:mr|mrs|ms|mdm|miss|dr|pax|passenger|guest)\b.*$/i, "")

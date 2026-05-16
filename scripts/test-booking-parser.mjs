@@ -203,6 +203,33 @@ assert.deepEqual(parseBookingForTest(extraStopTransferSample), {
   ],
 });
 
+const narratedExtraStopBabySeatDepartureSample =
+  'from my house one stop at marina one with 1 baby seat then to airport at 2315hrs';
+assert.deepEqual(parseBookingForTest(narratedExtraStopBabySeatDepartureSample), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '',
+  time: '2315hrs',
+  flight: '',
+  pickup: 'my house',
+  dropoff: 'Changi Airport',
+  booker: '',
+  bookerEmail: '',
+  name: '',
+  pax: '1',
+  childSeatRequired: 'yes',
+  childSeatCount: '1',
+  childSeatType: 'infant seat',
+  driverName: '',
+  driverContact: '',
+  extraStopCount: '1',
+  extraStopLocation: 'marina one',
+  bookerContact: '',
+  cleanedLines: [narratedExtraStopBabySeatDepartureSample],
+});
+
 const vinuQuotedArrivalMessage = `PG961 > 61 Grange Road
 
 Mr. Vinu. $80 + $10

@@ -55,6 +55,31 @@ E-mail address	hyunsoostar@hotmail.com
 Phone number	+6596389322
 Passangers	2
 Flight No.	SQ883`;
+const exactPastedWaypointAirportDepartureSample = `Pickup date and time	06-05-2026 8:00
+Order total amount	S$110.00
+Taxes	S$0.00 (0%)
+Distance	15.1 km
+Duration	25 minutes
+Comment	For Driver's Info – Pax Name and Number: Edien Joy, +65 83894342 For any updates, please contact me. Thank you.
+ROUTE
+Route name	Airport Departure
+ROUTE LOCATIONS
+351C Canberra Road, Singapore 351C Canberra Rd, Singapore 753351
+PICK UP LOCATION
+756 Woodlands Ave 4, Singapore
+VEHICLE
+Vehicle name	Mercedes Benz E-class
+Bag count	2
+Passengers count	3
+EXTRA
+1 x Waypoint 1 - S$25.00
+CLIENT DETAILS
+First name	Luther
+Last name	Graham
+E-mail address	luthergrahambk@gmail.com
+Phone number	+6580912613
+Passangers	2
+Flight No.	TR 288`;
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
 const timedScheduleItinerarySample = `Hi William, please arrange a car for Drew tomorrow, schedule as follow:
@@ -581,12 +606,17 @@ async function runChromeTest() {
       const fields = {
         company: fieldValue("Company / Account"),
         bookingType: fieldValue("Booking type"),
+        vehicle: fieldValue("Vehicle"),
+        pickupDate: fieldValue("Pickup date"),
         pickupTime: fieldValue("Pickup time"),
         flight: fieldValue("Flight number"),
         pickup: fieldValue("Pickup"),
         extraStopLocation: fieldValue("Extra stop location"),
         extraStopCount: fieldValue("Extra Stops"),
         dropoff: fieldValue("Drop-off"),
+        booker: fieldValue("Booker"),
+        bookerContact: fieldValue("Booker WhatsApp / Contact"),
+        bookerEmail: fieldValue("Booker email (optional)"),
         name: fieldValue("Name"),
         pax: fieldValue("Pax"),
         childSeatCount: fieldValue("Child seat count"),
@@ -742,6 +772,102 @@ async function runChromeTest() {
     assert.equal(exactPasteState.fields.pax, "2");
     assert.equal(exactPasteState.fields.extraStopCount, "1");
     assert.equal(exactPasteState.fields.extraStopLocation, "28 Alexandra View, Singapore 158744");
+
+    const focusedExactDepartureTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedExactDepartureTextarea,
+      true,
+      "Expected booking message textarea to be focused for exact pasted departure waypoint sample",
+    );
+
+    await client.send("Input.insertText", { text: exactPastedWaypointAirportDepartureSample });
+
+    const filledExactDepartureTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(exactPastedWaypointAirportDepartureSample)}`,
+    );
+    assert.equal(
+      filledExactDepartureTextarea,
+      true,
+      "Expected exact pasted departure waypoint booking message textarea to be filled",
+    );
+
+    const clickedExactDepartureParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedExactDepartureParse,
+      true,
+      "Expected Parse Booking button to parse exact pasted departure waypoint sample",
+    );
+
+    const exactDepartureState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.flight === "TR288" &&
+          candidateState?.fields?.vehicle === "E class" &&
+          candidateState?.fields?.name === "Edien Joy" &&
+          candidateState?.fields?.extraStopLocation === "351C Canberra Rd, Singapore 753351"
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed exact pasted departure waypoint UI state",
+    );
+    exactDepartureState.errors = [...browserErrors, ...(exactDepartureState.errors || [])];
+    exactDepartureState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(exactDepartureState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      exactDepartureState.errors,
+      [],
+      `Expected no browser runtime errors, got ${exactDepartureState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      exactDepartureState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${exactDepartureState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(exactDepartureState.fields.company, "");
+    assert.equal(exactDepartureState.fields.booker, "Luther Graham");
+    assert.equal(exactDepartureState.fields.bookerContact, "+6580912613");
+    assert.equal(exactDepartureState.fields.bookerEmail, "luthergrahambk@gmail.com");
+    assert.equal(exactDepartureState.fields.bookingType, "DEP");
+    assert.equal(exactDepartureState.fields.vehicle, "E class");
+    assert.equal(exactDepartureState.fields.pickupDate, "2026-05-06");
+    assert.equal(exactDepartureState.fields.pickupTime, "0800hrs");
+    assert.equal(exactDepartureState.fields.flight, "TR288");
+    assert.equal(exactDepartureState.fields.pickup, "756 Woodlands Ave 4, Singapore");
+    assert.equal(exactDepartureState.fields.dropoff, "Changi Airport");
+    assert.equal(exactDepartureState.fields.name, "Edien Joy");
+    assert.equal(exactDepartureState.fields.pax, "2");
+    assert.equal(exactDepartureState.fields.extraStopCount, "1");
+    assert.equal(exactDepartureState.fields.extraStopLocation, "351C Canberra Rd, Singapore 753351");
+    assert.equal(exactDepartureState.fields.customerPriceOverride, "110");
 
     const focusedDspTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

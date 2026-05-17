@@ -1234,6 +1234,54 @@ const parsedExactPastedWaypointSingleDigitHour =
 assert.equal(parsedExactPastedWaypointSingleDigitHour.date, '2026-05-17');
 assert.equal(parsedExactPastedWaypointSingleDigitHour.time, '0705hrs');
 
+const exactPastedWaypointAirportDepartureFormMessage = `Pickup date and time	06-05-2026 8:00
+Order total amount	S$110.00
+Taxes	S$0.00 (0%)
+Distance	15.1 km
+Duration	25 minutes
+Comment	For Driver's Info – Pax Name and Number: Edien Joy, +65 83894342 For any updates, please contact me. Thank you.
+ROUTE
+Route name	Airport Departure
+ROUTE LOCATIONS
+351C Canberra Road, Singapore 351C Canberra Rd, Singapore 753351
+PICK UP LOCATION
+756 Woodlands Ave 4, Singapore
+VEHICLE
+Vehicle name	Mercedes Benz E-class
+Bag count	2
+Passengers count	3
+EXTRA
+1 x Waypoint 1 - S$25.00
+CLIENT DETAILS
+First name	Luther
+Last name	Graham
+E-mail address	luthergrahambk@gmail.com
+Phone number	+6580912613
+Passangers	2
+Flight No.	TR 288`;
+const parsedExactPastedWaypointAirportDepartureForm =
+  parseBookingForTest(exactPastedWaypointAirportDepartureFormMessage) ?? {};
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.company ?? '', '');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.booker, 'Luther Graham');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.bookerContact, '+6580912613');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.bookerEmail, 'luthergrahambk@gmail.com');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.bookingType, 'DEP');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.date, '2026-05-06');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.time, '0800hrs');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.flight, 'TR288');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.pickup, '756 Woodlands Ave 4, Singapore');
+assert.equal(
+  parsedExactPastedWaypointAirportDepartureForm.extraStopLocation,
+  '351C Canberra Rd, Singapore 753351',
+);
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.extraStopCount, '1');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.dropoff, 'Changi Airport');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.name, 'Edien Joy');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.pax, '2');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.vehicle, 'E class');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.customerPriceOverride, '110');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.childSeatRequired ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

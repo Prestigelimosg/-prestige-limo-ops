@@ -580,7 +580,31 @@ function cleanStructuredListLocation(value: string) {
     return normalizeLocationName(`${beforeKorean}, ${afterKorean}`);
   }
 
+  const repeatedSingaporeAddressMatch = cleanedValue.match(/^(.+?\bSingapore)\s+(.+\bSingapore\b(?:\s+\d{5,6})?.*)$/i);
+
+  if (repeatedSingaporeAddressMatch?.[1] && repeatedSingaporeAddressMatch[2]) {
+    const firstAddress = clean(repeatedSingaporeAddressMatch[1]);
+    const secondAddress = clean(repeatedSingaporeAddressMatch[2]);
+    const normalizedFirst = normalizeAddressForComparison(firstAddress);
+    const normalizedSecond = normalizeAddressForComparison(secondAddress);
+
+    if (normalizedFirst.length >= 8 && normalizedSecond.startsWith(normalizedFirst)) {
+      return normalizeLocationName(secondAddress);
+    }
+  }
+
   return normalizeLocationName(cleanedValue);
+}
+
+function normalizeAddressForComparison(value: string) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/\broad\b/g, "rd")
+    .replace(/\bstreet\b/g, "st")
+    .replace(/\bavenue\b/g, "ave")
+    .replace(/[.,]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function cleanVehicle(value: string) {
@@ -1146,6 +1170,14 @@ function detectStructuredClientName(text: string) {
   return looksLikePersonName(fullName) ? fullName : "";
 }
 
+function detectPaxNameAndNumber(text: string) {
+  const paxName = firstMatch(text, [
+    /\bpax\s+name\s+and\s+number\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s*,\s*\+?\d|\s+\+?\d|\n|$)/i,
+  ]);
+
+  return looksLikePersonName(paxName) ? cleanDetectedName(paxName) : "";
+}
+
 function detectTripOrganizerDetails(text: string) {
   const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
   const booker = cleanDetectedName(match?.[1] ?? "");
@@ -1572,6 +1604,14 @@ function detectVehicle(text: string) {
     return "AVF";
   }
 
+  if (/\bE\s*-?\s*CLASS\b/.test(upperText)) {
+    return "E class";
+  }
+
+  if (/\bS\s*-?\s*CLASS\b/.test(upperText)) {
+    return "S class";
+  }
+
   if (/\bV\s*-?\s*CLASS\b|\bVIANO\b/.test(upperText)) {
     return "VVV";
   }
@@ -1866,11 +1906,14 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const standbyRouteDetails = !multiStopItinerary && isStandbyBooking(operationalText)
     ? detectStandbyRoute(operationalText)
     : { pickup: "", dropoff: "", returnDestination: "", standbyUntil: "" };
+  const structuredClientName = detectStructuredClientName(operationalText);
+  const paxNameAndNumber = detectPaxNameAndNumber(operationalText);
   const name =
     terminalFlightDetails?.passenger ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||
-    detectStructuredClientName(operationalText) ||
+    paxNameAndNumber ||
+    structuredClientName ||
     detectName(operationalText, flight) ||
     detectNameFromCleanedLines(cleanedLines) ||
     detectNameFromNextWhatsAppLine(whatsappTranscript) ||
@@ -1903,6 +1946,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
       tripOrganizerDetails.booker ||
       detectBookerValue(operationalText, bookerCompanyContext) ||
       whatsappTranscript.senderName ||
+      (paxNameAndNumber ? structuredClientName : "") ||
       getEmailBooker(email),
     bookerEmail: email,
     name,

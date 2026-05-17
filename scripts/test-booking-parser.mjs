@@ -9,6 +9,9 @@ import {
 const parserExamples = JSON.parse(
   readFileSync(new URL('../parser_examples/booking-examples.json', import.meta.url), 'utf8'),
 );
+const realWorldFixtures = JSON.parse(
+  readFileSync(new URL('../parser_examples/real-world-bookings.json', import.meta.url), 'utf8'),
+);
 const requiredConfidenceCategories = [
   'MNG airport arrival',
   'DEP airport departure',
@@ -2249,6 +2252,62 @@ for (const [category, count] of categories) {
 }
 
 assert.equal(categories.size, requiredConfidenceCategories.length, 'parser examples should cover the required Phase 1 categories');
+
+const realWorldCategories = new Map();
+const realWorldFailures = [];
+for (const fixture of realWorldFixtures) {
+  const fixtureCategories = Array.isArray(fixture.categories) ? fixture.categories : [fixture.category];
+  const fixtureLabel = `${fixtureCategories.join(', ')}/${fixture.id}`;
+  for (const fixtureCategory of fixtureCategories) {
+    realWorldCategories.set(fixtureCategory, (realWorldCategories.get(fixtureCategory) ?? 0) + 1);
+  }
+  const fixtureReferenceDate = fixture.referenceDate ? new Date(fixture.referenceDate) : referenceDate;
+  const parsedFixture = parseBookingMessage(fixture.input, { referenceDate: fixtureReferenceDate }) ?? {};
+
+  try {
+    for (const [field, expectedValue] of Object.entries(fixture.expected ?? {})) {
+      assert.equal(
+        parsedFixture[field] ?? '',
+        expectedValue,
+        `${fixtureLabel}: expected ${field}=${JSON.stringify(expectedValue)}, got ${JSON.stringify(parsedFixture[field] ?? '')}`,
+      );
+    }
+
+    if (fixture.expectedPreview) {
+      assert.ok(
+        Array.isArray(parsedFixture.extractedBookingsPreview),
+        `${fixtureLabel}: expected extractedBookingsPreview`,
+      );
+
+      for (const expectedPreview of fixture.expectedPreview) {
+        const previewLabel = expectedPreview.flight ?? expectedPreview.passenger ?? JSON.stringify(expectedPreview);
+        const matchingPreview = parsedFixture.extractedBookingsPreview.find((preview) => (
+          expectedPreview.flight
+            ? preview.flight === expectedPreview.flight
+            : preview.passenger === expectedPreview.passenger
+        )) ?? {};
+
+        assert.deepEqual(
+          matchingPreview,
+          expectedPreview,
+          `${fixtureLabel}: expected preview ${previewLabel}`,
+        );
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    realWorldFailures.push(`${fixtureLabel}: ${message}`);
+  }
+}
+
+console.log(
+  `Real-world parser fixtures: ${realWorldFixtures.length} examples across ${realWorldCategories.size} categories.`,
+);
+console.log(`Real-world parser categories: ${[...realWorldCategories.keys()].sort().join(', ')}`);
+console.log(
+  `Real-world parser fixture summary: ${realWorldFixtures.length - realWorldFailures.length} passed, ${realWorldFailures.length} failed.`,
+);
+assert.deepEqual(realWorldFailures, [], `real-world parser fixture failures:\n${realWorldFailures.join('\n')}`);
 
 const crmEnrichedParsed = {
   ...parsed,

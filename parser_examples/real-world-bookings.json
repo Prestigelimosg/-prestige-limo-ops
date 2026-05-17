@@ -481,5 +481,33 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "structured-terminal-specific-airport-arrival",
+    "categories": [
+      "structured terminal-specific airport arrival",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Title: Prestige Transport 15723\nService type: Airport transfer\nTransfer type: One Way\nPickup date and time: 11-06-2026 16:45\nOrder total amount: S$105.00\n\nRoute name: Airport arrival\n\nTerminal: 4\n\nDrop off location:\nRitz Carlton\n\nVehicle name: Toyota Alphard 2.5\nPassengers count: 4\n\nClient details:\nFirst name: Naomi\nLast name: Chen\nE-mail address: naomi.chen@gmail.com\nPhone number: +6594441111\nPassengers: 2\nFlight No.: CX739",
+    "expected": {
+      "company": "",
+      "booker": "naomi",
+      "bookerEmail": "naomi.chen@gmail.com",
+      "bookerContact": "+6594441111",
+      "bookingType": "MNG",
+      "vehicle": "AVF",
+      "date": "2026-06-11",
+      "time": "1645hrs",
+      "flight": "CX739",
+      "pickup": "Changi Airport T4",
+      "dropoff": "Ritz Carlton",
+      "name": "Naomi Chen",
+      "pax": "2",
+      "customerPriceOverride": "105",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

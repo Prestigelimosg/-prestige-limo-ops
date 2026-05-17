@@ -1366,7 +1366,6 @@ export default function Home() {
       `${flightLine}${formatPrivacySafeRoute(booking)}`,
       "",
       companyLine.trimEnd(),
-      "Guest details hidden for privacy",
       `Pax: ${Number(clean(booking.pax)) || 1}`,
       childSeatLine,
     ]

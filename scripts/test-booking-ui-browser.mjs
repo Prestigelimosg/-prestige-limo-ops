@@ -261,7 +261,7 @@ function assertBookingUiState(state) {
   assert.equal(state.fields.customerPriceOverride, "160");
   assert.ok(combinedUiText.includes("160.00"), "Expected parsed quoted price text 160.00");
   assert.match(state.visibleText, /Job Card Preview/);
-  assert.match(state.jobCardPreview, /Guest details hidden for privacy/);
+  assert.doesNotMatch(state.jobCardPreview, /Guest details hidden for privacy/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
   assert.match(state.visibleText, /Driver Dispatch/);
@@ -566,6 +566,24 @@ async function runChromeTest() {
         driverName: fieldValue("Driver Name"),
       };
       const overrideReasons = fieldValuesByLabel("Override Reason");
+      const preTextByHeading = (headingText) => {
+        const heading = [...document.querySelectorAll("h2")].find(
+          (candidate) => candidate.textContent.trim() === headingText,
+        );
+        let node = heading;
+
+        while (node && node !== document.body) {
+          const pre = node.querySelector?.("pre");
+
+          if (pre) {
+            return pre.innerText;
+          }
+
+          node = node.parentElement;
+        }
+
+        return "";
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -574,7 +592,7 @@ async function runChromeTest() {
         errors: window.__prestigeErrors || [],
         fields,
         fieldText: [...Object.values(fields), ...overrideReasons].join("\\n"),
-        jobCardPreview: pres.find((text) => text.includes("Guest details hidden for privacy")) || "",
+        jobCardPreview: preTextByHeading("Job Card Preview"),
         visibleText: document.body.innerText,
       };
     })()`;
@@ -585,7 +603,7 @@ async function runChromeTest() {
         if (
           candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
           candidateState?.fields?.flight === "SQ333" &&
-          candidateState?.jobCardPreview?.includes("Guest details hidden for privacy")
+          candidateState?.jobCardPreview?.includes("Flight: SQ333")
         ) {
           return candidateState;
         }

@@ -1172,7 +1172,7 @@ function detectStructuredClientName(text: string) {
 
 function detectPaxNameAndNumber(text: string) {
   const paxName = firstMatch(text, [
-    /\bpax\s+name\s+and\s+number\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s*,\s*\+?\d|\s+\+?\d|\n|$)/i,
+    /\b(?:pax|passenger)\s+name\s+and\s+number\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s*,\s*\+?\d|\s+\+?\d|\n|$)/i,
   ]);
 
   return looksLikePersonName(paxName) ? cleanDetectedName(paxName) : "";

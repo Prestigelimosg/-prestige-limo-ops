@@ -1282,6 +1282,43 @@ assert.equal(parsedExactPastedWaypointAirportDepartureForm.vehicle, 'E class');
 assert.equal(parsedExactPastedWaypointAirportDepartureForm.customerPriceOverride, '110');
 assert.equal(parsedExactPastedWaypointAirportDepartureForm.childSeatRequired ?? '', '');
 
+const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
+Order total amount	S$110.00
+Comment	For Driver's Info – Passenger Name and Number: Sarah Lim, +65 81234567
+ROUTE
+Route name	Airport Departure
+PICK UP LOCATION
+Marina Bay Sands
+VEHICLE
+Vehicle name	Mercedes Benz S-class
+Passengers count	3
+CLIENT DETAILS
+First name	Jonathan
+Last name	Tan
+E-mail address	jonathan.tan@gmail.com
+Phone number	+6590001111
+Passangers	1
+Flight No.	SQ 306`;
+const parsedStructuredPassengerNameAndNumberDepartureForm =
+  parseBookingForTest(structuredPassengerNameAndNumberDepartureFormMessage) ?? {};
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.company ?? '', '');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.booker, 'Jonathan Tan');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.bookerContact, '+6590001111');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.bookerEmail, 'jonathan.tan@gmail.com');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.bookingType, 'DEP');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.date, '2026-05-07');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.time, '0930hrs');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.flight, 'SQ306');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.pickup, 'Marina Bay Sands');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.dropoff, 'Changi Airport');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.name, 'Sarah Lim');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.pax, '1');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.vehicle, 'S class');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.customerPriceOverride, '110');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredPassengerNameAndNumberDepartureForm.childSeatRequired ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

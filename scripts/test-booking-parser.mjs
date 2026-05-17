@@ -658,6 +658,62 @@ function assertMultiBookingDoesNotBlend(sampleInput, label) {
 assertMultiBookingDoesNotBlend(liveBugSamples[0].input, 'multi-case dispatcher list');
 assertMultiBookingDoesNotBlend(liveBugSamples[2].input, 'need 2 cars tomorrow');
 
+const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
+Total 2 pickup from T3 and T4 to Grand Hyatt below:
+T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)
+T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)`;
+const terminalArrivalReferenceDate = new Date(2026, 4, 17, 12, 0, 0);
+const parsedMultiTerminalArrival = parseBookingMessage(multiTerminalArrivalChangeMessage, {
+  referenceDate: terminalArrivalReferenceDate,
+}) ?? {};
+assert.equal(parsedMultiTerminalArrival.success, false);
+assert.equal(parsedMultiTerminalArrival.multipleBookingsDetected, true);
+assert.equal(
+  parsedMultiTerminalArrival.parserWarning,
+  'Multiple bookings detected. Please select one extracted booking.',
+);
+const cx791Preview = parsedMultiTerminalArrival.extractedBookingsPreview
+  ?.find((preview) => preview.flight === 'CX791') ?? {};
+assert.deepEqual(cx791Preview, {
+  passenger: 'Anne Chiou',
+  date: '2026-05-18',
+  time: '1540hrs',
+  type: 'MNG',
+  flight: 'CX791',
+  pickup: 'Changi Airport T4',
+  dropoff: 'Grand Hyatt',
+  pax: '3',
+});
+
+const selectedCx791ArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
+Total 2 pickup from T3 and T4 to Grand Hyatt below:
+T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)`;
+assert.deepEqual(parseBookingMessage(selectedCx791ArrivalChangeMessage, {
+  referenceDate: terminalArrivalReferenceDate,
+}), {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-05-18',
+  time: '1540hrs',
+  flight: 'CX791',
+  pickup: 'Changi Airport T4',
+  dropoff: 'Grand Hyatt',
+  booker: '',
+  bookerEmail: '',
+  name: 'Anne Chiou',
+  pax: '3',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Hi William, some changes for tomorrow arrival:',
+    'Total 2 pickup from T3 and T4 to Grand Hyatt below:',
+    'T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)',
+  ],
+});
+
 const categories = new Map();
 for (const example of parserExamples) {
   categories.set(example.category, (categories.get(example.category) ?? 0) + 1);

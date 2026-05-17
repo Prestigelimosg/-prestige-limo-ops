@@ -33,6 +33,7 @@ export type ParsedBooking = {
     flight?: string;
     pickup?: string;
     dropoff?: string;
+    pax?: string;
   }>;
   parserWarning?: string;
   multipleBookingsDetected?: boolean;
@@ -58,6 +59,14 @@ type MultiStopItineraryDetails = {
   pickupTime: string;
   extraStopCount: string;
   extraStopLocation: string;
+};
+
+type TerminalFlightLineDetails = {
+  passenger: string;
+  flight: string;
+  pickup: string;
+  time: string;
+  pax: string;
 };
 
 export const alsonSq377Sample = `[11/5/26, 13:33:10] Alson Chua UOB: Hi kindly arrange airport pick up to home on 14 May Thursday 0740 SQ377. Thank you
@@ -334,6 +343,50 @@ function buildAirportStandbyPreview(text: string, referenceDate: Date) {
   ];
 }
 
+function detectSharedArrivalDropoff(text: string) {
+  return cleanLocation(firstMatch(text, [
+    /\btotal\s+\d+\s+pickups?\s+from\s+.+?\s+to\s+(.+?)(?=\s+below:?|\n|$)/i,
+    /\bpickups?\s+from\s+.+?\s+to\s+(.+?)(?=\s+below:?|\n|$)/i,
+  ]));
+}
+
+function detectTerminalFlightLineDetails(text: string, selectedFlight = ""): TerminalFlightLineDetails | null {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const match = line.match(/^(?:changi\s+airport\s*)?(?:t|terminal\s*)([1-4])\s*[:=-]\s*([A-Z]{2}\s?\d{1,4})\b/i);
+
+    if (!match?.[1] || !match[2]) {
+      continue;
+    }
+
+    const flight = normalizeFlightCode(match[2]);
+
+    if (!flight || (selectedFlight && flight !== selectedFlight)) {
+      continue;
+    }
+
+    const passengerList = firstMatch(line, [
+      /\(\s*\d{1,2}\s*passengers?\s*[-–]\s*([^)]+)\)/i,
+      /\bpassengers?\s*[-–]\s*([^)]+)\)/i,
+    ]);
+    const passenger = cleanDetectedName(passengerList.split(",")[0] || passengerList);
+
+    return {
+      passenger: looksLikePersonName(passenger) ? passenger : "",
+      flight,
+      pickup: `Changi Airport T${match[1]}`,
+      time: formatTimeForState(parseTimeFromText(line)),
+      pax: detectExplicitPax(line),
+    };
+  }
+
+  return null;
+}
+
 function splitPotentialBookings(text: string, cleanedLines: string[]) {
   const listLines = cleanedLines
     .filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line))
@@ -359,6 +412,8 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
   const hasExplicitList = cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line)).length > 1;
   const hasMultipleFlights = detectAllFlights(text).length > 1;
   const airportStandbyPreview = hasExplicitList || hasMultipleFlights ? [] : buildAirportStandbyPreview(text, referenceDate);
+  const contextDate = parseDateFromText(text, referenceDate);
+  const sharedArrivalDropoff = detectSharedArrivalDropoff(text);
 
   if (airportStandbyPreview.length > 0) {
     return airportStandbyPreview;
@@ -368,17 +423,21 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
     .map((segment) => {
       const segmentText = normalizeIntentText(segment);
       const flight = detectFlight(segmentText);
+      const terminalFlightDetails = detectTerminalFlightLineDetails(segmentText, flight);
       const route = detectRoute(segmentText, flight);
       const type = lineValue(segmentText, ["booking type", "type", "job type"]) ||
         detectBookingType(segmentText, flight, route);
-      const date = parseDateFromText(segmentText, referenceDate);
-      const rawTime = parseTimeFromText(segmentText);
+      const date = parseDateFromText(segmentText, referenceDate) || contextDate;
+      const rawTime = terminalFlightDetails?.time || parseTimeFromText(segmentText);
       const passenger =
+        terminalFlightDetails?.passenger ||
         detectStandbyName(segmentText) ||
         detectDrivenPassenger(segmentText) ||
         detectName(segmentText, flight) ||
         "";
       const departureTerminal = flight && type === "DEP" ? airportLocationFromText(segmentText) : "";
+      const dropoff = route.dropoff || (terminalFlightDetails ? sharedArrivalDropoff : "");
+      const pax = terminalFlightDetails?.pax || detectExplicitPax(segmentText);
 
       return {
         passenger,
@@ -386,8 +445,9 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
         time: formatTimeForState(rawTime) || rawTime,
         type,
         flight,
-        pickup: route.pickup,
-        dropoff: departureTerminal || route.dropoff,
+        pickup: terminalFlightDetails?.pickup || route.pickup,
+        dropoff: departureTerminal || dropoff,
+        ...(pax ? { pax } : {}),
       };
     })
     .filter((preview) => Object.values(preview).some(Boolean));
@@ -855,6 +915,18 @@ function detectChildSeatCount(text: string) {
   return "";
 }
 
+function detectExplicitPax(text: string) {
+  return firstMatch(text, [
+    /\b(?:pax|passengers?|persons?)\s*[:=-]?\s*(\d{1,2})\b/i,
+    /\b(\d{1,2})\s*(?:pax|passengers?|persons?)\b/i,
+  ]) ||
+    (detectCoupleCompanion(text) ? "2" : "");
+}
+
+function detectPax(text: string) {
+  return detectExplicitPax(text) || "1";
+}
+
 function cleanDetectedName(value: string) {
   return clean(value)
     .replace(/\s+(?:S\$|\$)\d+(?:\.\d{1,2})?(?:\s*\+\s*(?:S\$|\$)\d+(?:\.\d{1,2})?)*\b.*$/i, "")
@@ -1024,6 +1096,7 @@ function cleanLocation(value: string) {
     .replace(/\s+on\s+\d{1,2}\s+[A-Za-z]+.*$/i, "")
     .replace(/\s+\d{3,4}\s+[A-Z]{2}\s?\d{1,4}.*$/i, "")
     .replace(/\s+[A-Z]{2}\s?\d{1,4}.*$/i, "")
+    .replace(/\s+below:?$/i, "")
     .replace(/\s+(?:taking\s+flight|flight|flt)\s*$/i, "")
     .replace(/\s+(?:taking\s+flight|flight|flt)\s+[A-Z]{2}\s?\d{1,4}.*$/i, "")
     .replace(/\s+(?:at|on)\s+\d{1,2}(?::?\d{2})?\s*(?:am|pm|hrs?)?.*$/i, "")
@@ -1519,14 +1592,23 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const bookerCompanyContext = detectBookerCompanyContext(operationalText);
   const dateText = lineValue(operationalText, ["date", "pickup date", "p/u date", "pu date"]);
   const flight = detectFlight(operationalText);
+  const terminalFlightDetails = detectTerminalFlightLineDetails(operationalText, flight);
+  const sharedArrivalDropoff = terminalFlightDetails ? detectSharedArrivalDropoff(operationalText) : "";
   const multiStopItinerary = detectMultiStopItinerary(operationalText);
-  const routeValues = multiStopItinerary
+  const detectedRouteValues = multiStopItinerary
     ? { pickup: multiStopItinerary.pickup, dropoff: multiStopItinerary.dropoff }
     : detectRoute(operationalText, flight);
+  const routeValues = terminalFlightDetails
+    ? {
+        pickup: terminalFlightDetails.pickup || detectedRouteValues.pickup,
+        dropoff: sharedArrivalDropoff || detectedRouteValues.dropoff,
+      }
+    : detectedRouteValues;
   const standbyRouteDetails = !multiStopItinerary && isStandbyBooking(operationalText)
     ? detectStandbyRoute(operationalText)
     : { pickup: "", dropoff: "", returnDestination: "", standbyUntil: "" };
   const name =
+    terminalFlightDetails?.passenger ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||
     detectName(operationalText, flight) ||
@@ -1534,7 +1616,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     detectNameFromNextWhatsAppLine(whatsappTranscript) ||
     "";
   const standbyDriver = detectStandbyDriver(operationalText);
-  const rawTime = multiStopItinerary?.pickupTime || parseTimeFromText(operationalText);
+  const rawTime = terminalFlightDetails?.time || multiStopItinerary?.pickupTime || parseTimeFromText(operationalText);
   const childSeatType = detectChildSeatType(operationalText);
   const childSeatCount = detectChildSeatCount(operationalText);
   const extraStopDetails = multiStopItinerary || detectExtraStopDetails(operationalText);
@@ -1562,13 +1644,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
       whatsappTranscript.senderName,
     bookerEmail: email,
     name,
-    pax:
-      firstMatch(operationalText, [
-        /\b(?:pax|passengers?|persons?)\s*[:=-]?\s*(\d{1,2})\b/i,
-        /\b(\d{1,2})\s*(?:pax|passengers?|persons?)\b/i,
-      ]) ||
-      (detectCoupleCompanion(operationalText) ? "2" : "") ||
-      "1",
+    pax: terminalFlightDetails?.pax || detectPax(operationalText),
     driverName: lineValue(operationalText, ["driver", "driver name", "chauffeur"]) || standbyDriver,
     driverContact: lineValue(operationalText, [
       "driver contact",

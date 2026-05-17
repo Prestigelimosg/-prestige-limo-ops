@@ -610,6 +610,54 @@ function cleanStructuredListLocation(value: string) {
   return normalizeLocationName(cleanedValue);
 }
 
+function structuredListLocations(text: string, labels: string[]) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+  const sortedLabels = [...labels].sort((left, right) => right.length - left.length);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] || "";
+
+    for (const label of sortedLabels) {
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const labeledLineMatch = line.match(new RegExp(`^${escapedLabel}(?:\\s*[:=-]\\s*|\\t+)?(.*)$`, "i"));
+
+      if (!labeledLineMatch) {
+        continue;
+      }
+
+      const values = [];
+      const inlineValue = clean(labeledLineMatch[1] || "");
+
+      if (inlineValue) {
+        values.push(inlineValue);
+      }
+
+      for (let valueIndex = index + 1; valueIndex < lines.length; valueIndex += 1) {
+        const valueLine = lines[valueIndex] || "";
+
+        if (
+          /^[A-Za-z][A-Za-z0-9 /&().'-]{0,50}(?:\s*[:=-]|\t)/.test(valueLine) ||
+          /^[A-Z][A-Z0-9 /&().'-]{1,60}$/.test(valueLine)
+        ) {
+          break;
+        }
+
+        values.push(valueLine);
+      }
+
+      return values
+        .map((value) => cleanStructuredListLocation(value))
+        .filter(Boolean)
+        .join(" > ");
+    }
+  }
+
+  return "";
+}
+
 function normalizeAddressForComparison(value: string) {
   return clean(value)
     .toLowerCase()
@@ -1011,10 +1059,10 @@ function detectQuotedCustomerPrice(cleanedLines: string[]) {
 }
 
 function detectExtraStopDetails(text: string) {
-  const structuredRouteLocation = cleanStructuredListLocation(lineValue(text, [
+  const structuredRouteLocation = structuredListLocations(text, [
     "route location",
     "route locations",
-  ]));
+  ]);
   const labeledExtraStop = cleanLocation(lineValue(text, [
     "extra stop",
     "extra stops",

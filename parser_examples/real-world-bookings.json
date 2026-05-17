@@ -397,5 +397,89 @@
       "extraStopCount": "5",
       "extraStopLocation": "Ritz-Carlton Singapore by 10am > BDC office at 12pm > Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore at 1:30pm > 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960 at 3:30pm > Ritz-Carlton at 6pm"
     }
+  },
+  {
+    "id": "structured-multi-waypoint-airport-arrival",
+    "categories": [
+      "structured multi-waypoint airport arrival",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Title: Prestige Transport 15720\nService type: Airport transfer\nTransfer type: One Way\nPickup date and time: 08-06-2026 14:10\nOrder total amount: S$180.00\n\nRoute name: Airport arrival\n\nRoute locations:\n1. Mandarin Oriental Singapore\n2. Gardens by the Bay\n\nDrop off location:\nCapella Singapore\n\nVehicle name: Toyota Alphard 2.5\nPassengers count: 4\n\nExtra:\n2 x Waypoint - S$50.00\n\nClient details:\nFirst name: Anna\nLast name: Lim\nE-mail address: anna.lim@gmail.com\nPhone number: +6591113333\nPassengers: 3\nFlight No.: SQ317",
+    "expected": {
+      "company": "",
+      "booker": "anna",
+      "bookerEmail": "anna.lim@gmail.com",
+      "bookerContact": "+6591113333",
+      "bookingType": "MNG",
+      "vehicle": "AVF",
+      "date": "2026-06-08",
+      "time": "1410hrs",
+      "flight": "SQ317",
+      "pickup": "Changi Airport",
+      "extraStopCount": "2",
+      "extraStopLocation": "Mandarin Oriental Singapore > Gardens by the Bay",
+      "dropoff": "Capella Singapore",
+      "name": "Anna Lim",
+      "pax": "3",
+      "customerPriceOverride": "180",
+      "childSeatRequired": ""
+    }
+  },
+  {
+    "id": "structured-event-hourly-dsp-standby",
+    "categories": [
+      "structured event / hourly / DSP standby",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Title: Prestige Transport 15721\nService type: Hourly charter\nTransfer type: Hourly\nPickup date and time: 09-06-2026 18:00\nOrder total amount: S$240.00\n\nRoute name: Event standby\n\nVenue:\nNational Gallery Singapore\n\nSend back to Ritz Carlton after event\n\nVehicle name: Mercedes Benz S-class\nPassengers count: 3\n\nClient details:\nFirst name: Peter\nLast name: Goh\nE-mail address: peter.goh@gmail.com\nPhone number: +6592224444\nPassengers: 1",
+    "expected": {
+      "company": "",
+      "booker": "peter",
+      "bookerEmail": "peter.goh@gmail.com",
+      "bookerContact": "+6592224444",
+      "bookingType": "DSP",
+      "vehicle": "S class",
+      "date": "2026-06-09",
+      "time": "1800hrs",
+      "flight": "",
+      "pickup": "National Gallery Singapore",
+      "dropoff": "Ritz Carlton",
+      "name": "Peter Goh",
+      "pax": "1",
+      "customerPriceOverride": "240",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
+  },
+  {
+    "id": "structured-cruise-seaport-transfer",
+    "categories": [
+      "structured cruise / seaport transfer",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Title: Prestige Transport 15722\nService type: Cruise transfer\nTransfer type: One Way\nPickup date and time: 10-06-2026 10:30\nOrder total amount: S$90.00\n\nRoute name: Cruise terminal pickup\n\nPick up location:\nMarina Bay Cruise Centre Singapore\n\nDrop off location:\nFullerton Hotel\n\nVehicle name: Mercedes Benz E-class\nPassengers count: 3\n\nClient details:\nFirst name: Chloe\nLast name: Tan\nE-mail address: chloe.tan@gmail.com\nPhone number: +6593335555\nPassengers: 2",
+    "expected": {
+      "company": "",
+      "booker": "chloe",
+      "bookerEmail": "chloe.tan@gmail.com",
+      "bookerContact": "+6593335555",
+      "bookingType": "TRF",
+      "vehicle": "E class",
+      "date": "2026-06-10",
+      "time": "1030hrs",
+      "flight": "",
+      "pickup": "Marina Bay Cruise Centre Singapore",
+      "dropoff": "Fullerton Hotel",
+      "name": "Chloe Tan",
+      "pax": "2",
+      "customerPriceOverride": "90",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

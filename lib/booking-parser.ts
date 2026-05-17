@@ -349,9 +349,10 @@ function extractNamedPassengerLine(line: string) {
 }
 
 function detectMultipleBookings(text: string, cleanedLines: string[]) {
-  const listItems = cleanedLines.filter((line) =>
-    /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line),
-  );
+  const structuredBookingForm = /\bbooking\s+form\s+name\s*[:=-]|\broute\s+name\s*[:=-]|\bclient\s+details\s*:/i.test(text);
+  const listItems = structuredBookingForm
+    ? []
+    : cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line));
   const flights = detectAllFlights(text);
   const namedPassengers = Array.from(new Set(
     cleanedLines
@@ -531,7 +532,8 @@ function lineValue(text: string, labels: string[]) {
     const line = lines[index] || "";
 
     for (const label of labels) {
-      const pattern = new RegExp(`^${label}\\s*[:=-]\\s*(.*)$`, "i");
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const pattern = new RegExp(`^${escapedLabel}(?:\\s*[:=-]\\s*|\\t+)(.*)$`, "i");
       const match = line.match(pattern);
 
       if (match?.[1]) {
@@ -545,6 +547,14 @@ function lineValue(text: string, labels: string[]) {
           return clean(nextLine);
         }
       }
+
+      if (/\s/.test(label) && new RegExp(`^${escapedLabel}\\s*$`, "i").test(line)) {
+        const nextLine = lines[index + 1] || "";
+
+        if (nextLine && !/^[A-Za-z][A-Za-z0-9 /&().'-]{0,50}(?:\s*[:=-]|\t)/.test(nextLine)) {
+          return clean(nextLine);
+        }
+      }
     }
   }
 
@@ -553,6 +563,24 @@ function lineValue(text: string, labels: string[]) {
 
 function cleanedLineValue(text: string, labels: string[]) {
   return cleanLocation(lineValue(text, labels));
+}
+
+function cleanStructuredListLocation(value: string) {
+  const cleanedValue = clean(value).replace(/^\d+[.)]\s*/, "");
+  const koreanSingaporeMatch = cleanedValue.match(/^(.*?),?\s*싱가포르\s+(.+)$/i);
+
+  if (koreanSingaporeMatch?.[1] && koreanSingaporeMatch[2]) {
+    const beforeKorean = clean(koreanSingaporeMatch[1]).replace(/,\s*$/g, "");
+    const afterKorean = clean(koreanSingaporeMatch[2]);
+
+    if (afterKorean.toLowerCase().startsWith(beforeKorean.toLowerCase())) {
+      return normalizeLocationName(afterKorean);
+    }
+
+    return normalizeLocationName(`${beforeKorean}, ${afterKorean}`);
+  }
+
+  return normalizeLocationName(cleanedValue);
 }
 
 function cleanVehicle(value: string) {
@@ -804,7 +832,7 @@ function normalizeIntentText(text: string) {
 
 function parseTimeFromText(text: string) {
   const labeledDateTime = firstMatch(text, [
-    /\bpickup\s+date\s+and\s+time\s*[:=-]\s*\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\s+(\d{1,2}:\d{2}\s*(?:am|pm|hrs?)?)/i,
+    /\bpickup\s+date\s+and\s+time(?:\s*[:=-]\s*|\s+)\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\s+(\d{1,2}:\d{2}\s*(?:am|pm|hrs?)?)/i,
   ]);
   const labeledTime = firstMatch(text, [
     /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
@@ -852,6 +880,17 @@ function parseTimeFromText(text: string) {
   }
 
   const digits = compactTime.replace(/\D/g, "");
+  const colonTimeMatch = compactTime.match(/^(\d{1,2}):(\d{2})$/);
+
+  if (colonTimeMatch) {
+    const hour = Number(colonTimeMatch[1]);
+
+    if (hour < 0 || hour > 23) {
+      return "";
+    }
+
+    return `${String(hour).padStart(2, "0")}${colonTimeMatch[2]}`;
+  }
 
   if (digits.length >= 4) {
     return `${digits.slice(0, 2)}${digits.slice(2, 4)}`;
@@ -934,6 +973,10 @@ function detectQuotedCustomerPrice(cleanedLines: string[]) {
 }
 
 function detectExtraStopDetails(text: string) {
+  const structuredRouteLocation = cleanStructuredListLocation(lineValue(text, [
+    "route location",
+    "route locations",
+  ]));
   const labeledExtraStop = cleanLocation(lineValue(text, [
     "extra stop",
     "extra stops",
@@ -946,10 +989,11 @@ function detectExtraStopDetails(text: string) {
     /\bdrop\s+by\s+(.+?)(?=\.|,|\n|$)/i,
     /\b(?:via|stopover\s+at)\s+(.+?)(?=\.|,|\n|$)/i,
   ]));
-  const extraStopLocation = labeledExtraStop || narratedExtraStop;
+  const extraStopLocation = structuredRouteLocation || labeledExtraStop || narratedExtraStop;
   const explicitCount = firstMatch(text, [
     /\b(\d{1,2})[ \t]+extra[ \t]+stops?\b/i,
     /\bextra[ \t]+stops?[ \t]*[:=-][ \t]*(\d{1,2})\b/i,
+    /\b(\d{1,2})\s*x\s+waypoints?\b/i,
   ]);
 
   return {
@@ -1031,8 +1075,8 @@ function detectAdultChildPax(text: string) {
 
 function detectExplicitPax(text: string) {
   return detectAdultChildPax(text) || firstMatch(text, [
-    /\b(?:pax|passengers?|persons?)\s*[:=-]?\s*(\d{1,2})\b/i,
-    /\b(\d{1,2})\s*(?:pax|passengers?|persons?)\b/i,
+    /\b(?:pax|passengers?|passangers|persons?)\s*(?:[:=-]|\t)?\s*(\d{1,2})\b/i,
+    /\b(\d{1,2})\s*(?:pax|passengers?|passangers|persons?)\b/i,
   ]) ||
     (detectCoupleCompanion(text) ? "2" : "");
 }
@@ -1591,12 +1635,14 @@ function detectRoute(text: string, flight = "") {
     "to",
     "destination",
   ]);
-  const pickup = /\b(?:Singapore\s+)?\d{5,6}\b/i.test(rawPickup)
-    ? normalizeLocationName(rawPickup)
-    : cleanLocation(rawPickup);
-  const dropoff = /\b(?:Singapore\s+)?\d{5,6}\b/i.test(rawDropoff)
-    ? normalizeLocationName(rawDropoff)
-    : cleanLocation(rawDropoff);
+  const structuredPickup = cleanStructuredListLocation(rawPickup);
+  const structuredDropoff = cleanStructuredListLocation(rawDropoff);
+  const pickup = /\b(?:Singapore\s+)?\d{5,6}\b/i.test(structuredPickup)
+    ? structuredPickup
+    : cleanLocation(structuredPickup);
+  const dropoff = /\b(?:Singapore\s+)?\d{5,6}\b/i.test(structuredDropoff)
+    ? structuredDropoff
+    : cleanLocation(structuredDropoff);
 
   if (pickup || dropoff) {
     if (

@@ -29,6 +29,32 @@ Pax: 2
 Child seat: 2 booster seat
 Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
+const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
+Pickup date and time	17-05-2026 7:05
+Order total amount	S$130.00
+Taxes	S$0.00 (0%)
+Distance	46.4 km
+Duration	52 minutes
+Comment	1st Drop off: Ms. Kwok (28 Alexandra View), 2nd Drop off: Ms. Chan (26 Newton Road) Trip Organizer: Mr. Kim, Hyun Soo (Tel. No.: +65 98156017)
+ROUTE
+Route name	Airport arrival
+ROUTE LOCATIONS
+28 Alexandra View, 싱가포르 28 Alexandra View, Singapore 158744
+DROP OFF LOCATION
+26 Newton Rd, 싱가포르 307957
+VEHICLE
+Vehicle name	Toyota Alphard 2.5
+Bag count	3
+Passengers count	4
+EXTRA
+1 x Waypoint 1 - S$25.00
+CLIENT DETAILS
+First name	Pui Yu
+Last name	Chan
+E-mail address	hyunsoostar@hotmail.com
+Phone number	+6596389322
+Passangers	2
+Flight No.	SQ883`;
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
 const timedScheduleItinerarySample = `Hi William, please arrange a car for Drew tomorrow, schedule as follow:
@@ -555,11 +581,14 @@ async function runChromeTest() {
       const fields = {
         company: fieldValue("Company / Account"),
         bookingType: fieldValue("Booking type"),
+        pickupTime: fieldValue("Pickup time"),
         flight: fieldValue("Flight number"),
         pickup: fieldValue("Pickup"),
         extraStopLocation: fieldValue("Extra stop location"),
         extraStopCount: fieldValue("Extra Stops"),
         dropoff: fieldValue("Drop-off"),
+        name: fieldValue("Name"),
+        pax: fieldValue("Pax"),
         childSeatCount: fieldValue("Child seat count"),
         childSeatType: fieldValue("Child seat type / note"),
         customerPriceOverride: fieldValue("Customer Price Override"),
@@ -617,6 +646,102 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertBookingUiState(state);
+
+    const clickedClearBeforeExactPaste = await evaluate(`(() => {
+      const clearButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Clear",
+      );
+
+      if (!clearButton || clearButton.disabled) {
+        return false;
+      }
+
+      clearButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedClearBeforeExactPaste, true, "Expected Clear button before exact pasted waypoint sample");
+
+    const focusedExactPasteTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedExactPasteTextarea,
+      true,
+      "Expected booking message textarea to be focused for exact pasted waypoint sample",
+    );
+
+    await client.send("Input.insertText", { text: exactPastedWaypointAirportArrivalSample });
+
+    const filledExactPasteTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(exactPastedWaypointAirportArrivalSample)}`,
+    );
+    assert.equal(
+      filledExactPasteTextarea,
+      true,
+      "Expected exact pasted waypoint booking message textarea to be filled",
+    );
+
+    const clickedExactPasteParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedExactPasteParse,
+      true,
+      "Expected Parse Booking button to parse exact pasted waypoint sample",
+    );
+
+    const exactPasteState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.flight === "SQ883" &&
+          candidateState?.fields?.pickupTime === "0705hrs" &&
+          candidateState?.fields?.dropoff === "26 Newton Rd, 307957"
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed exact pasted waypoint UI state",
+    );
+    exactPasteState.errors = [...browserErrors, ...(exactPasteState.errors || [])];
+    exactPasteState.consoleErrors = [...browserConsoleErrors, ...(exactPasteState.consoleErrors || [])];
+
+    assert.deepEqual(
+      exactPasteState.errors,
+      [],
+      `Expected no browser runtime errors, got ${exactPasteState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      exactPasteState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${exactPasteState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(exactPasteState.fields.pickupTime, "0705hrs");
+    assert.equal(exactPasteState.fields.dropoff, "26 Newton Rd, 307957");
+    assert.equal(exactPasteState.fields.name, "Pui Yu Chan");
+    assert.equal(exactPasteState.fields.pax, "2");
+    assert.equal(exactPasteState.fields.extraStopCount, "1");
+    assert.equal(exactPasteState.fields.extraStopLocation, "28 Alexandra View, Singapore 158744");
 
     const focusedDspTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

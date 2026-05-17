@@ -1119,6 +1119,121 @@ assert.equal(parsedStructuredAirportDepartureForm.extraStopCount ?? '0', '0');
 assert.equal(parsedStructuredAirportDepartureForm.extraStopLocation ?? '', '');
 assert.equal(parsedStructuredAirportDepartureForm.childSeatRequired ?? '', '');
 
+const structuredWaypointAirportArrivalFormMessage = `Title: Prestige Transport 15695
+Booking form name: Prestige Transport
+Status: Completed (finished)
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 19-05-2026 18:20
+Order total amount: S$130.00
+Taxes: S$0.00 (0%)
+Distance: 46.4 km
+Duration: 52 minutes
+Comment: 1st Drop off: Ms. Kwok (28 Alexandra View), 2nd Drop off: Ms. Chan (26 Newton Road) Trip Organizer: Mr. Kim, Hyun Soo (Tel. No.: +65 98156017)
+
+Route name: Airport arrival
+
+Route locations:
+1. 28 Alexandra View, Singapore 158744
+
+Drop off location:
+1. 26 Newton Rd, 307957
+
+Vehicle name: Toyota Alphard 2.5
+Bag count: 3
+Passengers count: 4
+
+Extra:
+1. 1 x Waypoint - S$25.00
+
+Client details:
+First name: Pui Yu
+Last name: Chan
+E-mail address: hyunsoostar@hotmail.com
+Phone number: +6596389322
+Passengers: 2
+Flight No.: SQ883`;
+const parsedStructuredWaypointAirportArrivalForm =
+  parseBookingForTest(structuredWaypointAirportArrivalFormMessage) ?? {};
+assert.equal(parsedStructuredWaypointAirportArrivalForm.company ?? '', '');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.booker, 'Mr Kim, Hyun Soo');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.bookerContact, '+65 98156017');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.bookerEmail, 'hyunsoostar@hotmail.com');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.bookingType, 'MNG');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.date, '2026-05-19');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.time, '1820hrs');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.flight, 'SQ883');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.pickup, 'Changi Airport');
+assert.equal(
+  parsedStructuredWaypointAirportArrivalForm.extraStopLocation,
+  '28 Alexandra View, Singapore 158744',
+);
+assert.equal(parsedStructuredWaypointAirportArrivalForm.extraStopCount, '1');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.dropoff, '26 Newton Rd, 307957');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.name, 'Pui Yu Chan');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.pax, '2');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.vehicle, 'AVF');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.customerPriceOverride, '130');
+assert.equal(parsedStructuredWaypointAirportArrivalForm.childSeatRequired ?? '', '');
+
+const exactPastedWaypointAirportArrivalFormMessage = `Transfer type	One Way
+Pickup date and time	19-05-2026 18:20
+Order total amount	S$130.00
+Taxes	S$0.00 (0%)
+Distance	46.4 km
+Duration	52 minutes
+Comment	1st Drop off: Ms. Kwok (28 Alexandra View), 2nd Drop off: Ms. Chan (26 Newton Road) Trip Organizer: Mr. Kim, Hyun Soo (Tel. No.: +65 98156017)
+ROUTE
+Route name	Airport arrival
+ROUTE LOCATIONS
+28 Alexandra View, 싱가포르 28 Alexandra View, Singapore 158744
+DROP OFF LOCATION
+26 Newton Rd, 싱가포르 307957
+VEHICLE
+Vehicle name	Toyota Alphard 2.5
+Bag count	3
+Passengers count	4
+EXTRA
+1 x Waypoint 1 - S$25.00
+CLIENT DETAILS
+First name	Pui Yu
+Last name	Chan
+E-mail address	hyunsoostar@hotmail.com
+Phone number	+6596389322
+Passangers	2
+Flight No.	SQ883`;
+const parsedExactPastedWaypointAirportArrivalForm =
+  parseBookingForTest(exactPastedWaypointAirportArrivalFormMessage) ?? {};
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.company ?? '', '');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.booker, 'Mr Kim, Hyun Soo');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.bookerContact, '+65 98156017');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.bookerEmail, 'hyunsoostar@hotmail.com');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.bookingType, 'MNG');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.date, '2026-05-19');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.time, '1820hrs');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.flight, 'SQ883');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.pickup, 'Changi Airport');
+assert.equal(
+  parsedExactPastedWaypointAirportArrivalForm.extraStopLocation,
+  '28 Alexandra View, Singapore 158744',
+);
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.extraStopCount, '1');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.dropoff, '26 Newton Rd, 307957');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.name, 'Pui Yu Chan');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.pax, '2');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.vehicle, 'AVF');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.customerPriceOverride, '130');
+assert.equal(parsedExactPastedWaypointAirportArrivalForm.childSeatRequired ?? '', '');
+const parsedExactPastedWaypointSingleDigitHour =
+  parseBookingForTest(
+    exactPastedWaypointAirportArrivalFormMessage.replace(
+      'Pickup date and time	19-05-2026 18:20',
+      'Pickup date and time	17-05-2026 7:05',
+    ),
+  ) ?? {};
+assert.equal(parsedExactPastedWaypointSingleDigitHour.date, '2026-05-17');
+assert.equal(parsedExactPastedWaypointSingleDigitHour.time, '0705hrs');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

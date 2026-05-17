@@ -139,6 +139,14 @@ const knownCompanyTokens = new Set([
   "tiger",
   "uob",
 ]);
+const publicEmailDomains = new Set([
+  "gmail.com",
+  "hotmail.com",
+  "yahoo.com",
+  "outlook.com",
+  "icloud.com",
+]);
+const ownCompanyNames = new Set(["prestige transport"]);
 
 const ignoredFlightCodes = new Set(["AT", "BY", "IF", "IN", "IS", "NO", "OF", "ON", "OR", "TO"]);
 const flightCodePattern = /\b([A-Z]{2})\s?(\d{1,4})\b/gi;
@@ -171,7 +179,33 @@ function getEmailDomain(value: string) {
   const email = normaliseEmail(value);
   const domain = email.split("@")[1];
 
-  return domain ? domain.replace(/^www\./, "") : "";
+  if (!domain) {
+    return "";
+  }
+
+  const normalizedDomain = domain.replace(/^www\./, "");
+
+  if (publicEmailDomains.has(normalizedDomain)) {
+    return "";
+  }
+
+  const domainParts = normalizedDomain.split(".").filter(Boolean);
+  const organization = domainParts.length > 1 ? domainParts[domainParts.length - 2] : domainParts[0];
+
+  return organization ? organization.toUpperCase() : "";
+}
+
+function getEmailBooker(value: string) {
+  const localPart = normaliseEmail(value).split("@")[0] || "";
+  const firstToken = localPart.split(/[._+-]/)[0] || "";
+
+  return firstToken;
+}
+
+function cleanCompanyAccount(value: string) {
+  const company = clean(value).replace(/[|,;.]+$/g, "");
+
+  return ownCompanyNames.has(company.toLowerCase()) ? "" : company;
 }
 
 function firstMatch(text: string, patterns: RegExp[]) {
@@ -462,13 +496,23 @@ function lineValue(text: string, labels: string[]) {
     .map((line) => clean(line))
     .filter(Boolean);
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] || "";
+
     for (const label of labels) {
-      const pattern = new RegExp(`^${label}\\s*[:=-]\\s*(.+)$`, "i");
+      const pattern = new RegExp(`^${label}\\s*[:=-]\\s*(.*)$`, "i");
       const match = line.match(pattern);
 
       if (match?.[1]) {
         return clean(match[1]);
+      }
+
+      if (match && !match[1]) {
+        const nextLine = lines[index + 1] || "";
+
+        if (nextLine && !/^[A-Za-z][A-Za-z0-9 /&().'-]{0,50}\s*[:=-]/.test(nextLine)) {
+          return clean(nextLine);
+        }
       }
     }
   }
@@ -728,10 +772,14 @@ function normalizeIntentText(text: string) {
 }
 
 function parseTimeFromText(text: string) {
+  const labeledDateTime = firstMatch(text, [
+    /\bpickup\s+date\s+and\s+time\s*[:=-]\s*\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\s+(\d{1,2}:\d{2}\s*(?:am|pm|hrs?)?)/i,
+  ]);
   const labeledTime = firstMatch(text, [
     /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
   ]);
   const rawTime =
+    labeledDateTime ||
     labeledTime ||
     firstMatch(text, [
       /\b(\d{1,2}[.:]\d{2}\s*(?:am|pm))\b/i,
@@ -1013,6 +1061,14 @@ function detectNameFromNextWhatsAppLine(transcript: WhatsAppTranscript) {
   }
 
   return "";
+}
+
+function detectStructuredClientName(text: string) {
+  const firstName = lineValue(text, ["first name"]);
+  const lastName = lineValue(text, ["last name"]);
+  const fullName = cleanDetectedName(`${firstName} ${lastName}`);
+
+  return looksLikePersonName(fullName) ? fullName : "";
 }
 
 function detectName(text: string, flight: string) {
@@ -1429,11 +1485,19 @@ function detectVehicle(text: string) {
     return "AVF";
   }
 
+  if (/\bV\s*-?\s*CLASS\b|\bVIANO\b/.test(upperText)) {
+    return "VVV";
+  }
+
+  if (/\bCOMBI\b|\b13\s*-?\s*SEATER\b|\bMINIBUS\b/.test(upperText)) {
+    return "Combi";
+  }
+
   if (/\bS-?CLASS\b|\bMERC(?:EDES)?\b|\bSEDAN\b|\bLIMO\b/.test(upperText)) {
     return "Sedan";
   }
 
-  if (/\bVITO\b|\bV-?CLASS\b|\bVAN\b|\bMINIBUS\b/.test(upperText)) {
+  if (/\bVITO\b|\bVAN\b/.test(upperText)) {
     return "Van";
   }
 
@@ -1455,7 +1519,7 @@ function detectBookerValue(text: string, context: { booker: string; company: str
 }
 
 function detectRoute(text: string, flight = "") {
-  const pickup = cleanedLineValue(text, [
+  const rawPickup = lineValue(text, [
     "pickup",
     "pickup location",
     "pickup point",
@@ -1468,7 +1532,7 @@ function detectRoute(text: string, flight = "") {
     "from",
     "origin",
   ]);
-  const dropoff = cleanedLineValue(text, [
+  const rawDropoff = lineValue(text, [
     "dropoff",
     "dropoff location",
     "dropoff point",
@@ -1483,6 +1547,12 @@ function detectRoute(text: string, flight = "") {
     "to",
     "destination",
   ]);
+  const pickup = /\bSingapore\s+\d{5,6}\b/i.test(rawPickup)
+    ? normalizeLocationName(rawPickup)
+    : cleanLocation(rawPickup);
+  const dropoff = /\bSingapore\s+\d{5,6}\b/i.test(rawDropoff)
+    ? normalizeLocationName(rawDropoff)
+    : cleanLocation(rawDropoff);
 
   if (pickup || dropoff) {
     if (
@@ -1705,6 +1775,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     terminalFlightDetails?.passenger ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||
+    detectStructuredClientName(operationalText) ||
     detectName(operationalText, flight) ||
     detectNameFromCleanedLines(cleanedLines) ||
     detectNameFromNextWhatsAppLine(whatsappTranscript) ||
@@ -1721,9 +1792,9 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const parsedBooking: ParsedBooking = {
     success: true,
     company:
-      lineValue(operationalText, ["company", "client", "account"]) ||
-      bookerCompanyContext.company ||
-      whatsappTranscript.senderCompany ||
+      cleanCompanyAccount(lineValue(operationalText, ["company", "client", "account"])) ||
+      cleanCompanyAccount(bookerCompanyContext.company) ||
+      cleanCompanyAccount(whatsappTranscript.senderCompany) ||
       domain,
     bookingType,
     vehicle:
@@ -1735,7 +1806,8 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     dropoff: routeValues.dropoff,
     booker:
       detectBookerValue(operationalText, bookerCompanyContext) ||
-      whatsappTranscript.senderName,
+      whatsappTranscript.senderName ||
+      getEmailBooker(email),
     bookerEmail: email,
     name,
     pax: terminalFlightDetails?.pax || detectPax(operationalText),
@@ -1780,6 +1852,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
       "requestor contact",
       "contact",
       "phone",
+      "phone number",
       "whatsapp",
     ]),
     cleanedLines,

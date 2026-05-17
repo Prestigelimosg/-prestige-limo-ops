@@ -897,6 +897,88 @@ assert.deepEqual(parsedSgdNettQuotedArrival, {
 assert.equal(parsedSgdNettQuotedArrival.extraStopCount ?? '0', '0');
 assert.equal(parsedSgdNettQuotedArrival.extraStopLocation ?? '', '');
 
+const structuredAirportArrivalFormMessage = `Title: Prestige Transport 15697
+Booking form name: Prestige Transport
+Status: Completed (finished)
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 24-05-2026 17:45
+Order total amount: S$105.00
+Comment: Require English-speaking driver + Meet & Greet service. Driver is expected to hold a placard with Mr. Nakamura's name "Mr. Z.Nakamura" in the arrivals hall at Changi Airport Terminal.
+
+Route name: Airport arrival
+
+Drop off location:
+22 Orange Grove Rd, Singapore 258350
+
+Vehicle name: Toyota Alphard 2.5
+Bag count: 3
+Passengers count: 4
+
+Client details:
+First name: Zenji
+Last name: Nakamura
+E-mail address: yasuko.kunisawa@ubs.com
+Phone number: +819024036047
+Passengers: 1
+Flight No.: NH841`;
+const parsedStructuredAirportArrivalForm = parseBookingForTest(structuredAirportArrivalFormMessage) ?? {};
+assert.deepEqual(parsedStructuredAirportArrivalForm, {
+  success: true,
+  company: 'UBS',
+  bookingType: 'MNG',
+  vehicle: 'AVF',
+  date: '2026-05-24',
+  time: '1745hrs',
+  flight: 'NH841',
+  pickup: 'Changi Airport',
+  dropoff: '22 Orange Grove Rd, Singapore 258350',
+  booker: 'yasuko',
+  bookerEmail: 'yasuko.kunisawa@ubs.com',
+  name: 'Zenji Nakamura',
+  pax: '1',
+  customerPriceOverride: '105',
+  customerPriceOverrideReason: 'Parsed from message: S$105.00',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '+819024036047',
+  cleanedLines: [
+    'Title: Prestige Transport 15697',
+    'Booking form name: Prestige Transport',
+    'Status: Completed (finished)',
+    'Service type: Airport transfer',
+    'Transfer type: One Way',
+    'Pickup date and time: 24-05-2026 17:45',
+    'Order total amount: S$105.00',
+    'Comment: Require English-speaking driver + Meet & Greet service. Driver is expected to hold a placard with Mr. Nakamura\'s name "Mr. Z.Nakamura" in the arrivals hall at Changi Airport Terminal.',
+    'Route name: Airport arrival',
+    'Drop off location:',
+    '22 Orange Grove Rd, Singapore 258350',
+    'Vehicle name: Toyota Alphard 2.5',
+    'Bag count: 3',
+    'Passengers count: 4',
+    'Client details:',
+    'First name: Zenji',
+    'Last name: Nakamura',
+    'E-mail address: yasuko.kunisawa@ubs.com',
+    'Phone number: +819024036047',
+    'Passengers: 1',
+    'Flight No.: NH841',
+  ],
+});
+assert.equal(parsedStructuredAirportArrivalForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredAirportArrivalForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredAirportArrivalForm.childSeatRequired ?? '', '');
+assert.equal(
+  parseBookingForTest(
+    structuredAirportArrivalFormMessage.replace(
+      'E-mail address: yasuko.kunisawa@ubs.com',
+      'E-mail address: yasuko.kunisawa@gmail.com',
+    ),
+  ).company ?? '',
+  '',
+);
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

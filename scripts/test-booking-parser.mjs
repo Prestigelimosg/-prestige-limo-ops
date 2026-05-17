@@ -462,6 +462,42 @@ assert.deepEqual(parsedHyphenatedPickupLabelTransfer, {
 assert.equal(parsedHyphenatedPickupLabelTransfer.extraStopCount ?? '0', '0');
 assert.equal(parsedHyphenatedPickupLabelTransfer.extraStopLocation ?? '', '');
 
+const pickupDropoffLocationLabelsTransferSample = `Transfer for Mr Lee
+Date: 23/5/26
+Time: 3.30pm
+Pickup location: Fullerton Hotel
+Drop-off location: Marina Bay Sands
+Pax: 1`;
+const parsedPickupDropoffLocationLabelsTransfer = parseBookingForTest(pickupDropoffLocationLabelsTransferSample) ?? {};
+assert.deepEqual(parsedPickupDropoffLocationLabelsTransfer, {
+  success: true,
+  company: '',
+  bookingType: 'TRF',
+  vehicle: '',
+  date: '2026-05-23',
+  time: '1530hrs',
+  flight: '',
+  pickup: 'Fullerton Hotel',
+  dropoff: 'Marina Bay Sands',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Lee',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Transfer for Mr Lee',
+    'Date: 23/5/26',
+    'Time: 3.30pm',
+    'Pickup location: Fullerton Hotel',
+    'Drop-off location: Marina Bay Sands',
+    'Pax: 1',
+  ],
+});
+assert.equal(parsedPickupDropoffLocationLabelsTransfer.extraStopCount ?? '0', '0');
+assert.equal(parsedPickupDropoffLocationLabelsTransfer.extraStopLocation ?? '', '');
+
 const childSeatTransferSample =
   'Transfer for Mr Tan 0900 from St Regis to Marina Bay Sands with 2 child seats and booster seat.';
 assert.deepEqual(parseBookingForTest(childSeatTransferSample), {

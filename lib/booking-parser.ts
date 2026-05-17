@@ -2018,6 +2018,8 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
         "booker phone",
         "requestor contact",
         "contact",
+        "mobile",
+        "mobile number",
         "phone",
         "phone number",
         "whatsapp",

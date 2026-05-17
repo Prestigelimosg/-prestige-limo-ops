@@ -277,6 +277,85 @@ assert.deepEqual(parsedDepartureHotelAirportLabels, {
 assert.equal(parsedDepartureHotelAirportLabels.extraStopCount ?? '0', '0');
 assert.equal(parsedDepartureHotelAirportLabels.extraStopLocation ?? '', '');
 
+const etdOnlyDepartureSample = `Departure for Mr Koh
+Date: 24/5/26
+ETD: 2130
+Hotel: Pan Pacific Singapore
+Airport: Changi Airport T2
+Flight: SQ946
+Pax: 1`;
+const parsedEtdOnlyDeparture = parseBookingForTest(etdOnlyDepartureSample) ?? {};
+assert.deepEqual(parsedEtdOnlyDeparture, {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-05-24',
+  time: '',
+  flight: 'SQ946',
+  pickup: 'Pan Pacific Singapore',
+  dropoff: 'Changi Airport T2',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Koh',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Departure for Mr Koh',
+    'Date: 24/5/26',
+    'ETD: 2130',
+    'Hotel: Pan Pacific Singapore',
+    'Airport: Changi Airport T2',
+    'Flight: SQ946',
+    'Pax: 1',
+  ],
+});
+assert.equal(parsedEtdOnlyDeparture.extraStopCount ?? '0', '0');
+assert.equal(parsedEtdOnlyDeparture.extraStopLocation ?? '', '');
+assert.equal(parseBookingForTest(etdOnlyDepartureSample.replace('ETD: 2130', 'ETD 2130')).time, '');
+
+const pickupTimeWithEtdDepartureSample = `Departure for Mr Koh
+Date: 24/5/26
+Pickup time: 6.30pm
+ETD: 2130
+Hotel: Pan Pacific Singapore
+Airport: Changi Airport T2
+Flight: SQ946
+Pax: 1`;
+const parsedPickupTimeWithEtdDeparture = parseBookingForTest(pickupTimeWithEtdDepartureSample) ?? {};
+assert.deepEqual(parsedPickupTimeWithEtdDeparture, {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-05-24',
+  time: '1830hrs',
+  flight: 'SQ946',
+  pickup: 'Pan Pacific Singapore',
+  dropoff: 'Changi Airport T2',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Koh',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Departure for Mr Koh',
+    'Date: 24/5/26',
+    'Pickup time: 6.30pm',
+    'ETD: 2130',
+    'Hotel: Pan Pacific Singapore',
+    'Airport: Changi Airport T2',
+    'Flight: SQ946',
+    'Pax: 1',
+  ],
+});
+assert.equal(parsedPickupTimeWithEtdDeparture.extraStopCount ?? '0', '0');
+assert.equal(parsedPickupTimeWithEtdDeparture.extraStopLocation ?? '', '');
+
 const principalNameLabelArrivalSample = `Company: BNY
 MNG
 Date: 18/5/26

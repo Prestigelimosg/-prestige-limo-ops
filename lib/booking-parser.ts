@@ -743,7 +743,7 @@ function parseTimeFromText(text: string) {
       /\b((?:[01]\d|2[0-3])[0-5]\d)\s+(?=from\b|to\b|at\b)/i,
       /\b((?:[01]?\d|2[0-3])[ .]?[0-5]\d)\s*(?:hrs?|hours?)\b/i,
       /\b(\d{1,2}\s*(?:am|pm))\b/i,
-      /\b(?:at|by|around|pickup|pick\s*up|p\/u|pu|eta|etd|arrival|arriving|departure|departing|taking|standby)\s+((?:[01]\d|2[0-3])[0-5]\d)\b/i,
+      /\b(?:at|by|around|pickup|pick\s*up|p\/u|pu|eta|arrival|arriving|departure|departing|taking|standby)\s+((?:[01]\d|2[0-3])[0-5]\d)\b/i,
     ]);
 
   if (!rawTime) {

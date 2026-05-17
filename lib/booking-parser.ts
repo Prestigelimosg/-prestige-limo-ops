@@ -1304,7 +1304,7 @@ function detectMultiStopItinerary(text: string): MultiStopItineraryDetails | nul
 }
 
 function detectStandbyRoute(text: string) {
-  const pickup = cleanLocation(
+  const pickup = cleanedLineValue(text, ["venue"]) || cleanLocation(
     firstMatch(text, [
       /\bfrom\s+(.+?)\s+to\s+.+?(?=\s+standby\b|\s+wait\b|\s+return\b|\s+send\b|\.|,|\n|$)/i,
       /\bat\s+(.+?)(?=,\s*#|,\s*\d|,\s*Singapore\b|,\s*send\b|,\s*stop\b|,\s*pickup\b|,\s*return\b|\s+wait\b|\s+back\s+to\b|\s+and\s+back\s+to\b|\s+and\s+please\b|\s+and\s+send\b|\.|\n|$)/i,

@@ -427,6 +427,42 @@ assert.deepEqual(parsedDinnerStandby, {
   ],
 });
 
+const eventVenueStandbySample = `Event standby for Mr Lim
+Date: 25/5/26
+Time: 6pm
+Venue: National Gallery Singapore
+Send back to Ritz Carlton after event
+Pax: 1`;
+const parsedEventVenueStandby = parseBookingForTest(eventVenueStandbySample) ?? {};
+assert.deepEqual(parsedEventVenueStandby, {
+  success: true,
+  company: '',
+  bookingType: 'DSP',
+  vehicle: '',
+  date: '2026-05-25',
+  time: '1800hrs',
+  flight: '',
+  pickup: 'National Gallery Singapore',
+  dropoff: 'Ritz Carlton',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Lim',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Event standby for Mr Lim',
+    'Date: 25/5/26',
+    'Time: 6pm',
+    'Venue: National Gallery Singapore',
+    'Send back to Ritz Carlton after event',
+    'Pax: 1',
+  ],
+});
+assert.equal(parsedEventVenueStandby.extraStopCount ?? '0', '0');
+assert.equal(parsedEventVenueStandby.extraStopLocation ?? '', '');
+
 const airportDepartureSample =
   'Departure transfer for Sarah Tan on 15 May 2026 7:30pm from Ritz Carlton to Changi Airport T2.';
 assert.deepEqual(parseBookingForTest(airportDepartureSample), {

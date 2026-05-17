@@ -537,5 +537,34 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "structured-guest-name-separate-from-client",
+    "categories": [
+      "structured guest name separate from client/booker",
+      "structured terminal-specific airport arrival",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Title: Prestige Transport 15725\nService type: Airport transfer\nTransfer type: One Way\nPickup date and time: 13-06-2026 09:35\nOrder total amount: S$105.00\n\nRoute name: Airport arrival\n\nTerminal: 1\n\nDrop off location:\nConrad Singapore Orchard\n\nGuest name:\nMr David Wong\n\nVehicle name: Toyota Alphard 2.5\nPassengers count: 4\n\nClient details:\nFirst name: Karen\nLast name: Lim\nE-mail address: karen.lim@gmail.com\nPhone number: +6595552222\nPassengers: 1\nFlight No.: SQ321",
+    "expected": {
+      "company": "",
+      "booker": "karen",
+      "bookerEmail": "karen.lim@gmail.com",
+      "bookerContact": "+6595552222",
+      "bookingType": "MNG",
+      "vehicle": "AVF",
+      "date": "2026-06-13",
+      "time": "0935hrs",
+      "flight": "SQ321",
+      "pickup": "Changi Airport T1",
+      "dropoff": "Conrad Singapore Orchard",
+      "name": "Mr David Wong",
+      "pax": "1",
+      "customerPriceOverride": "105",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

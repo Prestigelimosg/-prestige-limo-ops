@@ -1241,6 +1241,19 @@ function detectPaxNameAndNumber(text: string) {
   return looksLikePersonName(paxName) ? cleanDetectedName(paxName) : "";
 }
 
+function detectLabeledTravelerName(text: string) {
+  const labeledName = lineValue(text, [
+    "passenger name",
+    "guest name",
+    "pax name",
+    "principal",
+    "traveller",
+    "traveler",
+  ]);
+
+  return looksLikePersonName(labeledName) ? cleanDetectedName(labeledName) : "";
+}
+
 function detectTripOrganizerDetails(text: string) {
   const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
   const booker = cleanDetectedName(match?.[1] ?? "");
@@ -2001,11 +2014,13 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     : { pickup: "", dropoff: "", returnDestination: "", standbyUntil: "" };
   const structuredClientName = detectStructuredClientName(operationalText);
   const paxNameAndNumber = detectPaxNameAndNumber(operationalText);
+  const labeledTravelerName = detectLabeledTravelerName(operationalText);
   const name =
     terminalFlightDetails?.passenger ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||
     paxNameAndNumber ||
+    labeledTravelerName ||
     structuredClientName ||
     detectName(operationalText, flight) ||
     detectNameFromCleanedLines(cleanedLines) ||

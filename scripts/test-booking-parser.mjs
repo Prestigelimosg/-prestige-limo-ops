@@ -1078,6 +1078,47 @@ assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.extraStopCou
 assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.extraStopLocation ?? '', '');
 assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.childSeatRequired ?? '', '');
 
+const structuredAirportDepartureFormMessage = `Title: Prestige Transport 15698
+Booking form name: Prestige Transport
+Status: Completed (finished)
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 28-05-2026 06:30
+Order total amount: S$120.00
+
+Route name: Airport departure
+
+Pick up location:
+Fullerton Hotel
+
+Vehicle name: Mercedes Benz V Class
+Bag count: 2
+Passengers count: 6
+
+Client details:
+First name: Ken
+Last name: Sato
+E-mail address: travel.coord@nomura.com
+Phone number: +81312345678
+Passengers: 2
+Flight No.: NH844`;
+const parsedStructuredAirportDepartureForm = parseBookingForTest(structuredAirportDepartureFormMessage) ?? {};
+assert.equal(parsedStructuredAirportDepartureForm.company, 'NOMURA');
+assert.equal(parsedStructuredAirportDepartureForm.booker, 'travel');
+assert.equal(parsedStructuredAirportDepartureForm.bookingType, 'DEP');
+assert.equal(parsedStructuredAirportDepartureForm.date, '2026-05-28');
+assert.equal(parsedStructuredAirportDepartureForm.time, '0630hrs');
+assert.equal(parsedStructuredAirportDepartureForm.flight, 'NH844');
+assert.equal(parsedStructuredAirportDepartureForm.pickup, 'Fullerton Hotel');
+assert.equal(parsedStructuredAirportDepartureForm.dropoff, 'Changi Airport');
+assert.equal(parsedStructuredAirportDepartureForm.name, 'Ken Sato');
+assert.equal(parsedStructuredAirportDepartureForm.pax, '2');
+assert.equal(parsedStructuredAirportDepartureForm.vehicle, 'VVV');
+assert.equal(parsedStructuredAirportDepartureForm.customerPriceOverride, '120');
+assert.equal(parsedStructuredAirportDepartureForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredAirportDepartureForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredAirportDepartureForm.childSeatRequired ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

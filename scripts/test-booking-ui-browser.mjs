@@ -246,6 +246,7 @@ function assertBookingUiState(state) {
     `Expected Changi Airport Terminal 3 or T3, received "${state.fields.pickup}"`,
   );
   assert.equal(state.fields.extraStopLocation, "Marina Bay Sands");
+  assert.equal(state.fields.extraStopCount, "1");
   assert.equal(state.fields.dropoff, "Raffles Hotel Singapore");
   assert.match(state.visibleText, /Route Extras & Child Seat/);
   assert.match(state.visibleText, /Extra stop location/);

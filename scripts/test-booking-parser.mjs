@@ -203,6 +203,26 @@ assert.deepEqual(parseBookingForTest(extraStopTransferSample), {
   ],
 });
 
+const terminalPickupExtraStopSample = `Company: BROWSER UI TEST COMPANY
+Booking type: MNG
+Vehicle: AVF
+Date: 27/05/2026
+Time: 15:30
+Flight: SQ333
+Pickup: Changi Airport Terminal 3
+Extra stop: Marina Bay Sands
+Drop-off: Raffles Hotel Singapore
+Booker: BROWSER UI TEST BOOKER
+Booker WhatsApp: +65 9000 0333
+Booker Email: browserui@example.com
+Name: BROWSER UI TEST TRAVELER
+Pax: 2
+Child seat: 2 booster seat
+Quoted price: $160.00
+Driver Name: TEST DRIVER CRM 20260516`;
+assert.equal(parseBookingForTest(terminalPickupExtraStopSample)?.extraStopLocation, 'Marina Bay Sands');
+assert.equal(parseBookingForTest(terminalPickupExtraStopSample)?.extraStopCount, '1');
+
 const narratedExtraStopBabySeatDepartureSample =
   'from my house one stop at marina one with 1 baby seat then to airport at 2315hrs';
 assert.deepEqual(parseBookingForTest(narratedExtraStopBabySeatDepartureSample), {

@@ -850,8 +850,8 @@ function detectExtraStopDetails(text: string) {
   ]));
   const extraStopLocation = labeledExtraStop || narratedExtraStop;
   const explicitCount = firstMatch(text, [
-    /\b(\d{1,2})\s+extra\s+stops?\b/i,
-    /\bextra\s+stops?\s*[:=-]\s*(\d{1,2})\b/i,
+    /\b(\d{1,2})[ \t]+extra[ \t]+stops?\b/i,
+    /\bextra[ \t]+stops?[ \t]*[:=-][ \t]*(\d{1,2})\b/i,
   ]);
 
   return {

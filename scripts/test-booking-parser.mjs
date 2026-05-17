@@ -152,6 +152,52 @@ assert.deepEqual(parsedArrivalHotelLabelDropoff, {
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopCount ?? '0', '0');
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopLocation ?? '', '');
 
+const principalNameLabelArrivalSample = `Company: BNY
+MNG
+Date: 18/5/26
+ETA: 8.15am
+Flight: SQ305
+Terminal 2
+Hotel: Fullerton Hotel
+Principal: Mr Rohan Singh
+Pax: 1`;
+const parsedPrincipalNameLabelArrival = parseBookingForTest(principalNameLabelArrivalSample) ?? {};
+assert.deepEqual(parsedPrincipalNameLabelArrival, {
+  success: true,
+  company: 'BNY',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-05-18',
+  time: '0815hrs',
+  flight: 'SQ305',
+  pickup: 'Changi Airport T2',
+  dropoff: 'Fullerton Hotel',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Rohan Singh',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Company: BNY',
+    'MNG',
+    'Date: 18/5/26',
+    'ETA: 8.15am',
+    'Flight: SQ305',
+    'Terminal 2',
+    'Hotel: Fullerton Hotel',
+    'Principal: Mr Rohan Singh',
+    'Pax: 1',
+  ],
+});
+assert.equal(parsedPrincipalNameLabelArrival.extraStopCount ?? '0', '0');
+assert.equal(parsedPrincipalNameLabelArrival.extraStopLocation ?? '', '');
+assert.equal(
+  parseBookingForTest(principalNameLabelArrivalSample.replace('Principal:', 'Traveller:')).name,
+  'Mr Rohan Singh',
+);
+
 const dinnerStandbySample =
   'Hi William, please get Richard standby for Drew, there is a dinner in the evening 6pm at ION Orchard, #04-12A, 2 Orchard Turn, Singapore 238801 and please send him back to Ritz Carlton after the dinner. thanks.';
 const parsedDinnerStandby = parseBookingForTest(dinnerStandbySample);

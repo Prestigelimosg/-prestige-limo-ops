@@ -269,7 +269,7 @@ function detectAllFlights(text: string) {
 function extractNamedPassengerLine(line: string) {
   const cleanedLine = clean(line.replace(/^[-*•]\s*/, ""));
   const labeledPassenger = firstMatch(cleanedLine, [
-    /^(?:name|passenger|passenger name|guest|guest name|pax name)\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60})$/i,
+    /^(?:name|passenger|passenger name|guest|guest name|pax name|principal|traveller|traveler)\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60})$/i,
   ]);
 
   if (looksLikePersonName(labeledPassenger)) {
@@ -1007,6 +1007,9 @@ function detectName(text: string, flight: string) {
     "guest",
     "guest name",
     "pax name",
+    "principal",
+    "traveller",
+    "traveler",
   ]);
 
   if (looksLikePersonName(labeledName)) {
@@ -1021,7 +1024,7 @@ function detectName(text: string, flight: string) {
 
   const inlineName = firstMatch(text, [
     /\bname\s+is\s+([A-Za-z][A-Za-z.' -]{1,60})/i,
-    /\b(?:name|passenger|guest|pax name)\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60})/i,
+    /\b(?:name|passenger|guest|pax name|principal|traveller|traveler)\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60})/i,
     /\b(?:pax|passenger|guest)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|,|\.|$)/i,
     /\b(?:for|under)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|\s+date\b|\s+time\b|\s+flight\b|\s+pickup\b|\s+drop\b|\s+airport\b|,|\.|$)/i,
     /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+from\b)/i,

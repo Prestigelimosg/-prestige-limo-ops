@@ -237,6 +237,41 @@ assert.deepEqual(parseBookingForTest(extraStopTransferSample), {
   ],
 });
 
+const informalDropByExtraStopDepartureSample = `DEP for Mr Wong
+16/5/26 6.45am
+From Conrad to airport T1
+Drop by Marina One
+Flight SQ318
+Pax 1`;
+assert.deepEqual(parseBookingForTest(informalDropByExtraStopDepartureSample), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-05-16',
+  time: '0645hrs',
+  flight: 'SQ318',
+  pickup: 'Conrad',
+  dropoff: 'Changi Airport T1',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Wong',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  extraStopCount: '1',
+  extraStopLocation: 'Marina One',
+  bookerContact: '',
+  cleanedLines: [
+    'DEP for Mr Wong',
+    '16/5/26 6.45am',
+    'From Conrad to airport T1',
+    'Drop by Marina One',
+    'Flight SQ318',
+    'Pax 1',
+  ],
+});
+
 const terminalPickupExtraStopSample = `Company: BROWSER UI TEST COMPANY
 Booking type: MNG
 Vehicle: AVF

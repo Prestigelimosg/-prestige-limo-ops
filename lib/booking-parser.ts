@@ -862,6 +862,7 @@ function detectExtraStopDetails(text: string) {
   const narratedExtraStop = cleanLocation(firstMatch(text, [
     /\b(?:one|a|an|\d{1,2})\s+stops?\s+(?:at|to|via)\s+(.+?)(?=\s+(?:with|then|and\s+then|before|after)\b|\.|,|\n|$)/i,
     /\bextra\s+stops?\s+(?:at|to|via)\s+(.+?)(?=\.|,|\n|$)/i,
+    /\bdrop\s+by\s+(.+?)(?=\.|,|\n|$)/i,
     /\b(?:via|stopover\s+at)\s+(.+?)(?=\.|,|\n|$)/i,
   ]));
   const extraStopLocation = labeledExtraStop || narratedExtraStop;

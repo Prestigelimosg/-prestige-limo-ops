@@ -212,7 +212,7 @@ function detectFlight(text: string) {
     return normalizedLabeledFlight;
   }
 
-  if (!/\b(?:airport|arrival|arriving|arrives?|departure|depart|drop\s*off|pick\s*up|pickup|eta|etd|landing|flight|flt|taking)\b|>|->|=>/i.test(text)) {
+  if (!/\b(?:airport|arrival|arriving|arrives?|departure|depart|drop\s*off|pick\s*up|pickup|eta|etd|landing|flight|flt|taking|mng)\b|>|->|=>/i.test(text)) {
     return "";
   }
 
@@ -711,6 +711,8 @@ function parseDateFromText(text: string, referenceDate: Date = new Date()) {
 
 function normalizeIntentText(text: string) {
   return text
+    .replace(/\bm\s*&\s*g\b/gi, "MNG")
+    .replace(/\bmeet(?:\s|-)*(?:and|&)(?:\s|-)*greet\b/gi, "MNG")
     .replace(/\barpt\b/gi, "airport")
     .replace(/\bp\/?u\b/gi, "pick up")
     .replace(/\bd\/?o\b/gi, "drop off")
@@ -1480,6 +1482,22 @@ function detectRoute(text: string, flight = "") {
     return {
       pickup: cleanLocation(routePickup),
       dropoff: cleanLocation(routeDropoff),
+    };
+  }
+
+  const arrivalTerminalToMatch = text.match(
+    /\b([A-Z]{2}\s?\d{1,4})\s+((?:changi\s+airport\s*)?(?:t|terminal)\s*[1-4])\s+to\s+(.+?)(?=\.|,|\n|$)/i,
+  );
+  if (
+    flight &&
+    arrivalTerminalToMatch?.[1] &&
+    normalizeFlightCode(arrivalTerminalToMatch[1]) === flight &&
+    arrivalTerminalToMatch[2] &&
+    arrivalTerminalToMatch[3]
+  ) {
+    return {
+      pickup: normalizeLocationName(arrivalTerminalToMatch[2]),
+      dropoff: cleanLocation(arrivalTerminalToMatch[3]),
     };
   }
 

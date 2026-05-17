@@ -509,5 +509,33 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "structured-terminal-specific-airport-departure",
+    "categories": [
+      "structured terminal-specific airport departure",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Title: Prestige Transport 15724\nService type: Airport transfer\nTransfer type: One Way\nPickup date and time: 12-06-2026 07:20\nOrder total amount: S$120.00\n\nRoute name: Airport departure\n\nPick up location:\nFullerton Hotel\n\nTerminal: 2\n\nVehicle name: Mercedes Benz V Class\nPassengers count: 6\n\nClient details:\nFirst name: Karen\nLast name: Lim\nE-mail address: karen.lim@gmail.com\nPhone number: +6595552222\nPassengers: 1\nFlight No.: SQ878",
+    "expected": {
+      "company": "",
+      "booker": "karen",
+      "bookerEmail": "karen.lim@gmail.com",
+      "bookerContact": "+6595552222",
+      "bookingType": "DEP",
+      "vehicle": "VVV",
+      "date": "2026-06-12",
+      "time": "0720hrs",
+      "flight": "SQ878",
+      "pickup": "Fullerton Hotel",
+      "dropoff": "Changi Airport T2",
+      "name": "Karen Lim",
+      "pax": "1",
+      "customerPriceOverride": "120",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

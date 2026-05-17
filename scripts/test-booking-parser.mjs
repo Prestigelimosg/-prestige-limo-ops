@@ -1498,6 +1498,50 @@ assert.equal(parsedStructuredStartEndPointToPointTransferForm.extraStopCount ?? 
 assert.equal(parsedStructuredStartEndPointToPointTransferForm.extraStopLocation ?? '', '');
 assert.equal(parsedStructuredStartEndPointToPointTransferForm.childSeatRequired ?? '', '');
 
+const structuredAddressPointToPointTransferFormMessage = `Title: Prestige Transport 15714
+Booking form name: Prestige Transport
+Service type: Point to point transfer
+Transfer type: One Way
+Pickup date and time: 02-06-2026 11:25
+Order total amount: S$90.00
+
+Route name: City transfer
+
+Pickup address:
+The Warehouse Hotel
+
+Drop-off address:
+Sentosa Golf Club
+
+Vehicle name: Mercedes Benz E-class
+Passengers count: 3
+
+Client details:
+First name: Olivia
+Last name: Tan
+E-mail address: olivia.tan@gmail.com
+Phone number: +6593334444
+Passengers: 2`;
+const parsedStructuredAddressPointToPointTransferForm =
+  parseBookingForTest(structuredAddressPointToPointTransferFormMessage) ?? {};
+assert.equal(parsedStructuredAddressPointToPointTransferForm.company ?? '', '');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.booker, 'olivia');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.bookerEmail, 'olivia.tan@gmail.com');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.bookerContact, '+6593334444');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.bookingType, 'TRF');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.date, '2026-06-02');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.time, '1125hrs');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.flight ?? '', '');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.pickup, 'The Warehouse Hotel');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.dropoff, 'Sentosa Golf Club');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.name, 'Olivia Tan');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.pax, '2');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.vehicle, 'E class');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.customerPriceOverride, '90');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.childSeatRequired ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

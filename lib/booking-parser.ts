@@ -1663,12 +1663,15 @@ function detectBookerValue(text: string, context: { booker: string; company: str
 function detectRoute(text: string, flight = "") {
   const rawPickup = lineValue(text, [
     "pickup",
+    "pickup address",
     "pickup location",
     "pickup point",
     "pick up",
+    "pick up address",
     "pick up location",
     "pick up point",
     "pick-up",
+    "pick-up address",
     "pick-up point",
     "p/u",
     "pu",
@@ -1678,12 +1681,15 @@ function detectRoute(text: string, flight = "") {
   ]);
   const rawDropoff = lineValue(text, [
     "dropoff",
+    "dropoff address",
     "dropoff location",
     "dropoff point",
     "drop off",
+    "drop off address",
     "drop off location",
     "drop off point",
     "drop-off",
+    "drop-off address",
     "drop-off location",
     "drop-off point",
     "d/o",

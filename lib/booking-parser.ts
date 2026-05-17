@@ -178,6 +178,15 @@ const publicEmailDomains = new Set([
   "zoho.com",
 ]);
 const ownCompanyNames = new Set(["prestige transport"]);
+const countryCodeSecondLevelDomains = new Set([
+  "ac",
+  "co",
+  "com",
+  "edu",
+  "gov",
+  "net",
+  "org",
+]);
 
 const ignoredFlightCodes = new Set(["AT", "BY", "IF", "IN", "IS", "NO", "OF", "ON", "OR", "TO"]);
 const flightCodePattern = /\b([A-Z]{2})\s?(\d{1,4})\b/gi;
@@ -221,7 +230,12 @@ function getEmailDomain(value: string) {
   }
 
   const domainParts = normalizedDomain.split(".").filter(Boolean);
-  const organization = domainParts.length > 1 ? domainParts[domainParts.length - 2] : domainParts[0];
+  const suffix = domainParts[domainParts.length - 1] || "";
+  const secondLevel = domainParts[domainParts.length - 2] || "";
+  const organization =
+    domainParts.length >= 3 && suffix.length === 2 && countryCodeSecondLevelDomains.has(secondLevel)
+      ? domainParts[domainParts.length - 3]
+      : domainParts.length > 1 ? secondLevel : domainParts[0];
 
   return organization ? organization.toUpperCase() : "";
 }

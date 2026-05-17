@@ -1678,6 +1678,7 @@ function detectRoute(text: string, flight = "") {
     "start location",
     "from",
     "origin",
+    "origin address",
   ]);
   const rawDropoff = lineValue(text, [
     "dropoff",
@@ -1697,6 +1698,7 @@ function detectRoute(text: string, flight = "") {
     "end location",
     "to",
     "destination",
+    "destination address",
   ]);
   const structuredPickup = cleanStructuredListLocation(rawPickup);
   const structuredDropoff = cleanStructuredListLocation(rawDropoff);

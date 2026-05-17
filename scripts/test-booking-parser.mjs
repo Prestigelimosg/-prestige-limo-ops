@@ -1542,6 +1542,50 @@ assert.equal(parsedStructuredAddressPointToPointTransferForm.extraStopCount ?? '
 assert.equal(parsedStructuredAddressPointToPointTransferForm.extraStopLocation ?? '', '');
 assert.equal(parsedStructuredAddressPointToPointTransferForm.childSeatRequired ?? '', '');
 
+const structuredOriginDestinationAddressPointToPointTransferFormMessage = `Title: Prestige Transport 15715
+Booking form name: Prestige Transport
+Service type: Point to point transfer
+Transfer type: One Way
+Pickup date and time: 03-06-2026 13:50
+Order total amount: S$140.00
+
+Route name: City transfer
+
+Origin address:
+Four Seasons Singapore
+
+Destination address:
+Singapore Expo
+
+Vehicle name: 13-seater minibus
+Passengers count: 13
+
+Client details:
+First name: Rachel
+Last name: Lim
+E-mail address: rachel.lim@gmail.com
+Phone number: +6594445555
+Passengers: 5`;
+const parsedStructuredOriginDestinationAddressPointToPointTransferForm =
+  parseBookingForTest(structuredOriginDestinationAddressPointToPointTransferFormMessage) ?? {};
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.company ?? '', '');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.booker, 'rachel');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.bookerEmail, 'rachel.lim@gmail.com');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.bookerContact, '+6594445555');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.bookingType, 'TRF');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.date, '2026-06-03');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.time, '1350hrs');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.flight ?? '', '');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.pickup, 'Four Seasons Singapore');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.dropoff, 'Singapore Expo');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.name, 'Rachel Lim');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.pax, '5');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.vehicle, 'Combi');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.customerPriceOverride, '140');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredOriginDestinationAddressPointToPointTransferForm.childSeatRequired ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

@@ -1112,7 +1112,7 @@ function normalizeLocationName(value: string) {
 }
 
 function detectTerminal(text: string) {
-  const terminalMatch = text.match(/\b(?:terminal\s*|term\s*|t)([1-4])\b/i);
+  const terminalMatch = text.match(/\b(?:terminal|term|t)\s*[:=-]?\s*([1-4])\b/i);
 
   return terminalMatch?.[1] ? `Changi Airport T${terminalMatch[1]}` : "";
 }

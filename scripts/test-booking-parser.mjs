@@ -152,6 +152,44 @@ assert.deepEqual(parsedArrivalHotelLabelDropoff, {
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopCount ?? '0', '0');
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopLocation ?? '', '');
 
+const arrivalTerminalColonLabelSample = `Arrival for Mr Goh
+Date: 26/5/26
+ETA: 8.20am
+Flight: SQ305
+Terminal: 2
+Hotel: Fullerton Hotel
+Pax: 1`;
+const parsedArrivalTerminalColonLabel = parseBookingForTest(arrivalTerminalColonLabelSample) ?? {};
+assert.deepEqual(parsedArrivalTerminalColonLabel, {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-05-26',
+  time: '0820hrs',
+  flight: 'SQ305',
+  pickup: 'Changi Airport T2',
+  dropoff: 'Fullerton Hotel',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Goh',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Arrival for Mr Goh',
+    'Date: 26/5/26',
+    'ETA: 8.20am',
+    'Flight: SQ305',
+    'Terminal: 2',
+    'Hotel: Fullerton Hotel',
+    'Pax: 1',
+  ],
+});
+assert.equal(parsedArrivalTerminalColonLabel.extraStopCount ?? '0', '0');
+assert.equal(parsedArrivalTerminalColonLabel.extraStopLocation ?? '', '');
+
 const arrivalDestinationLabelDropoffSample = `Arrival for Ms Chen
 Date: 21/5/26
 ETA: 10.10am

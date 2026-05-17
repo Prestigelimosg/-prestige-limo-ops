@@ -1454,6 +1454,19 @@ function detectRoute(text: string, flight = "") {
     return { pickup, dropoff };
   }
 
+  const departureHotelPickup = cleanedLineValue(text, ["hotel"]);
+  const departureAirportDropoff = cleanedLineValue(text, ["airport"]);
+  if (
+    departureHotelPickup &&
+    departureAirportDropoff &&
+    /\bDEP\b|\bDEPARTURE\b|\bDEPART\b|\bETD\b|\bAIRPORT\s+DROP\s*OFF\b|\bDROP\s*OFF\s+(?:AT\s+)?AIRPORT\b|\bTO\s+AIRPORT\b/i.test(text)
+  ) {
+    return {
+      pickup: departureHotelPickup,
+      dropoff: departureAirportDropoff,
+    };
+  }
+
   const routeMatch = text.match(/(.+?)\s*(?:>|->|=>)\s*(.+)/i);
   if (routeMatch?.[1] && routeMatch?.[2]) {
     const routePickup = clean(routeMatch[1].split("\n").pop() || "").replace(/^.*?\b\d{3,4}\s*(?:hrs?)?\s+/, "");

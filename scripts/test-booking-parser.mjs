@@ -152,6 +152,44 @@ assert.deepEqual(parsedArrivalHotelLabelDropoff, {
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopCount ?? '0', '0');
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopLocation ?? '', '');
 
+const departureHotelAirportLabelsSample = `Departure for Mr Tan
+Date: 19/5/26
+Pickup time: 6.30am
+Flight: SQ878
+Hotel: Fullerton Hotel
+Airport: Changi Airport T3
+Pax: 1`;
+const parsedDepartureHotelAirportLabels = parseBookingForTest(departureHotelAirportLabelsSample) ?? {};
+assert.deepEqual(parsedDepartureHotelAirportLabels, {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-05-19',
+  time: '0630hrs',
+  flight: 'SQ878',
+  pickup: 'Fullerton Hotel',
+  dropoff: 'Changi Airport T3',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Tan',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Departure for Mr Tan',
+    'Date: 19/5/26',
+    'Pickup time: 6.30am',
+    'Flight: SQ878',
+    'Hotel: Fullerton Hotel',
+    'Airport: Changi Airport T3',
+    'Pax: 1',
+  ],
+});
+assert.equal(parsedDepartureHotelAirportLabels.extraStopCount ?? '0', '0');
+assert.equal(parsedDepartureHotelAirportLabels.extraStopLocation ?? '', '');
+
 const principalNameLabelArrivalSample = `Company: BNY
 MNG
 Date: 18/5/26

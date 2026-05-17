@@ -152,6 +152,44 @@ assert.deepEqual(parsedArrivalHotelLabelDropoff, {
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopCount ?? '0', '0');
 assert.equal(parsedArrivalHotelLabelDropoff.extraStopLocation ?? '', '');
 
+const arrivalDestinationLabelDropoffSample = `Arrival for Ms Chen
+Date: 21/5/26
+ETA: 10.10am
+Flight: SQ336
+Terminal 2
+Destination: Mandarin Oriental
+Pax: 2`;
+const parsedArrivalDestinationLabelDropoff = parseBookingForTest(arrivalDestinationLabelDropoffSample) ?? {};
+assert.deepEqual(parsedArrivalDestinationLabelDropoff, {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-05-21',
+  time: '1010hrs',
+  flight: 'SQ336',
+  pickup: 'Changi Airport T2',
+  dropoff: 'Mandarin Oriental',
+  booker: '',
+  bookerEmail: '',
+  name: 'Ms Chen',
+  pax: '2',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Arrival for Ms Chen',
+    'Date: 21/5/26',
+    'ETA: 10.10am',
+    'Flight: SQ336',
+    'Terminal 2',
+    'Destination: Mandarin Oriental',
+    'Pax: 2',
+  ],
+});
+assert.equal(parsedArrivalDestinationLabelDropoff.extraStopCount ?? '0', '0');
+assert.equal(parsedArrivalDestinationLabelDropoff.extraStopLocation ?? '', '');
+
 const departureHotelAirportLabelsSample = `Departure for Mr Tan
 Date: 19/5/26
 Pickup time: 6.30am

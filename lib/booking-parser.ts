@@ -1451,6 +1451,14 @@ function detectRoute(text: string, flight = "") {
   ]);
 
   if (pickup || dropoff) {
+    if (
+      !pickup &&
+      dropoff &&
+      /\bARRIV(?:AL|ING|ES?)\b|\bETA\b|\bLANDING\b|\bFLIGHT\s+ARRIVES?\b|\bMNG\b|\bAIRPORT\s+PICK\s*UP\b|\bAIRPORT\s+P\/U\b|\bPICK\s*UP\s+FROM\s+AIRPORT\b/i.test(text)
+    ) {
+      return { pickup: airportLocationFromText(text), dropoff };
+    }
+
     return { pickup, dropoff };
   }
 

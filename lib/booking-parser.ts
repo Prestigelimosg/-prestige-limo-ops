@@ -34,6 +34,8 @@ export type ParsedBooking = {
     pickup?: string;
     dropoff?: string;
     pax?: string;
+    extraStopCount?: string;
+    extraStopLocation?: string;
   }>;
   parserWarning?: string;
   multipleBookingsDetected?: boolean;
@@ -448,6 +450,7 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
         pickup: terminalFlightDetails?.pickup || route.pickup,
         dropoff: departureTerminal || dropoff,
         ...(pax ? { pax } : {}),
+        ...(terminalFlightDetails ? { extraStopCount: "0", extraStopLocation: "" } : {}),
       };
     })
     .filter((preview) => Object.values(preview).some(Boolean));

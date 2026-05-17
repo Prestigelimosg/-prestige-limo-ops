@@ -681,7 +681,8 @@ assertMultiBookingDoesNotBlend(liveBugSamples[2].input, 'need 2 cars tomorrow');
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)
-T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)`;
+T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)
+Please advise your pickup plan for the above. Thanks.`;
 const terminalArrivalReferenceDate = new Date(2026, 4, 17, 12, 0, 0);
 const parsedMultiTerminalArrival = parseBookingMessage(multiTerminalArrivalChangeMessage, {
   referenceDate: terminalArrivalReferenceDate,
@@ -692,6 +693,21 @@ assert.equal(
   parsedMultiTerminalArrival.parserWarning,
   'Multiple bookings detected. Please select one extracted booking.',
 );
+assert.equal(parsedMultiTerminalArrival.extractedBookingsPreview?.length, 2);
+const mu567Preview = parsedMultiTerminalArrival.extractedBookingsPreview
+  ?.find((preview) => preview.flight === 'MU567') ?? {};
+assert.deepEqual(mu567Preview, {
+  passenger: 'Ye Yueqin',
+  date: '2026-05-18',
+  time: '1545hrs',
+  type: 'MNG',
+  flight: 'MU567',
+  pickup: 'Changi Airport T3',
+  dropoff: 'Grand Hyatt',
+  pax: '1',
+  extraStopCount: '0',
+  extraStopLocation: '',
+});
 const cx791Preview = parsedMultiTerminalArrival.extractedBookingsPreview
   ?.find((preview) => preview.flight === 'CX791') ?? {};
 assert.deepEqual(cx791Preview, {
@@ -703,11 +719,14 @@ assert.deepEqual(cx791Preview, {
   pickup: 'Changi Airport T4',
   dropoff: 'Grand Hyatt',
   pax: '3',
+  extraStopCount: '0',
+  extraStopLocation: '',
 });
 
 const selectedCx791ArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
-T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)`;
+T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)
+Please advise your pickup plan for the above. Thanks.`;
 assert.deepEqual(parseBookingMessage(selectedCx791ArrivalChangeMessage, {
   referenceDate: terminalArrivalReferenceDate,
 }), {
@@ -731,6 +750,7 @@ assert.deepEqual(parseBookingMessage(selectedCx791ArrivalChangeMessage, {
     'Hi William, some changes for tomorrow arrival:',
     'Total 2 pickup from T3 and T4 to Grand Hyatt below:',
     'T4: CX791 Hongkong - Singapore Arrival 15:40 (3 Passenger - Anne Chiou, Noah Chen, Isaac Chen)',
+    'Please advise your pickup plan for the above. Thanks.',
   ],
 });
 

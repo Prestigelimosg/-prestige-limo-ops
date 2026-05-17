@@ -129,6 +129,40 @@ assert.deepEqual(parseBookingForTest(airportDepartureSample), {
   cleanedLines: [airportDepartureSample],
 });
 
+const shortNumericDateDotTimeDepartureSample = `DEP for Mr Tan
+15/5/26 7.30pm
+From Fullerton Hotel to Changi Airport T3
+Flight SQ878
+Pax 1`;
+const parsedShortNumericDateDotTimeDeparture = parseBookingForTest(shortNumericDateDotTimeDepartureSample) ?? {};
+assert.deepEqual(parsedShortNumericDateDotTimeDeparture, {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-05-15',
+  time: '1930hrs',
+  flight: 'SQ878',
+  pickup: 'Fullerton Hotel',
+  dropoff: 'Changi Airport T3',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Tan',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'DEP for Mr Tan',
+    '15/5/26 7.30pm',
+    'From Fullerton Hotel to Changi Airport T3',
+    'Flight SQ878',
+    'Pax 1',
+  ],
+});
+assert.equal(parsedShortNumericDateDotTimeDeparture.extraStopCount ?? '0', '0');
+assert.equal(parsedShortNumericDateDotTimeDeparture.extraStopLocation ?? '', '');
+
 const transferSample =
   'Transfer for Michael Lee on 17 May 2026 1430 from Marina Bay Sands to Fullerton Hotel.';
 assert.deepEqual(parseBookingForTest(transferSample), {

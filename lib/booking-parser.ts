@@ -645,6 +645,14 @@ function parseDateFromText(text: string, referenceDate: Date = new Date()) {
     )}`;
   }
 
+  const shortNumericMatch = text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})\b/);
+  if (shortNumericMatch) {
+    return `20${shortNumericMatch[3]}-${shortNumericMatch[2].padStart(2, "0")}-${shortNumericMatch[1].padStart(
+      2,
+      "0",
+    )}`;
+  }
+
   const monthMatch = text.match(
     /\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+|-)(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(20\d{2}))?\b/i,
   );
@@ -724,6 +732,7 @@ function parseTimeFromText(text: string) {
   const rawTime =
     labeledTime ||
     firstMatch(text, [
+      /\b(\d{1,2}[.:]\d{2}\s*(?:am|pm))\b/i,
       /\b(\d{1,2}:\d{2}\s*(?:am|pm)?)\b/i,
       /\b((?:[01]?\d|2[0-3]):[0-5]\d)\b/i,
       /\b[A-Z]{2}\s?\d{1,4}\s+((?:[01]\d|2[0-3])[0-5]\d)\b/i,
@@ -740,17 +749,21 @@ function parseTimeFromText(text: string) {
   }
 
   const compactTime = rawTime.replace(/\s+/g, "").toLowerCase();
-  const amPmMatch = compactTime.match(/^(\d{1,2})(?::?(\d{2}))?(am|pm)$/);
+  const amPmMatch = compactTime.match(/^(\d{1,2})(?:(?::|\.)(\d{2})|(\d{2}))?(am|pm)$/);
 
   if (amPmMatch) {
     let hour = Number(amPmMatch[1]);
-    const minute = amPmMatch[2] || "00";
+    const minute = amPmMatch[2] || amPmMatch[3] || "00";
 
-    if (amPmMatch[3] === "pm" && hour < 12) {
+    if (hour < 1 || hour > 12) {
+      return "";
+    }
+
+    if (amPmMatch[4] === "pm" && hour < 12) {
       hour += 12;
     }
 
-    if (amPmMatch[3] === "am" && hour === 12) {
+    if (amPmMatch[4] === "am" && hour === 12) {
       hour = 0;
     }
 

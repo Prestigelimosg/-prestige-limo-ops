@@ -1452,6 +1452,91 @@ assert.equal(parsedStructuredMobileNumberAirportArrivalForm.extraStopCount ?? '0
 assert.equal(parsedStructuredMobileNumberAirportArrivalForm.extraStopLocation ?? '', '');
 assert.equal(parsedStructuredMobileNumberAirportArrivalForm.childSeatRequired ?? '', '');
 
+const structuredContactNumberAirportDepartureFormMessage = `Title: Prestige Transport 15717
+Booking form name: Prestige Transport
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 05-06-2026 18:30
+Order total amount: S$120.00
+
+Route name: Airport departure
+
+Pick up location:
+Conrad Singapore Orchard
+
+Vehicle name: Mercedes Benz V Class
+Passengers count: 6
+
+Client details:
+First name: Kevin
+Last name: Ng
+E-mail address: kevin.ng@gmail.com
+Contact number: +6596667777
+Passengers: 2
+Flight No.: SQ946`;
+const parsedStructuredContactNumberAirportDepartureForm =
+  parseBookingForTest(structuredContactNumberAirportDepartureFormMessage) ?? {};
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.company ?? '', '');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.booker, 'kevin');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.bookerEmail, 'kevin.ng@gmail.com');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.bookerContact, '+6596667777');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.bookingType, 'DEP');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.date, '2026-06-05');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.time, '1830hrs');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.flight, 'SQ946');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.pickup, 'Conrad Singapore Orchard');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.dropoff, 'Changi Airport');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.name, 'Kevin Ng');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.pax, '2');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.vehicle, 'VVV');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.customerPriceOverride, '120');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredContactNumberAirportDepartureForm.childSeatRequired ?? '', '');
+
+const structuredUnlabeledPhoneAirportArrivalFormMessage = `Title: Prestige Transport 15718
+Booking form name: Prestige Transport
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 06-06-2026 09:15
+Order total amount: S$105.00
+
+Route name: Airport arrival
+
+Drop off location:
+Raffles Hotel Singapore
+
+Vehicle name: Toyota Alphard 2.5
+Passengers count: 4
+
+Client details:
+First name: Marcus
+Last name: Lee
+E-mail address: marcus.lee@gmail.com
++6597778888
+Passengers: 2
+Flight No.: SQ305`;
+const parsedStructuredUnlabeledPhoneAirportArrivalForm =
+  parseBookingForTest(structuredUnlabeledPhoneAirportArrivalFormMessage) ?? {};
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.company ?? '', '');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.booker, 'marcus');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.bookerEmail, 'marcus.lee@gmail.com');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.bookerContact, '+6597778888');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.bookingType, 'MNG');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.date, '2026-06-06');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.time, '0915hrs');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.flight, 'SQ305');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.pickup, 'Changi Airport');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.dropoff, 'Raffles Hotel Singapore');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.name, 'Marcus Lee');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.pax, '2');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.vehicle, 'AVF');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.customerPriceOverride, '105');
+assert.notEqual(parsedStructuredUnlabeledPhoneAirportArrivalForm.bookerContact, '105');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredUnlabeledPhoneAirportArrivalForm.childSeatRequired ?? '', '');
+
 const structuredPointToPointTransferFormMessage = `Title: Prestige Transport 15712
 Booking form name: Prestige Transport
 Service type: Point to point transfer

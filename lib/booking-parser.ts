@@ -1205,6 +1205,26 @@ function detectTripOrganizerDetails(text: string) {
   };
 }
 
+function detectUnlabeledPlusContact(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line));
+
+  for (const line of lines) {
+    if (!/^\+\d[\d ]+\d$/.test(line)) {
+      continue;
+    }
+
+    const digitCount = line.replace(/\D/g, "").length;
+
+    if (digitCount >= 7) {
+      return line;
+    }
+  }
+
+  return "";
+}
+
 function detectName(text: string, flight: string) {
   const labeledName = lineValue(text, [
     "name",
@@ -2018,12 +2038,14 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
         "booker phone",
         "requestor contact",
         "contact",
+        "contact number",
         "mobile",
         "mobile number",
         "phone",
         "phone number",
         "whatsapp",
-      ]),
+      ]) ||
+      detectUnlabeledPlusContact(operationalText),
     cleanedLines,
   };
   const pronounReturnWithoutName =

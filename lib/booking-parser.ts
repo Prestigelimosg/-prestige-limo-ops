@@ -1439,7 +1439,7 @@ function detectBookerValue(text: string, context: { booker: string; company: str
 }
 
 function detectRoute(text: string, flight = "") {
-  const pickup = cleanedLineValue(text, ["pickup", "pick up", "p/u", "pu", "from", "origin"]);
+  const pickup = cleanedLineValue(text, ["pickup", "pick up", "pick-up", "p/u", "pu", "from", "origin"]);
   const dropoff = cleanedLineValue(text, [
     "dropoff",
     "drop off",

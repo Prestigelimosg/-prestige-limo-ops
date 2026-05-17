@@ -145,6 +145,8 @@ const publicEmailDomains = new Set([
   "yahoo.com",
   "outlook.com",
   "icloud.com",
+  "mac.com",
+  "me.com",
 ]);
 const ownCompanyNames = new Set(["prestige transport"]);
 

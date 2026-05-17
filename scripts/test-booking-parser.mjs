@@ -979,6 +979,54 @@ assert.equal(
   '',
 );
 
+const structuredMacEmailAirportArrivalFormMessage = `Title: Prestige Transport 15696
+Booking form name: Prestige Transport
+Status: Completed (finished)
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 09-05-2026 17:01
+Order total amount: S$200.00
+Taxes: S$0.00 (0%)
+Distance: 46.4 km
+Duration: 52 minutes
+
+Route name: Airport arrival
+
+Drop off location:
+4 Pandan Vly, Singapore 597628
+
+Vehicle name: Mercedes Benz S-class
+Bag count: 2
+Passengers count: 3
+
+Client details:
+First name: Tan
+Last name: WM
+E-mail address: wmt21@mac.com
+Phone number: +6581217803
+Passengers: 1
+Flight No.: SQ325
+
+Payment:
+Payment: Stripe`;
+const parsedStructuredMacEmailAirportArrivalForm =
+  parseBookingForTest(structuredMacEmailAirportArrivalFormMessage) ?? {};
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.company ?? '', '');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.bookingType, 'MNG');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.date, '2026-05-09');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.time, '1701hrs');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.flight, 'SQ325');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.pickup, 'Changi Airport');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.dropoff, '4 Pandan Vly, Singapore 597628');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.name, 'Tan WM');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.pax, '1');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.bookerEmail, 'wmt21@mac.com');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.bookerContact, '+6581217803');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.customerPriceOverride, '200');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredMacEmailAirportArrivalForm.childSeatRequired ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

@@ -566,5 +566,35 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "structured-etd-does-not-override-pickup-time",
+    "categories": [
+      "ETD not pickup time",
+      "structured terminal-specific airport departure",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class",
+      "phone/mobile/contact/tel labels"
+    ],
+    "input": "Title: Prestige Transport 15726\nService type: Airport transfer\nTransfer type: One Way\nPickup date and time: 14-06-2026 18:00\nETD: 2130\nOrder total amount: S$120.00\n\nRoute name: Airport departure\n\nPick up location:\nPan Pacific Singapore\n\nTerminal: 2\n\nVehicle name: Mercedes Benz E-class\nPassengers count: 3\n\nClient details:\nFirst name: Daniel\nLast name: Koh\nE-mail address: daniel.koh@gmail.com\nPhone number: +6596663333\nPassengers: 1\nFlight No.: SQ946",
+    "expected": {
+      "company": "",
+      "booker": "daniel",
+      "bookerEmail": "daniel.koh@gmail.com",
+      "bookerContact": "+6596663333",
+      "bookingType": "DEP",
+      "vehicle": "E class",
+      "date": "2026-06-14",
+      "time": "1800hrs",
+      "flight": "SQ946",
+      "pickup": "Pan Pacific Singapore",
+      "dropoff": "Changi Airport T2",
+      "name": "Daniel Koh",
+      "pax": "1",
+      "customerPriceOverride": "120",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

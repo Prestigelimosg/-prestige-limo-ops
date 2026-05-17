@@ -1027,6 +1027,57 @@ assert.equal(parsedStructuredMacEmailAirportArrivalForm.extraStopCount ?? '0', '
 assert.equal(parsedStructuredMacEmailAirportArrivalForm.extraStopLocation ?? '', '');
 assert.equal(parsedStructuredMacEmailAirportArrivalForm.childSeatRequired ?? '', '');
 
+const structuredHotmailTripOrganizerAirportArrivalFormMessage = `Title: Prestige Transport 15694
+Booking form name: Prestige Transport
+Status: Completed (finished)
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 23-05-2026 19:15
+Order total amount: S$105.00
+Taxes: S$0.00 (0%)
+Distance: 46.4 km
+Duration: 52 minutes
+Comment: Trip Organizer: Mr. Kim, Hyun Soo (Tel. No.: +65 98156017)
+
+Route name: Airport arrival
+
+Drop off location:
+88 Jellicoe Rd, Condo 208747
+
+Vehicle name: Toyota Alphard 2.5
+Bag count: 3
+Passengers count: 4
+
+Client details:
+First name: Lai Ting
+Last name: Wong
+E-mail address: hyunsoostar@hotmail.com
+Phone number: +6597382164
+Passengers: 1
+Flight No.: KE643`;
+const parsedStructuredHotmailTripOrganizerAirportArrivalForm =
+  parseBookingForTest(structuredHotmailTripOrganizerAirportArrivalFormMessage) ?? {};
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.company ?? '', '');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.bookingType, 'MNG');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.vehicle, 'AVF');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.date, '2026-05-23');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.time, '1915hrs');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.flight, 'KE643');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.pickup, 'Changi Airport');
+assert.equal(
+  parsedStructuredHotmailTripOrganizerAirportArrivalForm.dropoff,
+  '88 Jellicoe Rd, Condo 208747',
+);
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.booker, 'Mr Kim, Hyun Soo');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.bookerContact, '+65 98156017');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.bookerEmail, 'hyunsoostar@hotmail.com');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.name, 'Lai Ting Wong');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.pax, '1');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.customerPriceOverride, '105');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.extraStopLocation ?? '', '');
+assert.equal(parsedStructuredHotmailTripOrganizerAirportArrivalForm.childSeatRequired ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

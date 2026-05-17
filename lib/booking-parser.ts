@@ -140,13 +140,42 @@ const knownCompanyTokens = new Set([
   "uob",
 ]);
 const publicEmailDomains = new Set([
+  "126.com",
+  "163.com",
+  "aol.com",
+  "daum.net",
+  "fastmail.com",
   "gmail.com",
+  "gmx.com",
+  "gmx.net",
+  "googlemail.com",
+  "hanmail.net",
+  "hey.com",
   "hotmail.com",
-  "yahoo.com",
-  "outlook.com",
   "icloud.com",
+  "kakao.com",
+  "live.com",
   "mac.com",
+  "mail.com",
   "me.com",
+  "msn.com",
+  "naver.com",
+  "outlook.com",
+  "pm.me",
+  "proton.me",
+  "protonmail.com",
+  "qq.com",
+  "rediffmail.com",
+  "rocketmail.com",
+  "sina.com",
+  "tutanota.com",
+  "tutamail.com",
+  "yahoo.com",
+  "yahoo.com.sg",
+  "yandex.com",
+  "yandex.ru",
+  "ymail.com",
+  "zoho.com",
 ]);
 const ownCompanyNames = new Set(["prestige transport"]);
 
@@ -1073,6 +1102,18 @@ function detectStructuredClientName(text: string) {
   return looksLikePersonName(fullName) ? fullName : "";
 }
 
+function detectTripOrganizerDetails(text: string) {
+  const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
+  const booker = cleanDetectedName(match?.[1] ?? "");
+  const contactText = match?.[2] || match?.[0] || "";
+  const contact = firstMatch(contactText, [/(\+?\d[\d\s-]{6,}\d)/]);
+
+  return {
+    booker,
+    contact,
+  };
+}
+
 function detectName(text: string, flight: string) {
   const labeledName = lineValue(text, [
     "name",
@@ -1549,10 +1590,10 @@ function detectRoute(text: string, flight = "") {
     "to",
     "destination",
   ]);
-  const pickup = /\bSingapore\s+\d{5,6}\b/i.test(rawPickup)
+  const pickup = /\b(?:Singapore\s+)?\d{5,6}\b/i.test(rawPickup)
     ? normalizeLocationName(rawPickup)
     : cleanLocation(rawPickup);
-  const dropoff = /\bSingapore\s+\d{5,6}\b/i.test(rawDropoff)
+  const dropoff = /\b(?:Singapore\s+)?\d{5,6}\b/i.test(rawDropoff)
     ? normalizeLocationName(rawDropoff)
     : cleanLocation(rawDropoff);
 
@@ -1756,6 +1797,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const email = firstMatch(normalizedText, [/\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i]);
   const domain = getEmailDomain(email);
   const bookerCompanyContext = detectBookerCompanyContext(operationalText);
+  const tripOrganizerDetails = detectTripOrganizerDetails(operationalText);
   const dateText = lineValue(operationalText, ["date", "pickup date", "p/u date", "pu date"]);
   const flight = detectFlight(operationalText);
   const terminalFlightDetails = detectTerminalFlightLineDetails(operationalText, flight);
@@ -1807,6 +1849,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     pickup: routeValues.pickup,
     dropoff: routeValues.dropoff,
     booker:
+      tripOrganizerDetails.booker ||
       detectBookerValue(operationalText, bookerCompanyContext) ||
       whatsappTranscript.senderName ||
       getEmailBooker(email),
@@ -1847,16 +1890,18 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
       ? { returnDestination: standbyRouteDetails.returnDestination }
       : {}),
     ...(standbyRouteDetails.standbyUntil ? { standbyUntil: standbyRouteDetails.standbyUntil } : {}),
-    bookerContact: lineValue(operationalText, [
-      "booker contact",
-      "booker whatsapp",
-      "booker phone",
-      "requestor contact",
-      "contact",
-      "phone",
-      "phone number",
-      "whatsapp",
-    ]),
+    bookerContact:
+      tripOrganizerDetails.contact ||
+      lineValue(operationalText, [
+        "booker contact",
+        "booker whatsapp",
+        "booker phone",
+        "requestor contact",
+        "contact",
+        "phone",
+        "phone number",
+        "whatsapp",
+      ]),
     cleanedLines,
   };
   const pronounReturnWithoutName =

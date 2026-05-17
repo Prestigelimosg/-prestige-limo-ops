@@ -318,6 +318,48 @@ assert.deepEqual(parseBookingForTest(vinuQuotedArrivalMessage), {
   ],
 });
 
+const sgdNettQuotedArrivalMessage = `Arrival for Mr Lim
+Date: 15/5/26
+Time: 9.20am
+Flight: SQ322
+Pickup: Changi Airport T3
+Drop-off: Ritz Carlton
+Pax: 1
+Quoted price: SGD 90 nett`;
+const parsedSgdNettQuotedArrival = parseBookingForTest(sgdNettQuotedArrivalMessage) ?? {};
+assert.deepEqual(parsedSgdNettQuotedArrival, {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-05-15',
+  time: '0920hrs',
+  flight: 'SQ322',
+  pickup: 'Changi Airport T3',
+  dropoff: 'Ritz Carlton',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Lim',
+  pax: '1',
+  customerPriceOverride: '90',
+  customerPriceOverrideReason: 'Parsed from message: SGD 90',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Arrival for Mr Lim',
+    'Date: 15/5/26',
+    'Time: 9.20am',
+    'Flight: SQ322',
+    'Pickup: Changi Airport T3',
+    'Drop-off: Ritz Carlton',
+    'Pax: 1',
+    'Quoted price: SGD 90 nett',
+  ],
+});
+assert.equal(parsedSgdNettQuotedArrival.extraStopCount ?? '0', '0');
+assert.equal(parsedSgdNettQuotedArrival.extraStopLocation ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

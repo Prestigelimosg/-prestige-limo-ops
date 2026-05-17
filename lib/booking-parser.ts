@@ -727,7 +727,7 @@ function normalizeIntentText(text: string) {
 
 function parseTimeFromText(text: string) {
   const labeledTime = firstMatch(text, [
-    /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?::?\d{2})?\s*(?:am|pm|hrs?)?)/i,
+    /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
   ]);
   const rawTime =
     labeledTime ||
@@ -812,14 +812,14 @@ function formatDetectedMoneyAmount(value: number) {
 function detectQuotedCustomerPrice(cleanedLines: string[]) {
   const priceLines = cleanedLines
     .map((line) => clean(line))
-    .filter((line) => /(?:S\$|\$)\s*\d/.test(line));
+    .filter((line) => /\d/.test(line) && /(?:S\$|\$|\bSGD\b|\bquoted\s+price\b|\bnett\b)/i.test(line));
 
   for (const line of priceLines) {
-    const combinedMatch = line.match(/((?:S\$|\$)\s*\d+(?:\.\d{1,2})?\s*\+\s*(?:S\$|\$)\s*\d+(?:\.\d{1,2})?)/i);
+    const combinedMatch = line.match(/((?:(?:S\$|\$|SGD)\s*)?\d+(?:\.\d{1,2})?\s*\+\s*(?:(?:S\$|\$|SGD)\s*)?\d+(?:\.\d{1,2})?)/i);
 
     if (combinedMatch?.[1]) {
       const amounts = Array.from(
-        combinedMatch[1].matchAll(/(?:S\$|\$)\s*(\d+(?:\.\d{1,2})?)/gi),
+        combinedMatch[1].matchAll(/(?:S\$|\$|SGD)?\s*(\d+(?:\.\d{1,2})?)/gi),
       )
         .map((match) => Number(match[1]))
         .filter((amount) => Number.isFinite(amount));
@@ -832,7 +832,7 @@ function detectQuotedCustomerPrice(cleanedLines: string[]) {
       }
     }
 
-    const singleMatch = line.match(/((?:S\$|\$)\s*\d+(?:\.\d{1,2})?)/i);
+    const singleMatch = line.match(/((?:S\$|\$|SGD)\s*\d+(?:\.\d{1,2})?|\b\d+(?:\.\d{1,2})?\s+nett\b)/i);
 
     if (singleMatch?.[1]) {
       const amount = Number(singleMatch[1].replace(/[^0-9.]/g, ""));
@@ -1020,7 +1020,7 @@ function detectName(text: string, flight: string) {
     /\bname\s+is\s+([A-Za-z][A-Za-z.' -]{1,60})/i,
     /\b(?:name|passenger|guest|pax name)\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60})/i,
     /\b(?:pax|passenger|guest)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|,|\.|$)/i,
-    /\b(?:for|under)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|\s+airport\b|,|\.|$)/i,
+    /\b(?:for|under)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|\s+date\b|\s+time\b|\s+flight\b|\s+pickup\b|\s+drop\b|\s+airport\b|,|\.|$)/i,
     /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+from\b)/i,
     /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+[A-Z]{2}\s?\d{1,4}\b)/i,
     /^([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d{3,4}\s+[A-Z]{2}\s?\d{1,4}\b)/i,

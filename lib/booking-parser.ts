@@ -934,8 +934,24 @@ function detectChildSeatCount(text: string) {
   return "";
 }
 
+function detectAdultChildPax(text: string) {
+  const match = text.match(
+    /\b(\d{1,2})\s*adults?\s*(?:\+|and)?\s*(\d{1,2})\s*(?:children|child|kids?)\b/i,
+  ) || text.match(
+    /\b(\d{1,2})\s*(?:children|child|kids?)\s*(?:\+|and)?\s*(\d{1,2})\s*adults?\b/i,
+  );
+
+  if (!match?.[1] || !match[2]) {
+    return "";
+  }
+
+  const pax = Number(match[1]) + Number(match[2]);
+
+  return Number.isFinite(pax) && pax > 0 ? String(pax) : "";
+}
+
 function detectExplicitPax(text: string) {
-  return firstMatch(text, [
+  return detectAdultChildPax(text) || firstMatch(text, [
     /\b(?:pax|passengers?|persons?)\s*[:=-]?\s*(\d{1,2})\b/i,
     /\b(\d{1,2})\s*(?:pax|passengers?|persons?)\b/i,
   ]) ||

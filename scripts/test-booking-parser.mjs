@@ -190,6 +190,55 @@ assert.deepEqual(parsedArrivalDestinationLabelDropoff, {
 assert.equal(parsedArrivalDestinationLabelDropoff.extraStopCount ?? '0', '0');
 assert.equal(parsedArrivalDestinationLabelDropoff.extraStopLocation ?? '', '');
 
+const adultChildPassengerCountArrivalSample = `Arrival for Ms Wong
+Date: 22/5/26
+ETA: 11.05am
+Flight: SQ321
+Terminal 1
+Hotel: Capella Singapore
+2 adults + 1 child`;
+const parsedAdultChildPassengerCountArrival = parseBookingForTest(adultChildPassengerCountArrivalSample) ?? {};
+assert.deepEqual(parsedAdultChildPassengerCountArrival, {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-05-22',
+  time: '1105hrs',
+  flight: 'SQ321',
+  pickup: 'Changi Airport T1',
+  dropoff: 'Capella Singapore',
+  booker: '',
+  bookerEmail: '',
+  name: 'Ms Wong',
+  pax: '3',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Arrival for Ms Wong',
+    'Date: 22/5/26',
+    'ETA: 11.05am',
+    'Flight: SQ321',
+    'Terminal 1',
+    'Hotel: Capella Singapore',
+    '2 adults + 1 child',
+  ],
+});
+assert.equal(parsedAdultChildPassengerCountArrival.extraStopCount ?? '0', '0');
+assert.equal(parsedAdultChildPassengerCountArrival.extraStopLocation ?? '', '');
+assert.equal(parsedAdultChildPassengerCountArrival.childSeatRequired ?? '', '');
+assert.equal(parsedAdultChildPassengerCountArrival.childSeatCount ?? '', '');
+assert.equal(parsedAdultChildPassengerCountArrival.childSeatType ?? '', '');
+assert.equal(
+  parseBookingForTest(adultChildPassengerCountArrivalSample.replace('2 adults + 1 child', '2 adults and 1 child')).pax,
+  '3',
+);
+assert.equal(
+  parseBookingForTest(adultChildPassengerCountArrivalSample.replace('2 adults + 1 child', '2 adult 1 kid')).pax,
+  '3',
+);
+
 const departureHotelAirportLabelsSample = `Departure for Mr Tan
 Date: 19/5/26
 Pickup time: 6.30am

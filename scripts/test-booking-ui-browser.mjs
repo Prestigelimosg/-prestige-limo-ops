@@ -9,6 +9,9 @@ const browserName = (process.env.BROWSER || "chrome").toLowerCase();
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9227);
+const incompleteNeedsReviewSample = `Arrival for NEEDS REVIEW TEST TRAVELER
+Pickup: Changi Airport Terminal 3
+Pax 1`;
 const bookingSample = `Company: BROWSER UI TEST COMPANY
 Booking type: MNG
 Vehicle: AVF
@@ -349,6 +352,135 @@ async function runChromeTest() {
         window.__prestigeConsoleErrors.push(args.map(String).join(" "));
         originalError.apply(console, args);
       };`);
+
+    const focusedNeedsReviewTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedNeedsReviewTextarea,
+      true,
+      "Expected booking message textarea to be focused for Needs Review sample",
+    );
+
+    await client.send("Input.insertText", { text: incompleteNeedsReviewSample });
+
+    const filledNeedsReviewTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(incompleteNeedsReviewSample)}`,
+    );
+    assert.equal(
+      filledNeedsReviewTextarea,
+      true,
+      "Expected Needs Review booking message textarea to be filled",
+    );
+
+    const clickedNeedsReviewParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedNeedsReviewParse, true, "Expected Parse Booking button to parse Needs Review sample");
+
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("Needs review before saving") &&
+            bodyText.includes("Missing pickup date") &&
+            bodyText.includes("Missing pickup time") &&
+            bodyText.includes("Missing drop-off") &&
+            bodyText.includes("Missing flight for arrival");
+        })()`),
+      10000,
+      "Needs Review warning",
+    );
+
+    const savedCountBeforeBlockedSave = await evaluate(
+      `document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || ""`,
+    );
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (...args) => {
+        const target = args[0]?.url || args[0];
+        window.__prestigeFetchCalls.push(String(target));
+        return originalFetch(...args);
+      };
+    })()`);
+
+    const clickedBlockedSave = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Booking + CRM",
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedBlockedSave, true, "Expected Save Booking + CRM button to be clickable");
+
+    const blockedSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return {
+            bodyText,
+            fetchCalls: window.__prestigeFetchCalls || [],
+            savedCount: bodyText.match(/Saved\\s+(\\d+)/)?.[1] || "",
+          };
+        })()`);
+
+        return candidateState?.bodyText?.includes("Please review warnings before saving.")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "blocked Needs Review save message",
+    );
+
+    assert.deepEqual(
+      blockedSaveState.fetchCalls,
+      [],
+      `Expected blocked Needs Review save to make no network calls, got ${blockedSaveState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(
+      blockedSaveState.savedCount,
+      savedCountBeforeBlockedSave,
+      "Expected blocked Needs Review save not to change recent booking count",
+    );
+    assert.doesNotMatch(blockedSaveState.bodyText, /Booking saved successfully/);
+
+    const clickedClearAfterNeedsReview = await evaluate(`(() => {
+      const clearButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Clear",
+      );
+
+      if (!clearButton || clearButton.disabled) {
+        return false;
+      }
+
+      clearButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedClearAfterNeedsReview, true, "Expected Clear button after Needs Review test");
 
     const focusedTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

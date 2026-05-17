@@ -285,6 +285,14 @@ const childSeatTypeOptions = [
   "customer did not specify",
 ] as const;
 
+const requiredFields: Array<keyof BookingForm> = [
+  "date",
+  "time",
+  "pickup",
+  "dropoff",
+  "booker",
+];
+
 function createInitialBooking(): BookingForm {
   return {
     company: "",
@@ -316,14 +324,6 @@ function createInitialBooking(): BookingForm {
     driverIncludePayout: "",
   };
 }
-
-const requiredFields: Array<keyof BookingForm> = [
-  "date",
-  "time",
-  "pickup",
-  "dropoff",
-  "booker",
-];
 
 const fieldLabels: Record<keyof BookingForm, string> = {
   company: "Company / Account",
@@ -375,6 +375,77 @@ const fieldOrder: Array<keyof BookingForm> = [
 
 function clean(value: string | null | undefined) {
   return (value ?? "").trim();
+}
+
+function getNeedsReviewWarnings(booking: BookingForm) {
+  const warnings: string[] = [];
+  const bookingType = normalizeBookingType(booking.bookingType);
+  const paxValue = Number(clean(booking.pax));
+  const customerPriceOverride = clean(booking.customerPriceOverride);
+  const customerPriceOverrideValue = Number(customerPriceOverride);
+
+  if (!clean(booking.date)) {
+    warnings.push("Missing pickup date");
+  }
+
+  if (!clean(booking.time)) {
+    warnings.push("Missing pickup time");
+  }
+
+  if (!clean(booking.pickup)) {
+    warnings.push("Missing pickup");
+  }
+
+  if (!clean(booking.dropoff)) {
+    warnings.push("Missing drop-off");
+  }
+
+  if (!clean(booking.bookingType)) {
+    warnings.push("Missing booking type");
+  }
+
+  if (!clean(booking.vehicle)) {
+    warnings.push("Missing vehicle");
+  }
+
+  if (!clean(booking.pax) || !Number.isFinite(paxValue) || paxValue < 1) {
+    warnings.push("Missing or invalid pax");
+  }
+
+  if (!clean(booking.name)) {
+    warnings.push("Missing traveler / name");
+  }
+
+  if (bookingType === "MNG" && !clean(booking.flight)) {
+    warnings.push("Missing flight for arrival");
+  }
+
+  if (normalizeExtraStopCount(booking.extraStopCount) > 0 && !clean(booking.extraStopLocation)) {
+    warnings.push("Extra stop location missing");
+  }
+
+  if (
+    clean(booking.childSeatRequired) === "yes" &&
+    normalizeChildSeatCount(booking.childSeatRequired, booking.childSeatCount) < 1
+  ) {
+    warnings.push("Child seat count missing");
+  }
+
+  if (
+    customerPriceOverride &&
+    (!Number.isFinite(customerPriceOverrideValue) || customerPriceOverrideValue < 0)
+  ) {
+    warnings.push("Quoted price override is not a valid number");
+  }
+
+  return warnings;
+}
+
+function getReviewAcceptanceKey(booking: BookingForm, warnings = getNeedsReviewWarnings(booking)) {
+  return JSON.stringify({
+    booking,
+    warnings,
+  });
 }
 
 function formatPrivacySafePlace(value: string | null | undefined, fallback: string) {
@@ -1229,6 +1300,7 @@ export default function Home() {
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
+  const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [message, setMessage] = useState<Message>({
     tone: "info",
     text: "Ready for dispatch.",
@@ -1342,6 +1414,14 @@ export default function Home() {
 
     return [...childSeatTypeOptions];
   }, [booking.childSeatType]);
+
+  const needsReviewWarnings = useMemo(() => getNeedsReviewWarnings(booking), [booking]);
+  const needsReviewAcceptanceKey = useMemo(
+    () => getReviewAcceptanceKey(booking, needsReviewWarnings),
+    [booking, needsReviewWarnings],
+  );
+  const hasNeedsReviewWarnings = needsReviewWarnings.length > 0;
+  const reviewWarningsAccepted = hasNeedsReviewWarnings && acceptedReviewWarningKey === needsReviewAcceptanceKey;
 
   const companyOverrideRecords = useMemo(
     () => rateCompanies.filter((companyRecord) => hasRateOverrideValues(companyRecord)),
@@ -1663,34 +1743,6 @@ export default function Home() {
   }
 
   function validateBooking() {
-    const missing = requiredFields.filter((field) =>
-      field === "booker" ? !clean(booking.booker) && !clean(booking.name) : !clean(booking[field]),
-    );
-
-    if (missing.length > 0) {
-      setMessage({
-        tone: "error",
-        text: `Missing: ${missing.map((field) => fieldLabels[field]).join(", ")}.`,
-      });
-      return false;
-    }
-
-    if (Number(clean(booking.pax)) < 1) {
-      setMessage({
-        tone: "error",
-        text: "Pax must be at least 1.",
-      });
-      return false;
-    }
-
-    if (clean(booking.childSeatRequired) === "yes" && normalizeChildSeatCount(true, booking.childSeatCount) < 1) {
-      setMessage({
-        tone: "error",
-        text: "Child seat count must be at least 1 when a child seat is required.",
-      });
-      return false;
-    }
-
     if (clean(booking.bookerEmail) && !isValidEmail(booking.bookerEmail)) {
       setMessage({
         tone: "error",
@@ -2685,6 +2737,23 @@ export default function Home() {
   async function saveBooking() {
     setBookingSaveMessage(null);
 
+    const currentNeedsReviewWarnings = getNeedsReviewWarnings(booking);
+    const currentReviewAcceptanceKey = getReviewAcceptanceKey(booking, currentNeedsReviewWarnings);
+
+    if (
+      currentNeedsReviewWarnings.length > 0 &&
+      acceptedReviewWarningKey !== currentReviewAcceptanceKey
+    ) {
+      const reviewMessage = {
+        tone: "error",
+        text: "Please review warnings before saving.",
+      } satisfies Message;
+
+      setMessage(reviewMessage);
+      setBookingSaveMessage(reviewMessage);
+      return;
+    }
+
     if (!validateBooking()) {
       return;
     }
@@ -2831,6 +2900,7 @@ export default function Home() {
             }`,
           });
           setBookingSaveMessage(saveMessage);
+          setAcceptedReviewWarningKey("");
           return;
         }
 
@@ -2850,6 +2920,7 @@ export default function Home() {
 
         setMessage(saveMessage);
         setBookingSaveMessage(saveMessage);
+        setAcceptedReviewWarningKey("");
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown save error.";
@@ -3778,6 +3849,28 @@ export default function Home() {
                 >
                   {showParserDebug ? "Hide parser debug" : "Show parser debug"}
                 </button>
+              </div>
+            ) : null}
+
+            {hasNeedsReviewWarnings ? (
+              <div className="mt-5 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <p className="font-semibold">Needs review before saving</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {needsReviewWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+                <label className="mt-3 flex items-start gap-2 text-sm font-medium">
+                  <input
+                    checked={reviewWarningsAccepted}
+                    className="mt-0.5 h-4 w-4 rounded border-amber-400 text-slate-950 focus:ring-slate-900"
+                    onChange={(event) =>
+                      setAcceptedReviewWarningKey(event.target.checked ? needsReviewAcceptanceKey : "")
+                    }
+                    type="checkbox"
+                  />
+                  <span>I reviewed these warnings and still want to save</span>
+                </label>
               </div>
             ) : null}
 

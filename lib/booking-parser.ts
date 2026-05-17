@@ -1532,6 +1532,7 @@ function detectRoute(text: string, flight = "") {
       text,
     )
   ) {
+    const labeledHotelDropoff = cleanedLineValue(text, ["hotel"]);
     const dropoffAfterAirport = cleanLocation(firstMatch(text, [
       /\bairport\s+pick\s*up\b.*?\bto\s+(.+?)(?=\.|,|\n|$)/i,
       /\bairport\s+pickup\b.*?\bto\s+(.+?)(?=\.|,|\n|$)/i,
@@ -1546,7 +1547,7 @@ function detectRoute(text: string, flight = "") {
 
     return {
       pickup: airportLocationFromText(text),
-      dropoff: dropoffAfterAirport,
+      dropoff: dropoffAfterAirport || labeledHotelDropoff,
     };
   }
 

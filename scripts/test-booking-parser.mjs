@@ -114,6 +114,44 @@ assert.deepEqual(parsedMeetAndGreetShorthand, {
 assert.equal(parsedMeetAndGreetShorthand.extraStopCount ?? '0', '0');
 assert.equal(parsedMeetAndGreetShorthand.extraStopLocation ?? '', '');
 
+const arrivalHotelLabelDropoffSample = `Arrival for Mr Tan
+15/5/26
+ETA 9.20am
+Flight SQ322
+Terminal 3
+Hotel: Ritz Carlton
+Pax 1`;
+const parsedArrivalHotelLabelDropoff = parseBookingForTest(arrivalHotelLabelDropoffSample) ?? {};
+assert.deepEqual(parsedArrivalHotelLabelDropoff, {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-05-15',
+  time: '0920hrs',
+  flight: 'SQ322',
+  pickup: 'Changi Airport T3',
+  dropoff: 'Ritz Carlton',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Tan',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Arrival for Mr Tan',
+    '15/5/26',
+    'ETA 9.20am',
+    'Flight SQ322',
+    'Terminal 3',
+    'Hotel: Ritz Carlton',
+    'Pax 1',
+  ],
+});
+assert.equal(parsedArrivalHotelLabelDropoff.extraStopCount ?? '0', '0');
+assert.equal(parsedArrivalHotelLabelDropoff.extraStopLocation ?? '', '');
+
 const dinnerStandbySample =
   'Hi William, please get Richard standby for Drew, there is a dinner in the evening 6pm at ION Orchard, #04-12A, 2 Orchard Turn, Singapore 238801 and please send him back to Ritz Carlton after the dinner. thanks.';
 const parsedDinnerStandby = parseBookingForTest(dinnerStandbySample);

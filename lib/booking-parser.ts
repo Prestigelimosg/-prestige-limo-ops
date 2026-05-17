@@ -1077,6 +1077,7 @@ function detectChildSeatType(text: string) {
 
 function detectChildSeatCount(text: string) {
   const explicitCount = firstMatch(text, [
+    /\b(\d{1,2})\s*x\s*(?:child|baby|booster|infant|toddler)\s+seat(?:s)?\b/i,
     /\b(\d{1,2})\s+(?:child|baby|booster|infant|toddler)\s+seat(?:s)?\b/i,
   ]);
 

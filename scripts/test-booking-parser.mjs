@@ -1363,6 +1363,53 @@ assert.equal(parsedStructuredCountryCodeEmailAirportArrivalForm.extraStopCount ?
 assert.equal(parsedStructuredCountryCodeEmailAirportArrivalForm.extraStopLocation ?? '', '');
 assert.equal(parsedStructuredCountryCodeEmailAirportArrivalForm.childSeatRequired ?? '', '');
 
+const structuredChildSeatExtraAirportArrivalFormMessage = `Title: Prestige Transport 15711
+Booking form name: Prestige Transport
+Service type: Airport transfer
+Transfer type: One Way
+Pickup date and time: 30-05-2026 10:20
+Order total amount: S$135.00
+
+Route name: Airport arrival
+
+Drop off location:
+Four Seasons Singapore
+
+Vehicle name: Toyota Alphard 2.5
+Passengers count: 4
+
+Extra:
+2 x Booster Seat - S$30.00
+
+Client details:
+First name: Mei Lin
+Last name: Wong
+E-mail address: mei.wong@gmail.com
+Phone number: +6588881111
+Passengers: 2
+Flight No.: SQ317`;
+const parsedStructuredChildSeatExtraAirportArrivalForm =
+  parseBookingForTest(structuredChildSeatExtraAirportArrivalFormMessage) ?? {};
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.company ?? '', '');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.booker, 'mei');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.bookerEmail, 'mei.wong@gmail.com');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.bookerContact, '+6588881111');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.bookingType, 'MNG');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.date, '2026-05-30');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.time, '1020hrs');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.flight, 'SQ317');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.pickup, 'Changi Airport');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.dropoff, 'Four Seasons Singapore');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.name, 'Mei Lin Wong');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.pax, '2');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.vehicle, 'AVF');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.customerPriceOverride, '135');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.childSeatRequired, 'yes');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.childSeatCount, '2');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.childSeatType, 'booster seat');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.extraStopCount ?? '0', '0');
+assert.equal(parsedStructuredChildSeatExtraAirportArrivalForm.extraStopLocation ?? '', '');
+
 const eventReturnTripSample =
   'Please arrange standby for Drew at Gardens by the Bay, Singapore 018953 and send him back to Ritz Carlton after the event. thanks.';
 assert.deepEqual(parseBookingForTest(eventReturnTripSample), {

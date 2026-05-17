@@ -2043,6 +2043,11 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
         "mobile number",
         "phone",
         "phone number",
+        "tel",
+        "tel no",
+        "tel. no.",
+        "telephone",
+        "telephone number",
         "whatsapp",
       ]) ||
       detectUnlabeledPlusContact(operationalText),

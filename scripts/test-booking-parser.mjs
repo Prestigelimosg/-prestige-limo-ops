@@ -314,6 +314,40 @@ assert.deepEqual(parseBookingForTest(multiStopItinerarySample), {
   ],
 });
 
+const timedScheduleItinerarySample = `Hi William, please arrange a car for Drew tomorrow, schedule as follow:
+9:30am 1 HarbourFront Avenue, #02-01 Keppel Bay Tower;
+11am One Raffles Quay, #39-01 North Tower;
+2pm Capital Tower;
+4:30pm BDC office;`;
+assert.deepEqual(parseBookingForTest(timedScheduleItinerarySample), {
+  success: true,
+  company: '',
+  bookingType: 'DSP',
+  vehicle: '',
+  date: '2026-05-14',
+  time: '0930hrs',
+  flight: '',
+  pickup: '1 HarbourFront Avenue, Keppel Bay Tower',
+  dropoff: 'BDC office',
+  booker: '',
+  bookerEmail: '',
+  name: 'Drew',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  extraStopCount: '3',
+  extraStopLocation:
+    '1 HarbourFront Avenue, Keppel Bay Tower at 9:30am > One Raffles Quay, North Tower at 11am > Capital Tower at 2pm > BDC office at 4:30pm',
+  bookerContact: '',
+  cleanedLines: [
+    'Hi William, please arrange a car for Drew tomorrow, schedule as follow:',
+    '9:30am 1 HarbourFront Avenue, #02-01 Keppel Bay Tower;',
+    '11am One Raffles Quay, #39-01 North Tower;',
+    '2pm Capital Tower;',
+    '4:30pm BDC office;',
+  ],
+});
+
 const liveBugSamples = [
   {
     input: `Hi William.

@@ -1050,6 +1050,17 @@ function cleanItineraryLocation(value: string) {
     .trim();
 }
 
+function cleanTimedScheduleLocation(value: string) {
+  return cleanItineraryLocation(value)
+    .replace(/\s*,?\s*#\s*[a-z0-9]+(?:[-/][a-z0-9]+)?\s*,?\s*/gi, ", ")
+    .replace(/\s*,\s*Singapore\s+\d{5,6}\b/gi, "")
+    .replace(/\s+Singapore\s+\d{5,6}\b/gi, "")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/^,\s*|\s*,\s*$/g, "")
+    .trim();
+}
+
 function formatItineraryDisplayTime(value: string) {
   return clean(value).replace(/\s+/g, "").toLowerCase();
 }
@@ -1060,10 +1071,37 @@ function formatItineraryStop(stop: MultiStopItineraryStop) {
   return displayTime ? `${stop.location} ${stop.timeQualifier} ${displayTime}` : stop.location;
 }
 
+function extractTimedScheduleStops(text: string) {
+  return text
+    .split(";")
+    .map((rawSegment) => clean(rawSegment))
+    .map((segment): MultiStopItineraryStop | null => {
+      const stopMatch = segment.match(/(?:^|[:\s])(\d{1,2}(?::\d{2})?\s*(?:am|pm))\s+(.+)$/i);
+
+      if (!stopMatch?.[1] || !stopMatch[2]) {
+        return null;
+      }
+
+      const location = cleanTimedScheduleLocation(stopMatch[2]);
+
+      if (!location) {
+        return null;
+      }
+
+      return {
+        location,
+        time: stopMatch[1],
+        timeQualifier: "at",
+      };
+    })
+    .filter((stop): stop is MultiStopItineraryStop => Boolean(stop));
+}
+
 function detectMultiStopItinerary(text: string): MultiStopItineraryDetails | null {
   const normalizedText = clean(text.replace(/\n+/g, " "));
   const timedSegmentCount = (normalizedText.match(/(?:^|;)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/gi) ?? []).length;
-  const looksLikeSchedule = /\b(?:schedule|itinerary)\b/i.test(normalizedText) || timedSegmentCount >= 2;
+  const hasScheduleCue = /\b(?:schedule|itinerary)\b/i.test(normalizedText);
+  const looksLikeSchedule = hasScheduleCue || timedSegmentCount >= 2;
 
   if (!looksLikeSchedule || !/;\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(normalizedText)) {
     return null;
@@ -1074,7 +1112,31 @@ function detectMultiStopItinerary(text: string): MultiStopItineraryDetails | nul
   );
 
   if (!firstRouteMatch?.[1] || !firstRouteMatch[2]) {
-    return null;
+    if (!hasScheduleCue) {
+      return null;
+    }
+
+    const timedStops = extractTimedScheduleStops(normalizedText);
+
+    if (timedStops.length < 2) {
+      return null;
+    }
+
+    const pickup = timedStops[0]?.location || "";
+    const dropoff = timedStops[timedStops.length - 1]?.location || "";
+    const pickupTime = parseTimeFromText(timedStops[0]?.time || "");
+
+    if (!pickup || !dropoff || !pickupTime) {
+      return null;
+    }
+
+    return {
+      pickup,
+      dropoff,
+      pickupTime,
+      extraStopCount: String(Math.max(timedStops.length - 1, 0)),
+      extraStopLocation: timedStops.map(formatItineraryStop).join(" > "),
+    };
   }
 
   const pickup = cleanLocation(firstRouteMatch[1]);

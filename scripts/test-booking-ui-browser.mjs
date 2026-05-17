@@ -28,6 +28,11 @@ Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
+const timedScheduleItinerarySample = `Hi William, please arrange a car for Drew tomorrow, schedule as follow:
+9:30am 1 HarbourFront Avenue, #02-01 Keppel Bay Tower;
+11am One Raffles Quay, #39-01 North Tower;
+2pm Capital Tower;
+4:30pm BDC office;`;
 const browserErrors = [];
 const browserConsoleErrors = [];
 const forbiddenRuntimeText = [
@@ -541,6 +546,101 @@ async function runChromeTest() {
       1,
       "Expected final Ritz-Carlton to appear once in the driver itinerary",
     );
+
+    const focusedTimedScheduleTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedTimedScheduleTextarea,
+      true,
+      "Expected booking message textarea to be focused for timed schedule sample",
+    );
+
+    await client.send("Input.insertText", { text: timedScheduleItinerarySample });
+
+    const filledTimedScheduleTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(timedScheduleItinerarySample)}`,
+    );
+    assert.equal(
+      filledTimedScheduleTextarea,
+      true,
+      "Expected timed schedule booking message textarea to be filled",
+    );
+
+    const clickedTimedScheduleParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedTimedScheduleParse,
+      true,
+      "Expected Parse Booking button to parse timed schedule sample",
+    );
+
+    const timedScheduleState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.bookingType === "DSP" &&
+          candidateState?.fields?.pickup === "1 HarbourFront Avenue, Keppel Bay Tower" &&
+          candidateState?.fields?.extraStopCount === "3"
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed timed schedule itinerary UI state",
+    );
+    timedScheduleState.errors = [...browserErrors, ...(timedScheduleState.errors || [])];
+    timedScheduleState.consoleErrors = [...browserConsoleErrors, ...(timedScheduleState.consoleErrors || [])];
+
+    assert.deepEqual(
+      timedScheduleState.errors,
+      [],
+      `Expected no browser runtime errors, got ${timedScheduleState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      timedScheduleState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${timedScheduleState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(timedScheduleState.fields.dropoff, "BDC office");
+    assert.doesNotMatch(timedScheduleState.fields.extraStopLocation, /Marina Bay Sands/);
+    assert.match(
+      timedScheduleState.fields.extraStopLocation,
+      /1 HarbourFront Avenue, Keppel Bay Tower at 9:30am/,
+    );
+    assert.match(
+      timedScheduleState.jobCardPreview,
+      /HarbourFront Avenue > Multi-stop itinerary hidden for privacy > BDC office/,
+    );
+    assert.doesNotMatch(timedScheduleState.jobCardPreview, /#02-01|#39-01|North Tower|Capital Tower/);
+    assert.match(timedScheduleState.visibleText, /Itinerary preview/);
+    assert.match(timedScheduleState.driverDispatch, /Pickup: 1 HarbourFront Avenue, Keppel Bay Tower/);
+    assert.match(timedScheduleState.driverDispatch, /Itinerary:/);
+    assert.match(timedScheduleState.driverDispatch, /0930hrs - 1 HarbourFront Avenue, Keppel Bay Tower/);
+    assert.match(timedScheduleState.driverDispatch, /1100hrs - One Raffles Quay, North Tower/);
+    assert.match(timedScheduleState.driverDispatch, /1400hrs - Capital Tower/);
+    assert.match(timedScheduleState.driverDispatch, /1630hrs - BDC office/);
+    assert.doesNotMatch(timedScheduleState.driverDispatch, /Pickup > Drop-off|Marina Bay Sands/);
 
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {

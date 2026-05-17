@@ -1672,6 +1672,7 @@ function detectRoute(text: string, flight = "") {
     "pick-up point",
     "p/u",
     "pu",
+    "start location",
     "from",
     "origin",
   ]);
@@ -1687,6 +1688,7 @@ function detectRoute(text: string, flight = "") {
     "drop-off point",
     "d/o",
     "do",
+    "end location",
     "to",
     "destination",
   ]);

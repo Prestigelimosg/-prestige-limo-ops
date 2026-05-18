@@ -158,6 +158,11 @@ Phase 1 goal: stable internal limo operations dashboard.
 - Driver payout rules are simple per-booking-type amounts for Phase 1; advanced distance, zone, and conditional payout logic remains out of scope.
 - Customer rate management requires Supabase migrations through `202605130005_extra_stop_count.sql` to be applied before booking-level override and extra-stop snapshots persist.
 - Child seat pricing and saved child seat fields require Supabase migration `202605140001_child_seat_pricing.sql` to be applied in the deployment database.
+- Future architecture task: Make Save Booking + CRM atomic.
+  Current frontend save order can create/update CRM records before booking insert.
+  Risk: if booking insert fails, CRM records may remain without booking.
+  Best long-term fix: Supabase RPC / database transaction that writes company, booker, traveler, booking, and links together atomically.
+  Do not attempt quick frontend-only refactor unless specifically approved.
 
 ## Next Testing Checklist
 

@@ -1288,6 +1288,8 @@ export default function Home() {
   const [driverDrafts, setDriverDrafts] = useState<Record<string, DriverDraft>>({});
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [savingDriverProfile, setSavingDriverProfile] = useState(false);
   const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -2674,32 +2676,39 @@ export default function Home() {
     if (!supabase) {
       setMessage({
         tone: "error",
-        text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Load drivers failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
       });
       return;
     }
 
+    setLoadingDrivers(true);
     setMessage({ tone: "info", text: "Loading drivers..." });
 
-    const { data, error } = await supabase
-      .from("drivers")
-      .select("id, driver_name, contact_number, vehicle_type, plate_number, payout_preferences, driver_payout_rules, availability_status, notes, preferred_areas, airport_permit_notes")
-      .order("driver_name", { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from("drivers")
+        .select("id, driver_name, contact_number, vehicle_type, plate_number, payout_preferences, driver_payout_rules, availability_status, notes, preferred_areas, airport_permit_notes")
+        .order("driver_name", { ascending: true });
 
-    if (error) {
-      setMessage({ tone: "error", text: `Driver load failed: ${error.message}` });
-      return;
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setDrivers((data ?? []) as DriverRecord[]);
+      setMessage({ tone: "success", text: successText });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown driver load error.";
+      setMessage({ tone: "error", text: `Load drivers failed: ${errorMessage}` });
+    } finally {
+      setLoadingDrivers(false);
     }
-
-    setDrivers((data ?? []) as DriverRecord[]);
-    setMessage({ tone: "success", text: successText });
   }
 
   async function saveDriverProfile() {
     if (!supabase) {
       setMessage({
         tone: "error",
-        text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Save driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
       });
       return;
     }
@@ -2711,52 +2720,58 @@ export default function Home() {
       return;
     }
 
+    setSavingDriverProfile(true);
     setMessage({ tone: "info", text: "Saving driver profile..." });
 
-    let existingDriver: DriverRecord | null = drivers.find(
-      (driver) => clean(driver.driver_name).toLowerCase() === driverName.toLowerCase(),
-    ) ?? null;
+    try {
+      let existingDriver: DriverRecord | null = drivers.find(
+        (driver) => clean(driver.driver_name).toLowerCase() === driverName.toLowerCase(),
+      ) ?? null;
 
-    if (!existingDriver) {
-      const existingResult = await supabase
-        .from("drivers")
-        .select("id, driver_name, contact_number, vehicle_type, plate_number, payout_preferences, driver_payout_rules, availability_status, notes, preferred_areas, airport_permit_notes")
-        .ilike("driver_name", driverName)
-        .limit(1)
-        .maybeSingle();
+      if (!existingDriver) {
+        const existingResult = await supabase
+          .from("drivers")
+          .select("id, driver_name, contact_number, vehicle_type, plate_number, payout_preferences, driver_payout_rules, availability_status, notes, preferred_areas, airport_permit_notes")
+          .ilike("driver_name", driverName)
+          .limit(1)
+          .maybeSingle();
 
-      if (existingResult.error) {
-        setMessage({ tone: "error", text: `Driver lookup failed: ${existingResult.error.message}` });
-        return;
+        if (existingResult.error) {
+          throw new Error(existingResult.error.message);
+        }
+
+        existingDriver = existingResult.data as DriverRecord | null;
       }
 
-      existingDriver = existingResult.data as DriverRecord | null;
+      const payload = {
+        driver_name: driverName,
+        contact_number: clean(driverProfileDraft.contactNumber) || null,
+        vehicle_type: clean(driverProfileDraft.vehicleType) || null,
+        plate_number: clean(driverProfileDraft.plateNumber) || null,
+        payout_preferences: clean(driverProfileDraft.payoutPreferences) || null,
+        driver_payout_rules: driverProfileDraft.payoutRules,
+        availability_status: clean(driverProfileDraft.availabilityStatus) || "available",
+        notes: clean(driverProfileDraft.notes) || null,
+        preferred_areas: clean(driverProfileDraft.preferredAreas) || null,
+        airport_permit_notes: clean(driverProfileDraft.airportPermitNotes) || null,
+        updated_at: new Date().toISOString(),
+      };
+      const result = existingDriver
+        ? await supabase.from("drivers").update(payload).eq("id", existingDriver.id)
+        : await supabase.from("drivers").insert(payload);
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      setDriverProfileDraft(initialDriverProfileDraft);
+      await loadDrivers("Driver profile saved.");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown driver save error.";
+      setMessage({ tone: "error", text: `Save driver failed: ${errorMessage}` });
+    } finally {
+      setSavingDriverProfile(false);
     }
-
-    const payload = {
-      driver_name: driverName,
-      contact_number: clean(driverProfileDraft.contactNumber) || null,
-      vehicle_type: clean(driverProfileDraft.vehicleType) || null,
-      plate_number: clean(driverProfileDraft.plateNumber) || null,
-      payout_preferences: clean(driverProfileDraft.payoutPreferences) || null,
-      driver_payout_rules: driverProfileDraft.payoutRules,
-      availability_status: clean(driverProfileDraft.availabilityStatus) || "available",
-      notes: clean(driverProfileDraft.notes) || null,
-      preferred_areas: clean(driverProfileDraft.preferredAreas) || null,
-      airport_permit_notes: clean(driverProfileDraft.airportPermitNotes) || null,
-      updated_at: new Date().toISOString(),
-    };
-    const result = existingDriver
-      ? await supabase.from("drivers").update(payload).eq("id", existingDriver.id)
-      : await supabase.from("drivers").insert(payload);
-
-    if (result.error) {
-      setMessage({ tone: "error", text: `Driver save failed: ${result.error.message}` });
-      return;
-    }
-
-    setDriverProfileDraft(initialDriverProfileDraft);
-    await loadDrivers("Driver profile saved.");
   }
 
   async function saveBooking() {
@@ -3091,7 +3106,7 @@ export default function Home() {
     if (!supabase) {
       setMessage({
         tone: "error",
-        text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Assign driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
       });
       return;
     }
@@ -3100,27 +3115,29 @@ export default function Home() {
     setAssigningBookingId(bookingId);
     setMessage({ tone: "info", text: "Assigning driver..." });
 
-    const { error } = await supabase
-      .from("bookings")
-      .update({
-        driver_id: selectedDriver?.id ?? null,
-        driver_name: driverName,
-        driver_contact: clean(driverDraft.driverContact) || clean(selectedDriver?.contact_number) || null,
-        driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number) || null,
-        driver_payout_amount: calculatedPayout || null,
-        driver_payout_override: clean(driverDraft.payoutOverride)
-          ? numericRate(driverDraft.payoutOverride)
-          : null,
-        driver_payout_reason: clean(driverDraft.payoutReason) || null,
-        driver_notes: clean(driverDraft.notes) || null,
-        driver_dispatch_include_payout: driverDraft.includePayout,
-        status: "assigned",
-      })
-      .eq("id", bookingRecord.id);
+    try {
+      const { error } = await supabase
+        .from("bookings")
+        .update({
+          driver_id: selectedDriver?.id ?? null,
+          driver_name: driverName,
+          driver_contact: clean(driverDraft.driverContact) || clean(selectedDriver?.contact_number) || null,
+          driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number) || null,
+          driver_payout_amount: calculatedPayout || null,
+          driver_payout_override: clean(driverDraft.payoutOverride)
+            ? numericRate(driverDraft.payoutOverride)
+            : null,
+          driver_payout_reason: clean(driverDraft.payoutReason) || null,
+          driver_notes: clean(driverDraft.notes) || null,
+          driver_dispatch_include_payout: driverDraft.includePayout,
+          status: "assigned",
+        })
+        .eq("id", bookingRecord.id);
 
-    if (error) {
-      setMessage({ tone: "error", text: `Driver assignment failed: ${error.message}` });
-    } else {
+      if (error) {
+        throw new Error(error.message);
+      }
+
       setBookings((current) =>
         current.map((currentBooking) =>
           currentBooking.id === bookingRecord.id
@@ -3143,9 +3160,12 @@ export default function Home() {
         ),
       );
       setMessage({ tone: "success", text: `Driver assigned to booking ${bookingRecord.id}.` });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown driver assignment error.";
+      setMessage({ tone: "error", text: `Assign driver failed: ${errorMessage}` });
+    } finally {
+      setAssigningBookingId(null);
     }
-
-    setAssigningBookingId(null);
   }
 
   async function copyDriverDispatch(bookingRecord: BookingRecord) {
@@ -3744,11 +3764,12 @@ export default function Home() {
                   <p className="text-sm text-slate-600">Manual assignment with payout control.</p>
                 </div>
                 <button
-                  className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-900 transition hover:bg-sky-50"
+                  className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                  disabled={loadingDrivers}
                   onClick={() => loadDrivers()}
                   type="button"
                 >
-                  Load Drivers
+                  {loadingDrivers ? "Loading..." : "Load Drivers"}
                 </button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -4051,18 +4072,20 @@ export default function Home() {
 	            </div>
 	            <div className="flex flex-col gap-2 sm:flex-row">
 	              <button
-	                className="h-10 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+	                className="h-10 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+	                disabled={loadingDrivers}
 	                onClick={() => loadDrivers()}
 	                type="button"
 	              >
-	                Load Drivers
+	                {loadingDrivers ? "Loading..." : "Load Drivers"}
 	              </button>
 	              <button
-	                className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+	                className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+	                disabled={savingDriverProfile}
 	                onClick={saveDriverProfile}
 	                type="button"
 	              >
-	                Save Driver
+	                {savingDriverProfile ? "Saving..." : "Save Driver"}
 	              </button>
 	            </div>
 	          </div>

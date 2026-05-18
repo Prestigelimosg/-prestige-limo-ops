@@ -2364,11 +2364,14 @@ export default function Home() {
 
   async function loadRates(successText = "Rates loaded.") {
     if (!supabase) {
+      const errorMessage =
+        "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.";
+
       setMessage({
         tone: "error",
-        text: "Load failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: `Load failed: ${errorMessage}`,
       });
-      return;
+      return { ok: false, errorMessage };
     }
 
     setSavingRates(true);
@@ -2445,6 +2448,7 @@ export default function Home() {
       );
       setRatesLoaded(true);
       setMessage({ tone: "success", text: successText });
+      return { ok: true, errorMessage: "" };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown rate load error.";
 
@@ -2452,6 +2456,7 @@ export default function Home() {
         tone: "error",
         text: formatRatesSetupError(errorMessage, "Load failed: "),
       });
+      return { ok: false, errorMessage };
     } finally {
       setSavingRates(false);
     }
@@ -2521,7 +2526,7 @@ export default function Home() {
     if (!supabase) {
       setMessage({
         tone: "error",
-        text: "Save failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Save rate override failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
       });
       return;
     }
@@ -2532,12 +2537,17 @@ export default function Home() {
     const overrideDriverPayoutRules = normalizeDriverPayoutRules(rateOverrideDraft.driverPayoutRules);
 
     if (!companyName && !bossName) {
-      setMessage({ tone: "error", text: "Save failed: Enter a company/account or boss/name before saving overrides." });
+      setMessage({
+        tone: "error",
+        text: "Save rate override failed: Enter a company/account or boss/name before saving overrides.",
+      });
       return;
     }
 
     setSavingRates(true);
     setMessage({ tone: "info", text: "Saving rate override..." });
+
+    let companyOverrideSaved = false;
 
     try {
       let company: CompanyRecord | null = rateCompanies.find(
@@ -2607,6 +2617,8 @@ export default function Home() {
         throw new Error(companyUpdate.error.message);
       }
 
+      companyOverrideSaved = true;
+
       if (bossName) {
         const existingTraveler = await supabase
           .from("travelers")
@@ -2661,13 +2673,29 @@ export default function Home() {
         driverPayoutRules: overrideDriverPayoutRules,
         transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
       });
-      await loadRates("Override saved.");
+      const reloadResult = await loadRates("Override saved.");
+
+      if (!reloadResult.ok) {
+        setMessage({
+          tone: "error",
+          text: `Rate override saved, but reload failed: ${reloadResult.errorMessage}`,
+        });
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown rate save error.";
+      const partialSaveWarning =
+        companyOverrideSaved && bossName
+          ? " Company override may already be saved; reload rates and review before relying on this boss/name override."
+          : "";
+
       setMessage({
         tone: "error",
-        text: formatRatesSetupError(errorMessage, "Save failed: "),
+        text: formatRatesSetupError(
+          `${errorMessage}${partialSaveWarning}`,
+          "Save rate override failed: ",
+        ),
       });
+    } finally {
       setSavingRates(false);
     }
   }

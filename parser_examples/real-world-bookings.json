@@ -675,5 +675,54 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "mixed-multi-booking-dispatcher-list-nicole-bny",
+    "categories": [
+      "mixed multi-booking dispatcher list",
+      "freeform corporate booker/company context"
+    ],
+    "referenceDate": "2026-05-13T12:00:00+08:00",
+    "input": "Hi William.\n\nTomorrow:\n1) Mr Deep arriving SQ318 ETA 0610hrs. Send to Fullerton Hotel.\n2) Mr Stanley departure 9pm from Ritz Carlton to T3 taking SQ221.\n3) Need standby AVF for Ms Chloe 1pm-5pm MBS meetings then send back to Capella.\n\nRichard handle Deep.\nAh Seng handle Stanley.\n\nBooked by Nicole from BNY.\nThanks.",
+    "expected": {
+      "success": false,
+      "multipleBookingsDetected": true,
+      "parserWarning": "Multiple bookings detected. Please select one extracted booking.",
+      "booker": "Nicole",
+      "company": "BNY",
+      "flight": "",
+      "pickup": "",
+      "dropoff": ""
+    },
+    "expectedPreview": [
+      {
+        "passenger": "Mr Deep",
+        "date": "2026-05-14",
+        "time": "0610hrs",
+        "type": "MNG",
+        "flight": "SQ318",
+        "pickup": "Changi Airport",
+        "dropoff": "Fullerton Hotel"
+      },
+      {
+        "passenger": "",
+        "date": "2026-05-14",
+        "time": "2100hrs",
+        "type": "DEP",
+        "flight": "SQ221",
+        "pickup": "Ritz Carlton",
+        "dropoff": "Changi Airport T3"
+      },
+      {
+        "passenger": "Ms Chloe",
+        "date": "2026-05-14",
+        "time": "1300hrs",
+        "type": "DSP",
+        "flight": "",
+        "pickup": "",
+        "dropoff": "Capella"
+      }
+    ],
+    "expectedPreviewLength": 3
   }
 ]

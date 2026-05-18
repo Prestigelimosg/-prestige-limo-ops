@@ -910,5 +910,26 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "arrival-event-destination-not-dsp-mr-lee",
+    "categories": [
+      "airport arrival booking type priority",
+      "structured event / hourly / DSP standby"
+    ],
+    "input": "Mr Lee arriving SQ318 ETA 0610 tomorrow. Send to Gardens by the Bay event hall. 1 pax.",
+    "expected": {
+      "bookingType": "MNG",
+      "date": "2026-05-14",
+      "time": "0610hrs",
+      "flight": "SQ318",
+      "pickup": "Changi Airport",
+      "dropoff": "Gardens by the Bay event hall",
+      "name": "Mr Lee",
+      "pax": "1",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

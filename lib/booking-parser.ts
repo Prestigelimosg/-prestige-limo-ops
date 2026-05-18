@@ -1637,8 +1637,11 @@ function detectBookingType(text: string, flight = "", route: { pickup: string; d
   const upperText = text.toUpperCase();
   const pickup = clean(route.pickup);
   const dropoff = clean(route.dropoff);
+  const hardDspEvidence = /\bDSP\b|\bDISPOSAL\b|\bHOURLY\b|\bSTANDBY\b|\bWAIT\s+\d+\s*(?:HOURS?|HRS?)\b/.test(
+    upperText,
+  );
 
-  if (/\bDSP\b|\bDISPOSAL\b|\bHOURLY\b/.test(upperText) || isStandbyBooking(text)) {
+  if (hardDspEvidence) {
     return "DSP";
   }
 
@@ -1686,6 +1689,10 @@ function detectBookingType(text: string, flight = "", route: { pickup: string; d
     if (/^changi airport/i.test(dropoff) || normalizeFlightCode(dropoff) === flight) {
       return "DEP";
     }
+  }
+
+  if (isStandbyBooking(text)) {
+    return "DSP";
   }
 
   if (/\bTRF\b|\bTRANSFER\b/.test(upperText)) {

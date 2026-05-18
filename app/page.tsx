@@ -324,6 +324,16 @@ const publicEmailDomains = new Set([
   "ymail.com",
   "zoho.com",
 ]);
+const internalPrestigeEmailDomains = new Set([
+  "prestige-limo.sg",
+  "prestigelimo.sg",
+  "prestigetransport.sg",
+]);
+const internalPrestigeAccountTokens = new Set([
+  "prestige-limo",
+  "prestigelimo",
+  "prestigetransport",
+]);
 
 const requiredFields: Array<keyof BookingForm> = [
   "date",
@@ -667,6 +677,22 @@ function isPublicEmailDomain(value: string | null | undefined) {
   return Boolean(domain && publicEmailDomains.has(domain));
 }
 
+function isInternalPrestigeEmailDomain(value: string | null | undefined) {
+  const domain = normaliseEmailDomain(value);
+
+  return Boolean(domain && internalPrestigeEmailDomains.has(domain));
+}
+
+function isIgnoredAccountEmailDomain(value: string | null | undefined) {
+  return isPublicEmailDomain(value) || isInternalPrestigeEmailDomain(value);
+}
+
+function isInternalPrestigeAccount(value: string | null | undefined) {
+  const account = clean(value).toLowerCase().replace(/\s+/g, "");
+
+  return Boolean(account && internalPrestigeAccountTokens.has(account));
+}
+
 function getPublicEmailLocalPart(value: string | null | undefined) {
   const email = normaliseEmail(value ?? "");
   const [localPart, domain] = email.split("@");
@@ -678,7 +704,7 @@ function getEmailDomain(value: string) {
   const email = normaliseEmail(value);
   const domain = normaliseEmailDomain(email.split("@")[1]);
 
-  return isPublicEmailDomain(domain) ? "" : domain;
+  return isIgnoredAccountEmailDomain(domain) ? "" : domain;
 }
 
 function normalizeCompanyAccount(value: string | null | undefined, email: string | null | undefined = "") {
@@ -687,7 +713,8 @@ function normalizeCompanyAccount(value: string | null | undefined, email: string
 
   if (
     !companyName ||
-    isPublicEmailDomain(companyName) ||
+    isIgnoredAccountEmailDomain(companyName) ||
+    isInternalPrestigeAccount(companyName) ||
     (publicEmailLocalPart && companyName.toLowerCase() === publicEmailLocalPart)
   ) {
     return "";
@@ -1211,7 +1238,7 @@ function getBookingCompanyName(bookingRecord: BookingRecord) {
 
   if (
     !safeCompanyName ||
-    isPublicEmailDomain(companyDomain) ||
+    isIgnoredAccountEmailDomain(companyDomain) ||
     safeCompanyName.toLowerCase() === "internal account"
   ) {
     return "";
@@ -2148,7 +2175,7 @@ export default function Home() {
 
       if (
         companyRecord &&
-        ((clean(companyRecord.company_name) && !safeCompanyName) || isPublicEmailDomain(companyRecord.domain))
+        ((clean(companyRecord.company_name) && !safeCompanyName) || isIgnoredAccountEmailDomain(companyRecord.domain))
       ) {
         return null;
       }

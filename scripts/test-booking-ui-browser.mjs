@@ -143,6 +143,11 @@ E-mail address	luthergrahambk@gmail.com
 Phone number	+6580912613
 Passangers	3
 Flight No.	SQ265`;
+const routeNameAirportPickupOnlyDepartureInternalSample =
+  routeNameAirportPickupOnlyDepartureWaypointSample.replace(
+    "luthergrahambk@gmail.com",
+    "luthergrahambk@prestigelimo.sg",
+  );
 const freeformTransferMultiLocationSample =
   "organise viano tomorrow 11am pickup andrew shenton way send him to MAS building pickup john follow by Asia sq then to capital tower";
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
@@ -1178,10 +1183,10 @@ async function runChromeTest() {
       "Expected booking message textarea to be focused for route-name Airport pickup-only departure sample",
     );
 
-    await client.send("Input.insertText", { text: routeNameAirportPickupOnlyDepartureWaypointSample });
+    await client.send("Input.insertText", { text: routeNameAirportPickupOnlyDepartureInternalSample });
 
     const filledRouteNameAirportDepartureTextarea = await evaluate(
-      `document.querySelector("textarea")?.value === ${JSON.stringify(routeNameAirportPickupOnlyDepartureWaypointSample)}`,
+      `document.querySelector("textarea")?.value === ${JSON.stringify(routeNameAirportPickupOnlyDepartureInternalSample)}`,
     );
     assert.equal(
       filledRouteNameAirportDepartureTextarea,
@@ -1253,7 +1258,7 @@ async function runChromeTest() {
     assert.equal(routeNameAirportDepartureState.fields.flight, "SQ265");
     assert.equal(routeNameAirportDepartureState.fields.pickup, "160 Watten Estate Rd, Singapore 287610");
     assert.equal(routeNameAirportDepartureState.fields.dropoff, "Changi Airport");
-    assert.equal(routeNameAirportDepartureState.fields.bookerEmail, "luthergrahambk@gmail.com");
+    assert.equal(routeNameAirportDepartureState.fields.bookerEmail, "luthergrahambk@prestigelimo.sg");
     assert.equal(routeNameAirportDepartureState.fields.name, "Luther Graham");
     assert.equal(routeNameAirportDepartureState.fields.pax, "3");
     assert.equal(routeNameAirportDepartureState.fields.extraStopCount, "2");
@@ -1265,6 +1270,7 @@ async function runChromeTest() {
       /Watten Estate Rd > Sin Ming Ave > Bedok South Avenue 2 > Changi Airport/,
     );
     assert.doesNotMatch(routeNameAirportDepartureState.jobCardPreview, /Company:\s*gmail\.com/i);
+    assert.doesNotMatch(routeNameAirportDepartureState.jobCardPreview, /Company:\s*PRESTIGELIMO/i);
     assert.doesNotMatch(routeNameAirportDepartureState.jobCardPreview, /Company:/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Watten Estate Rd/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Sin Ming Ave/);

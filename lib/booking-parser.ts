@@ -177,6 +177,11 @@ const publicEmailDomains = new Set([
   "ymail.com",
   "zoho.com",
 ]);
+const internalPrestigeEmailDomains = new Set([
+  "prestige-limo.sg",
+  "prestigelimo.sg",
+  "prestigetransport.sg",
+]);
 const ownCompanyNames = new Set(["prestige transport"]);
 const countryCodeSecondLevelDomains = new Set([
   "ac",
@@ -216,6 +221,10 @@ function normaliseEmail(value: string) {
   return clean(value).toLowerCase();
 }
 
+function isIgnoredAccountEmailDomain(value: string) {
+  return publicEmailDomains.has(value) || internalPrestigeEmailDomains.has(value);
+}
+
 function getEmailDomain(value: string) {
   const email = normaliseEmail(value);
   const domain = email.split("@")[1];
@@ -226,7 +235,7 @@ function getEmailDomain(value: string) {
 
   const normalizedDomain = domain.replace(/^www\./, "");
 
-  if (publicEmailDomains.has(normalizedDomain)) {
+  if (isIgnoredAccountEmailDomain(normalizedDomain)) {
     return "";
   }
 

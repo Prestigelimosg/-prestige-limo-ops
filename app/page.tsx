@@ -4707,7 +4707,9 @@ export default function Home() {
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold">Operations Dashboard</h2>
-              <p className="text-sm text-slate-500">Today, upcoming jobs, and quick CRM search.</p>
+              <p className="text-sm text-slate-500">
+                Based on currently loaded bookings. Click Load Bookings or Refresh Loaded Bookings to update.
+              </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[520px]">
               <label className="flex-1">
@@ -4726,7 +4728,7 @@ export default function Home() {
                 onClick={() => loadBookings()}
                 type="button"
               >
-                Refresh
+                Refresh Loaded Bookings
               </button>
             </div>
           </div>

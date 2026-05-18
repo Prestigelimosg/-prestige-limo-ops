@@ -1112,6 +1112,10 @@ function detectChildSeatType(text: string) {
     return "toddler seat";
   }
 
+  if (/\bneed\s+\d{1,2}\s+baby\s+seat(?:s)?\b/i.test(text)) {
+    return "baby seat";
+  }
+
   if (/\b(?:infant|baby)\s+seat(?:s)?\b/i.test(text)) {
     return "infant seat";
   }
@@ -1932,10 +1936,11 @@ function detectRoute(text: string, flight = "") {
     };
   }
 
-  if (/\b(?:to\s+airport|airport\s+drop\s*off|drop\s*off\s+(?:at\s+)?airport)\b/i.test(text)) {
+  if (/\b(?:to\s+(?:changi\s+)?airport|airport\s+drop\s*off|drop\s*off\s+(?:at\s+)?airport)\b/i.test(text)) {
     const pickupBeforeAirport = cleanLocation(firstMatch(text, [
       /\bfrom\s+(.+?)\s+to\s+(?:changi\s+)?airport\b/i,
       /\bpick\s*up\s+(?:from\s+)?(.+?)\s+to\s+(?:changi\s+)?airport\b/i,
+      /\bpick\s*up\s+from\s+(.+?)(?=\s+(?:at|by|around)\s+\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?|\s+then\b|\.|,|\n|$)/i,
     ]));
     return {
       pickup: pickupBeforeAirport,

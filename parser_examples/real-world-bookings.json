@@ -852,5 +852,34 @@
       "childSeatRequired": "",
       "parserWarning": "Missing critical fields: pickup, pickup time, passenger/name"
     }
+  },
+  {
+    "id": "narrated-departure-extra-stop-baby-seat-ms-tan",
+    "categories": [
+      "narrated departure with extra stop and baby seat",
+      "true extra stops",
+      "child seat extras"
+    ],
+    "input": "DEP tomorrow for Ms Tan.\nPick up from 2C Anamalai Ave at 6.15am.\nDrop by Marina One then to Changi Airport T3.\nFlight SQ878.\nNeed 1 baby seat.\n2 pax.",
+    "expected": {
+      "company": "",
+      "bookingType": "DEP",
+      "vehicle": "",
+      "date": "2026-05-14",
+      "time": "0615hrs",
+      "flight": "SQ878",
+      "pickup": "2C Anamalai Ave",
+      "extraStopLocation": "Marina One",
+      "extraStopCount": "1",
+      "dropoff": "Changi Airport T3",
+      "booker": "",
+      "bookerEmail": "",
+      "name": "Ms Tan",
+      "pax": "2",
+      "childSeatRequired": "yes",
+      "childSeatCount": "1",
+      "childSeatType": "baby seat",
+      "customerPriceOverride": ""
+    }
   }
 ]

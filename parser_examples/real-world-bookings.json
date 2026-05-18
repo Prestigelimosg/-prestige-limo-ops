@@ -826,5 +826,31 @@
       "bookerContact": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "return-only-missing-critical-fields-jasmine-temasek",
+    "categories": [
+      "return-only missing-critical-fields safety",
+      "freeform corporate booker/company context"
+    ],
+    "input": "After meeting, please send her back to One Raffles Quay.\n\nBooker: Jasmine from Temasek.\nVehicle: AVF.",
+    "expected": {
+      "success": true,
+      "bookingType": "DSP",
+      "company": "Temasek",
+      "booker": "Jasmine",
+      "vehicle": "AVF",
+      "date": "",
+      "time": "",
+      "flight": "",
+      "pickup": "",
+      "dropoff": "One Raffles Quay",
+      "name": "",
+      "pax": "1",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": "",
+      "parserWarning": "Missing critical fields: pickup, pickup time, passenger/name"
+    }
   }
 ]

@@ -596,5 +596,31 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "freeform-corporate-booker-context-nicole-bny-departure",
+    "categories": [
+      "freeform corporate booker/company context",
+      "pickup/dropoff/origin/destination/start/end labels",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "referenceDate": "2026-05-14T12:00:00+08:00",
+    "input": "Hi William, Nicole here from BNY.\n\nPlease arrange AVF for Mr Rohan Singh tomorrow morning.\nPickup 7:15am from Fullerton Hotel to Changi Airport T3.\nFlight NH844.\n1 pax.",
+    "expected": {
+      "company": "BNY",
+      "booker": "Nicole",
+      "bookingType": "DEP",
+      "vehicle": "AVF",
+      "date": "2026-05-15",
+      "time": "0715hrs",
+      "flight": "NH844",
+      "pickup": "Fullerton Hotel",
+      "dropoff": "Changi Airport T3",
+      "name": "Mr Rohan Singh",
+      "pax": "1",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

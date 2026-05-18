@@ -1562,10 +1562,16 @@ export default function Home() {
     }));
   }
 
+  function clearReviewAndSaveState() {
+    setAcceptedReviewWarningKey("");
+    setBookingSaveMessage(null);
+  }
+
   function clearParseArtifacts() {
     setParsedDebugBooking(null);
     setShowParserDebug(false);
     setMultiBookingNotice(null);
+    clearReviewAndSaveState();
     setMessage({
       tone: "info",
       text: "Ready for dispatch.",
@@ -1861,13 +1867,14 @@ export default function Home() {
   }
 
   async function applyParsedBookingMessage(messageText: string) {
+    clearParseArtifacts();
+
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
       return;
     }
 
     setBooking(() => createInitialBooking());
-    clearParseArtifacts();
 
     const parsedBooking = parseBookingMessageForState(messageText);
 
@@ -3012,6 +3019,7 @@ export default function Home() {
     setParsedDebugBooking(null);
     setShowParserDebug(false);
     setMultiBookingNotice(null);
+    clearReviewAndSaveState();
     setMessage({
       tone: "success",
       text: `Booking ${bookingRecord.id || clean(bookingRecord.flight_no) || getBookingDateKey(bookingRecord)} loaded.`,

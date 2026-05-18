@@ -3357,6 +3357,19 @@ export default function Home() {
 	                  </label>
 	                  <label>
 	                    <span className="mb-1 block text-xs font-medium text-slate-600">
+	                      Driver Car Plate
+	                    </span>
+	                    <input
+	                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+	                      onChange={(event) =>
+	                        updateDriverDraft(savedBooking, "driverPlate", event.target.value)
+	                      }
+	                      placeholder="Plate: —"
+	                      value={driverDraft.driverPlate}
+	                    />
+	                  </label>
+	                  <label>
+	                    <span className="mb-1 block text-xs font-medium text-slate-600">
 	                      Override Payout
 	                    </span>
 	                    <input

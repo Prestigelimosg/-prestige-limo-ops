@@ -47,6 +47,7 @@ type BookingForm = {
   driverId: string;
   driverName: string;
   driverContact: string;
+  driverPlate: string;
   customerPriceOverride: string;
   customerPriceOverrideReason: string;
   driverPayoutOverride: string;
@@ -316,6 +317,7 @@ function createInitialBooking(): BookingForm {
     driverId: "",
     driverName: "",
     driverContact: "",
+    driverPlate: "",
     customerPriceOverride: "",
     customerPriceOverrideReason: "",
     driverPayoutOverride: "",
@@ -347,6 +349,7 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   driverId: "Driver",
   driverName: "Driver Name",
   driverContact: "Driver Contact",
+  driverPlate: "Driver Car Plate",
   customerPriceOverride: "Customer price override",
   customerPriceOverrideReason: "Customer override reason",
   driverPayoutOverride: "Driver payout override",
@@ -369,8 +372,6 @@ const fieldOrder: Array<keyof BookingForm> = [
   "bookerEmail",
   "name",
   "pax",
-  "driverName",
-  "driverContact",
 ];
 
 function clean(value: string | null | undefined) {
@@ -1202,6 +1203,7 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
     driverId: bookingRecord.driver_id ? String(bookingRecord.driver_id) : "",
     driverName: clean(bookingRecord.driver_name),
     driverContact: clean(bookingRecord.driver_contact),
+    driverPlate: clean(bookingRecord.driver_plate_number),
     childSeatRequired: childSeatRequired ? "yes" : "",
     childSeatCount: childSeatRequired ? String(normalizeChildSeatCount(true, bookingRecord.child_seat_count)) : "",
     childSeatType: childSeatRequired ? clean(bookingRecord.child_seat_type) : "",
@@ -1457,6 +1459,7 @@ export default function Home() {
   );
   const assignedDriverSelectValue = assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : "");
   const showSavedAssignedDriverOption = Boolean(assignedDriverId && !assignedDriverRecord);
+  const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
 
   const draftDriverDispatchCard = useMemo(() => {
     const bookingDriverId = clean(booking.driverId);
@@ -1466,6 +1469,7 @@ export default function Home() {
         (bookingDriverId && String(driver.id) === bookingDriverId) ||
         (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
     );
+    const driverPlate = clean(booking.driverPlate) || clean(selectedDriver?.plate_number);
     const driverPayout = draftPricing.driverPayout;
     const childSeatLine =
       clean(booking.childSeatRequired) === "yes"
@@ -1489,7 +1493,7 @@ export default function Home() {
       [
         `Driver: ${clean(booking.driverName) || "Driver TBC"}`,
         clean(booking.driverContact) ? `Contact: ${clean(booking.driverContact)}` : "",
-        clean(selectedDriver?.plate_number) ? `Plate: ${clean(selectedDriver?.plate_number)}` : "",
+        driverPlate ? `Plate: ${driverPlate}` : "",
       ],
       [
         `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
@@ -1716,6 +1720,7 @@ export default function Home() {
         driverId: "",
         driverName: "",
         driverContact: "",
+        driverPlate: "",
         driverNotes: "",
       }));
       return;
@@ -1736,6 +1741,7 @@ export default function Home() {
       driverId,
       driverName: clean(selectedDriver.driver_name),
       driverContact: clean(selectedDriver.contact_number),
+      driverPlate: clean(selectedDriver.plate_number),
       driverNotes: clean(selectedDriver.notes),
     }));
   }
@@ -2929,7 +2935,7 @@ export default function Home() {
         driver_id: resolvedDriverId,
         driver_name: clean(booking.driverName) || null,
         driver_contact: clean(booking.driverContact) || clean(selectedDriver?.contact_number) || null,
-        driver_plate_number: clean(selectedDriver?.plate_number) || null,
+        driver_plate_number: clean(booking.driverPlate) || clean(selectedDriver?.plate_number) || null,
         customer_rate: pricing.customerRate,
         customer_rate_unit: pricing.customerRateUnit,
         customer_price_amount: pricingSnapshot.customerPrice,
@@ -3849,6 +3855,34 @@ export default function Home() {
                   </select>
                 </label>
                 <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver Name</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    onChange={(event) => update("driverName", event.target.value)}
+                    placeholder="Driver name"
+                    value={booking.driverName}
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver Contact</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    onChange={(event) => update("driverContact", event.target.value)}
+                    placeholder="Phone / WhatsApp"
+                    type="tel"
+                    value={booking.driverContact}
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Driver Car Plate</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    onChange={(event) => update("driverPlate", event.target.value)}
+                    placeholder="Plate: —"
+                    value={assignedDriverPlate}
+                  />
+                </label>
+                <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Override Payout</span>
                   <input
                     className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -3885,6 +3919,13 @@ export default function Home() {
                   />
                   Include payout in dispatch
                 </label>
+                <button
+                  className="h-10 rounded-md border border-sky-300 bg-white px-4 text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
+                  onClick={assignDraftDriver}
+                  type="button"
+                >
+                  Apply Driver to Draft
+                </button>
               </div>
             </div>
 
@@ -3985,13 +4026,6 @@ export default function Home() {
             ) : null}
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <button
-                className="h-12 rounded-md border border-sky-300 bg-sky-50 px-5 text-base font-semibold text-sky-900 transition hover:bg-sky-100"
-                onClick={assignDraftDriver}
-                type="button"
-              >
-                Apply Driver to Draft
-              </button>
               <button
                 className="h-12 rounded-md bg-slate-950 px-5 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                 disabled={saving}
@@ -4290,10 +4324,13 @@ export default function Home() {
 	                    >
 	                      <p className="font-semibold">{driver.driver_name}</p>
 	                      <p className="text-slate-600">
-	                        {[driver.vehicle_type, driver.plate_number, driver.availability_status]
+	                        {[driver.vehicle_type, driver.availability_status]
 	                          .map(clean)
 	                          .filter(Boolean)
 	                          .join(" / ")}
+	                      </p>
+	                      <p className="text-xs text-slate-500">
+	                        Plate: {clean(driver.plate_number) || "—"}
 	                      </p>
 	                      <p className="text-xs text-slate-500">
 	                        Assigned jobs:{" "}

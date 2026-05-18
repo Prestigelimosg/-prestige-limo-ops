@@ -756,5 +756,46 @@
       "extraStopCount": "",
       "extraStopLocation": ""
     }
+  },
+  {
+    "id": "airport-arrival-plus-standby-return-split-sharon-shiseido",
+    "categories": [
+      "airport arrival plus standby return split",
+      "freeform corporate booker/company context"
+    ],
+    "referenceDate": "2026-05-13T12:00:00+08:00",
+    "input": "Hi William pls assist.\n\nBoss arriving EK404 tomorrow 1815hrs.\nPickup airport and send to Marina Bay Sands.\n\nNeed standby till 10pm then return Ritz Carlton.\n\nAh Seng ok for this?\n\nBooked by Sharon from Shiseido.",
+    "expected": {
+      "success": false,
+      "multipleBookingsDetected": true,
+      "parserWarning": "Multiple bookings detected. Please select one extracted booking.",
+      "booker": "Sharon",
+      "company": "Shiseido",
+      "flight": "",
+      "pickup": "",
+      "dropoff": ""
+    },
+    "expectedPreviewMatch": "ordered",
+    "expectedPreview": [
+      {
+        "passenger": "",
+        "date": "2026-05-14",
+        "time": "1815hrs",
+        "type": "MNG",
+        "flight": "EK404",
+        "pickup": "Changi Airport",
+        "dropoff": "Marina Bay Sands"
+      },
+      {
+        "passenger": "",
+        "date": "",
+        "time": "",
+        "type": "TRF",
+        "flight": "",
+        "pickup": "Marina Bay Sands",
+        "dropoff": "Ritz Carlton"
+      }
+    ],
+    "expectedPreviewLength": 2
   }
 ]

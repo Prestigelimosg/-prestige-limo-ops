@@ -2273,19 +2273,33 @@ for (const fixture of realWorldFixtures) {
       );
     }
 
+    if (fixture.expectedPreviewLength !== undefined) {
+      assert.ok(
+        Array.isArray(parsedFixture.extractedBookingsPreview),
+        `${fixtureLabel}: expected extractedBookingsPreview`,
+      );
+      assert.equal(
+        parsedFixture.extractedBookingsPreview.length,
+        fixture.expectedPreviewLength,
+        `${fixtureLabel}: expected extractedBookingsPreview length ${fixture.expectedPreviewLength}`,
+      );
+    }
+
     if (fixture.expectedPreview) {
       assert.ok(
         Array.isArray(parsedFixture.extractedBookingsPreview),
         `${fixtureLabel}: expected extractedBookingsPreview`,
       );
 
-      for (const expectedPreview of fixture.expectedPreview) {
+      for (const [previewIndex, expectedPreview] of fixture.expectedPreview.entries()) {
         const previewLabel = expectedPreview.flight ?? expectedPreview.passenger ?? JSON.stringify(expectedPreview);
-        const matchingPreview = parsedFixture.extractedBookingsPreview.find((preview) => (
-          expectedPreview.flight
-            ? preview.flight === expectedPreview.flight
-            : preview.passenger === expectedPreview.passenger
-        )) ?? {};
+        const matchingPreview = fixture.expectedPreviewMatch === 'ordered'
+          ? parsedFixture.extractedBookingsPreview[previewIndex] ?? {}
+          : parsedFixture.extractedBookingsPreview.find((preview) => (
+            expectedPreview.flight
+              ? preview.flight === expectedPreview.flight
+              : preview.passenger === expectedPreview.passenger
+          )) ?? {};
 
         assert.deepEqual(
           matchingPreview,

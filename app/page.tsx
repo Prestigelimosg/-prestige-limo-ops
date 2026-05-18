@@ -1301,6 +1301,7 @@ export default function Home() {
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
+  const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | null>(null);
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [message, setMessage] = useState<Message>({
@@ -2362,7 +2363,7 @@ export default function Home() {
     }
   }
 
-  async function loadRates(successText = "Rates loaded.") {
+  async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
     if (!supabase) {
       const errorMessage =
         "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.";
@@ -2375,6 +2376,9 @@ export default function Home() {
     }
 
     setSavingRates(true);
+    if (!options?.preserveAction) {
+      setRateAction("load");
+    }
     setMessage({ tone: "info", text: "Loading rates..." });
 
     try {
@@ -2458,6 +2462,9 @@ export default function Home() {
       });
       return { ok: false, errorMessage };
     } finally {
+      if (!options?.preserveAction) {
+        setRateAction(null);
+      }
       setSavingRates(false);
     }
   }
@@ -2472,6 +2479,7 @@ export default function Home() {
     }
 
     setSavingRates(true);
+    setRateAction("defaults");
     setMessage({ tone: "info", text: "Saving default rates..." });
 
     try {
@@ -2518,6 +2526,7 @@ export default function Home() {
         text: formatRatesSetupError(errorMessage, "Save failed: "),
       });
     } finally {
+      setRateAction(null);
       setSavingRates(false);
     }
   }
@@ -2545,6 +2554,7 @@ export default function Home() {
     }
 
     setSavingRates(true);
+    setRateAction("override");
     setMessage({ tone: "info", text: "Saving rate override..." });
 
     let companyOverrideSaved = false;
@@ -2673,7 +2683,7 @@ export default function Home() {
         driverPayoutRules: overrideDriverPayoutRules,
         transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
       });
-      const reloadResult = await loadRates("Override saved.");
+      const reloadResult = await loadRates("Override saved.", { preserveAction: true });
 
       if (!reloadResult.ok) {
         setMessage({
@@ -2696,11 +2706,15 @@ export default function Home() {
         ),
       });
     } finally {
+      setRateAction(null);
       setSavingRates(false);
     }
   }
 
-  async function loadDrivers(successText = "Drivers loaded.") {
+  async function loadDrivers(
+    successText = "Driver database loaded.",
+    loadingText = "Loading driver database...",
+  ) {
     if (!supabase) {
       setMessage({
         tone: "error",
@@ -2710,7 +2724,7 @@ export default function Home() {
     }
 
     setLoadingDrivers(true);
-    setMessage({ tone: "info", text: "Loading drivers..." });
+    setMessage({ tone: "info", text: loadingText });
 
     try {
       const { data, error } = await supabase
@@ -2793,7 +2807,7 @@ export default function Home() {
       }
 
       setDriverProfileDraft(initialDriverProfileDraft);
-      await loadDrivers("Driver profile saved.");
+      await loadDrivers("Driver profile saved.", "Refreshing driver database...");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown driver save error.";
       setMessage({ tone: "error", text: `Save driver failed: ${errorMessage}` });
@@ -3187,7 +3201,7 @@ export default function Home() {
             : currentBooking,
         ),
       );
-      setMessage({ tone: "success", text: `Driver assigned to booking ${bookingRecord.id}.` });
+      setMessage({ tone: "success", text: "Driver assigned." });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown driver assignment error.";
       setMessage({ tone: "error", text: `Assign driver failed: ${errorMessage}` });
@@ -3794,10 +3808,10 @@ export default function Home() {
                 <button
                   className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   disabled={loadingDrivers}
-                  onClick={() => loadDrivers()}
+                  onClick={() => loadDrivers("Drivers loaded for assignment.", "Loading drivers for assignment...")}
                   type="button"
                 >
-                  {loadingDrivers ? "Loading..." : "Load Drivers"}
+                  {loadingDrivers ? "Loading Drivers..." : "Load Drivers for Assignment"}
                 </button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -4105,7 +4119,7 @@ export default function Home() {
 	                onClick={() => loadDrivers()}
 	                type="button"
 	              >
-	                {loadingDrivers ? "Loading..." : "Load Drivers"}
+	                {loadingDrivers ? "Loading Driver Database..." : "Load Driver Database"}
 	              </button>
 	              <button
 	                className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
@@ -4299,7 +4313,7 @@ export default function Home() {
                 onClick={() => loadRates()}
                 type="button"
               >
-                Load Rates
+                {rateAction === "load" ? "Loading Rates..." : "Load Rates"}
               </button>
               <button
                 className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
@@ -4307,7 +4321,7 @@ export default function Home() {
                 onClick={saveDefaultRates}
                 type="button"
               >
-                Save Defaults
+                {rateAction === "defaults" ? "Saving Defaults..." : "Save Defaults"}
               </button>
             </div>
           </div>
@@ -4493,7 +4507,7 @@ export default function Home() {
                 onClick={saveRateOverride}
                 type="button"
               >
-                Save Override
+                {rateAction === "override" ? "Saving Override..." : "Save Override"}
               </button>
             </div>
 

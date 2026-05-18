@@ -1125,6 +1125,20 @@ function getBookerName(bookingRecord: BookingRecord) {
   return clean(bookingRecord.bookers?.booker_name) || clean(jobCardBooker?.[1]);
 }
 
+function formatDashboardRoute(bookingRecord: BookingRecord) {
+  const routePoints = getRoutePoints(bookingRecord);
+  const pickup = formatPrivacySafePlace(
+    clean(bookingRecord.pickup_address) || routePoints[0],
+    "Pickup",
+  );
+  const dropoff = formatPrivacySafePlace(
+    clean(bookingRecord.dropoff_address) || routePoints[routePoints.length - 1],
+    "Drop-off",
+  );
+
+  return `${pickup} → ${dropoff}`;
+}
+
 function formatCreatedAt(value: string | null | undefined) {
   if (!value) {
     return "";
@@ -3234,7 +3248,12 @@ export default function Home() {
           const driverDraft = getDriverDraft(savedBooking);
           const bookingId = String(savedBooking.id);
           const isAssigned = clean(savedBooking.status).toLowerCase() === "assigned";
-          const hasDriver = Boolean(clean(savedBooking.driver_name) || clean(driverDraft.driverName));
+          const bookingType = clean(savedBooking.booking_type) || "Booking";
+          const vehicle = clean(savedBooking.vehicle) || "Vehicle";
+          const bookerName = getBookerName(savedBooking);
+          const travelerName = getBookingName(savedBooking);
+          const driverName = clean(savedBooking.driver_name) || clean(driverDraft.driverName);
+          const hasDriver = Boolean(driverName);
 
           return (
             <article
@@ -3244,7 +3263,7 @@ export default function Home() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold">
-                    {savedBooking.vehicle || "Vehicle"} {savedBooking.booking_type || "Booking"}
+                    {bookingType} / {vehicle}
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
                     {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
@@ -3260,17 +3279,11 @@ export default function Home() {
               </div>
 
               <div className="mt-3 space-y-1 text-sm text-slate-700">
-                {getBookingName(savedBooking) ? (
-                  <p className="font-medium text-slate-900">{getBookingName(savedBooking)}</p>
-                ) : null}
-                <p>{getBookingCompany(savedBooking)}</p>
-                <p>
-                  {savedBooking.route ||
-                    `${savedBooking.pickup_address || "Pickup"} > ${
-                      savedBooking.dropoff_address || "Drop-off"
-                    }`}
-                </p>
                 {savedBooking.flight_no ? <p>Flight: {savedBooking.flight_no}</p> : null}
+                <p>Booker: {bookerName || "—"}</p>
+                <p>Traveler: {travelerName || "—"}</p>
+                <p>Route: {formatDashboardRoute(savedBooking)}</p>
+                <p>Driver: {driverName || "—"}</p>
                 <p>Pax {savedBooking.pax || 1}</p>
                 {savedBooking.child_seat_required ? (
                   <p>{formatChildSeatNote(savedBooking.child_seat_count, savedBooking.child_seat_type)}</p>

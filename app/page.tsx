@@ -3107,7 +3107,7 @@ export default function Home() {
 
     setMessage({
       tone: "success",
-      text: "Driver assigned for this draft. Save Booking + CRM will store driver details.",
+      text: "Driver applied to draft. Save booking to keep this assignment.",
     });
   }
 
@@ -3977,7 +3977,7 @@ export default function Home() {
                 onClick={assignDraftDriver}
                 type="button"
               >
-                Assign Driver
+                Apply Driver to Draft
               </button>
               <button
                 className="h-12 rounded-md bg-slate-950 px-5 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"

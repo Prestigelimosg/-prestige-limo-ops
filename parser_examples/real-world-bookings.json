@@ -724,5 +724,37 @@
       }
     ],
     "expectedPreviewLength": 3
+  },
+  {
+    "id": "freeform-quoted-arrival-child-seat-additive-price-vinu",
+    "categories": [
+      "freeform quoted arrival with child seat and additive price",
+      "child seat extras"
+    ],
+    "input": "PG961 > 61 Grange Road\n\nMr. Vinu. $80 + $10\n\n8mth old child seat",
+    "expected": {
+      "company": "",
+      "bookingType": "MNG",
+      "vehicle": "",
+      "date": "",
+      "time": "",
+      "flight": "PG961",
+      "pickup": "Changi Airport",
+      "dropoff": "61 Grange Road",
+      "booker": "",
+      "bookerEmail": "",
+      "name": "Mr Vinu",
+      "pax": "1",
+      "childSeatRequired": "yes",
+      "childSeatCount": "1",
+      "childSeatType": "infant seat / 8mth old",
+      "customerPriceOverride": "90",
+      "customerPriceOverrideReason": "Parsed from message: $80 + $10",
+      "driverName": "",
+      "driverContact": "",
+      "bookerContact": "",
+      "extraStopCount": "",
+      "extraStopLocation": ""
+    }
   }
 ]

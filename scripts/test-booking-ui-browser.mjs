@@ -525,6 +525,60 @@ async function runChromeTest() {
         originalError.apply(console, args);
       };`);
 
+    const clickedEmptyAiAssist = await evaluate(`(() => {
+      const aiButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+      );
+
+      if (!aiButton || aiButton.disabled) {
+        return false;
+      }
+
+      aiButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedEmptyAiAssist, true, "Expected AI Assist Parse (Mock) button to exist");
+
+    const emptyAiAssistPlacement = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const messageText = "Paste a booking message before using AI Assist Parse.";
+          const aiButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+          );
+          const buttonRow = aiButton?.parentElement;
+          const feedback = document.querySelector("[data-ai-assist-feedback='true']");
+          const textNodes = [];
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          let currentNode = walker.nextNode();
+
+          while (currentNode) {
+            if (currentNode.nodeValue.trim()) {
+              textNodes.push(currentNode.nodeValue.trim());
+            }
+
+            currentNode = walker.nextNode();
+          }
+
+          return feedback?.textContent.trim() === messageText &&
+            feedback.previousElementSibling === buttonRow
+            ? {
+                directTextCount: textNodes.filter((text) => text === messageText).length,
+                feedbackText: feedback.textContent.trim(),
+                buttonRowText: buttonRow?.innerText || "",
+              }
+            : false;
+        })()`),
+      10000,
+      "empty AI Assist friendly message near controls",
+    );
+    assert.match(emptyAiAssistPlacement.buttonRowText, /AI Assist Parse \(Mock\)/);
+    assert.equal(
+      emptyAiAssistPlacement.directTextCount,
+      1,
+      "Expected exactly one local empty AI Assist warning",
+    );
+
     const focusedNeedsReviewTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
       if (!textarea) {
@@ -805,6 +859,96 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertBookingUiState(state);
+
+    const savedCountBeforeAiAssist = await evaluate(
+      `document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || ""`,
+    );
+    await evaluate(`window.__prestigeFetchCalls = []`);
+
+    const clickedMockAiAssist = await evaluate(`(() => {
+      const aiButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+      );
+
+      if (!aiButton || aiButton.disabled) {
+        return false;
+      }
+
+      aiButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedMockAiAssist, true, "Expected AI Assist Parse (Mock) button to be clickable");
+
+    const aiDraftState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const labels = [...document.querySelectorAll("label")];
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldValue = (labelText) => {
+            const label = labels.find((candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText);
+            const control = label?.querySelector("input, select, textarea");
+
+            if (!control) {
+              return "";
+            }
+
+            if (control.tagName === "SELECT") {
+              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+            }
+
+            return control.value || "";
+          };
+
+          return {
+            bodyText,
+            draftIsNearButtonRow:
+              document.querySelector("[data-ai-assist-draft='true']")?.previousElementSibling ===
+              [...document.querySelectorAll("button")].find(
+                (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+              )?.parentElement,
+            localWarningCount: document.querySelectorAll("[data-ai-assist-feedback='true']").length,
+            fetchCalls: window.__prestigeFetchCalls || [],
+            savedCount: bodyText.match(/Saved\\s+(\\d+)/)?.[1] || "",
+            fields: {
+              company: fieldValue("Company / Account"),
+              bookingType: fieldValue("Booking type"),
+              vehicle: fieldValue("Vehicle"),
+              pickup: fieldValue("Pickup"),
+              dropoff: fieldValue("Drop-off"),
+              name: fieldValue("Passenger name") || fieldValue("Name"),
+            },
+          };
+        })()`);
+
+        return candidateState?.bodyText?.includes("AI parsed draft — review before saving")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "mock AI draft panel",
+    );
+
+    assert.match(aiDraftState.bodyText, /AI draft is for review only\. It does not save bookings\./);
+    assert.match(aiDraftState.bodyText, /Mock AI Assist is not connected to OpenAI yet/);
+    assert.equal(aiDraftState.draftIsNearButtonRow, true, "Expected AI draft panel near AI button row");
+    assert.equal(aiDraftState.localWarningCount, 0, "Expected empty AI Assist warning to clear after draft");
+    assert.deepEqual(
+      aiDraftState.fetchCalls,
+      [],
+      `Expected mock AI Assist to make no network calls, got ${aiDraftState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(
+      aiDraftState.savedCount,
+      savedCountBeforeAiAssist,
+      "Expected mock AI Assist not to change saved booking count",
+    );
+    assert.equal(aiDraftState.fields.company, state.fields.company);
+    assert.equal(aiDraftState.fields.bookingType, state.fields.bookingType);
+    assert.equal(aiDraftState.fields.vehicle, state.fields.vehicle);
+    assert.equal(aiDraftState.fields.pickup, state.fields.pickup);
+    assert.equal(aiDraftState.fields.dropoff, state.fields.dropoff);
+    assert.equal(aiDraftState.fields.name, state.fields.name);
 
     const focusedMultiBookingTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

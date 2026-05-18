@@ -6,6 +6,10 @@ import {
   parseBookingMessage,
 } from "../lib/booking-parser";
 import {
+  sanitizeAiParseResult,
+  type AiParseResult,
+} from "../lib/ai-parser-schema";
+import {
   calculateProfit,
   defaultChildSeatCustomerSurcharge,
   defaultChildSeatDriverPayout,
@@ -186,6 +190,8 @@ type Message = {
   text: string;
 };
 
+type AiDraftBooking = AiParseResult["bookings"][number];
+
 type ParsedBooking = Partial<BookingForm> & {
   success?: boolean;
   cleanedLines?: string[];
@@ -350,6 +356,41 @@ const requiredFields: Array<keyof BookingForm> = [
   "dropoff",
   "booker",
 ];
+
+function buildMockAiParseResult(messageText: string): AiParseResult {
+  const messageLength = clean(messageText).length;
+
+  return sanitizeAiParseResult({
+    multipleBookingsDetected: false,
+    bookings: [
+      {
+        bookingType: "",
+        companyAccount: "",
+        bookerName: "",
+        bookerEmail: "",
+        bookerContact: "",
+        passengerName: "",
+        pax: "",
+        vehicle: "",
+        pickupDate: "",
+        pickupTime: "",
+        flightNumber: "",
+        pickup: "",
+        dropoff: "",
+        extraStopLocation: "",
+        extraStops: "",
+        customerPriceOverride: "",
+        notes: `Mock AI draft placeholder from ${messageLength} pasted characters. No AI request was made.`,
+        confidence: 0.1,
+        needsReviewReasons: [
+          "Mock AI Assist is not connected to OpenAI yet",
+          "Review all fields before saving",
+        ],
+      },
+    ],
+    rawWarnings: ["Mock draft only; no API request was made."],
+  });
+}
 
 function createInitialBooking(): BookingForm {
   return {
@@ -1447,6 +1488,8 @@ export default function Home() {
   const [parsedDebugBooking, setParsedDebugBooking] = useState<ParsedDebugBooking | null>(null);
   const [showParserDebug, setShowParserDebug] = useState(false);
   const [multiBookingNotice, setMultiBookingNotice] = useState<ParsedBooking | null>(null);
+  const [aiDraft, setAiDraft] = useState<AiParseResult | null>(null);
+  const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
@@ -1713,6 +1756,7 @@ export default function Home() {
   const multiBookingPreviewItems = Array.isArray(multiBookingNotice?.extractedBookingsPreview)
     ? multiBookingNotice.extractedBookingsPreview.filter(Boolean)
     : [];
+  const aiDraftBookings = aiDraft?.bookings ?? [];
   const parsedDebugPreviewItems = Array.isArray(parsedDebugBooking?.extractedBookingsPreview)
     ? parsedDebugBooking.extractedBookingsPreview.filter(Boolean)
     : [];
@@ -1751,6 +1795,8 @@ export default function Home() {
     setParsedDebugBooking(null);
     setShowParserDebug(false);
     setMultiBookingNotice(null);
+    setAiDraft(null);
+    setAiAssistMessage(null);
     clearReviewAndSaveState();
     setMessage({
       tone: "info",
@@ -2146,6 +2192,20 @@ export default function Home() {
 
   async function handleParseBookingMessage() {
     await applyParsedBookingMessage(bookingMessage);
+  }
+
+  function handleMockAiAssistParse() {
+    if (!clean(bookingMessage)) {
+      setAiDraft(null);
+      setAiAssistMessage({
+        tone: "error",
+        text: "Paste a booking message before using AI Assist Parse.",
+      });
+      return;
+    }
+
+    setAiDraft(buildMockAiParseResult(bookingMessage));
+    setAiAssistMessage(null);
   }
 
   async function resolveCompany() {
@@ -3781,7 +3841,11 @@ export default function Home() {
                   key={bookingMessageResetKey}
                   className="min-h-32 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   ref={bookingMessageRef}
-                  onChange={(event) => setBookingMessage(event.target.value)}
+                  onChange={(event) => {
+                    setBookingMessage(event.target.value);
+                    setAiDraft(null);
+                    setAiAssistMessage(null);
+                  }}
                   placeholder="Paste WhatsApp, email, or screenshot OCR text here."
                   value={bookingMessage}
                 />
@@ -3795,6 +3859,13 @@ export default function Home() {
                   Parse Booking
                 </button>
                 <button
+                  className="h-10 rounded-md border border-indigo-300 bg-indigo-50 px-4 text-sm font-semibold text-indigo-900 transition hover:bg-indigo-100"
+                  onClick={handleMockAiAssistParse}
+                  type="button"
+                >
+                  AI Assist Parse (Mock)
+                </button>
+                <button
                   className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
                   onClick={clearBookingMessageInput}
                   type="button"
@@ -3802,6 +3873,89 @@ export default function Home() {
                   Clear Message
                 </button>
               </div>
+              {aiAssistMessage ? (
+                <p
+                  aria-live="polite"
+                  className={`mt-2 rounded-md border px-3 py-2 text-sm font-medium ${
+                    aiAssistMessage.tone === "error"
+                      ? "border-red-200 bg-red-50 text-red-800"
+                      : "border-indigo-200 bg-indigo-50 text-indigo-900"
+                  }`}
+                  data-ai-assist-feedback="true"
+                >
+                  {aiAssistMessage.text}
+                </p>
+              ) : null}
+              {aiDraft ? (
+                <div
+                  className="mt-3 rounded-lg border-2 border-indigo-300 bg-indigo-50 p-4 shadow-sm"
+                  data-ai-assist-draft="true"
+                >
+                  <p className="text-base font-semibold text-indigo-950">
+                    AI parsed draft — review before saving
+                  </p>
+                  <p className="mt-1 text-sm text-indigo-950">
+                    AI draft is for review only. It does not save bookings.
+                  </p>
+                  {aiDraft.rawWarnings.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-indigo-900">
+                      {aiDraft.rawWarnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="mt-3 grid gap-3">
+                    {aiDraftBookings.length > 0 ? (
+                      aiDraftBookings.map((draft: AiDraftBooking, index) => (
+                        <div
+                          className="rounded-md border border-indigo-200 bg-white p-3 text-sm text-slate-800"
+                          key={`${draft.passengerName || "ai-draft"}-${index}`}
+                        >
+                          <div className="grid gap-1 sm:grid-cols-2">
+                            <p>
+                              <strong>Booking type:</strong>{" "}
+                              {draft.bookingType || "Needs review"}
+                            </p>
+                            <p>
+                              <strong>Vehicle:</strong> {draft.vehicle || "Not detected"}
+                            </p>
+                            <p>
+                              <strong>Passenger:</strong>{" "}
+                              {draft.passengerName || "Not detected"}
+                            </p>
+                            <p>
+                              <strong>Confidence:</strong>{" "}
+                              {Math.round(draft.confidence * 100)}%
+                            </p>
+                            <p className="sm:col-span-2">
+                              <strong>Pickup:</strong> {draft.pickup || "Not detected"}
+                            </p>
+                            <p className="sm:col-span-2">
+                              <strong>Drop-off:</strong> {draft.dropoff || "Not detected"}
+                            </p>
+                            <div className="sm:col-span-2">
+                              <strong>Needs review reasons:</strong>
+                              {draft.needsReviewReasons.length > 0 ? (
+                                <ul className="mt-1 list-disc space-y-1 pl-5">
+                                  {draft.needsReviewReasons.map((reason) => (
+                                    <li key={reason}>{reason}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <span> None</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="rounded-md border border-indigo-200 bg-white p-3 text-sm text-indigo-950">
+                        No AI draft bookings were generated.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               {multiBookingNotice?.multipleBookingsDetected ? (
                 <div className="mt-4 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 shadow-sm">
                   <p className="text-base font-semibold text-amber-950">

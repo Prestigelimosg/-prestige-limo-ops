@@ -1064,6 +1064,15 @@ function detectQuotedCustomerPrice(cleanedLines: string[]) {
 }
 
 function detectExtraStopDetails(text: string) {
+  const freeformMultiLocationTransfer = detectFreeformMultiLocationTransfer(text);
+
+  if (freeformMultiLocationTransfer) {
+    return {
+      extraStopCount: freeformMultiLocationTransfer.extraStopCount,
+      extraStopLocation: freeformMultiLocationTransfer.extraStopLocation,
+    };
+  }
+
   const structuredRouteLocation = structuredListLocations(text, [
     "route location",
     "route locations",
@@ -1093,6 +1102,38 @@ function detectExtraStopDetails(text: string) {
   return {
     extraStopCount: structuredRouteLocationCount ? String(structuredRouteLocationCount) : explicitCount || (extraStopLocation ? "1" : ""),
     extraStopLocation,
+  };
+}
+
+function detectFreeformMultiLocationTransfer(text: string) {
+  if (isStandbyBooking(text) || /\b(?:airport|flight|arriv(?:al|ing|es?)|departure|depart|eta|etd|mng)\b/i.test(text)) {
+    return null;
+  }
+
+  const match = text.match(
+    /\bpick\s*up\s+([A-Za-z][A-Za-z.'-]*)\s+(.+?)\s+send\s+(?:him|her|them|passenger|guest)\s+to\s+(.+?)\s+pick\s*up\s+[A-Za-z][A-Za-z.'-]*\s+follow(?:ed)?\s+by\s+(.+?)\s+then\s+to\s+(.+?)(?=\.|,|\n|$)/i,
+  );
+
+  if (!match?.[1] || !match[2] || !match[3] || !match[4] || !match[5]) {
+    return null;
+  }
+
+  const pickup = cleanNumberedItineraryLocation(match[2]);
+  const firstStop = cleanNumberedItineraryLocation(match[3]);
+  const secondStop = cleanNumberedItineraryLocation(match[4]);
+  const dropoff = cleanNumberedItineraryLocation(match[5]);
+  const stops = [firstStop, secondStop].filter(Boolean);
+
+  if (!pickup || !dropoff || stops.length < 2) {
+    return null;
+  }
+
+  return {
+    passenger: cleanNumberedItineraryLocation(match[1]),
+    pickup,
+    dropoff,
+    extraStopCount: String(stops.length),
+    extraStopLocation: stops.join(" > "),
   };
 }
 
@@ -1998,6 +2039,15 @@ function detectRoute(text: string, flight = "") {
     };
   }
 
+  const freeformMultiLocationTransfer = detectFreeformMultiLocationTransfer(text);
+
+  if (freeformMultiLocationTransfer) {
+    return {
+      pickup: freeformMultiLocationTransfer.pickup,
+      dropoff: freeformMultiLocationTransfer.dropoff,
+    };
+  }
+
   if (isStandbyBooking(text)) {
     const standbyRoute = detectStandbyRoute(text);
 
@@ -2142,11 +2192,13 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const standbyRouteDetails = !multiStopItinerary && isStandbyBooking(operationalText)
     ? detectStandbyRoute(operationalText)
     : { pickup: "", dropoff: "", returnDestination: "", standbyUntil: "" };
+  const freeformMultiLocationTransfer = detectFreeformMultiLocationTransfer(operationalText);
   const structuredClientName = detectStructuredClientName(operationalText);
   const paxNameAndNumber = detectPaxNameAndNumber(operationalText);
   const labeledTravelerName = detectLabeledTravelerName(operationalText);
   const name =
     terminalFlightDetails?.passenger ||
+    freeformMultiLocationTransfer?.passenger ||
     detectStandbyName(operationalText) ||
     detectDrivenPassenger(operationalText) ||
     paxNameAndNumber ||

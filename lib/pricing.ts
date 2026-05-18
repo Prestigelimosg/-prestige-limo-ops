@@ -276,7 +276,7 @@ export function calculateProfit(
     : null;
   const driverPayout =
     manualDriverPayout ??
-    pricing.driverPayoutMax +
+    pricing.driverPayoutMin +
       pricing.midnightPayout +
       pricing.extraStopDriverAmount +
       pricing.childSeatDriverAmount;

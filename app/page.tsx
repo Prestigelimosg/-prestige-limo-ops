@@ -829,6 +829,16 @@ function formatCompactMoney(value: string | number | null | undefined) {
   return formattedValue.endsWith(".00") ? formattedValue.slice(0, -3) : formattedValue;
 }
 
+function getPricingReviewWarnings(pricing: { customerPrice: number; driverPayout: number; profit: number }) {
+  if (pricing.profit >= 0) {
+    return [];
+  }
+
+  return [
+    `Negative profit: customer $${formatCompactMoney(pricing.customerPrice)} is below driver payout $${formatCompactMoney(pricing.driverPayout)}`,
+  ];
+}
+
 function finiteNumber(value: unknown) {
   if (
     value === null ||
@@ -1513,7 +1523,14 @@ export default function Home() {
     return [...childSeatTypeOptions];
   }, [booking.childSeatType]);
 
-  const needsReviewWarnings = useMemo(() => getNeedsReviewWarnings(booking), [booking]);
+  const pricingReviewWarnings = useMemo(
+    () => getPricingReviewWarnings(draftPricing),
+    [draftPricing],
+  );
+  const needsReviewWarnings = useMemo(
+    () => [...getNeedsReviewWarnings(booking), ...pricingReviewWarnings],
+    [booking, pricingReviewWarnings],
+  );
   const needsReviewAcceptanceKey = useMemo(
     () => getReviewAcceptanceKey(booking, needsReviewWarnings),
     [booking, needsReviewWarnings],
@@ -2917,7 +2934,10 @@ export default function Home() {
   }
 
   async function saveBooking() {
-    const currentNeedsReviewWarnings = getNeedsReviewWarnings(booking);
+    const currentNeedsReviewWarnings = [
+      ...getNeedsReviewWarnings(booking),
+      ...getPricingReviewWarnings(draftPricing),
+    ];
     const currentReviewAcceptanceKey = getReviewAcceptanceKey(booking, currentNeedsReviewWarnings);
 
     if (

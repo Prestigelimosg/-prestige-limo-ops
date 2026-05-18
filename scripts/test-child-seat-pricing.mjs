@@ -27,8 +27,8 @@ assert.deepEqual(
   calculateProfit(defaultPricing),
   {
     customerPrice: 105,
-    driverPayout: 85,
-    profit: 20,
+    driverPayout: 75,
+    profit: 30,
     customerPriceSource: "default",
     driverPayoutSource: "default",
   },
@@ -63,8 +63,8 @@ assert.deepEqual(
   calculateProfit(configuredPricing),
   {
     customerPrice: 135,
-    driverPayout: 100,
-    profit: 35,
+    driverPayout: 90,
+    profit: 45,
     customerPriceSource: "default",
     driverPayoutSource: "default",
   },
@@ -121,5 +121,30 @@ for (const bookingType of ["MNG", "DEP", "TRF"]) {
   assert.equal(nonDspPricing.extraStopPayout, 10, `${bookingType} should keep driver extra stop payout`);
   assert.equal(nonDspPricing.extraStopDriverAmount, 20, `${bookingType} should pay driver extra stops`);
 }
+
+const trfMultiStopPricing = resolvePricing(
+  {
+    bookingType: "TRF",
+    time: "1100hrs",
+    extraStopCount: "2",
+    childSeatRequired: "",
+    childSeatCount: "",
+  },
+  { customer_rates: {}, driver_payout_rules: {} },
+  null,
+  initialRateSettings,
+  null,
+);
+
+assert.deepEqual(
+  calculateProfit(trfMultiStopPricing),
+  {
+    customerPrice: 85,
+    driverPayout: 65,
+    profit: 20,
+    customerPriceSource: "default",
+    driverPayoutSource: "default",
+  },
+);
 
 console.log("Pricing tests passed.");

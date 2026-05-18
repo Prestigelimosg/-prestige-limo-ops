@@ -983,5 +983,28 @@
       "extraStopLocation": "Capella Residence Suite A > Cherry Garden > Suntec Expo",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "freeform-trf-multi-location-pickup-follow-by-then-to",
+    "categories": [
+      "TRF transfer",
+      "true extra stops",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "referenceDate": "2026-05-18T12:00:00+08:00",
+    "input": "organise viano tomorrow 11am pickup andrew shenton way send him to MAS building pickup john follow by Asia sq then to capital tower",
+    "expected": {
+      "bookingType": "TRF",
+      "vehicle": "VVV",
+      "date": "2026-05-19",
+      "time": "1100hrs",
+      "flight": "",
+      "pickup": "Shenton Way",
+      "dropoff": "Capital Tower",
+      "name": "Andrew",
+      "extraStopCount": "2",
+      "extraStopLocation": "MAS Building > Asia Sq",
+      "childSeatRequired": ""
+    }
   }
 ]

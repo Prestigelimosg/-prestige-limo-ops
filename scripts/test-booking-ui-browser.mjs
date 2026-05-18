@@ -143,6 +143,8 @@ E-mail address	luthergrahambk@gmail.com
 Phone number	+6580912613
 Passangers	3
 Flight No.	SQ265`;
+const freeformTransferMultiLocationSample =
+  "organise viano tomorrow 11am pickup andrew shenton way send him to MAS building pickup john follow by Asia sq then to capital tower";
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
 const numberedEventDspItinerarySample = `@Fikeri A40 7941
@@ -722,6 +724,13 @@ async function runChromeTest() {
 
         return "";
       };
+      const sectionTextByHeading = (headingText) => {
+        const heading = [...document.querySelectorAll("h2")].find(
+          (candidate) => candidate.textContent.trim() === headingText,
+        );
+
+        return heading?.parentElement?.innerText || "";
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -731,6 +740,7 @@ async function runChromeTest() {
         fields,
         fieldText: [...Object.values(fields), ...overrideReasons].join("\\n"),
         jobCardPreview: preTextByHeading("Job Card Preview"),
+        pricingPanel: sectionTextByHeading("Pricing"),
         visibleText: document.body.innerText,
       };
     })()`;
@@ -1257,6 +1267,106 @@ async function runChromeTest() {
     assert.match(routeNameAirportDepartureState.driverDispatch, /Sin Ming Ave/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Bedok South/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Changi Airport/);
+
+    const focusedFreeformTransferTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedFreeformTransferTextarea,
+      true,
+      "Expected booking message textarea to be focused for freeform transfer sample",
+    );
+
+    await client.send("Input.insertText", { text: freeformTransferMultiLocationSample });
+
+    const filledFreeformTransferTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(freeformTransferMultiLocationSample)}`,
+    );
+    assert.equal(
+      filledFreeformTransferTextarea,
+      true,
+      "Expected freeform transfer booking message textarea to be filled",
+    );
+
+    const clickedFreeformTransferParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedFreeformTransferParse, true, "Expected Parse Booking button to parse freeform transfer sample");
+
+    const freeformTransferState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.bookingType === "TRF" &&
+          candidateState?.fields?.pickup === "Shenton Way" &&
+          candidateState?.fields?.dropoff === "Capital Tower" &&
+          candidateState?.jobCardPreview?.includes("MAS Building") &&
+          candidateState?.jobCardPreview?.includes("Asia Sq")
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed freeform multi-location transfer UI state",
+    );
+    freeformTransferState.errors = [...browserErrors, ...(freeformTransferState.errors || [])];
+    freeformTransferState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(freeformTransferState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      freeformTransferState.errors,
+      [],
+      `Expected no browser runtime errors, got ${freeformTransferState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      freeformTransferState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${freeformTransferState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(freeformTransferState.fields.bookingType, "TRF");
+    assert.equal(freeformTransferState.fields.vehicle, "VVV");
+    assert.equal(freeformTransferState.fields.pickupDate, "2026-05-19");
+    assert.equal(freeformTransferState.fields.pickupTime, "1100hrs");
+    assert.equal(freeformTransferState.fields.flight, "");
+    assert.equal(freeformTransferState.fields.pickup, "Shenton Way");
+    assert.equal(freeformTransferState.fields.dropoff, "Capital Tower");
+    assert.equal(freeformTransferState.fields.name, "Andrew");
+    assert.equal(freeformTransferState.fields.extraStopCount, "2");
+    assert.equal(freeformTransferState.fields.extraStopLocation, "MAS Building > Asia Sq");
+    assert.doesNotMatch(freeformTransferState.fieldText, /Changi Airport|andrew shenton way send him|pickup john/i);
+    assert.match(
+      freeformTransferState.jobCardPreview,
+      /Shenton Way > MAS Building > Asia Sq > Capital Tower/,
+    );
+    assert.match(
+      freeformTransferState.driverDispatch,
+      /Shenton Way > MAS Building > Asia Sq > Capital Tower/,
+    );
+    assert.match(freeformTransferState.pricingPanel, /Customer\s+\$85\.00/);
+    assert.match(freeformTransferState.pricingPanel, /Driver\s+\$65\.00/);
+    assert.match(freeformTransferState.pricingPanel, /Profit\s+\$20\.00/);
+    assert.doesNotMatch(freeformTransferState.visibleText, /Negative profit/);
 
     const focusedDspTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

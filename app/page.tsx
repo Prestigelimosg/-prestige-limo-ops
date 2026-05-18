@@ -2989,29 +2989,36 @@ export default function Home() {
       setMessage({ tone: "info", text: "Loading bookings..." });
     }
 
-    const { data, error } = await supabase
-      .from("bookings")
-      .select("*, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)")
-      .order("created_at", { ascending: false })
-      .limit(25);
+    try {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)")
+        .order("created_at", { ascending: false })
+        .limit(25);
 
-    if (error) {
-      if (!options?.silent) {
-        setMessage({ tone: "error", text: `Load failed: ${error.message}` });
-      }
-    } else {
-      const loadedBookings = sortBookingsNewestFirst((data ?? []) as BookingRecord[]);
-      setBookings(loadedBookings);
-      if (!options?.silent) {
-        if (loadedBookings.length === 0) {
-          setMessage({ tone: "info", text: "No bookings found." });
-        } else {
-          setMessage({ tone: "success", text: `${successText} Choose a booking below.` });
+      if (error) {
+        if (!options?.silent) {
+          setMessage({ tone: "error", text: `Load bookings failed: ${formatSupabaseError(error)}` });
+        }
+      } else {
+        const loadedBookings = sortBookingsNewestFirst((data ?? []) as BookingRecord[]);
+        setBookings(loadedBookings);
+        if (!options?.silent) {
+          if (loadedBookings.length === 0) {
+            setMessage({ tone: "info", text: "No bookings found." });
+          } else {
+            setMessage({ tone: "success", text: `${successText} Choose a booking below.` });
+          }
         }
       }
+    } catch (error) {
+      if (!options?.silent) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown load error.";
+        setMessage({ tone: "error", text: `Load bookings failed: ${errorMessage}` });
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   function loadSelectedBooking(bookingRecord: BookingRecord) {

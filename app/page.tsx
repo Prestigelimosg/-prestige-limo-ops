@@ -3881,6 +3881,7 @@ export default function Home() {
             {hasNeedsReviewWarnings ? (
               <div className="mt-5 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                 <p className="font-semibold">Needs review before saving</p>
+                <p className="mt-1">Please check these fields before saving this booking.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {needsReviewWarnings.map((warning) => (
                     <li key={warning}>{warning}</li>

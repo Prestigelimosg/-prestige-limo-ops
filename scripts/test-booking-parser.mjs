@@ -1830,8 +1830,7 @@ assert.deepEqual(parseBookingForTest(timedScheduleItinerarySample), {
   driverName: '',
   driverContact: '',
   extraStopCount: '3',
-  extraStopLocation:
-    '1 HarbourFront Avenue, Keppel Bay Tower at 9:30am > One Raffles Quay, North Tower at 11am > Capital Tower at 2pm > BDC office at 4:30pm',
+  extraStopLocation: 'One Raffles Quay, North Tower > Capital Tower',
   bookerContact: '',
   cleanedLines: [
     'Hi William, please arrange a car for Drew tomorrow, schedule as follow:',

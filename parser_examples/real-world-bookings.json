@@ -797,5 +797,34 @@
       }
     ],
     "expectedPreviewLength": 2
+  },
+  {
+    "id": "timed-dsp-itinerary-without-explicit-first-route",
+    "categories": [
+      "timed DSP itinerary without explicit first route",
+      "DSP multi-stop"
+    ],
+    "input": "Hi William, please arrange a car for Drew tomorrow, schedule as follow:\n9:30am 1 HarbourFront Avenue, #02-01 Keppel Bay Tower;\n11am One Raffles Quay, #39-01 North Tower;\n2pm Capital Tower;\n4:30pm BDC office;",
+    "expected": {
+      "success": true,
+      "company": "",
+      "bookingType": "DSP",
+      "vehicle": "",
+      "date": "2026-05-14",
+      "time": "0930hrs",
+      "flight": "",
+      "pickup": "1 HarbourFront Avenue, Keppel Bay Tower",
+      "dropoff": "BDC office",
+      "booker": "",
+      "bookerEmail": "",
+      "name": "Drew",
+      "pax": "1",
+      "driverName": "",
+      "driverContact": "",
+      "extraStopCount": "3",
+      "extraStopLocation": "One Raffles Quay, North Tower > Capital Tower",
+      "bookerContact": "",
+      "childSeatRequired": ""
+    }
   }
 ]

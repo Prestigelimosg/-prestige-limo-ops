@@ -1026,23 +1026,21 @@ async function runChromeTest() {
     );
     assert.equal(timedScheduleState.fields.dropoff, "BDC office");
     assert.doesNotMatch(timedScheduleState.fields.extraStopLocation, /Marina Bay Sands/);
+    assert.doesNotMatch(timedScheduleState.fields.extraStopLocation, /HarbourFront Avenue|BDC office/);
     assert.match(
       timedScheduleState.fields.extraStopLocation,
-      /1 HarbourFront Avenue, Keppel Bay Tower at 9:30am/,
+      /One Raffles Quay, North Tower > Capital Tower/,
     );
     assert.match(
       timedScheduleState.jobCardPreview,
-      /HarbourFront Avenue > Multi-stop itinerary hidden for privacy > BDC office/,
+      /HarbourFront Avenue > One Raffles Quay > BDC office/,
     );
     assert.doesNotMatch(timedScheduleState.jobCardPreview, /#02-01|#39-01|North Tower|Capital Tower/);
-    assert.match(timedScheduleState.visibleText, /Itinerary preview/);
-    assert.match(timedScheduleState.driverDispatch, /Pickup: 1 HarbourFront Avenue, Keppel Bay Tower/);
-    assert.match(timedScheduleState.driverDispatch, /Itinerary:/);
-    assert.match(timedScheduleState.driverDispatch, /0930hrs - 1 HarbourFront Avenue, Keppel Bay Tower/);
-    assert.match(timedScheduleState.driverDispatch, /1100hrs - One Raffles Quay, North Tower/);
-    assert.match(timedScheduleState.driverDispatch, /1400hrs - Capital Tower/);
-    assert.match(timedScheduleState.driverDispatch, /1630hrs - BDC office/);
-    assert.doesNotMatch(timedScheduleState.driverDispatch, /Pickup > Drop-off|Marina Bay Sands/);
+    assert.match(
+      timedScheduleState.driverDispatch,
+      /1 HarbourFront Avenue, Keppel Bay Tower > One Raffles Quay, North Tower > Capital Tower > BDC office/,
+    );
+    assert.doesNotMatch(timedScheduleState.driverDispatch, /Pickup > Drop-off|Marina Bay Sands|#02-01|#39-01/);
 
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {

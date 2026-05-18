@@ -1512,12 +1512,14 @@ function detectMultiStopItinerary(text: string): MultiStopItineraryDetails | nul
       return null;
     }
 
+    const middleStops = timedStops.slice(1, -1).map((stop) => stop.location).filter(Boolean);
+
     return {
       pickup,
       dropoff,
       pickupTime,
       extraStopCount: String(Math.max(timedStops.length - 1, 0)),
-      extraStopLocation: timedStops.map(formatItineraryStop).join(" > "),
+      extraStopLocation: middleStops.join(" > "),
     };
   }
 

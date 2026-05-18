@@ -681,6 +681,21 @@ function getEmailDomain(value: string) {
   return isPublicEmailDomain(domain) ? "" : domain;
 }
 
+function normalizeCompanyAccount(value: string | null | undefined, email: string | null | undefined = "") {
+  const companyName = clean(value);
+  const publicEmailLocalPart = getPublicEmailLocalPart(email);
+
+  if (
+    !companyName ||
+    isPublicEmailDomain(companyName) ||
+    (publicEmailLocalPart && companyName.toLowerCase() === publicEmailLocalPart)
+  ) {
+    return "";
+  }
+
+  return companyName;
+}
+
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normaliseEmail(value));
 }
@@ -765,14 +780,19 @@ function mergeParsedBookingIntoForm(
     ...(parsedName ? { name: parsedName } : {}),
     ...(parsedExtraStopCount ? { extraStopCount: parsedExtraStopCount } : {}),
   });
+  const safeCompany = normalizeCompanyAccount(
+    mergedBooking.company,
+    clean(mergedBooking.bookerEmail) || clean(currentBooking.bookerEmail),
+  );
 
   return {
     ...currentBooking,
     ...mergedBooking,
+    company: safeCompany,
     booker:
       clean(mergedBooking.booker) ||
       clean(currentBooking.booker) ||
-      (!clean(mergedBooking.company) && parsedName && clean(mergedBooking.bookingType).toUpperCase() !== "DSP"
+      (!safeCompany && parsedName && clean(mergedBooking.bookingType).toUpperCase() !== "DSP"
         ? parsedName
         : ""),
     name: parsedName,
@@ -794,10 +814,15 @@ function mergeCrmUpdatesIntoForm(
     ...bookingFields,
     name: currentName || crmName,
   });
+  const safeCompany = normalizeCompanyAccount(
+    mergedBooking.company,
+    clean(mergedBooking.bookerEmail) || clean(currentBooking.bookerEmail),
+  );
 
   return {
     ...currentBooking,
     ...mergedBooking,
+    company: safeCompany,
     name: currentName || crmName,
   };
 }
@@ -1182,18 +1207,17 @@ function getBookingCompany(bookingRecord: BookingRecord) {
 function getBookingCompanyName(bookingRecord: BookingRecord) {
   const companyName = clean(bookingRecord.companies?.company_name);
   const companyDomain = clean(bookingRecord.companies?.domain);
-  const publicEmailLocalPart = getPublicEmailLocalPart(bookingRecord.bookers?.email);
+  const safeCompanyName = normalizeCompanyAccount(companyName, bookingRecord.bookers?.email);
 
   if (
-    isPublicEmailDomain(companyName) ||
+    !safeCompanyName ||
     isPublicEmailDomain(companyDomain) ||
-    companyName.toLowerCase() === "internal account" ||
-    (publicEmailLocalPart && companyName.toLowerCase() === publicEmailLocalPart)
+    safeCompanyName.toLowerCase() === "internal account"
   ) {
     return "";
   }
 
-  return companyName;
+  return safeCompanyName;
 }
 
 function getRecentBookingTitle(bookingRecord: BookingRecord) {
@@ -1439,7 +1463,8 @@ export default function Home() {
 
   const jobCard = useMemo(() => {
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}\n` : "";
-    const companyLine = clean(booking.company) ? `Company: ${clean(booking.company)}\n` : "";
+    const safeCompany = normalizeCompanyAccount(booking.company, booking.bookerEmail);
+    const companyLine = safeCompany ? `Company: ${safeCompany}\n` : "";
     const childSeatLine =
       clean(booking.childSeatRequired) === "yes"
         ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
@@ -1462,7 +1487,8 @@ export default function Home() {
 
   const jobCardPreview = useMemo(() => {
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}\n` : "";
-    const companyLine = clean(booking.company) ? `Company: ${clean(booking.company)}\n` : "";
+    const safeCompany = normalizeCompanyAccount(booking.company, booking.bookerEmail);
+    const companyLine = safeCompany ? `Company: ${safeCompany}\n` : "";
     const childSeatLine =
       clean(booking.childSeatRequired) === "yes"
         ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
@@ -1483,8 +1509,9 @@ export default function Home() {
   }, [booking]);
 
   const draftPricing = useMemo(() => {
+    const safeCompany = normalizeCompanyAccount(booking.company, booking.bookerEmail);
     const matchingCompany = rateCompanies.find(
-      (company) => clean(company.company_name).toLowerCase() === clean(booking.company).toLowerCase(),
+      (company) => clean(company.company_name).toLowerCase() === safeCompany.toLowerCase(),
     );
     const matchingTraveler = rateTravelers.find(
       (traveler) => clean(traveler.traveler_name).toLowerCase() === clean(booking.name).toLowerCase(),
@@ -1498,7 +1525,7 @@ export default function Home() {
     );
     const pricing = resolvePricing(
       booking,
-      matchingCompany ?? blankCompanyRecord(clean(booking.company)),
+      matchingCompany ?? blankCompanyRecord(safeCompany),
       matchingTraveler ?? null,
       rateSettings,
       matchingDriver ?? null,
@@ -1916,9 +1943,13 @@ export default function Home() {
   function applyNameMemory(parsedBooking: ParsedBooking, nameMemory: NameMemory) {
     const enrichedBooking = { ...parsedBooking };
     const bookingType = clean(enrichedBooking.bookingType || booking.bookingType).toUpperCase();
+    const safeMemoryCompany = normalizeCompanyAccount(
+      nameMemory.company,
+      clean(enrichedBooking.bookerEmail) || clean(booking.bookerEmail),
+    );
 
-    if (!clean(enrichedBooking.company) && nameMemory.company) {
-      enrichedBooking.company = nameMemory.company;
+    if (!clean(enrichedBooking.company) && safeMemoryCompany) {
+      enrichedBooking.company = safeMemoryCompany;
     }
 
     if (!clean(enrichedBooking.vehicle) && nameMemory.preferredVehicle) {
@@ -1978,7 +2009,7 @@ export default function Home() {
     const savedAddress = addressResult.data as SavedAddressRecord | null;
 
     return {
-      company: clean(companyResult.data?.company_name),
+      company: normalizeCompanyAccount(companyResult.data?.company_name, nameRecord.booker_email),
       companyId: nameRecord.company_id,
       travelerId: nameRecord.id,
       savedAddress: clean(savedAddress?.address) || clean(nameRecord.default_address),
@@ -2090,7 +2121,7 @@ export default function Home() {
       booking.name,
       booking.company,
     );
-    const companyName = detectedCompany || clean(booking.company);
+    const companyName = normalizeCompanyAccount(detectedCompany || booking.company, booking.bookerEmail);
     const bookerName = clean(booking.booker);
     const personName = clean(booking.name);
     const bookerContact = normalizePhone(booking.bookerContact);
@@ -2112,7 +2143,17 @@ export default function Home() {
         throw new Error(companyResult.error.message);
       }
 
-      return companyResult.data as CompanyRecord | null;
+      const companyRecord = companyResult.data as CompanyRecord | null;
+      const safeCompanyName = normalizeCompanyAccount(companyRecord?.company_name, booking.bookerEmail);
+
+      if (
+        companyRecord &&
+        ((clean(companyRecord.company_name) && !safeCompanyName) || isPublicEmailDomain(companyRecord.domain))
+      ) {
+        return null;
+      }
+
+      return companyRecord;
     }
 
     if (companyName) {
@@ -2980,7 +3021,10 @@ export default function Home() {
 
     try {
       const fallbackCompanyName =
-        getKnownCompanyForRelationship(booking.booker, booking.name, booking.company) || clean(booking.company);
+        normalizeCompanyAccount(
+          getKnownCompanyForRelationship(booking.booker, booking.name, booking.company) || booking.company,
+          booking.bookerEmail,
+        );
       let company: CompanyRecord = blankCompanyRecord(fallbackCompanyName);
       let booker: BookerRecord | null = null;
       let name: TravelerRecord | null = null;

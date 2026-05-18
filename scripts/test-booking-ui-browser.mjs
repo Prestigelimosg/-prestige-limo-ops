@@ -1253,6 +1253,7 @@ async function runChromeTest() {
     assert.equal(routeNameAirportDepartureState.fields.flight, "SQ265");
     assert.equal(routeNameAirportDepartureState.fields.pickup, "160 Watten Estate Rd, Singapore 287610");
     assert.equal(routeNameAirportDepartureState.fields.dropoff, "Changi Airport");
+    assert.equal(routeNameAirportDepartureState.fields.bookerEmail, "luthergrahambk@gmail.com");
     assert.equal(routeNameAirportDepartureState.fields.name, "Luther Graham");
     assert.equal(routeNameAirportDepartureState.fields.pax, "3");
     assert.equal(routeNameAirportDepartureState.fields.extraStopCount, "2");
@@ -1263,6 +1264,8 @@ async function runChromeTest() {
       routeNameAirportDepartureState.jobCardPreview,
       /Watten Estate Rd > Sin Ming Ave > Bedok South Avenue 2 > Changi Airport/,
     );
+    assert.doesNotMatch(routeNameAirportDepartureState.jobCardPreview, /Company:\s*gmail\.com/i);
+    assert.doesNotMatch(routeNameAirportDepartureState.jobCardPreview, /Company:/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Watten Estate Rd/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Sin Ming Ave/);
     assert.match(routeNameAirportDepartureState.driverDispatch, /Bedok South/);

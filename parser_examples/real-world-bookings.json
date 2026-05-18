@@ -1062,5 +1062,53 @@
       "extraStopLocation": "MAS Building > Asia Sq",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "warburg-pincus-two-transfer-requests-shared-context",
+    "categories": [
+      "mixed multi-booking dispatcher list",
+      "structured airport arrival form",
+      "structured airport departure form",
+      "organization email domain company inference",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Hello:\n \nI need to arrange car transfers, along with meet and greet services, for Mark Colodny of Warburg Pincus. Please advise if you have availability for below two transfer requests.  Thank you!\n \nPassenger: Mark Colodny\nPassenger Mobile: 917-734-5070\nCompany: Warburg Pincus\nPay Method: AMEX 5008\n \nVehicle type: Sedan\n \nPickup Date: Friday, February 6\nPickup Time: 7:30AM SGT\nPickup Address:  Singapore Changi airport\nFlight details:  SG 423 BOM SIN\n*meet and greet service needed\n \nDropoff:  The Ritz (7 Raffles Ave., Marina Bay, Singapore, 039799)\n \n===\n \nPickup Date: Friday, February 6\nPickup Time: 3:00pm SGT\nPickup Address:  The Ritz (7 Raffles Ave., Marina Bay, Singapore, 039799)\n \nDropoff:  Singapore Changi airport\nFlight details:  SG 34 SIN SFO\n \n \nThank you,\n \nJill Van Cook\nEA to Mark Colodny, Co-Head of US Private Equity\n& Chairman of Global Technology\nWarburg Pincus",
+    "expected": {
+      "success": false,
+      "multipleBookingsDetected": true,
+      "parserWarning": "Multiple bookings detected. Please select one extracted booking.",
+      "company": "Warburg Pincus",
+      "booker": "Jill Van Cook",
+      "vehicle": "Sedan",
+      "name": "Mark Colodny"
+    },
+    "expectedPreviewMatch": "ordered",
+    "expectedPreviewLength": 2,
+    "expectedPreview": [
+      {
+        "passenger": "Mark Colodny",
+        "company": "Warburg Pincus",
+        "booker": "Jill Van Cook",
+        "vehicle": "Sedan",
+        "date": "2026-02-06",
+        "time": "0730hrs",
+        "type": "MNG",
+        "flight": "SG423",
+        "pickup": "Changi Airport",
+        "dropoff": "The Ritz, 7 Raffles Ave, Marina Bay, Singapore, 039799"
+      },
+      {
+        "passenger": "Mark Colodny",
+        "company": "Warburg Pincus",
+        "booker": "Jill Van Cook",
+        "vehicle": "Sedan",
+        "date": "2026-02-06",
+        "time": "1500hrs",
+        "type": "DEP",
+        "flight": "SG34",
+        "pickup": "The Ritz, 7 Raffles Ave, Marina Bay, Singapore, 039799",
+        "dropoff": "Changi Airport"
+      }
+    ]
   }
 ]

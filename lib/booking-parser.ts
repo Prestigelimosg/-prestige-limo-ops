@@ -27,6 +27,9 @@ export type ParsedBooking = {
   cleanedLines?: string[];
   extractedBookingsPreview?: Array<{
     passenger?: string;
+    company?: string;
+    booker?: string;
+    vehicle?: string;
     date?: string;
     time?: string;
     type?: string;
@@ -504,12 +507,109 @@ function splitPotentialBookings(text: string, cleanedLines: string[]) {
   return passengerLines.length > 1 ? passengerLines : cleanedLines;
 }
 
+function detectSignatureBooker(text: string) {
+  const signatureName = firstMatch(text, [
+    /\b(?:thank\s+you|thanks|regards|best),?\s*\n+\s*([A-Z][A-Za-z.' -]{2,60})(?=\n|$)/i,
+  ]);
+
+  return looksLikePersonName(signatureName) ? cleanDetectedName(signatureName) : "";
+}
+
+function normalizeParenthesizedAddress(value: string) {
+  return clean(value)
+    .replace(/\s*\(\s*([^)]+?)\s*\)\s*$/g, ", $1")
+    .replace(/\bAve\./gi, "Ave")
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ", ")
+    .trim();
+}
+
+function detectSharedTransferRequestContext(text: string) {
+  const company = cleanCompanyAccount(lineValue(text, ["company", "client", "account"]));
+  const passenger = detectName(text, "") || cleanDetectedName(lineValue(text, ["passenger", "passenger name"]));
+  const booker = detectBookerValue(text, { booker: "", company }) || detectSignatureBooker(text);
+  const vehicle = cleanVehicle(lineValue(text, ["vehicle type", "vehicle", "car", "vehicle name"])) || detectVehicle(text);
+
+  return {
+    company,
+    passenger: looksLikePersonName(passenger) ? cleanDetectedName(passenger) : "",
+    booker,
+    vehicle,
+  };
+}
+
+function buildSeparatedTransferRequestPreview(text: string, referenceDate: Date) {
+  if (!/\n\s*={3,}\s*\n/.test(text)) {
+    return [];
+  }
+
+  const rawSegments = text
+    .split(/\n\s*={3,}\s*\n/g)
+    .map((segment) => clean(segment))
+    .filter(Boolean);
+
+  if (rawSegments.length < 2) {
+    return [];
+  }
+
+  const sharedContext = detectSharedTransferRequestContext(text);
+  const bookingSegments = rawSegments
+    .map((segment, index) => {
+      if (index === 0) {
+        const pickupDateIndex = segment.search(/\bpickup\s+date\s*[:=-]/i);
+
+        return pickupDateIndex >= 0 ? segment.slice(pickupDateIndex) : segment;
+      }
+
+      return segment
+        .replace(/\n+\s*(?:thank\s+you|thanks|regards|best),?\s*\n+[\s\S]*$/i, "")
+        .trim();
+    })
+    .filter((segment) => /\bpickup\s+date\s*[:=-]/i.test(segment));
+
+  if (bookingSegments.length < 2) {
+    return [];
+  }
+
+  return bookingSegments.map((segment) => {
+    const segmentText = normalizeIntentText(segment);
+    const flight = detectFlight(segmentText);
+    const rawRoute = detectRoute(segmentText, flight);
+    const route = {
+      pickup: normalizeParenthesizedAddress(rawRoute.pickup),
+      dropoff: normalizeParenthesizedAddress(rawRoute.dropoff),
+    };
+    const type = lineValue(segmentText, ["booking type", "type", "job type"]) ||
+      detectBookingType(segmentText, flight, route);
+    const dateText = lineValue(segmentText, ["pickup date", "date"]);
+    const rawTime = parseTimeFromText(segmentText);
+
+    return {
+      passenger: sharedContext.passenger,
+      company: sharedContext.company,
+      booker: sharedContext.booker,
+      vehicle: sharedContext.vehicle,
+      date: parseDateFromText(dateText || segmentText, referenceDate),
+      time: formatTimeForState(rawTime) || rawTime,
+      type,
+      flight,
+      pickup: route.pickup,
+      dropoff: route.dropoff,
+    };
+  });
+}
+
 function buildExtractedBookingsPreview(text: string, cleanedLines: string[], referenceDate: Date) {
   const hasExplicitList = cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line)).length > 1;
   const hasMultipleFlights = detectAllFlights(text).length > 1;
   const airportStandbyPreview = hasExplicitList || hasMultipleFlights ? [] : buildAirportStandbyPreview(text, referenceDate);
+  const separatedTransferPreview = buildSeparatedTransferRequestPreview(text, referenceDate);
   const contextDate = parseDateFromText(text, referenceDate);
   const sharedArrivalDropoff = detectSharedArrivalDropoff(text);
+
+  if (separatedTransferPreview.length > 0) {
+    return separatedTransferPreview;
+  }
 
   if (airportStandbyPreview.length > 0) {
     return airportStandbyPreview;
@@ -864,6 +964,16 @@ function parseDateFromText(text: string, referenceDate: Date = new Date()) {
     const year = monthMatch[3] || String(referenceDate.getFullYear());
 
     return `${year}-${month}-${monthMatch[1].padStart(2, "0")}`;
+  }
+
+  const monthFirstMatch = text.match(
+    /\b(?:(?:mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\s*,\s*)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(20\d{2}))?\b/i,
+  );
+  if (monthFirstMatch) {
+    const month = monthLookup[monthFirstMatch[1].toLowerCase()];
+    const year = monthFirstMatch[3] || String(referenceDate.getFullYear());
+
+    return `${year}-${month}-${monthFirstMatch[2].padStart(2, "0")}`;
   }
 
   const lowerText = text.toLowerCase();
@@ -1438,7 +1548,7 @@ function normalizeLocationName(value: string) {
     return `Changi Airport T${terminalMatch[1]}`;
   }
 
-  if (/^(?:changi\s+)?airport$/i.test(cleanedValue)) {
+  if (/^(?:singapore\s+)?(?:changi\s+)?airport$/i.test(cleanedValue)) {
     return "Changi Airport";
   }
 
@@ -2168,11 +2278,14 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const multipleBookingsDetected = detectMultipleBookings(operationalText, cleanedLines);
   if (multipleBookingsDetected) {
     const bookerCompanyContext = detectBookerCompanyContext(operationalText);
+    const sharedTransferContext = detectSharedTransferRequestContext(operationalText);
 
     return {
       success: false,
-      company: bookerCompanyContext.company,
-      booker: bookerCompanyContext.booker,
+      company: sharedTransferContext.company || bookerCompanyContext.company,
+      booker: sharedTransferContext.booker || bookerCompanyContext.booker,
+      vehicle: sharedTransferContext.vehicle,
+      name: sharedTransferContext.passenger,
       multipleBookingsDetected: true,
       parserWarning: "Multiple bookings detected. Please select one extracted booking.",
       extractedBookingsPreview: buildExtractedBookingsPreview(operationalText, cleanedLines, referenceDate),

@@ -41,6 +41,41 @@ Ah Seng handle Stanley.
 
 Booked by Nicole from BNY.
 Thanks.`;
+const warburgTwoTransferSample = `Hello:
+ 
+I need to arrange car transfers, along with meet and greet services, for Mark Colodny of Warburg Pincus. Please advise if you have availability for below two transfer requests.  Thank you!
+ 
+Passenger: Mark Colodny
+Passenger Mobile: 917-734-5070
+Company: Warburg Pincus
+Pay Method: AMEX 5008
+ 
+Vehicle type: Sedan
+ 
+Pickup Date: Friday, February 6
+Pickup Time: 7:30AM SGT
+Pickup Address:  Singapore Changi airport
+Flight details:  SG 423 BOM SIN
+*meet and greet service needed
+ 
+Dropoff:  The Ritz (7 Raffles Ave., Marina Bay, Singapore, 039799)
+ 
+===
+ 
+Pickup Date: Friday, February 6
+Pickup Time: 3:00pm SGT
+Pickup Address:  The Ritz (7 Raffles Ave., Marina Bay, Singapore, 039799)
+ 
+Dropoff:  Singapore Changi airport
+Flight details:  SG 34 SIN SFO
+ 
+ 
+Thank you,
+ 
+Jill Van Cook
+EA to Mark Colodny, Co-Head of US Private Equity
+& Chairman of Global Technology
+Warburg Pincus`;
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
 Order total amount	S$130.00
@@ -880,6 +915,160 @@ async function runChromeTest() {
     assert.equal(selectedPreviewState.fields.name, "Mr Deep");
     assert.doesNotMatch(selectedPreviewState.fieldText, /Mr Stanley|Ms Chloe|SQ221|Capella/);
     assert.doesNotMatch(selectedPreviewState.visibleText, /extractedBookingsPreview\.length|Please review warnings before saving\./);
+
+    const parseWarburgPreview = async (previewIndex, expectedFlight) => {
+      const focusedTextarea = await evaluate(`(() => {
+        const textarea = document.querySelector("textarea");
+        if (!textarea) {
+          return false;
+        }
+
+        textarea.focus();
+        textarea.select();
+        return document.activeElement === textarea;
+      })()`);
+      assert.equal(focusedTextarea, true, "Expected textarea to be focused for Warburg transfer sample");
+
+      await client.send("Input.insertText", { text: warburgTwoTransferSample });
+
+      const filledTextarea = await evaluate(
+        `document.querySelector("textarea")?.value === ${JSON.stringify(warburgTwoTransferSample)}`,
+      );
+      assert.equal(filledTextarea, true, "Expected Warburg transfer sample textarea to be filled");
+
+      const clickedParse = await evaluate(`(() => {
+        const parseButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Parse Booking",
+        );
+
+        if (!parseButton || parseButton.disabled) {
+          return false;
+        }
+
+        parseButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedParse, true, "Expected Parse Booking button for Warburg transfer sample");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const bodyText = document.body.innerText;
+
+            return bodyText.includes("Multiple bookings detected. Please select one extracted booking.") &&
+              bodyText.includes("extractedBookingsPreview.length: 2") &&
+              [...document.querySelectorAll("button")].filter(
+                (button) => button.textContent.trim() === "Use this booking",
+              ).length >= 2;
+          })()`),
+        10000,
+        "Warburg two-transfer preview choices",
+      );
+
+      const clickedPreview = await evaluate(`(() => {
+        const previewButtons = [...document.querySelectorAll("button")].filter(
+          (button) => button.textContent.trim() === "Use this booking",
+        );
+        const previewButton = previewButtons[${previewIndex}];
+
+        if (!previewButton || previewButton.disabled) {
+          return false;
+        }
+
+        previewButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedPreview, true, `Expected Warburg preview ${previewIndex + 1} to be selectable`);
+
+      return waitForCondition(
+        async () => {
+          const candidateState = await evaluate(extractStateScript);
+
+          if (
+            candidateState?.fields?.company === "Warburg Pincus" &&
+            candidateState?.fields?.booker === "Jill Van Cook" &&
+            candidateState?.fields?.vehicle === "Sedan" &&
+            candidateState?.fields?.flight === expectedFlight
+          ) {
+            return candidateState;
+          }
+
+          return false;
+        },
+        10000,
+        `selected Warburg preview ${previewIndex + 1} UI state`,
+      );
+    };
+
+    const selectedWarburgArrivalState = await parseWarburgPreview(0, "SG423");
+    selectedWarburgArrivalState.errors = [
+      ...browserErrors,
+      ...(selectedWarburgArrivalState.errors || []),
+    ];
+    selectedWarburgArrivalState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(selectedWarburgArrivalState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      selectedWarburgArrivalState.errors,
+      [],
+      `Expected no browser runtime errors, got ${selectedWarburgArrivalState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      selectedWarburgArrivalState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${selectedWarburgArrivalState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(selectedWarburgArrivalState.fields.company, "Warburg Pincus");
+    assert.equal(selectedWarburgArrivalState.fields.booker, "Jill Van Cook");
+    assert.equal(selectedWarburgArrivalState.fields.vehicle, "Sedan");
+    assert.equal(selectedWarburgArrivalState.fields.bookingType, "MNG");
+    assert.equal(selectedWarburgArrivalState.fields.pickupDate, "2026-02-06");
+    assert.equal(selectedWarburgArrivalState.fields.pickupTime, "0730hrs");
+    assert.equal(selectedWarburgArrivalState.fields.flight, "SG423");
+    assert.equal(selectedWarburgArrivalState.fields.pickup, "Changi Airport");
+    assert.match(selectedWarburgArrivalState.fields.dropoff, /The Ritz/);
+    assert.equal(selectedWarburgArrivalState.fields.name, "Mark Colodny");
+    assert.doesNotMatch(selectedWarburgArrivalState.fields.vehicle, /^AVF$/);
+    assert.match(selectedWarburgArrivalState.jobCardPreview, /Sedan MNG/);
+    assert.doesNotMatch(selectedWarburgArrivalState.jobCardPreview, /AVF MNG/);
+    assert.match(selectedWarburgArrivalState.driverDispatch, /Sedan MNG/);
+
+    const selectedWarburgDepartureState = await parseWarburgPreview(1, "SG34");
+    selectedWarburgDepartureState.errors = [
+      ...browserErrors,
+      ...(selectedWarburgDepartureState.errors || []),
+    ];
+    selectedWarburgDepartureState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(selectedWarburgDepartureState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      selectedWarburgDepartureState.errors,
+      [],
+      `Expected no browser runtime errors, got ${selectedWarburgDepartureState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      selectedWarburgDepartureState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${selectedWarburgDepartureState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(selectedWarburgDepartureState.fields.company, "Warburg Pincus");
+    assert.equal(selectedWarburgDepartureState.fields.booker, "Jill Van Cook");
+    assert.equal(selectedWarburgDepartureState.fields.vehicle, "Sedan");
+    assert.equal(selectedWarburgDepartureState.fields.bookingType, "DEP");
+    assert.equal(selectedWarburgDepartureState.fields.pickupDate, "2026-02-06");
+    assert.equal(selectedWarburgDepartureState.fields.pickupTime, "1500hrs");
+    assert.equal(selectedWarburgDepartureState.fields.flight, "SG34");
+    assert.match(selectedWarburgDepartureState.fields.pickup, /The Ritz/);
+    assert.equal(selectedWarburgDepartureState.fields.dropoff, "Changi Airport");
+    assert.equal(selectedWarburgDepartureState.fields.name, "Mark Colodny");
+    assert.doesNotMatch(selectedWarburgDepartureState.fields.vehicle, /^AVF$/);
+    assert.match(selectedWarburgDepartureState.jobCardPreview, /Sedan DEP/);
+    assert.doesNotMatch(selectedWarburgDepartureState.jobCardPreview, /AVF DEP/);
+    assert.match(selectedWarburgDepartureState.driverDispatch, /Sedan DEP/);
 
     const clickedClearBeforeExactPaste = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(

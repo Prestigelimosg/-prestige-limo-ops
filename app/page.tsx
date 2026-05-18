@@ -191,6 +191,9 @@ type ParsedBooking = Partial<BookingForm> & {
   cleanedLines?: string[];
   extractedBookingsPreview?: Array<{
     passenger?: string;
+    company?: string;
+    booker?: string;
+    vehicle?: string;
     date?: string;
     time?: string;
     type?: string;
@@ -206,6 +209,9 @@ type ParsedDebugBooking = BookingForm & {
   cleanedLines?: string[];
   extractedBookingsPreview?: Array<{
     passenger?: string;
+    company?: string;
+    booker?: string;
+    vehicle?: string;
     date?: string;
     time?: string;
     type?: string;
@@ -1768,6 +1774,7 @@ export default function Home() {
       booker: clean(sharedContextSource.booker),
       bookerContact: clean(sharedContextSource.bookerContact),
       bookerEmail: clean(sharedContextSource.bookerEmail),
+      vehicle: clean(sharedContextSource.vehicle),
     };
 
     setBooking((current) => ({
@@ -1776,6 +1783,7 @@ export default function Home() {
       ...(sharedContext.booker ? { booker: sharedContext.booker } : {}),
       ...(sharedContext.bookerContact ? { bookerContact: sharedContext.bookerContact } : {}),
       ...(sharedContext.bookerEmail ? { bookerEmail: sharedContext.bookerEmail } : {}),
+      vehicle: clean(safePreview.vehicle) || sharedContext.vehicle || current.vehicle,
       name: clean(safePreview.passenger),
       bookingType: clean(safePreview.type) || current.bookingType,
       date: clean(safePreview.date),

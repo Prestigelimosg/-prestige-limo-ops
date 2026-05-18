@@ -29,6 +29,18 @@ Pax: 2
 Child seat: 2 booster seat
 Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
+const multiBookingPreviewSample = `Hi William.
+
+Tomorrow:
+1) Mr Deep arriving SQ318 ETA 0610hrs. Send to Fullerton Hotel.
+2) Mr Stanley departure 9pm from Ritz Carlton to T3 taking SQ221.
+3) Need standby AVF for Ms Chloe 1pm-5pm MBS meetings then send back to Capella.
+
+Richard handle Deep.
+Ah Seng handle Stanley.
+
+Booked by Nicole from BNY.
+Thanks.`;
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
 Order total amount	S$130.00
@@ -676,6 +688,116 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertBookingUiState(state);
+
+    const focusedMultiBookingTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedMultiBookingTextarea,
+      true,
+      "Expected booking message textarea to be focused for multi-booking preview sample",
+    );
+
+    await client.send("Input.insertText", { text: multiBookingPreviewSample });
+
+    const filledMultiBookingTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(multiBookingPreviewSample)}`,
+    );
+    assert.equal(
+      filledMultiBookingTextarea,
+      true,
+      "Expected multi-booking preview sample to be filled",
+    );
+
+    const clickedMultiBookingParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedMultiBookingParse, true, "Expected Parse Booking button for multi-booking preview sample");
+
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("Multiple bookings detected. Please select one extracted booking.") &&
+            bodyText.includes("extractedBookingsPreview.length: 3") &&
+            [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Use this booking");
+        })()`),
+      10000,
+      "multi-booking preview choices",
+    );
+
+    const clickedFirstPreviewBooking = await evaluate(`(() => {
+      const previewButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Use this booking",
+      );
+
+      if (!previewButton || previewButton.disabled) {
+        return false;
+      }
+
+      previewButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedFirstPreviewBooking, true, "Expected first extracted booking preview to be selectable");
+
+    const selectedPreviewState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.company === "BNY" &&
+          candidateState?.fields?.booker === "Nicole" &&
+          candidateState?.fields?.flight === "SQ318" &&
+          candidateState?.fields?.dropoff === "Fullerton Hotel"
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "selected multi-booking preview UI state",
+    );
+    selectedPreviewState.errors = [...browserErrors, ...(selectedPreviewState.errors || [])];
+    selectedPreviewState.consoleErrors = [...browserConsoleErrors, ...(selectedPreviewState.consoleErrors || [])];
+
+    assert.deepEqual(
+      selectedPreviewState.errors,
+      [],
+      `Expected no browser runtime errors, got ${selectedPreviewState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      selectedPreviewState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${selectedPreviewState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(selectedPreviewState.fields.company, "BNY");
+    assert.equal(selectedPreviewState.fields.booker, "Nicole");
+    assert.equal(selectedPreviewState.fields.bookingType, "MNG");
+    assert.equal(selectedPreviewState.fields.pickupTime, "0610hrs");
+    assert.equal(selectedPreviewState.fields.flight, "SQ318");
+    assert.equal(selectedPreviewState.fields.pickup, "Changi Airport");
+    assert.equal(selectedPreviewState.fields.dropoff, "Fullerton Hotel");
+    assert.equal(selectedPreviewState.fields.name, "Mr Deep");
+    assert.doesNotMatch(selectedPreviewState.fieldText, /Mr Stanley|Ms Chloe|SQ221|Capella/);
+    assert.doesNotMatch(selectedPreviewState.visibleText, /extractedBookingsPreview\.length|Please review warnings before saving\./);
 
     const clickedClearBeforeExactPaste = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(

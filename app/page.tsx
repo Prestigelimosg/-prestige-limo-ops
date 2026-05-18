@@ -1584,9 +1584,20 @@ export default function Home() {
 
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
     const safePreview = preview ?? {};
+    const sharedContextSource: Partial<BookingForm> = multiBookingNotice ?? parsedDebugBooking ?? {};
+    const sharedContext = {
+      company: clean(sharedContextSource.company),
+      booker: clean(sharedContextSource.booker),
+      bookerContact: clean(sharedContextSource.bookerContact),
+      bookerEmail: clean(sharedContextSource.bookerEmail),
+    };
 
     setBooking((current) => ({
       ...current,
+      ...(sharedContext.company ? { company: sharedContext.company } : {}),
+      ...(sharedContext.booker ? { booker: sharedContext.booker } : {}),
+      ...(sharedContext.bookerContact ? { bookerContact: sharedContext.bookerContact } : {}),
+      ...(sharedContext.bookerEmail ? { bookerEmail: sharedContext.bookerEmail } : {}),
       name: clean(safePreview.passenger),
       bookingType: clean(safePreview.type) || current.bookingType,
       date: clean(safePreview.date),
@@ -1599,7 +1610,11 @@ export default function Home() {
       tone: "success",
       text: "Selected extracted booking. Review before saving.",
     });
+    setParsedDebugBooking(null);
+    setShowParserDebug(false);
     setMultiBookingNotice(null);
+    setAcceptedReviewWarningKey("");
+    setBookingSaveMessage(null);
   }
 
   function updateDefaultCustomerRate(bookingType: keyof Required<RateRules>, value: string) {

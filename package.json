@@ -10,11 +10,12 @@
     "lint": "eslint",
     "test:parser": "node --experimental-strip-types scripts/test-booking-parser.mjs",
     "test:pricing": "node --experimental-strip-types scripts/test-child-seat-pricing.mjs",
+    "test:ai-parser-schema": "node --experimental-strip-types scripts/test-ai-parser-schema.mjs",
     "test:browser": "node scripts/test-booking-browser.mjs",
     "test:app-smoke-browser": "node scripts/test-app-smoke-browser.mjs",
     "test:booking-ui-browser": "node scripts/test-booking-ui-browser.mjs",
     "test:rates-browser": "node scripts/test-rates-browser.mjs",
-    "test:safe": "npm run test:parser && npm run test:pricing && npm run lint && npm run build && npm run test:rates-browser && npm run test:booking-ui-browser && npm run test:app-smoke-browser"
+    "test:safe": "npm run test:parser && npm run test:pricing && npm run test:ai-parser-schema && npm run lint && npm run build && npm run test:rates-browser && npm run test:booking-ui-browser && npm run test:app-smoke-browser"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",

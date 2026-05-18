@@ -286,6 +286,45 @@ const childSeatTypeOptions = [
   "customer did not specify",
 ] as const;
 
+const publicEmailDomains = new Set([
+  "126.com",
+  "163.com",
+  "aol.com",
+  "daum.net",
+  "fastmail.com",
+  "gmail.com",
+  "gmx.com",
+  "gmx.net",
+  "googlemail.com",
+  "hanmail.net",
+  "hey.com",
+  "hotmail.com",
+  "icloud.com",
+  "kakao.com",
+  "live.com",
+  "mac.com",
+  "mail.com",
+  "me.com",
+  "msn.com",
+  "naver.com",
+  "outlook.com",
+  "pm.me",
+  "proton.me",
+  "protonmail.com",
+  "qq.com",
+  "rediffmail.com",
+  "rocketmail.com",
+  "sina.com",
+  "tutanota.com",
+  "tutamail.com",
+  "yahoo.com",
+  "yahoo.com.sg",
+  "yandex.com",
+  "yandex.ru",
+  "ymail.com",
+  "zoho.com",
+]);
+
 const requiredFields: Array<keyof BookingForm> = [
   "date",
   "time",
@@ -621,11 +660,28 @@ function normaliseEmail(value: string) {
   return clean(value).toLowerCase();
 }
 
+function normaliseEmailDomain(value: string | null | undefined) {
+  return clean(value).toLowerCase().replace(/^www\./, "");
+}
+
+function isPublicEmailDomain(value: string | null | undefined) {
+  const domain = normaliseEmailDomain(value);
+
+  return Boolean(domain && publicEmailDomains.has(domain));
+}
+
+function getPublicEmailLocalPart(value: string | null | undefined) {
+  const email = normaliseEmail(value ?? "");
+  const [localPart, domain] = email.split("@");
+
+  return localPart && isPublicEmailDomain(domain) ? localPart : "";
+}
+
 function getEmailDomain(value: string) {
   const email = normaliseEmail(value);
-  const domain = email.split("@")[1];
+  const domain = normaliseEmailDomain(email.split("@")[1]);
 
-  return domain ? domain.replace(/^www\./, "") : "";
+  return isPublicEmailDomain(domain) ? "" : domain;
 }
 
 function isValidEmail(value: string) {
@@ -1111,7 +1167,28 @@ function sortBookingsNewestFirst(bookingRecords: BookingRecord[]) {
 }
 
 function getBookingCompany(bookingRecord: BookingRecord) {
-  return bookingRecord.companies?.company_name || "Unlinked company";
+  return getBookingCompanyName(bookingRecord) || "Unlinked company";
+}
+
+function getBookingCompanyName(bookingRecord: BookingRecord) {
+  const companyName = clean(bookingRecord.companies?.company_name);
+  const companyDomain = clean(bookingRecord.companies?.domain);
+  const publicEmailLocalPart = getPublicEmailLocalPart(bookingRecord.bookers?.email);
+
+  if (
+    isPublicEmailDomain(companyName) ||
+    isPublicEmailDomain(companyDomain) ||
+    companyName.toLowerCase() === "internal account" ||
+    (publicEmailLocalPart && companyName.toLowerCase() === publicEmailLocalPart)
+  ) {
+    return "";
+  }
+
+  return companyName;
+}
+
+function getRecentBookingTitle(bookingRecord: BookingRecord) {
+  return getBookingCompanyName(bookingRecord) || getBookingName(bookingRecord) || getBookerName(bookingRecord) || "Unlinked booking";
 }
 
 function getJobCardName(jobCard: string | null) {
@@ -1190,7 +1267,7 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
 
   return {
     ...createInitialBooking(),
-    company: clean(bookingRecord.companies?.company_name),
+    company: getBookingCompanyName(bookingRecord),
     bookingType: clean(bookingRecord.booking_type) || "MNG",
     vehicle: clean(bookingRecord.vehicle) || "AVF",
     date: getBookingDateKey(bookingRecord),
@@ -4088,7 +4165,7 @@ export default function Home() {
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                           <div className="space-y-1 text-slate-700">
                             <p className="font-semibold text-slate-950">
-                              {getBookingCompany(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                              {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
                             </p>
                             <p>
                               {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}

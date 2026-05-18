@@ -646,5 +646,34 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "freeform-standby-driver-until-return-faisal",
+    "categories": [
+      "freeform standby with driver/standby-until/return destination"
+    ],
+    "referenceDate": "2026-05-13T12:00:00+08:00",
+    "input": "Hi bro, Ah Seng familiar with this guest already.\nTomorrow pls send Mr Faisal from Andaz to Tuas site 2pm\nthen standby till 6pm before sending him back to hotel.",
+    "expected": {
+      "company": "",
+      "bookingType": "DSP",
+      "vehicle": "",
+      "date": "2026-05-14",
+      "time": "1400hrs",
+      "flight": "",
+      "pickup": "Andaz",
+      "dropoff": "Tuas site",
+      "booker": "",
+      "bookerEmail": "",
+      "name": "Mr Faisal",
+      "pax": "1",
+      "driverName": "Ah Seng",
+      "driverContact": "",
+      "standbyUntil": "1800hrs",
+      "returnDestination": "hotel",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

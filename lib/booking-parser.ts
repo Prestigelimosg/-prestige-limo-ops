@@ -1797,10 +1797,19 @@ function detectRoute(text: string, flight = "") {
     : cleanLocation(structuredDropoff);
 
   if (pickup || dropoff) {
+    const dropoffOnlyAirportTransferArrival =
+      !pickup &&
+      dropoff &&
+      Boolean(flight) &&
+      /\bAIRPORT\s+TRANSFER\b/i.test(text) &&
+      /\bROUTE\s+NAME\s+AIRPORT\b/i.test(text) &&
+      !/\bPICK\s*UP\s+LOCATION\b/i.test(text);
+
     if (
       !pickup &&
       dropoff &&
-      /\bARRIV(?:AL|ING|ES?)\b|\bETA\b|\bLANDING\b|\bFLIGHT\s+ARRIVES?\b|\bMNG\b|\bAIRPORT\s+PICK\s*UP\b|\bAIRPORT\s+P\/U\b|\bPICK\s*UP\s+FROM\s+AIRPORT\b/i.test(text)
+      (/\bARRIV(?:AL|ING|ES?)\b|\bETA\b|\bLANDING\b|\bFLIGHT\s+ARRIVES?\b|\bMNG\b|\bAIRPORT\s+PICK\s*UP\b|\bAIRPORT\s+P\/U\b|\bPICK\s*UP\s+FROM\s+AIRPORT\b/i.test(text) ||
+        dropoffOnlyAirportTransferArrival)
     ) {
       return { pickup: airportLocationFromText(text), dropoff };
     }

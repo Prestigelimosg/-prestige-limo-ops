@@ -881,5 +881,34 @@
       "childSeatType": "baby seat",
       "customerPriceOverride": ""
     }
+  },
+  {
+    "id": "structured-airport-route-name-airport-dropoff-only-baonline",
+    "categories": [
+      "structured airport arrival form",
+      "organization email domain company inference",
+      "vehicle mapping AVF / VVV / Combi / E class / S class",
+      "phone/mobile/contact/tel labels"
+    ],
+    "input": "Status\tCompleted (finished)\nService type\tAirport transfer\nTransfer type\tOne Way\nPickup date and time\t30-04-2026 15:30\nOrder total amount\tS$95.00\nTaxes\tS$0.00 (0%)\nDistance\t46.8 km\nDuration\t53 minutes\nROUTE\nRoute name\tAirport \nROUTE LOCATIONS\nDROP OFF LOCATION\n333 Orchard Rd, Singapore 238867\nVEHICLE\nVehicle name\tMercedes Benz E-class\nBag count\t2\nPassengers count\t3\nCLIENT DETAILS\nFirst name\tPeter\nLast name\tDynan\nE-mail address\tpj@baonline.com.au\nPhone number\t+61419501117\nPassangers\t1\nFlight No.\tSQ238",
+    "expected": {
+      "company": "BAONLINE",
+      "booker": "pj",
+      "bookerEmail": "pj@baonline.com.au",
+      "bookerContact": "+61419501117",
+      "bookingType": "MNG",
+      "vehicle": "E class",
+      "date": "2026-04-30",
+      "time": "1530hrs",
+      "flight": "SQ238",
+      "pickup": "Changi Airport",
+      "dropoff": "333 Orchard Rd, Singapore 238867",
+      "name": "Peter Dynan",
+      "pax": "1",
+      "customerPriceOverride": "95",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

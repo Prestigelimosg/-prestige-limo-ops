@@ -92,6 +92,30 @@ E-mail address	luthergrahambk@gmail.com
 Phone number	+6580912613
 Passangers	2
 Flight No.	TR 288`;
+const routeNameAirportDropoffOnlySample = `Status	Completed (finished)
+Service type	Airport transfer
+Transfer type	One Way
+Pickup date and time	30-04-2026 15:30
+Order total amount	S$95.00
+Taxes	S$0.00 (0%)
+Distance	46.8 km
+Duration	53 minutes
+ROUTE
+Route name	Airport 
+ROUTE LOCATIONS
+DROP OFF LOCATION
+333 Orchard Rd, Singapore 238867
+VEHICLE
+Vehicle name	Mercedes Benz E-class
+Bag count	2
+Passengers count	3
+CLIENT DETAILS
+First name	Peter
+Last name	Dynan
+E-mail address	pj@baonline.com.au
+Phone number	+61419501117
+Passangers	1
+Flight No.	SQ238`;
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
 const timedScheduleItinerarySample = `Hi William, please arrange a car for Drew tomorrow, schedule as follow:
@@ -990,6 +1014,100 @@ async function runChromeTest() {
     assert.equal(exactDepartureState.fields.extraStopCount, "1");
     assert.equal(exactDepartureState.fields.extraStopLocation, "351C Canberra Rd, Singapore 753351");
     assert.equal(exactDepartureState.fields.customerPriceOverride, "110");
+
+    const focusedRouteNameAirportTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedRouteNameAirportTextarea,
+      true,
+      "Expected booking message textarea to be focused for route-name Airport drop-off-only sample",
+    );
+
+    await client.send("Input.insertText", { text: routeNameAirportDropoffOnlySample });
+
+    const filledRouteNameAirportTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(routeNameAirportDropoffOnlySample)}`,
+    );
+    assert.equal(
+      filledRouteNameAirportTextarea,
+      true,
+      "Expected route-name Airport drop-off-only booking message textarea to be filled",
+    );
+
+    const clickedRouteNameAirportParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedRouteNameAirportParse,
+      true,
+      "Expected Parse Booking button to parse route-name Airport drop-off-only sample",
+    );
+
+    const routeNameAirportState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.bookingType === "MNG" &&
+          candidateState?.fields?.flight === "SQ238" &&
+          candidateState?.fields?.pickup === "Changi Airport"
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed route-name Airport drop-off-only UI state",
+    );
+    routeNameAirportState.errors = [...browserErrors, ...(routeNameAirportState.errors || [])];
+    routeNameAirportState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(routeNameAirportState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      routeNameAirportState.errors,
+      [],
+      `Expected no browser runtime errors, got ${routeNameAirportState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      routeNameAirportState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${routeNameAirportState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(routeNameAirportState.fields.company, "BAONLINE");
+    assert.equal(routeNameAirportState.fields.booker, "pj");
+    assert.equal(routeNameAirportState.fields.bookerContact, "+61419501117");
+    assert.equal(routeNameAirportState.fields.bookerEmail, "pj@baonline.com.au");
+    assert.equal(routeNameAirportState.fields.bookingType, "MNG");
+    assert.equal(routeNameAirportState.fields.vehicle, "E class");
+    assert.equal(routeNameAirportState.fields.pickupDate, "2026-04-30");
+    assert.equal(routeNameAirportState.fields.pickupTime, "1530hrs");
+    assert.equal(routeNameAirportState.fields.flight, "SQ238");
+    assert.equal(routeNameAirportState.fields.pickup, "Changi Airport");
+    assert.equal(routeNameAirportState.fields.dropoff, "333 Orchard Rd, Singapore 238867");
+    assert.equal(routeNameAirportState.fields.name, "Peter Dynan");
+    assert.equal(routeNameAirportState.fields.pax, "1");
+    assert.equal(routeNameAirportState.fields.customerPriceOverride, "95");
+    assert.doesNotMatch(routeNameAirportState.visibleText, /Missing pickup/);
 
     const focusedDspTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

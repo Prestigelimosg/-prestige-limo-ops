@@ -116,6 +116,33 @@ E-mail address	pj@baonline.com.au
 Phone number	+61419501117
 Passangers	1
 Flight No.	SQ238`;
+const routeNameAirportPickupOnlyDepartureWaypointSample = `Transfer type	One Way
+Pickup date and time	30-04-2026 4:20
+Order total amount	S$160.00
+Taxes	S$0.00 (0%)
+Distance	13.4 km
+Duration	23 minutes
+ROUTE
+Route name	Airport 
+ROUTE LOCATIONS
+405 Sin Ming Avenue, Singapore 405 Sin Ming Ave, Singapore 570405
+Bedok South Avenue 2, Block 10B HDB Bedok South, Singapore 10B Bedok S Ave 2, Block 10B, Singapore 461010
+PICK UP LOCATION
+160 Watten Estate Rd, Singapore 287610
+VEHICLE
+Vehicle name	Toyota Alphard 2.5
+Bag count	3
+Passengers count	4
+EXTRA
+1 x Waypoint 2 - S$50.00
+1 x Midnight surcharges - S$15.00
+CLIENT DETAILS
+First name	Luther
+Last name	Graham
+E-mail address	luthergrahambk@gmail.com
+Phone number	+6580912613
+Passangers	3
+Flight No.	SQ265`;
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
 const timedScheduleItinerarySample = `Hi William, please arrange a car for Drew tomorrow, schedule as follow:
@@ -1108,6 +1135,112 @@ async function runChromeTest() {
     assert.equal(routeNameAirportState.fields.pax, "1");
     assert.equal(routeNameAirportState.fields.customerPriceOverride, "95");
     assert.doesNotMatch(routeNameAirportState.visibleText, /Missing pickup/);
+
+    const focusedRouteNameAirportDepartureTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedRouteNameAirportDepartureTextarea,
+      true,
+      "Expected booking message textarea to be focused for route-name Airport pickup-only departure sample",
+    );
+
+    await client.send("Input.insertText", { text: routeNameAirportPickupOnlyDepartureWaypointSample });
+
+    const filledRouteNameAirportDepartureTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(routeNameAirportPickupOnlyDepartureWaypointSample)}`,
+    );
+    assert.equal(
+      filledRouteNameAirportDepartureTextarea,
+      true,
+      "Expected route-name Airport pickup-only departure booking message textarea to be filled",
+    );
+
+    const clickedRouteNameAirportDepartureParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedRouteNameAirportDepartureParse,
+      true,
+      "Expected Parse Booking button to parse route-name Airport pickup-only departure sample",
+    );
+
+    const routeNameAirportDepartureState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.bookingType === "DEP" &&
+          candidateState?.fields?.flight === "SQ265" &&
+          candidateState?.fields?.dropoff === "Changi Airport" &&
+          candidateState?.fields?.extraStopCount === "2" &&
+          candidateState?.jobCardPreview?.includes("Bedok South")
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed route-name Airport pickup-only departure UI state",
+    );
+    routeNameAirportDepartureState.errors = [
+      ...browserErrors,
+      ...(routeNameAirportDepartureState.errors || []),
+    ];
+    routeNameAirportDepartureState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(routeNameAirportDepartureState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      routeNameAirportDepartureState.errors,
+      [],
+      `Expected no browser runtime errors, got ${routeNameAirportDepartureState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      routeNameAirportDepartureState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${routeNameAirportDepartureState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(routeNameAirportDepartureState.fields.company, "");
+    assert.equal(routeNameAirportDepartureState.fields.bookingType, "DEP");
+    assert.equal(routeNameAirportDepartureState.fields.vehicle, "AVF");
+    assert.equal(routeNameAirportDepartureState.fields.pickupDate, "2026-04-30");
+    assert.equal(routeNameAirportDepartureState.fields.pickupTime, "0420hrs");
+    assert.equal(routeNameAirportDepartureState.fields.flight, "SQ265");
+    assert.equal(routeNameAirportDepartureState.fields.pickup, "160 Watten Estate Rd, Singapore 287610");
+    assert.equal(routeNameAirportDepartureState.fields.dropoff, "Changi Airport");
+    assert.equal(routeNameAirportDepartureState.fields.name, "Luther Graham");
+    assert.equal(routeNameAirportDepartureState.fields.pax, "3");
+    assert.equal(routeNameAirportDepartureState.fields.extraStopCount, "2");
+    assert.match(routeNameAirportDepartureState.fields.extraStopLocation, /Sin Ming/);
+    assert.match(routeNameAirportDepartureState.fields.extraStopLocation, /Bedok South/);
+    assert.equal(routeNameAirportDepartureState.fields.customerPriceOverride, "160");
+    assert.match(
+      routeNameAirportDepartureState.jobCardPreview,
+      /Watten Estate Rd > Sin Ming Ave > Bedok South Avenue 2 > Changi Airport/,
+    );
+    assert.match(routeNameAirportDepartureState.driverDispatch, /Watten Estate Rd/);
+    assert.match(routeNameAirportDepartureState.driverDispatch, /Sin Ming Ave/);
+    assert.match(routeNameAirportDepartureState.driverDispatch, /Bedok South/);
+    assert.match(routeNameAirportDepartureState.driverDispatch, /Changi Airport/);
 
     const focusedDspTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

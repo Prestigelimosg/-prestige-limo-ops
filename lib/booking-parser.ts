@@ -1076,6 +1076,9 @@ function detectExtraStopDetails(text: string) {
     /\b(?:via|stopover\s+at)\s+(.+?)(?=\.|,|\n|$)/i,
   ]));
   const extraStopLocation = structuredRouteLocation || labeledExtraStop || narratedExtraStop;
+  const structuredRouteLocationCount = structuredRouteLocation
+    ? structuredRouteLocation.split(/\s*>\s*/g).filter(Boolean).length
+    : 0;
   const explicitCount = firstMatch(text, [
     /\b(\d{1,2})[ \t]+extra[ \t]+stops?\b/i,
     /\bextra[ \t]+stops?[ \t]*[:=-][ \t]*(\d{1,2})\b/i,
@@ -1083,7 +1086,7 @@ function detectExtraStopDetails(text: string) {
   ]);
 
   return {
-    extraStopCount: explicitCount || (extraStopLocation ? "1" : ""),
+    extraStopCount: structuredRouteLocationCount ? String(structuredRouteLocationCount) : explicitCount || (extraStopLocation ? "1" : ""),
     extraStopLocation,
   };
 }
@@ -1811,6 +1814,13 @@ function detectRoute(text: string, flight = "") {
       /\bAIRPORT\s+TRANSFER\b/i.test(text) &&
       /\bROUTE\s+NAME\s+AIRPORT\b/i.test(text) &&
       !/\bPICK\s*UP\s+LOCATION\b/i.test(text);
+    const pickupOnlyAirportRouteDeparture =
+      pickup &&
+      !dropoff &&
+      Boolean(flight) &&
+      /\bROUTE\s+NAME\s+AIRPORT\b/i.test(text) &&
+      /\bPICK\s*UP\s+LOCATION\b/i.test(text) &&
+      !/\bDROP\s*OFF\s+LOCATION\b/i.test(text);
 
     if (
       !pickup &&
@@ -1821,7 +1831,7 @@ function detectRoute(text: string, flight = "") {
       return { pickup: airportLocationFromText(text), dropoff };
     }
 
-    if (pickup && !dropoff && /\bairport\s+departure\b/i.test(text)) {
+    if (pickup && !dropoff && (/\bairport\s+departure\b/i.test(text) || pickupOnlyAirportRouteDeparture)) {
       return { pickup, dropoff: airportLocationFromText(text) };
     }
 

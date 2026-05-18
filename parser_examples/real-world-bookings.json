@@ -931,5 +931,33 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "structured-airport-route-name-airport-pickup-only-gmail-departure",
+    "categories": [
+      "structured airport departure form",
+      "structured departure waypoint form",
+      "public email domains ignored",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Transfer type\tOne Way\nPickup date and time\t30-04-2026 4:20\nOrder total amount\tS$160.00\nTaxes\tS$0.00 (0%)\nDistance\t13.4 km\nDuration\t23 minutes\nROUTE\nRoute name\tAirport \nROUTE LOCATIONS\n405 Sin Ming Avenue, Singapore 405 Sin Ming Ave, Singapore 570405\nBedok South Avenue 2, Block 10B HDB Bedok South, Singapore 10B Bedok S Ave 2, Block 10B, Singapore 461010\nPICK UP LOCATION\n160 Watten Estate Rd, Singapore 287610\nVEHICLE\nVehicle name\tToyota Alphard 2.5\nBag count\t3\nPassengers count\t4\nEXTRA\n1 x Waypoint 2 - S$50.00\n1 x Midnight surcharges - S$15.00\nCLIENT DETAILS\nFirst name\tLuther\nLast name\tGraham\nE-mail address\tluthergrahambk@gmail.com\nPhone number\t+6580912613\nPassangers\t3\nFlight No.\tSQ265",
+    "expected": {
+      "company": "",
+      "bookerEmail": "luthergrahambk@gmail.com",
+      "bookerContact": "+6580912613",
+      "bookingType": "DEP",
+      "vehicle": "AVF",
+      "date": "2026-04-30",
+      "time": "0420hrs",
+      "flight": "SQ265",
+      "pickup": "160 Watten Estate Rd, Singapore 287610",
+      "dropoff": "Changi Airport",
+      "name": "Luther Graham",
+      "pax": "3",
+      "extraStopCount": "2",
+      "extraStopLocation": "405 Sin Ming Ave, Singapore 570405 > Bedok South Avenue 2, Block 10B HDB Bedok South, Singapore 10B Bedok S Ave 2, Block 10B, Singapore 461010",
+      "childSeatRequired": "",
+      "customerPriceOverride": "160"
+    }
   }
 ]

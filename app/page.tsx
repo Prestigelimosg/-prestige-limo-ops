@@ -590,11 +590,15 @@ function formatPrivacySafeRoute(
     return [pickup, "Multi-stop itinerary hidden for privacy", dropoff].filter(Boolean).join(" > ");
   }
 
-  const extraStop = clean(bookingValue.extraStopLocation)
-    ? formatPrivacySafePlace(bookingValue.extraStopLocation, "Extra stop")
-    : "";
+  const extraStopParts = clean(bookingValue.extraStopLocation)
+    .split(/\s*>\s*/g)
+    .map((stop) => formatPrivacySafePlace(stop, "Extra stop"))
+    .filter((stop) => stop && stop !== "Extra stop");
+  const extraStops = clean(bookingValue.bookingType).toUpperCase() === "DSP"
+    ? extraStopParts.slice(0, 1)
+    : extraStopParts;
 
-  return [pickup, extraStop, dropoff].filter(Boolean).join(" > ");
+  return [pickup, ...extraStops, dropoff].filter(Boolean).join(" > ");
 }
 
 function hasParsedValue(value: unknown) {

@@ -1923,6 +1923,10 @@ export default function Home() {
       text: `Parsed ${detectedFields} field${detectedFields === 1 ? "" : "s"}. Review before saving.`,
     });
 
+    if (getNeedsReviewWarnings(finalForm).length > 0) {
+      return;
+    }
+
     const nameMemory = await lookupNameMemory(parsedBooking.name || "");
 
     if (nameMemory) {
@@ -2749,8 +2753,6 @@ export default function Home() {
   }
 
   async function saveBooking() {
-    setBookingSaveMessage(null);
-
     const currentNeedsReviewWarnings = getNeedsReviewWarnings(booking);
     const currentReviewAcceptanceKey = getReviewAcceptanceKey(booking, currentNeedsReviewWarnings);
 
@@ -2767,6 +2769,8 @@ export default function Home() {
       setBookingSaveMessage(reviewMessage);
       return;
     }
+
+    setBookingSaveMessage(null);
 
     if (!validateBooking()) {
       return;

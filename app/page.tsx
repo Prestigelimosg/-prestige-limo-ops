@@ -378,7 +378,7 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   booker: "Booker",
   bookerContact: "Booker WhatsApp / Contact",
   bookerEmail: "Booker email (optional)",
-  name: "Name",
+  name: "Passenger name",
   pax: "Pax",
   childSeatRequired: "Child seat required",
   childSeatCount: "Child seat count",
@@ -633,11 +633,8 @@ function formatPrivacySafeRoute(
     .split(/\s*>\s*/g)
     .map((stop) => formatPrivacySafePlace(stop, "Extra stop"))
     .filter((stop) => stop && stop !== "Extra stop");
-  const extraStops = clean(bookingValue.bookingType).toUpperCase() === "DSP"
-    ? extraStopParts.slice(0, 1)
-    : extraStopParts;
 
-  return [pickup, ...extraStops, dropoff].filter(Boolean).join(" > ");
+  return [pickup, ...extraStopParts, dropoff].filter(Boolean).join(" > ");
 }
 
 function hasParsedValue(value: unknown) {
@@ -775,7 +772,9 @@ function mergeParsedBookingIntoForm(
     booker:
       clean(mergedBooking.booker) ||
       clean(currentBooking.booker) ||
-      (!clean(mergedBooking.company) && parsedName ? parsedName : ""),
+      (!clean(mergedBooking.company) && parsedName && clean(mergedBooking.bookingType).toUpperCase() !== "DSP"
+        ? parsedName
+        : ""),
     name: parsedName,
   };
 }

@@ -145,6 +145,22 @@ Passangers	3
 Flight No.	SQ265`;
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
+const numberedEventDspItinerarySample = `@Fikeri A40 7941
+
+Mr. Wong is the events organiser, pls follow his instructions attentively 
+
+1130hrs, pickup Mr. Wong from Carlton City then proceed following locations below:  
+
+
+[Dresscode] - Businees w. Jacket no tie
+[Driver] - Black Alphard - Plate: TBC
+1. [SSW Driver]Depart capella residence suite A@11:30AM //Arrive Cherry Garden@11:50AM
+2. [12-12:30PM]王炎平 Catch up 
+3. [SSW Driver]Depart Cherry Garden@1:30PM//Arrive Suntec Expo@1:45PM
+4. [1:45-2PM]MPA Interview Meeting - Prompt question & answer to be shared. 
+5. [2:15-3PM]MPA Panelist - Speaker
+6. [SSW Driver]Depart Suntec Expo@3PM//Arrive UIC Building@3:15PM
+7. [3:30-4:30PM]MOL Bulk Meeting`;
 const timedScheduleItinerarySample = `Hi William, please arrange a car for Drew tomorrow, schedule as follow:
 9:30am 1 HarbourFront Avenue, #02-01 Keppel Bay Tower;
 11am One Raffles Quay, #39-01 North Tower;
@@ -680,7 +696,7 @@ async function runChromeTest() {
         booker: fieldValue("Booker"),
         bookerContact: fieldValue("Booker WhatsApp / Contact"),
         bookerEmail: fieldValue("Booker email (optional)"),
-        name: fieldValue("Name"),
+        name: fieldValue("Passenger name") || fieldValue("Name"),
         pax: fieldValue("Pax"),
         childSeatCount: fieldValue("Child seat count"),
         childSeatType: fieldValue("Child seat type / note"),
@@ -1322,6 +1338,113 @@ async function runChromeTest() {
       "Expected final Ritz-Carlton to appear once in the driver itinerary",
     );
 
+    const focusedNumberedEventDspTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedNumberedEventDspTextarea,
+      true,
+      "Expected booking message textarea to be focused for numbered event DSP sample",
+    );
+
+    await client.send("Input.insertText", { text: numberedEventDspItinerarySample });
+
+    const filledNumberedEventDspTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(numberedEventDspItinerarySample)}`,
+    );
+    assert.equal(
+      filledNumberedEventDspTextarea,
+      true,
+      "Expected numbered event DSP booking message textarea to be filled",
+    );
+
+    const clickedNumberedEventDspParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Parse Booking",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedNumberedEventDspParse,
+      true,
+      "Expected Parse Booking button to parse numbered event DSP sample",
+    );
+
+    const numberedEventDspState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.bookingType === "DSP" &&
+          candidateState?.fields?.pickup === "Carlton City" &&
+          candidateState?.fields?.dropoff === "UIC Building" &&
+          candidateState?.fields?.extraStopLocation?.includes("Cherry Garden") &&
+          candidateState?.jobCardPreview?.includes("Cherry Garden") &&
+          candidateState?.jobCardPreview?.includes("Suntec Expo")
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed numbered event DSP itinerary UI state",
+    );
+    numberedEventDspState.errors = [...browserErrors, ...(numberedEventDspState.errors || [])];
+    numberedEventDspState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(numberedEventDspState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      numberedEventDspState.errors,
+      [],
+      `Expected no browser runtime errors, got ${numberedEventDspState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      numberedEventDspState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${numberedEventDspState.consoleErrors.join("\n")}`,
+    );
+    assert.match(numberedEventDspState.visibleText, /Passenger name/);
+    assert.equal(numberedEventDspState.fields.bookingType, "DSP");
+    assert.equal(numberedEventDspState.fields.pickupTime, "1130hrs");
+    assert.equal(numberedEventDspState.fields.pickup, "Carlton City");
+    assert.equal(numberedEventDspState.fields.dropoff, "UIC Building");
+    assert.equal(numberedEventDspState.fields.name, "Mr Wong");
+    assert.equal(numberedEventDspState.fields.booker, "");
+    assert.equal(numberedEventDspState.fields.vehicle, "AVF");
+    assert.equal(numberedEventDspState.fields.flight, "");
+    assert.equal(numberedEventDspState.fields.extraStopCount, "3");
+    assert.equal(
+      numberedEventDspState.fields.extraStopLocation,
+      "Capella Residence Suite A > Cherry Garden > Suntec Expo",
+    );
+    assert.doesNotMatch(numberedEventDspState.fieldText, /Black Alphard|Plate/);
+    assert.doesNotMatch(numberedEventDspState.fieldText, /Changi Airport/);
+    assert.match(
+      numberedEventDspState.jobCardPreview,
+      /Carlton City > Capella Residence Suite A > Cherry Garden > Suntec Expo > UIC Building/,
+    );
+    assert.match(
+      numberedEventDspState.driverDispatch,
+      /Carlton City > Capella Residence Suite A > Cherry Garden > Suntec Expo > UIC Building/,
+    );
+    assert.doesNotMatch(numberedEventDspState.visibleText, /Multiple bookings detected/);
+
     const focusedTimedScheduleTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
       if (!textarea) {
@@ -1406,9 +1529,9 @@ async function runChromeTest() {
     );
     assert.match(
       timedScheduleState.jobCardPreview,
-      /HarbourFront Avenue > One Raffles Quay > BDC office/,
+      /HarbourFront Avenue > One Raffles Quay > Capital Tower > BDC office/,
     );
-    assert.doesNotMatch(timedScheduleState.jobCardPreview, /#02-01|#39-01|North Tower|Capital Tower/);
+    assert.doesNotMatch(timedScheduleState.jobCardPreview, /#02-01|#39-01|North Tower/);
     assert.match(
       timedScheduleState.driverDispatch,
       /1 HarbourFront Avenue, Keppel Bay Tower > One Raffles Quay, North Tower > Capital Tower > BDC office/,

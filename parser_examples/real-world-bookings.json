@@ -959,5 +959,29 @@
       "childSeatRequired": "",
       "customerPriceOverride": "160"
     }
+  },
+  {
+    "id": "freeform-dsp-event-itinerary-numbered-route-lines",
+    "categories": [
+      "DSP multi-stop",
+      "structured event / hourly / DSP standby",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "@Fikeri A40 7941\n\nMr. Wong is the events organiser, pls follow his instructions attentively \n\n1130hrs, pickup Mr. Wong from Carlton City then proceed following locations below:  \n\n\n[Dresscode] - Businees w. Jacket no tie\n[Driver] - Black Alphard - Plate: TBC\n1. [SSW Driver]Depart capella residence suite A@11:30AM //Arrive Cherry Garden@11:50AM\n2. [12-12:30PM]王炎平 Catch up \n3. [SSW Driver]Depart Cherry Garden@1:30PM//Arrive Suntec Expo@1:45PM\n4. [1:45-2PM]MPA Interview Meeting - Prompt question & answer to be shared. \n5. [2:15-3PM]MPA Panelist - Speaker\n6. [SSW Driver]Depart Suntec Expo@3PM//Arrive UIC Building@3:15PM\n7. [3:30-4:30PM]MOL Bulk Meeting",
+    "expected": {
+      "multipleBookingsDetected": "",
+      "bookingType": "DSP",
+      "vehicle": "AVF",
+      "date": "",
+      "time": "1130hrs",
+      "flight": "",
+      "pickup": "Carlton City",
+      "dropoff": "UIC Building",
+      "booker": "",
+      "name": "Mr Wong",
+      "extraStopCount": "3",
+      "extraStopLocation": "Capella Residence Suite A > Cherry Garden > Suntec Expo",
+      "childSeatRequired": ""
+    }
   }
 ]

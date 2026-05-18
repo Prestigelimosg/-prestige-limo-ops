@@ -200,6 +200,7 @@ type ParsedBooking = Partial<BookingForm> & {
     flight?: string;
     pickup?: string;
     dropoff?: string;
+    pax?: string;
   }>;
   parserWarning?: string;
   multipleBookingsDetected?: boolean;
@@ -218,6 +219,7 @@ type ParsedDebugBooking = BookingForm & {
     flight?: string;
     pickup?: string;
     dropoff?: string;
+    pax?: string;
   }>;
   parserWarning?: string;
   multipleBookingsDetected?: boolean;
@@ -1791,6 +1793,7 @@ export default function Home() {
       flight: clean(safePreview.flight),
       pickup: clean(safePreview.pickup),
       dropoff: clean(safePreview.dropoff),
+      pax: clean(safePreview.pax) || current.pax,
     }));
     setMessage({
       tone: "success",

@@ -395,7 +395,11 @@ function detectMultipleBookings(text: string, cleanedLines: string[]) {
     return false;
   }
 
-  return listItems.length > 1 || flights.length > 1 || namedPassengers.length > 1 || multiLegAirportStandby;
+  return hasCrewTransferRequestSections(text) ||
+    listItems.length > 1 ||
+    flights.length > 1 ||
+    namedPassengers.length > 1 ||
+    multiLegAirportStandby;
 }
 
 function buildAirportStandbyPreview(text: string, referenceDate: Date) {
@@ -509,10 +513,41 @@ function splitPotentialBookings(text: string, cleanedLines: string[]) {
 
 function detectSignatureBooker(text: string) {
   const signatureName = firstMatch(text, [
-    /\b(?:thank\s+you|thanks|regards|best),?\s*\n+\s*([A-Z][A-Za-z.' -]{2,60})(?=\n|$)/i,
+    /\b(?:thank\s+you|thanks(?:\s+and\s+regards)?|regards|best),?\s*\n+\s*([A-Z][A-Za-z.' -]{2,60})(?=\n|$)/i,
   ]);
 
   return looksLikePersonName(signatureName) ? cleanDetectedName(signatureName) : "";
+}
+
+function splitCrewTransferRequestSections(text: string) {
+  const sectionMatches = Array.from(text.matchAll(/(?:^|\n)\s*For\s+([^:\n]+):\s*/gi));
+
+  if (sectionMatches.length < 2) {
+    return [];
+  }
+
+  return sectionMatches
+    .map((match, index) => {
+      const nextMatch = sectionMatches[index + 1];
+      const segment = text.slice(match.index ?? 0, nextMatch?.index ?? text.length);
+
+      return clean(segment);
+    })
+    .filter((segment) =>
+      /\bcrew\s+name\s*(?:\([^)]+\))?\s*:/i.test(segment) &&
+      /\bnumber\s+of\s+crew\s*:/i.test(segment) &&
+      /\bpick\s*up\s*time\s*:/i.test(segment),
+    );
+}
+
+function hasCrewTransferRequestSections(text: string) {
+  return splitCrewTransferRequestSections(text).length > 1;
+}
+
+function normalizeCrewCount(value: string) {
+  const count = Number(firstMatch(value, [/\b0*(\d{1,2})\b/]));
+
+  return Number.isFinite(count) && count > 0 ? String(count) : "";
 }
 
 function normalizeParenthesizedAddress(value: string) {
@@ -525,7 +560,8 @@ function normalizeParenthesizedAddress(value: string) {
 }
 
 function detectSharedTransferRequestContext(text: string) {
-  const company = cleanCompanyAccount(lineValue(text, ["company", "client", "account"]));
+  const email = firstMatch(text, [/\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i]);
+  const company = cleanCompanyAccount(lineValue(text, ["company", "client", "account"])) || getEmailDomain(email);
   const passenger = detectName(text, "") || cleanDetectedName(lineValue(text, ["passenger", "passenger name"]));
   const booker = detectBookerValue(text, { booker: "", company }) || detectSignatureBooker(text);
   const vehicle = cleanVehicle(lineValue(text, ["vehicle type", "vehicle", "car", "vehicle name"])) || detectVehicle(text);
@@ -536,6 +572,42 @@ function detectSharedTransferRequestContext(text: string) {
     booker,
     vehicle,
   };
+}
+
+function buildCrewTransferRequestPreview(text: string, referenceDate: Date) {
+  const crewSections = splitCrewTransferRequestSections(text);
+
+  if (crewSections.length < 2) {
+    return [];
+  }
+
+  const sharedContext = detectSharedTransferRequestContext(text);
+
+  return crewSections.map((section) => {
+    const pickupTimeText = lineValue(section, ["pick up time", "pickup time", "p/u time", "pu time", "time"]);
+    const rawRoute = detectRoute(section, "");
+    const passenger = clean(lineValue(section, ["crew name (s)", "crew name(s)", "crew names", "crew name"]));
+    const pax = normalizeCrewCount(lineValue(section, ["number of crew", "crew count"]));
+    const vehicle = cleanVehicle(lineValue(section, ["vehicle type", "vehicle", "car", "vehicle name"])) ||
+      detectVehicle(section) ||
+      sharedContext.vehicle;
+    const rawTime = parseTimeFromText(pickupTimeText || section);
+    const type = detectBookingType(section, "", rawRoute) || "TRF";
+
+    return {
+      passenger,
+      company: sharedContext.company,
+      booker: sharedContext.booker,
+      vehicle,
+      date: parseDateFromText(pickupTimeText || section, referenceDate),
+      time: formatTimeForState(rawTime) || rawTime,
+      type,
+      flight: "",
+      pickup: rawRoute.pickup,
+      dropoff: rawRoute.dropoff,
+      ...(pax ? { pax } : {}),
+    };
+  });
 }
 
 function buildSeparatedTransferRequestPreview(text: string, referenceDate: Date) {
@@ -603,9 +675,14 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
   const hasExplicitList = cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line)).length > 1;
   const hasMultipleFlights = detectAllFlights(text).length > 1;
   const airportStandbyPreview = hasExplicitList || hasMultipleFlights ? [] : buildAirportStandbyPreview(text, referenceDate);
+  const crewTransferPreview = buildCrewTransferRequestPreview(text, referenceDate);
   const separatedTransferPreview = buildSeparatedTransferRequestPreview(text, referenceDate);
   const contextDate = parseDateFromText(text, referenceDate);
   const sharedArrivalDropoff = detectSharedArrivalDropoff(text);
+
+  if (crewTransferPreview.length > 0) {
+    return crewTransferPreview;
+  }
 
   if (separatedTransferPreview.length > 0) {
     return separatedTransferPreview;
@@ -1044,11 +1121,15 @@ function parseTimeFromText(text: string) {
   const labeledDateTime = firstMatch(text, [
     /\bpickup\s+date\s+and\s+time(?:\s*[:=-]\s*|\s+)\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\s+(\d{1,2}:\d{2}\s*(?:am|pm|hrs?)?)/i,
   ]);
+  const labeledDatePipeTime = firstMatch(text, [
+    /\b(?:pick\s*up|pickup)\s+time\s*[:=-]?\s*(?:\d{1,2}\s+[A-Za-z]{3,9}\s*\|\s*)?((?:[01]\d|2[0-3])[0-5]\d)\s*(?:LT|SGT|hrs?)?\b/i,
+  ]);
   const labeledTime = firstMatch(text, [
     /\b(?:pickup\s*time|time|p\/u\s*time|pu\s*time|eta)\s*[:=-]?\s*(\d{1,2}(?:(?::|\.)?\d{2})?\s*(?:am|pm|hrs?)?)/i,
   ]);
   const rawTime =
     labeledDateTime ||
+    labeledDatePipeTime ||
     labeledTime ||
     firstMatch(text, [
       /\b(\d{1,2}[.:]\d{2}\s*(?:am|pm))\b/i,
@@ -1056,6 +1137,8 @@ function parseTimeFromText(text: string) {
       /\b((?:[01]?\d|2[0-3]):[0-5]\d)\b/i,
       /\b[A-Z]{2}\s?\d{1,4}\s+((?:[01]\d|2[0-3])[0-5]\d)\b/i,
       /\b((?:[01]\d|2[0-3])[0-5]\d)\s+[A-Z]{2}\s?\d{1,4}\b/i,
+      /\|\s*((?:[01]\d|2[0-3])[0-5]\d)\s*(?:LT|SGT|hrs?)?\b/i,
+      /\b((?:[01]\d|2[0-3])[0-5]\d)\s*(?:LT|SGT)\b/i,
       /\b((?:[01]\d|2[0-3])[0-5]\d)\s+(?=[A-Za-z].*?(?:>|->|=>))/i,
       /\b((?:[01]\d|2[0-3])[0-5]\d)\s+(?=from\b|to\b|at\b)/i,
       /\b((?:[01]?\d|2[0-3])[ .]?[0-5]\d)\s*(?:hrs?|hours?)\b/i,
@@ -1893,6 +1976,12 @@ function isConversationalRouteText(text: string) {
   );
 }
 
+function isPrivateJetAirportLocation(value: string) {
+  const location = clean(value);
+
+  return /\b(?:seletar|wssl|jet\s+av(?:ia|ai)ation|fbo)\b/i.test(location);
+}
+
 function detectBookingType(text: string, flight = "", route: { pickup: string; dropoff: string } = { pickup: "", dropoff: "" }) {
   const upperText = text.toUpperCase();
   const pickup = clean(route.pickup);
@@ -1947,6 +2036,19 @@ function detectBookingType(text: string, flight = "", route: { pickup: string; d
     }
 
     if (/^changi airport/i.test(dropoff) || normalizeFlightCode(dropoff) === flight) {
+      return "DEP";
+    }
+  }
+
+  if (pickup && dropoff && !flight) {
+    const pickupPrivateAirport = isPrivateJetAirportLocation(pickup);
+    const dropoffPrivateAirport = isPrivateJetAirportLocation(dropoff);
+
+    if (pickupPrivateAirport && !dropoffPrivateAirport) {
+      return "MNG";
+    }
+
+    if (dropoffPrivateAirport && !pickupPrivateAirport) {
       return "DEP";
     }
   }

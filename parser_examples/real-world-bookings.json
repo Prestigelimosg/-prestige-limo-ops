@@ -1110,5 +1110,54 @@
         "dropoff": "Changi Airport"
       }
     ]
+  },
+  {
+    "id": "asm-crew-transfer-captains-and-cabin-crew",
+    "categories": [
+      "TRF transfer",
+      "mixed multi-booking dispatcher list",
+      "organization email domain company inference",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "input": "Dear Team,\nKindly arrange transportation as per below, please reconfirm the charges.\nFor captains:\nAircraft Tail:\nVT-DHA\nCrew Name (s):\nCapt Zubin + 1\nNumber of Crew:\n02\nPick up Time:\n05 Feb | 1630 LT\nFrom:\nWSSL airport | Seletar Airport (Jet Avaiation FBO)\nTo:\nMercure Singapore Bugis Hotel\nVehicle Type:\n01 VAN\n \n \nFor Cabin Crew:\nAircraft Tail:\nVT-DHA\nCrew Name (s):\nFE Milind + 1\nNumber of Crew:\n02\nPick up Time:\n05 Feb | 1630 LT\nFrom:\nWSSL airport | Seletar Airport (Jet Avaiation FBO)\nTo:\nMercure Singapore Bugis Hotel\nVehicle Type:\n01 VAN\n \n \n**Kindly ensure to copy ops@asm.aero and vendor.relations@asm.aero in all email correspondence.\n \nThanks and Regards,\n \nRimza Rafeek\nTravel Desk Executive",
+    "expected": {
+      "success": false,
+      "multipleBookingsDetected": true,
+      "parserWarning": "Multiple bookings detected. Please select one extracted booking.",
+      "company": "ASM",
+      "booker": "Rimza Rafeek",
+      "vehicle": "01 VAN",
+      "flight": ""
+    },
+    "expectedPreviewMatch": "ordered",
+    "expectedPreviewLength": 2,
+    "expectedPreview": [
+      {
+        "passenger": "Capt Zubin + 1",
+        "company": "ASM",
+        "booker": "Rimza Rafeek",
+        "vehicle": "01 VAN",
+        "date": "2026-02-05",
+        "time": "1630hrs",
+        "type": "MNG",
+        "flight": "",
+        "pickup": "WSSL airport | Seletar Airport (Jet Avaiation FBO)",
+        "dropoff": "Mercure Singapore Bugis Hotel",
+        "pax": "2"
+      },
+      {
+        "passenger": "FE Milind + 1",
+        "company": "ASM",
+        "booker": "Rimza Rafeek",
+        "vehicle": "01 VAN",
+        "date": "2026-02-05",
+        "time": "1630hrs",
+        "type": "MNG",
+        "flight": "",
+        "pickup": "WSSL airport | Seletar Airport (Jet Avaiation FBO)",
+        "dropoff": "Mercure Singapore Bugis Hotel",
+        "pax": "2"
+      }
+    ]
   }
 ]

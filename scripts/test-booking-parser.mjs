@@ -582,6 +582,76 @@ assert.deepEqual(parseBookingForTest(transferSample), {
   cleanedLines: [transferSample],
 });
 
+const privateJetAirportArrivalTransferSample = `Transfer for Mr Lee
+Date: 5/2/26
+Time: 1630hrs
+From:
+WSSL airport | Seletar Airport (Jet Aviation FBO)
+To:
+Mercure Singapore Bugis Hotel`;
+assert.deepEqual(parseBookingForTest(privateJetAirportArrivalTransferSample), {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-02-05',
+  time: '1630hrs',
+  flight: '',
+  pickup: 'WSSL airport | Seletar Airport (Jet Aviation FBO)',
+  dropoff: 'Mercure Singapore Bugis Hotel',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Lee',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Transfer for Mr Lee',
+    'Date: 5/2/26',
+    'Time: 1630hrs',
+    'From:',
+    'WSSL airport | Seletar Airport (Jet Aviation FBO)',
+    'To:',
+    'Mercure Singapore Bugis Hotel',
+  ],
+});
+
+const privateJetAirportDepartureTransferSample = `Transfer for Mr Lee
+Date: 5/2/26
+Time: 1630hrs
+From:
+Mercure Singapore Bugis Hotel
+To:
+WSSL airport | Seletar Airport (Jet Aviation FBO)`;
+assert.deepEqual(parseBookingForTest(privateJetAirportDepartureTransferSample), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-02-05',
+  time: '1630hrs',
+  flight: '',
+  pickup: 'Mercure Singapore Bugis Hotel',
+  dropoff: 'WSSL airport | Seletar Airport (Jet Aviation FBO)',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Lee',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Transfer for Mr Lee',
+    'Date: 5/2/26',
+    'Time: 1630hrs',
+    'From:',
+    'Mercure Singapore Bugis Hotel',
+    'To:',
+    'WSSL airport | Seletar Airport (Jet Aviation FBO)',
+  ],
+});
+
 const hyphenatedPickupLabelTransferSample = `Transfer for Ms Lee
 Date: 20/5/26
 Time: 2.15pm

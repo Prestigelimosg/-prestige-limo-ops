@@ -622,5 +622,29 @@
       "extraStopLocation": "",
       "childSeatRequired": ""
     }
+  },
+  {
+    "id": "long-form-customer-arrival-inquiry-brent-johnston",
+    "categories": [
+      "long-form customer arrival inquiry",
+      "public email domains ignored"
+    ],
+    "input": "Good afternoon William, my name is Brent Johnston, and my mom Sheila forwarded me your contact information regarding booking a pickup for my wife and I this week. Can we reserve a pickup with you or your colleagues for Friday night this week? Our flight from Tokyo SQ 633 arrives at Changi at 11:05pm 15-May, and we will be staying at the V Bencoolen Hotel. Thank you so much.",
+    "expected": {
+      "company": "",
+      "booker": "Brent Johnston",
+      "bookingType": "MNG",
+      "vehicle": "",
+      "date": "2026-05-15",
+      "time": "2305hrs",
+      "flight": "SQ633",
+      "pickup": "Changi Airport",
+      "dropoff": "V Bencoolen Hotel",
+      "name": "Brent Johnston and wife",
+      "pax": "2",
+      "extraStopCount": "",
+      "extraStopLocation": "",
+      "childSeatRequired": ""
+    }
   }
 ]

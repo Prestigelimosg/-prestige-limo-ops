@@ -1692,6 +1692,9 @@ async function runChromeTest() {
           const bodyText = document.body.innerText;
 
           return bodyText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+            bodyText.includes("Assign driver to this booking") &&
+            bodyText.includes("This updates the selected booking only.") &&
+            [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign to this booking") &&
             Boolean(document.querySelector("[data-dashboard-load-booking='true']"));
         })()`),
       10000,
@@ -1705,7 +1708,7 @@ async function runChromeTest() {
         (candidate) =>
           candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
           candidate.innerText.includes("SQ777") &&
-          [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign Driver"),
+          [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign to this booking"),
       );
 
       if (!article) {
@@ -1736,7 +1739,7 @@ async function runChromeTest() {
         candidate.innerText.includes("Include payout")
       )?.querySelector("input[type='checkbox']");
       const assignButton = [...article.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Assign Driver",
+        (button) => button.textContent.trim() === "Assign to this booking",
       );
 
       if (
@@ -1767,7 +1770,7 @@ async function runChromeTest() {
       assignButton.click();
       return true;
     })()`);
-    assert.equal(clickedDashboardAssignDriver, true, "Expected dashboard Assign Driver button to be clickable");
+    assert.equal(clickedDashboardAssignDriver, true, "Expected dashboard Assign to this booking button to be clickable");
 
     const dashboardAssignmentState = await waitForCondition(
       async () => {
@@ -1792,7 +1795,7 @@ async function runChromeTest() {
             (candidate) =>
               candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
               candidate.innerText.includes("SQ777") &&
-              [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign Driver"),
+              [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign to this booking"),
           );
 
           return {

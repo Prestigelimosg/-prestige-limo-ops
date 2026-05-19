@@ -3634,27 +3634,31 @@ export default function Home() {
               </button>
 
               <div className="mt-4 rounded-md border border-stone-200 bg-white p-3">
-	                <div className="grid gap-3 sm:grid-cols-2">
-	                  <label className="sm:col-span-2">
-	                    <span className="mb-1 block text-xs font-medium text-slate-600">
-	                      Driver
-	                    </span>
-	                    <select
-	                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-	                      onChange={(event) =>
-	                        updateDriverDraft(savedBooking, "driverId", event.target.value)
-	                      }
-	                      value={driverDraft.driverId}
-	                    >
-	                      <option value="">Manual / unselected</option>
-	                      {drivers.map((driver) => (
-	                        <option key={driver.id} value={driver.id}>
-	                          {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
-	                        </option>
-	                      ))}
-	                    </select>
-	                  </label>
-	                  <label>
+                <div className="mb-3">
+                  <h4 className="text-sm font-semibold text-slate-900">Assign driver to this booking</h4>
+                  <p className="mt-1 text-xs text-slate-500">This updates the selected booking only.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="sm:col-span-2">
+                    <span className="mb-1 block text-xs font-medium text-slate-600">
+                      Driver
+                    </span>
+                    <select
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      onChange={(event) =>
+                        updateDriverDraft(savedBooking, "driverId", event.target.value)
+                      }
+                      value={driverDraft.driverId}
+                    >
+                      <option value="">Manual / unselected</option>
+                      {drivers.map((driver) => (
+                        <option key={driver.id} value={driver.id}>
+                          {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
                     <span className="mb-1 block text-xs font-medium text-slate-600">
                       Driver Name
                     </span>
@@ -3751,7 +3755,7 @@ export default function Home() {
                   onClick={() => assignDriver(savedBooking)}
                   type="button"
                 >
-                  {assigningBookingId === bookingId ? "Assigning..." : "Assign Driver"}
+                  {assigningBookingId === bookingId ? "Assigning..." : "Assign to this booking"}
                 </button>
               </div>
 
@@ -4705,8 +4709,8 @@ export default function Home() {
 	        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
 	          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
 	            <div>
-	              <h2 className="text-xl font-semibold">Drivers</h2>
-	              <p className="text-sm text-slate-500">Driver profiles, availability, payout rules, and notes.</p>
+	              <h2 className="text-xl font-semibold">Driver Database</h2>
+	              <p className="text-sm text-slate-500">Save or update reusable driver details here.</p>
 	            </div>
 	            <div className="flex flex-col gap-2 sm:flex-row">
 	              <button
@@ -4723,7 +4727,7 @@ export default function Home() {
 	                onClick={saveDriverProfile}
 	                type="button"
 	              >
-	                {savingDriverProfile ? "Saving..." : "Save Driver"}
+	                {savingDriverProfile ? "Saving..." : "Save Driver Profile"}
 	              </button>
 	            </div>
 	          </div>

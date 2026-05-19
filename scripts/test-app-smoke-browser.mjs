@@ -29,6 +29,7 @@ const requiredVisibleText = [
   "Load Bookings",
   "Operations Dashboard",
   "Driver Database",
+  "Save Driver Profile",
   "Rates",
   "Saved Rate Overrides",
 ];

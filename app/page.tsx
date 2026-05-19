@@ -3877,73 +3877,65 @@ export default function Home() {
                   value={bookingMessage}
                 />
               </label>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row" data-ai-assist-controls="true">
-                <button
-                  className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  onClick={handleParseBookingMessage}
-                  type="button"
-                >
-                  Parse Booking
-                </button>
-                <div className="flex flex-col gap-2" data-ai-assist-gate="true">
-                  <label
-                    className="flex max-w-sm items-start gap-2 rounded-md border border-indigo-200 bg-white px-3 py-2 text-xs font-medium text-indigo-950"
-                  >
-                    <input
-                      checked={aiAssistSafetyAccepted}
-                      className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-700"
-                      data-ai-assist-safety-checkbox="true"
-                      onClick={(event) => {
-                        setAiAssistSafetyAccepted(event.currentTarget.checked);
-                      }}
-                      onChange={(event) => {
-                        setAiAssistSafetyAccepted(event.target.checked);
-                      }}
-                      type="checkbox"
-                    />
-                    <span>
-                      I understand AI Assist is review-only and may use paid API later.
-                    </span>
-                  </label>
+              <div className="mt-3 flex flex-col gap-2" data-ai-assist-controls="true">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                  <div className="flex w-full flex-col gap-2 sm:w-56" data-ai-assist-gate="true">
+                    <button
+                      className={`h-10 w-full rounded-md border px-3 text-sm font-semibold transition ${
+                        aiAssistSafetyAccepted
+                          ? "border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50"
+                          : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                      }`}
+                      disabled={!aiAssistSafetyAccepted || aiAssistLoading}
+                      onClick={handleMockAiAssistParse}
+                      type="button"
+                    >
+                      AI Assist Parse (Mock)
+                    </button>
+                    <label
+                      className="flex h-10 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-3 text-xs font-medium leading-tight text-indigo-950"
+                    >
+                      <input
+                        checked={aiAssistSafetyAccepted}
+                        className="h-4 w-4 shrink-0 rounded border-indigo-300 text-indigo-700"
+                        data-ai-assist-safety-checkbox="true"
+                        onClick={(event) => {
+                          setAiAssistSafetyAccepted(event.currentTarget.checked);
+                        }}
+                        onChange={(event) => {
+                          setAiAssistSafetyAccepted(event.target.checked);
+                        }}
+                        type="checkbox"
+                      />
+                      <span>
+                        Tick the AI safety checkbox to enable AI Assist
+                      </span>
+                    </label>
+                    {aiAssistLoading ? (
+                      <p
+                        aria-live="polite"
+                        className="text-xs font-medium text-indigo-900"
+                        data-ai-assist-loading="true"
+                      >
+                        Loading mock AI Assist draft...
+                      </p>
+                    ) : null}
+                  </div>
                   <button
-                    aria-describedby={!aiAssistSafetyAccepted ? "ai-assist-safety-helper" : undefined}
-                    className={`h-8 self-start rounded-md border px-3 text-xs font-medium transition ${
-                      aiAssistSafetyAccepted
-                        ? "border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50"
-                        : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                    }`}
-                    disabled={!aiAssistSafetyAccepted || aiAssistLoading}
-                    onClick={handleMockAiAssistParse}
+                    className="h-10 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 sm:w-56"
+                    onClick={handleParseBookingMessage}
                     type="button"
                   >
-                    AI Assist Parse (Mock)
+                    Create Job Card
                   </button>
-                  {aiAssistLoading ? (
-                    <p
-                      aria-live="polite"
-                      className="text-xs font-medium text-indigo-900"
-                      data-ai-assist-loading="true"
-                    >
-                      Loading mock AI Assist draft...
-                    </p>
-                  ) : null}
-                  {!aiAssistSafetyAccepted ? (
-                    <p
-                      className="text-xs font-medium text-indigo-900"
-                      data-ai-assist-safety-helper="true"
-                      id="ai-assist-safety-helper"
-                    >
-                      Tick the AI safety checkbox to enable AI Assist.
-                    </p>
-                  ) : null}
+                  <button
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 sm:w-auto"
+                    onClick={clearBookingMessageInput}
+                    type="button"
+                  >
+                    Clear Message
+                  </button>
                 </div>
-                <button
-                  className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                  onClick={clearBookingMessageInput}
-                  type="button"
-                >
-                  Clear Message
-                </button>
               </div>
               {aiAssistMessage ? (
                 <p

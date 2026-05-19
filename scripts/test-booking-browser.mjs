@@ -227,7 +227,7 @@ async function runSafariTest() {
     await waitForCondition(
       () =>
       execute(`return Boolean(document.querySelector("textarea")) &&
-        [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Parse Booking");`),
+        [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Create Job Card");`),
       10000,
       "Safari intake controls",
     );
@@ -251,7 +251,7 @@ async function runSafariTest() {
 
     const parseButtonId = await findElement(
       "xpath",
-      "//button[normalize-space(.) = 'Parse Booking']",
+      "//button[normalize-space(.) = 'Create Job Card']",
     );
     await request("POST", `/session/${sessionId}/element/${parseButtonId}/click`);
 
@@ -475,7 +475,7 @@ async function runChromeTest() {
     await waitForCondition(
       () =>
         evaluate(`Boolean(document.querySelector("textarea")) &&
-          [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Parse Booking")`),
+          [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Create Job Card")`),
       10000,
       "Chrome intake controls",
     );
@@ -519,7 +519,7 @@ async function runChromeTest() {
 
     await evaluate(`(async () => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton) {

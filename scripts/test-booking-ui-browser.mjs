@@ -552,7 +552,7 @@ async function runChromeTest() {
     await waitForCondition(
       () =>
         evaluate(`Boolean(document.querySelector("textarea")) &&
-          [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Parse Booking")`),
+          [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Create Job Card")`),
       10000,
       "booking parse controls",
     );
@@ -573,19 +573,45 @@ async function runChromeTest() {
             (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
           );
           const parseButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "Parse Booking",
+            (button) => button.textContent.trim() === "Create Job Card",
           );
           const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
-          const helper = document.querySelector("[data-ai-assist-safety-helper='true']");
           const gate = document.querySelector("[data-ai-assist-gate='true']");
+          const checkboxLabel = checkbox?.closest("label");
+          const parseButtonRect = parseButton?.getBoundingClientRect();
+          const aiButtonRect = aiButton?.getBoundingClientRect();
+          const checkboxLabelRect = checkboxLabel?.getBoundingClientRect();
+          const controls = document.querySelector("[data-ai-assist-controls='true']");
+          const controlButtonLabels = [...(controls?.querySelectorAll("button") || [])].map(
+            (button) => button.textContent.trim(),
+          );
+          const promptText = "Tick the AI safety checkbox to enable AI Assist";
+          const textNodes = [];
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          let currentNode = walker.nextNode();
 
-          return aiButton && checkbox && helper && gate?.contains(aiButton) && gate?.contains(helper)
+          while (currentNode) {
+            if (currentNode.nodeValue.trim()) {
+              textNodes.push(currentNode.nodeValue.trim());
+            }
+
+            currentNode = walker.nextNode();
+          }
+
+          return aiButton && parseButton && checkbox && checkboxLabel && gate?.contains(aiButton) && gate?.contains(checkboxLabel)
             ? {
                 aiButtonDisabled: aiButton.disabled,
                 checkboxChecked: checkbox.checked,
-                helperText: helper.textContent.trim(),
+                checkboxLabelText: checkboxLabel.textContent.trim(),
+                checkboxLabelWidthDelta: Math.abs((checkboxLabelRect?.width || 0) - (aiButtonRect?.width || 0)),
+                checkboxLabelHeightDelta: Math.abs((checkboxLabelRect?.height || 0) - (aiButtonRect?.height || 0)),
+                controlButtonLabels,
+                helperCount: document.querySelectorAll("[data-ai-assist-safety-helper='true']").length,
+                matchedButtonHeightDelta: Math.abs((parseButtonRect?.height || 0) - (aiButtonRect?.height || 0)),
+                matchedButtonWidthDelta: Math.abs((parseButtonRect?.width || 0) - (aiButtonRect?.width || 0)),
                 gateText: gate.innerText || "",
                 parseButtonDisabled: Boolean(parseButton?.disabled),
+                promptTextCount: textNodes.filter((text) => text === promptText).length,
               }
             : false;
         })()`),
@@ -595,11 +621,34 @@ async function runChromeTest() {
     assert.equal(initialAiAssistSafetyState.aiButtonDisabled, true);
     assert.equal(initialAiAssistSafetyState.checkboxChecked, false);
     assert.equal(initialAiAssistSafetyState.parseButtonDisabled, false);
-    assert.equal(
-      initialAiAssistSafetyState.helperText,
-      "Tick the AI safety checkbox to enable AI Assist.",
+    assert.deepEqual(
+      initialAiAssistSafetyState.controlButtonLabels.slice(0, 2),
+      ["AI Assist Parse (Mock)", "Create Job Card"],
+      "Expected AI Assist and Create Job Card button positions to be swapped",
     );
-    assert.match(initialAiAssistSafetyState.gateText, /I understand AI Assist is review-only/);
+    assert.ok(
+      initialAiAssistSafetyState.matchedButtonHeightDelta <= 1,
+      "Expected Create Job Card and AI Assist buttons to have matched heights",
+    );
+    assert.ok(
+      initialAiAssistSafetyState.matchedButtonWidthDelta <= 1,
+      "Expected Create Job Card and AI Assist buttons to have matched widths",
+    );
+    assert.ok(
+      initialAiAssistSafetyState.checkboxLabelHeightDelta <= 1,
+      "Expected AI checkbox control and AI Assist button to have matched heights",
+    );
+    assert.ok(
+      initialAiAssistSafetyState.checkboxLabelWidthDelta <= 1,
+      "Expected AI checkbox control and AI Assist button to have matched widths",
+    );
+    assert.equal(
+      initialAiAssistSafetyState.checkboxLabelText,
+      "Tick the AI safety checkbox to enable AI Assist",
+    );
+    assert.equal(initialAiAssistSafetyState.helperCount, 0);
+    assert.equal(initialAiAssistSafetyState.promptTextCount, 1);
+    assert.match(initialAiAssistSafetyState.gateText, /Tick the AI safety checkbox to enable AI Assist/);
     assert.match(initialAiAssistSafetyState.gateText, /AI Assist Parse \(Mock\)/);
 
     const enabledAiAssistSafetyState = await waitForCondition(
@@ -703,12 +752,13 @@ async function runChromeTest() {
             checkbox.click();
           }
 
-          const helper = document.querySelector("[data-ai-assist-safety-helper='true']");
+          const checkboxLabel = checkbox.closest("label");
 
           return {
             aiButtonDisabled: aiButton.disabled,
             checkboxChecked: checkbox.checked,
-            helperText: helper?.textContent.trim() || "",
+            checkboxLabelText: checkboxLabel?.textContent.trim() || "",
+            helperCount: document.querySelectorAll("[data-ai-assist-safety-helper='true']").length,
           };
         })()`);
 
@@ -718,9 +768,10 @@ async function runChromeTest() {
       "AI Assist safety checkbox disabling button again",
     );
     assert.equal(
-      disabledAgainAiAssistSafetyState.helperText,
-      "Tick the AI safety checkbox to enable AI Assist.",
+      disabledAgainAiAssistSafetyState.checkboxLabelText,
+      "Tick the AI safety checkbox to enable AI Assist",
     );
+    assert.equal(disabledAgainAiAssistSafetyState.helperCount, 0);
 
     await waitForCondition(
       async () => {
@@ -776,7 +827,7 @@ async function runChromeTest() {
 
     const clickedNeedsReviewParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -786,7 +837,7 @@ async function runChromeTest() {
       parseButton.click();
       return true;
     })()`);
-    assert.equal(clickedNeedsReviewParse, true, "Expected Parse Booking button to parse Needs Review sample");
+    assert.equal(clickedNeedsReviewParse, true, "Expected Create Job Card button to parse Needs Review sample");
 
     await waitForCondition(
       () =>
@@ -897,7 +948,7 @@ async function runChromeTest() {
 
     const clickedParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -907,7 +958,7 @@ async function runChromeTest() {
       parseButton.click();
       return true;
     })()`);
-    assert.equal(clickedParse, true, "Expected Parse Booking button to be clickable");
+    assert.equal(clickedParse, true, "Expected Create Job Card button to be clickable");
 
     const extractStateScript = `(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
@@ -1392,7 +1443,7 @@ async function runChromeTest() {
 
     const clickedMultiBookingParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -1402,7 +1453,7 @@ async function runChromeTest() {
       parseButton.click();
       return true;
     })()`);
-    assert.equal(clickedMultiBookingParse, true, "Expected Parse Booking button for multi-booking preview sample");
+    assert.equal(clickedMultiBookingParse, true, "Expected Create Job Card button for multi-booking preview sample");
 
     await waitForCondition(
       () =>
@@ -1495,7 +1546,7 @@ async function runChromeTest() {
 
       const clickedParse = await evaluate(`(() => {
         const parseButton = [...document.querySelectorAll("button")].find(
-          (button) => button.textContent.trim() === "Parse Booking",
+          (button) => button.textContent.trim() === "Create Job Card",
         );
 
         if (!parseButton || parseButton.disabled) {
@@ -1505,7 +1556,7 @@ async function runChromeTest() {
         parseButton.click();
         return true;
       })()`);
-      assert.equal(clickedParse, true, "Expected Parse Booking button for Warburg transfer sample");
+      assert.equal(clickedParse, true, "Expected Create Job Card button for Warburg transfer sample");
 
       await waitForCondition(
         () =>
@@ -1670,7 +1721,7 @@ async function runChromeTest() {
 
     const clickedExactPasteParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -1683,7 +1734,7 @@ async function runChromeTest() {
     assert.equal(
       clickedExactPasteParse,
       true,
-      "Expected Parse Booking button to parse exact pasted waypoint sample",
+      "Expected Create Job Card button to parse exact pasted waypoint sample",
     );
 
     const exactPasteState = await waitForCondition(
@@ -1752,7 +1803,7 @@ async function runChromeTest() {
 
     const clickedExactDepartureParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -1765,7 +1816,7 @@ async function runChromeTest() {
     assert.equal(
       clickedExactDepartureParse,
       true,
-      "Expected Parse Booking button to parse exact pasted departure waypoint sample",
+      "Expected Create Job Card button to parse exact pasted departure waypoint sample",
     );
 
     const exactDepartureState = await waitForCondition(
@@ -1848,7 +1899,7 @@ async function runChromeTest() {
 
     const clickedRouteNameAirportParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -1861,7 +1912,7 @@ async function runChromeTest() {
     assert.equal(
       clickedRouteNameAirportParse,
       true,
-      "Expected Parse Booking button to parse route-name Airport drop-off-only sample",
+      "Expected Create Job Card button to parse route-name Airport drop-off-only sample",
     );
 
     const routeNameAirportState = await waitForCondition(
@@ -1942,7 +1993,7 @@ async function runChromeTest() {
 
     const clickedRouteNameAirportDepartureParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -1955,7 +2006,7 @@ async function runChromeTest() {
     assert.equal(
       clickedRouteNameAirportDepartureParse,
       true,
-      "Expected Parse Booking button to parse route-name Airport pickup-only departure sample",
+      "Expected Create Job Card button to parse route-name Airport pickup-only departure sample",
     );
 
     const routeNameAirportDepartureState = await waitForCondition(
@@ -2052,7 +2103,7 @@ async function runChromeTest() {
 
     const clickedFreeformTransferParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -2062,7 +2113,7 @@ async function runChromeTest() {
       parseButton.click();
       return true;
     })()`);
-    assert.equal(clickedFreeformTransferParse, true, "Expected Parse Booking button to parse freeform transfer sample");
+    assert.equal(clickedFreeformTransferParse, true, "Expected Create Job Card button to parse freeform transfer sample");
 
     const freeformTransferState = await waitForCondition(
       async () => {
@@ -2144,7 +2195,7 @@ async function runChromeTest() {
 
     const clickedDspParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -2154,7 +2205,7 @@ async function runChromeTest() {
       parseButton.click();
       return true;
     })()`);
-    assert.equal(clickedDspParse, true, "Expected Parse Booking button to parse DSP itinerary sample");
+    assert.equal(clickedDspParse, true, "Expected Create Job Card button to parse DSP itinerary sample");
 
     const dspState = await waitForCondition(
       async () => {
@@ -2232,7 +2283,7 @@ async function runChromeTest() {
 
     const clickedNumberedEventDspParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -2245,7 +2296,7 @@ async function runChromeTest() {
     assert.equal(
       clickedNumberedEventDspParse,
       true,
-      "Expected Parse Booking button to parse numbered event DSP sample",
+      "Expected Create Job Card button to parse numbered event DSP sample",
     );
 
     const numberedEventDspState = await waitForCondition(
@@ -2339,7 +2390,7 @@ async function runChromeTest() {
 
     const clickedTimedScheduleParse = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Parse Booking",
+        (button) => button.textContent.trim() === "Create Job Card",
       );
 
       if (!parseButton || parseButton.disabled) {
@@ -2352,7 +2403,7 @@ async function runChromeTest() {
     assert.equal(
       clickedTimedScheduleParse,
       true,
-      "Expected Parse Booking button to parse timed schedule sample",
+      "Expected Create Job Card button to parse timed schedule sample",
     );
 
     const timedScheduleState = await waitForCondition(

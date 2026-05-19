@@ -1064,6 +1064,44 @@
     }
   },
   {
+    "id": "freeform-airport-transfer-return-transfer-shared-stay-address",
+    "categories": [
+      "airport departure plus return arrival split",
+      "mixed multi-booking dispatcher list"
+    ],
+    "referenceDate": "2026-05-19T12:00:00+08:00",
+    "input": "Hi, can I arrange for a airport transfer tomorrow at 645 pick for SQ108. And the return transfer on Friday at 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o",
+    "expected": {
+      "success": false,
+      "multipleBookingsDetected": true,
+      "parserWarning": "Multiple bookings detected. Please select one extracted booking."
+    },
+    "expectedPreviewMatch": "ordered",
+    "expectedPreviewLength": 2,
+    "expectedPreview": [
+      {
+        "passenger": "Mr Peter",
+        "pax": "1",
+        "date": "2026-05-20",
+        "time": "0645hrs",
+        "type": "DEP",
+        "flight": "SQ108",
+        "pickup": "276 Ocean Drive lobby O",
+        "dropoff": "Changi Airport"
+      },
+      {
+        "passenger": "Mr Peter",
+        "pax": "1",
+        "date": "2026-05-22",
+        "time": "2000hrs",
+        "type": "MNG",
+        "flight": "SQ121",
+        "pickup": "Changi Airport",
+        "dropoff": "276 Ocean Drive lobby O"
+      }
+    ]
+  },
+  {
     "id": "warburg-pincus-two-transfer-requests-shared-context",
     "categories": [
       "mixed multi-booking dispatcher list",

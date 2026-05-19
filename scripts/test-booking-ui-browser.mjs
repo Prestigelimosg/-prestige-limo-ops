@@ -117,6 +117,7 @@ Jill Van Cook
 EA to Mark Colodny, Co-Head of US Private Equity
 & Chairman of Global Technology
 Warburg Pincus`;
+const airportTransferReturnTransferSample = "Hi, can I arrange for a airport transfer tomorrow at 645 pick for SQ108. And the return transfer on Friday at 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o";
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
 Order total amount	S$130.00
@@ -1677,6 +1678,151 @@ async function runChromeTest() {
     assert.match(selectedWarburgDepartureState.jobCardPreview, /Sedan DEP/);
     assert.doesNotMatch(selectedWarburgDepartureState.jobCardPreview, /AVF DEP/);
     assert.match(selectedWarburgDepartureState.driverDispatch, /Sedan DEP/);
+
+    const parseAirportTransferReturnPreview = async (previewIndex, expectedFlight) => {
+      const focusedTextarea = await evaluate(`(() => {
+        const textarea = document.querySelector("textarea");
+        if (!textarea) {
+          return false;
+        }
+
+        textarea.focus();
+        textarea.select();
+        return document.activeElement === textarea;
+      })()`);
+      assert.equal(focusedTextarea, true, "Expected textarea to be focused for airport return transfer sample");
+
+      await client.send("Input.insertText", { text: airportTransferReturnTransferSample });
+
+      const filledTextarea = await evaluate(
+        `document.querySelector("textarea")?.value === ${JSON.stringify(airportTransferReturnTransferSample)}`,
+      );
+      assert.equal(filledTextarea, true, "Expected airport return transfer sample textarea to be filled");
+
+      const clickedParse = await evaluate(`(() => {
+        const parseButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Create Job Card",
+        );
+
+        if (!parseButton || parseButton.disabled) {
+          return false;
+        }
+
+        parseButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedParse, true, "Expected Create Job Card button for airport return transfer sample");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const bodyText = document.body.innerText;
+
+            return bodyText.includes("Multiple bookings detected. Please select one extracted booking.") &&
+              bodyText.includes("extractedBookingsPreview.length: 2") &&
+              bodyText.includes("SQ108") &&
+              bodyText.includes("SQ121") &&
+              [...document.querySelectorAll("button")].filter(
+                (button) => button.textContent.trim() === "Use this booking",
+              ).length >= 2;
+          })()`),
+        10000,
+        "airport return transfer preview choices",
+      );
+
+      const clickedPreview = await evaluate(`(() => {
+        const previewButtons = [...document.querySelectorAll("button")].filter(
+          (button) => button.textContent.trim() === "Use this booking",
+        );
+        const previewButton = previewButtons[${previewIndex}];
+
+        if (!previewButton || previewButton.disabled) {
+          return false;
+        }
+
+        previewButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedPreview, true, `Expected airport return preview ${previewIndex + 1} to be selectable`);
+
+      return waitForCondition(
+        async () => {
+          const candidateState = await evaluate(extractStateScript);
+
+          if (
+            candidateState?.fields?.flight === expectedFlight &&
+            candidateState?.fields?.name === "Mr Peter" &&
+            candidateState?.fields?.pax === "1"
+          ) {
+            return candidateState;
+          }
+
+          return false;
+        },
+        10000,
+        `selected airport return preview ${previewIndex + 1} UI state`,
+      );
+    };
+
+    const selectedAirportDepartureState = await parseAirportTransferReturnPreview(0, "SQ108");
+    selectedAirportDepartureState.errors = [
+      ...browserErrors,
+      ...(selectedAirportDepartureState.errors || []),
+    ];
+    selectedAirportDepartureState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(selectedAirportDepartureState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      selectedAirportDepartureState.errors,
+      [],
+      `Expected no browser runtime errors, got ${selectedAirportDepartureState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      selectedAirportDepartureState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${selectedAirportDepartureState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(selectedAirportDepartureState.fields.bookingType, "DEP");
+    assert.equal(selectedAirportDepartureState.fields.pickupDate, "2026-05-20");
+    assert.equal(selectedAirportDepartureState.fields.pickupTime, "0645hrs");
+    assert.equal(selectedAirportDepartureState.fields.flight, "SQ108");
+    assert.equal(selectedAirportDepartureState.fields.pickup, "276 Ocean Drive lobby O");
+    assert.equal(selectedAirportDepartureState.fields.dropoff, "Changi Airport");
+    assert.equal(selectedAirportDepartureState.fields.name, "Mr Peter");
+    assert.equal(selectedAirportDepartureState.fields.pax, "1");
+    assert.doesNotMatch(selectedAirportDepartureState.fieldText, /Changi Airport T[1-4]/);
+
+    const selectedAirportArrivalState = await parseAirportTransferReturnPreview(1, "SQ121");
+    selectedAirportArrivalState.errors = [
+      ...browserErrors,
+      ...(selectedAirportArrivalState.errors || []),
+    ];
+    selectedAirportArrivalState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(selectedAirportArrivalState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      selectedAirportArrivalState.errors,
+      [],
+      `Expected no browser runtime errors, got ${selectedAirportArrivalState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      selectedAirportArrivalState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${selectedAirportArrivalState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(selectedAirportArrivalState.fields.bookingType, "MNG");
+    assert.equal(selectedAirportArrivalState.fields.pickupDate, "2026-05-22");
+    assert.equal(selectedAirportArrivalState.fields.pickupTime, "2000hrs");
+    assert.equal(selectedAirportArrivalState.fields.flight, "SQ121");
+    assert.equal(selectedAirportArrivalState.fields.pickup, "Changi Airport");
+    assert.equal(selectedAirportArrivalState.fields.dropoff, "276 Ocean Drive lobby O");
+    assert.equal(selectedAirportArrivalState.fields.name, "Mr Peter");
+    assert.equal(selectedAirportArrivalState.fields.pax, "1");
+    assert.doesNotMatch(selectedAirportArrivalState.fieldText, /Changi Airport T[1-4]/);
 
     const clickedClearBeforeExactPaste = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(

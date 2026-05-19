@@ -671,12 +671,138 @@ function buildSeparatedTransferRequestPreview(text: string, referenceDate: Date)
   });
 }
 
+function normalizeNarratedAddress(value: string) {
+  const location = cleanLocation(value);
+
+  return location
+    .split(/\s+/)
+    .map((word) => {
+      if (/^[A-Za-z]$/.test(word)) {
+        return word.toUpperCase();
+      }
+
+      if (/^(?:blk|block|floor|level|lobby|unit)$/i.test(word)) {
+        return word.toLowerCase();
+      }
+
+      if (/^[A-Za-z][A-Za-z'-]*$/.test(word)) {
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      }
+
+      return word;
+    })
+    .join(" ");
+}
+
+function detectStayAtTransferContext(text: string) {
+  const passengerAddressMatch = text.match(
+    /\b((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)\s+stay(?:ing)?\s+at\s+(?:the\s+)?(.+?)(?=\.|,|\n|$)/i,
+  );
+  const passenger = passengerAddressMatch?.[1] ? cleanDetectedName(passengerAddressMatch[1]) : "";
+  const address = normalizeNarratedAddress(
+    passengerAddressMatch?.[2] || firstMatch(text, [
+      /\bstay(?:ing)?\s+at\s+(?:the\s+)?(.+?)(?=\.|,|\n|$)/i,
+    ]),
+  );
+
+  return {
+    passenger: looksLikePersonName(passenger) ? passenger : "",
+    address,
+  };
+}
+
+function detectAirportReturnTransferPax(text: string) {
+  return detectExplicitPax(text) || (/\bone\s+persons?\b/i.test(text) ? "1" : "");
+}
+
+function formatFlexibleTimeForState(value: string) {
+  const digits = clean(value).replace(/\D/g, "");
+
+  if (digits.length === 3) {
+    const hour = Number(digits.slice(0, 1));
+    const minute = Number(digits.slice(1));
+
+    if (hour >= 0 && hour <= 9 && minute >= 0 && minute <= 59) {
+      return `0${digits.slice(0, 1)}${digits.slice(1)}hrs`;
+    }
+  }
+
+  return formatTimeForState(value);
+}
+
+function parseAirportTransferSegmentTime(segment: string) {
+  const parsedTime = parseTimeFromText(segment);
+  const compactPickupTime = firstMatch(segment, [
+    /\b(?:at|by|around|pickup|pick\s*up|pick)\s+(\d{3,4})(?=\s*(?:hrs?)?\b|\s+(?:pick|pickup|pick\s*up|for|[A-Z]{2}\s?\d{1,4}\b))/i,
+    /\b(\d{3,4})\s*(?:hrs?)?\s+(?:pick|pickup|pick\s*up|for\s+[A-Z]{2}\s?\d{1,4}\b)/i,
+  ]);
+  const rawTime = parsedTime || compactPickupTime;
+
+  return formatFlexibleTimeForState(rawTime) || rawTime;
+}
+
+function firstFlightInSegment(segment: string) {
+  return detectFlight(segment) || detectAllFlights(segment)[0] || "";
+}
+
+function buildAirportReturnTransferPreview(text: string, referenceDate: Date) {
+  const normalizedText = clean(text.replace(/\n+/g, " "));
+  const returnTransferMatch = normalizedText.match(/\b(?:and\s+the\s+)?return\s+transfer\b/i);
+  const flights = detectAllFlights(normalizedText);
+
+  if (
+    !returnTransferMatch ||
+    !/\bairport\s+transfer\b/i.test(normalizedText) ||
+    flights.length < 2
+  ) {
+    return [];
+  }
+
+  const firstSegment = clean(normalizedText.slice(0, returnTransferMatch.index));
+  const returnSegment = clean(normalizedText.slice(returnTransferMatch.index));
+  const firstFlight = firstFlightInSegment(firstSegment);
+  const returnFlight = firstFlightInSegment(returnSegment);
+  const sharedContext = detectStayAtTransferContext(normalizedText);
+
+  if (!firstFlight || !returnFlight || !sharedContext.address) {
+    return [];
+  }
+
+  const pax = detectAirportReturnTransferPax(normalizedText);
+  const sharedFields = {
+    passenger: sharedContext.passenger,
+    ...(pax ? { pax } : {}),
+  };
+
+  return [
+    {
+      ...sharedFields,
+      date: parseDateFromText(firstSegment, referenceDate),
+      time: parseAirportTransferSegmentTime(firstSegment),
+      type: "DEP",
+      flight: firstFlight,
+      pickup: sharedContext.address,
+      dropoff: airportLocationFromText(firstSegment),
+    },
+    {
+      ...sharedFields,
+      date: parseDateFromText(returnSegment, referenceDate),
+      time: parseAirportTransferSegmentTime(returnSegment),
+      type: "MNG",
+      flight: returnFlight,
+      pickup: airportLocationFromText(returnSegment),
+      dropoff: sharedContext.address,
+    },
+  ];
+}
+
 function buildExtractedBookingsPreview(text: string, cleanedLines: string[], referenceDate: Date) {
   const hasExplicitList = cleanedLines.filter((line) => /^(?:\d+[.)]\s+|[-*•]\s+)/.test(line)).length > 1;
   const hasMultipleFlights = detectAllFlights(text).length > 1;
   const airportStandbyPreview = hasExplicitList || hasMultipleFlights ? [] : buildAirportStandbyPreview(text, referenceDate);
   const crewTransferPreview = buildCrewTransferRequestPreview(text, referenceDate);
   const separatedTransferPreview = buildSeparatedTransferRequestPreview(text, referenceDate);
+  const airportReturnTransferPreview = buildAirportReturnTransferPreview(text, referenceDate);
   const contextDate = parseDateFromText(text, referenceDate);
   const sharedArrivalDropoff = detectSharedArrivalDropoff(text);
 
@@ -686,6 +812,10 @@ function buildExtractedBookingsPreview(text: string, cleanedLines: string[], ref
 
   if (separatedTransferPreview.length > 0) {
     return separatedTransferPreview;
+  }
+
+  if (airportReturnTransferPreview.length > 0) {
+    return airportReturnTransferPreview;
   }
 
   if (airportStandbyPreview.length > 0) {

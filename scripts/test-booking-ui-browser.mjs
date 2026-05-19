@@ -170,6 +170,51 @@ const dashboardDriverAssignmentFixture = {
     traveler_name: "DASHBOARD DRIVER TEST TRAVELER",
   },
 };
+const dashboardAssignedDriverClearFixture = {
+  id: "ui-dashboard-clear-driver-fixture",
+  company_id: 711,
+  booker_id: 712,
+  traveler_id: 713,
+  booking_type: "DEP",
+  vehicle: "AVF",
+  pickup_time: "1230",
+  pickup_address: "The Fullerton Hotel Singapore",
+  dropoff_address: "Changi Airport",
+  flight_no: "SQ778",
+  route: "The Fullerton Hotel Singapore > Changi Airport",
+  pax: 1,
+  job_card:
+    "AVF DEP\n29 May 2026, 1230hrs\nFlight: SQ778\nThe Fullerton Hotel Singapore > Changi Airport\nPassenger: DASHBOARD CLEAR DRIVER TEST TRAVELER\nPax: 1",
+  status: "assigned",
+  driver_id: 901,
+  driver_name: "OLD DASHBOARD TEST DRIVER",
+  driver_contact: "+65 8999 7777",
+  driver_plate_number: "SLC901D",
+  customer_price_amount: 95,
+  driver_payout_amount: 70,
+  driver_payout_override: 88,
+  driver_payout_reason: "Old assignment test",
+  driver_notes: "Old assigned driver note",
+  driver_dispatch_include_payout: true,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:54:00.000Z",
+  updated_at: "2026-05-18T23:54:00.000Z",
+  companies: {
+    company_name: "DASHBOARD CLEAR DRIVER TEST COMPANY",
+    domain: "dashboard-clear-driver.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD CLEAR DRIVER TEST BOOKER",
+    email: "booker@dashboard-clear-driver.example.com",
+    phone: "+65 8666 1111",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD CLEAR DRIVER TEST TRAVELER",
+  },
+};
 const completedSavedBookingFixture = {
   id: "ui-completed-load-fixture",
   company_id: 801,
@@ -1663,6 +1708,7 @@ async function runChromeTest() {
       const loadedBookings = [
         ${JSON.stringify(loadedSavedBookingFixture)},
         ${JSON.stringify(dashboardDriverAssignmentFixture)},
+        ${JSON.stringify(dashboardAssignedDriverClearFixture)},
         ${JSON.stringify(completedSavedBookingFixture)},
       ];
       window.__prestigeFetchCalls = [];
@@ -1690,7 +1736,10 @@ async function runChromeTest() {
         if (
           method === "PATCH" &&
           String(target).includes("/rest/v1/bookings") &&
-          String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}")
+          (
+            String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}") ||
+            String(target).includes("id=eq.${dashboardAssignedDriverClearFixture.id}")
+          )
         ) {
           try {
             window.__prestigeDashboardDriverAssignmentBodies.push(JSON.parse(bodyText));
@@ -1908,6 +1957,136 @@ async function runChromeTest() {
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
     assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
+
+    const assignedDriverClearInitialState = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD CLEAR DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ778"),
+      );
+
+      return {
+        articleText: article?.innerText || "",
+        hasClearButton: Boolean(
+          [...(article?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Clear assigned driver",
+          ),
+        ),
+      };
+    })()`);
+    assert.match(assignedDriverClearInitialState.articleText, /assigned/);
+    assert.match(assignedDriverClearInitialState.articleText, /Driver:\s*OLD DASHBOARD TEST DRIVER/);
+    assert.match(assignedDriverClearInitialState.articleText, /Contact:\s*\+65 8999 7777/);
+    assert.match(assignedDriverClearInitialState.articleText, /Copy Driver Dispatch/);
+    assert.equal(
+      assignedDriverClearInitialState.hasClearButton,
+      true,
+      "Expected assigned dashboard booking to show Clear assigned driver button",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDashboardDriverAssignmentBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedClearAssignedDriver = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD CLEAR DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ778"),
+      );
+      const clearButton = [...(article?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Clear assigned driver",
+      );
+
+      if (!clearButton || clearButton.disabled) {
+        return false;
+      }
+
+      clearButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedClearAssignedDriver, true, "Expected Clear assigned driver button to be clickable");
+
+    const clearedAssignedDriverState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD CLEAR DRIVER TEST TRAVELER") &&
+              candidate.innerText.includes("SQ778"),
+          );
+          const assignmentMessage = article?.querySelector("[data-driver-assignment-message='${dashboardAssignedDriverClearFixture.id}']");
+          const assignButton = [...(article?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Assign to this booking",
+          );
+          const messageRect = assignmentMessage?.getBoundingClientRect();
+          const assignButtonRect = assignButton?.getBoundingClientRect();
+
+          return {
+            articleText: article?.innerText || "",
+            assignmentBodies: window.__prestigeDashboardDriverAssignmentBodies || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+            hasClearButton: Boolean(
+              [...(article?.querySelectorAll("button") || [])].find(
+                (button) => button.textContent.trim() === "Clear assigned driver",
+              ),
+            ),
+            localMessageText: assignmentMessage?.textContent.trim() || "",
+            localMessageDistance:
+              assignButtonRect && messageRect ? Math.abs(messageRect.top - assignButtonRect.bottom) : null,
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.localMessageText === "Assigned driver cleared." &&
+          candidateState?.articleText?.includes("Driver: —") &&
+          !candidateState?.articleText?.includes("OLD DASHBOARD TEST DRIVER")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "dashboard clear assigned driver success state",
+    );
+
+    assert.deepEqual(
+      clearedAssignedDriverState.unhandledSupabaseCalls,
+      [],
+      `Expected clear assigned driver Supabase calls to be mocked, got ${clearedAssignedDriverState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      clearedAssignedDriverState.fetchCalls.length,
+      1,
+      `Expected clear assigned driver to make one mocked booking PATCH, got ${clearedAssignedDriverState.fetchCalls.join(", ")}`,
+    );
+    assert.match(
+      clearedAssignedDriverState.fetchCalls[0],
+      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardAssignedDriverClearFixture.id}`),
+    );
+    assert.ok(
+      clearedAssignedDriverState.fetchCalls.every((call) => !call.includes("/rest/v1/drivers")),
+      `Expected clear assigned driver not to modify driver profiles, got ${clearedAssignedDriverState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(clearedAssignedDriverState.assignmentBodies.length, 1);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_id, null);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_name, null);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_contact, null);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_plate_number, null);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_payout_override, null);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_payout_reason, null);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_notes, null);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_dispatch_include_payout, false);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.status, "confirmed");
+    assert.match(clearedAssignedDriverState.articleText, /confirmed/);
+    assert.match(clearedAssignedDriverState.articleText, /Driver:\s*—/);
+    assert.ok(!clearedAssignedDriverState.articleText.includes("Copy Driver Dispatch"));
+    assert.equal(clearedAssignedDriverState.hasClearButton, false);
+    assert.ok(
+      clearedAssignedDriverState.localMessageDistance !== null &&
+        clearedAssignedDriverState.localMessageDistance <= 120,
+      `Expected clear assigned driver status near assignment controls, got ${clearedAssignedDriverState.localMessageDistance}px`,
+    );
 
     await clickTab("Drivers", "Driver Database");
 

@@ -1480,6 +1480,9 @@ export default function Home() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
   const [driverDrafts, setDriverDrafts] = useState<Record<string, DriverDraft>>({});
+  const [driverAssignmentMessages, setDriverAssignmentMessages] =
+    useState<Record<string, Message>>({});
+  const [loadedBookingId, setLoadedBookingId] = useState("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
@@ -1778,6 +1781,21 @@ export default function Home() {
       ...current,
       [field]: value,
     }));
+  }
+
+  function setDriverAssignmentMessage(bookingId: string, nextMessage: Message | null) {
+    setDriverAssignmentMessages((current) => {
+      if (!nextMessage) {
+        const next = { ...current };
+        delete next[bookingId];
+        return next;
+      }
+
+      return {
+        ...current,
+        [bookingId]: nextMessage,
+      };
+    });
   }
 
   function clearReviewAndSaveState() {
@@ -2099,6 +2117,7 @@ export default function Home() {
 
   async function applyParsedBookingMessage(messageText: string) {
     clearParseArtifacts();
+    setLoadedBookingId("");
 
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
@@ -3421,6 +3440,7 @@ export default function Home() {
 
   function loadSelectedBooking(bookingRecord: BookingRecord) {
     setBooking(() => bookingRecordToForm(bookingRecord));
+    setLoadedBookingId(String(bookingRecord.id));
     setActiveTab("dispatch");
     clearBookingMessageInput();
     setMessage({
@@ -3477,6 +3497,101 @@ export default function Home() {
       setMessage({ tone: "success", text: "Booking job card copied." });
     } catch {
       setMessage({ tone: "error", text: "Copy failed. Select the booking details manually." });
+    }
+  }
+
+  async function clearAssignedDriver(bookingRecord: BookingRecord) {
+    const bookingId = String(bookingRecord.id);
+    const nextStatus = clean(bookingRecord.status).toLowerCase() === "assigned"
+      ? "confirmed"
+      : clean(bookingRecord.status) || "confirmed";
+
+    if (!supabase) {
+      const errorMessage = {
+        tone: "error",
+        text: "Clear assigned driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      } satisfies Message;
+      setMessage(errorMessage);
+      setDriverAssignmentMessage(bookingId, errorMessage);
+      return;
+    }
+
+    const loadingMessage = { tone: "info", text: "Clearing assigned driver..." } satisfies Message;
+    setAssigningBookingId(bookingId);
+    setMessage(loadingMessage);
+    setDriverAssignmentMessage(bookingId, loadingMessage);
+
+    try {
+      const { error } = await supabase
+        .from("bookings")
+        .update({
+          driver_id: null,
+          driver_name: null,
+          driver_contact: null,
+          driver_plate_number: null,
+          driver_payout_override: null,
+          driver_payout_reason: null,
+          driver_notes: null,
+          driver_dispatch_include_payout: false,
+          status: nextStatus,
+        })
+        .eq("id", bookingRecord.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setBookings((current) =>
+        current.map((currentBooking) =>
+          currentBooking.id === bookingRecord.id
+            ? {
+                ...currentBooking,
+                driver_id: null,
+                driver_name: null,
+                driver_contact: null,
+                driver_plate_number: null,
+                driver_payout_override: null,
+                driver_payout_reason: null,
+                driver_notes: null,
+                driver_dispatch_include_payout: false,
+                status: nextStatus,
+              }
+            : currentBooking,
+        ),
+      );
+      setDriverDrafts((current) => {
+        const next = { ...current };
+        delete next[bookingId];
+        return next;
+      });
+
+      if (loadedBookingId === bookingId) {
+        setBooking((current) => ({
+          ...current,
+          driverId: "",
+          driverName: "",
+          driverContact: "",
+          driverPlate: "",
+          driverPayoutOverride: "",
+          driverPayoutReason: "",
+          driverNotes: "",
+          driverIncludePayout: "",
+        }));
+      }
+
+      const successMessage = { tone: "success", text: "Assigned driver cleared." } satisfies Message;
+      setMessage(successMessage);
+      setDriverAssignmentMessage(bookingId, successMessage);
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Unknown driver clear error.";
+      const errorMessage = {
+        tone: "error",
+        text: `Clear assigned driver failed: ${errorText}`,
+      } satisfies Message;
+      setMessage(errorMessage);
+      setDriverAssignmentMessage(bookingId, errorMessage);
+    } finally {
+      setAssigningBookingId(null);
     }
   }
 
@@ -3591,6 +3706,8 @@ export default function Home() {
           const travelerName = getBookingName(savedBooking);
           const driverName = clean(savedBooking.driver_name) || clean(driverDraft.driverName);
           const hasDriver = Boolean(driverName);
+          const hasSavedDriver = Boolean(clean(savedBooking.driver_name) || savedBooking.driver_id);
+          const driverAssignmentMessage = driverAssignmentMessages[bookingId] ?? null;
 
           return (
             <article
@@ -3772,6 +3889,26 @@ export default function Home() {
                 >
                   {assigningBookingId === bookingId ? "Assigning..." : "Assign to this booking"}
                 </button>
+                {hasSavedDriver ? (
+                  <button
+                    className="mt-2 h-10 w-full rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    disabled={assigningBookingId === bookingId}
+                    onClick={() => clearAssignedDriver(savedBooking)}
+                    type="button"
+                  >
+                    {assigningBookingId === bookingId ? "Clearing..." : "Clear assigned driver"}
+                  </button>
+                ) : null}
+                {driverAssignmentMessage ? (
+                  <p
+                    className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
+                      driverAssignmentMessage.tone,
+                    )}`}
+                    data-driver-assignment-message={bookingId}
+                  >
+                    {driverAssignmentMessage.text}
+                  </p>
+                ) : null}
               </div>
 
               {isAssigned || hasDriver ? (
@@ -4075,6 +4212,7 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setBooking(() => createInitialBooking());
+                  setLoadedBookingId("");
                   clearBookingMessageInput();
                 }}
               >

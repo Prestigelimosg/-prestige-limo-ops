@@ -3596,6 +3596,7 @@ export default function Home() {
   }
 
   async function assignDriver(bookingRecord: BookingRecord) {
+    const bookingId = String(bookingRecord.id);
     const driverDraft = getDriverDraft(bookingRecord);
     const selectedDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
     const driverName = clean(driverDraft.driverName) || clean(selectedDriver?.driver_name);
@@ -3607,21 +3608,29 @@ export default function Home() {
     );
 
     if (!driverName) {
-      setMessage({ tone: "error", text: "Driver name is required before assignment." });
+      const errorMessage = {
+        tone: "error",
+        text: "Driver name is required before assignment.",
+      } satisfies Message;
+      setMessage(errorMessage);
+      setDriverAssignmentMessage(bookingId, errorMessage);
       return;
     }
 
     if (!supabase) {
-      setMessage({
+      const errorMessage = {
         tone: "error",
         text: "Assign driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
-      });
+      } satisfies Message;
+      setMessage(errorMessage);
+      setDriverAssignmentMessage(bookingId, errorMessage);
       return;
     }
 
-    const bookingId = String(bookingRecord.id);
+    const loadingMessage = { tone: "info", text: "Assigning driver..." } satisfies Message;
     setAssigningBookingId(bookingId);
-    setMessage({ tone: "info", text: "Assigning driver..." });
+    setMessage(loadingMessage);
+    setDriverAssignmentMessage(bookingId, loadingMessage);
 
     try {
       const { error } = await supabase
@@ -3667,10 +3676,17 @@ export default function Home() {
             : currentBooking,
         ),
       );
-      setMessage({ tone: "success", text: "Driver assigned." });
+      const successMessage = { tone: "success", text: "Assigned driver updated." } satisfies Message;
+      setMessage(successMessage);
+      setDriverAssignmentMessage(bookingId, successMessage);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown driver assignment error.";
-      setMessage({ tone: "error", text: `Assign driver failed: ${errorMessage}` });
+      const assignmentErrorMessage = {
+        tone: "error",
+        text: `Assign driver failed: ${errorMessage}`,
+      } satisfies Message;
+      setMessage(assignmentErrorMessage);
+      setDriverAssignmentMessage(bookingId, assignmentErrorMessage);
     } finally {
       setAssigningBookingId(null);
     }
@@ -3883,6 +3899,7 @@ export default function Home() {
 	                </div>
                 <button
                   className="mt-3 h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  data-dashboard-assign-driver={bookingId}
                   disabled={assigningBookingId === bookingId}
                   onClick={() => assignDriver(savedBooking)}
                   type="button"
@@ -3892,6 +3909,7 @@ export default function Home() {
                 {hasSavedDriver ? (
                   <button
                     className="mt-2 h-10 w-full rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    data-dashboard-clear-driver={bookingId}
                     disabled={assigningBookingId === bookingId}
                     onClick={() => clearAssignedDriver(savedBooking)}
                     type="button"

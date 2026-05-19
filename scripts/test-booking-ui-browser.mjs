@@ -1906,6 +1906,10 @@ async function runChromeTest() {
               candidate.innerText.includes("SQ777") &&
               [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign to this booking"),
           );
+          const assignmentMessage = article?.querySelector("[data-driver-assignment-message='${dashboardDriverAssignmentFixture.id}']");
+          const assignButton = article?.querySelector("[data-dashboard-assign-driver='${dashboardDriverAssignmentFixture.id}']");
+          const messageRect = assignmentMessage?.getBoundingClientRect();
+          const assignButtonRect = assignButton?.getBoundingClientRect();
 
           return {
             articleText: article?.innerText || "",
@@ -1917,11 +1921,14 @@ async function runChromeTest() {
             },
             fetchCalls: window.__prestigeFetchCalls || [],
             assignmentBodies: window.__prestigeDashboardDriverAssignmentBodies || [],
+            localMessageText: assignmentMessage?.textContent.trim() || "",
+            localMessageDistance:
+              assignButtonRect && messageRect ? Math.abs(messageRect.top - assignButtonRect.bottom) : null,
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
           };
         })()`);
 
-        return candidateState?.bodyText?.includes("Driver assigned.") &&
+        return candidateState?.localMessageText === "Assigned driver updated." &&
           candidateState?.articleText?.includes("Driver: DASHBOARD TEST DRIVER")
           ? candidateState
           : false;
@@ -1944,6 +1951,10 @@ async function runChromeTest() {
       dashboardAssignmentState.fetchCalls[0],
       new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardDriverAssignmentFixture.id}`),
     );
+    assert.ok(
+      dashboardAssignmentState.fetchCalls.every((call) => !call.includes("/rest/v1/drivers")),
+      `Expected dashboard assignment not to modify driver profiles, got ${dashboardAssignmentState.fetchCalls.join(", ")}`,
+    );
     assert.equal(dashboardAssignmentState.assignmentBodies.length, 1);
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_name, "DASHBOARD TEST DRIVER");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_contact, "+65 8555 7777");
@@ -1957,6 +1968,11 @@ async function runChromeTest() {
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
     assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
+    assert.ok(
+      dashboardAssignmentState.localMessageDistance !== null &&
+        dashboardAssignmentState.localMessageDistance <= 120,
+      `Expected Assign to this booking status near Assign to this booking button, got ${dashboardAssignmentState.localMessageDistance}px`,
+    );
 
     const assignedDriverClearInitialState = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(

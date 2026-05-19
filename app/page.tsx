@@ -357,41 +357,6 @@ const requiredFields: Array<keyof BookingForm> = [
   "booker",
 ];
 
-function buildMockAiParseResult(messageText: string): AiParseResult {
-  const messageLength = clean(messageText).length;
-
-  return sanitizeAiParseResult({
-    multipleBookingsDetected: false,
-    bookings: [
-      {
-        bookingType: "",
-        companyAccount: "",
-        bookerName: "",
-        bookerEmail: "",
-        bookerContact: "",
-        passengerName: "",
-        pax: "",
-        vehicle: "",
-        pickupDate: "",
-        pickupTime: "",
-        flightNumber: "",
-        pickup: "",
-        dropoff: "",
-        extraStopLocation: "",
-        extraStops: "",
-        customerPriceOverride: "",
-        notes: `Mock AI draft placeholder from ${messageLength} pasted characters. No AI request was made.`,
-        confidence: 0.1,
-        needsReviewReasons: [
-          "Mock AI Assist is not connected to OpenAI yet",
-          "Review all fields before saving",
-        ],
-      },
-    ],
-    rawWarnings: ["Mock draft only; no API request was made."],
-  });
-}
-
 function createInitialBooking(): BookingForm {
   return {
     company: "",
@@ -1491,6 +1456,8 @@ export default function Home() {
   const [aiDraft, setAiDraft] = useState<AiParseResult | null>(null);
   const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
   const [aiAssistSafetyAccepted, setAiAssistSafetyAccepted] = useState(false);
+  const [aiAssistLoading, setAiAssistLoading] = useState(false);
+  const [aiAssistResponseNote, setAiAssistResponseNote] = useState("");
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
@@ -1798,6 +1765,8 @@ export default function Home() {
     setMultiBookingNotice(null);
     setAiDraft(null);
     setAiAssistMessage(null);
+    setAiAssistLoading(false);
+    setAiAssistResponseNote("");
     clearReviewAndSaveState();
     setMessage({
       tone: "info",
@@ -2195,9 +2164,10 @@ export default function Home() {
     await applyParsedBookingMessage(bookingMessage);
   }
 
-  function handleMockAiAssistParse() {
+  async function handleMockAiAssistParse() {
     if (!aiAssistSafetyAccepted) {
       setAiDraft(null);
+      setAiAssistResponseNote("");
       setAiAssistMessage({
         tone: "error",
         text: "Tick the AI safety checkbox to enable AI Assist.",
@@ -2207,6 +2177,7 @@ export default function Home() {
 
     if (!clean(bookingMessage)) {
       setAiDraft(null);
+      setAiAssistResponseNote("");
       setAiAssistMessage({
         tone: "error",
         text: "Paste a booking message before using AI Assist Parse.",
@@ -2214,8 +2185,47 @@ export default function Home() {
       return;
     }
 
-    setAiDraft(buildMockAiParseResult(bookingMessage));
+    setAiDraft(null);
+    setAiAssistResponseNote("");
     setAiAssistMessage(null);
+    setAiAssistLoading(true);
+
+    try {
+      const response = await fetch("/api/ai-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: clean(bookingMessage) }),
+      });
+      const responseBody = await response.json().catch(() => ({})) as {
+        ok?: unknown;
+        error?: unknown;
+        result?: unknown;
+      };
+
+      if (!response.ok || responseBody.ok !== true) {
+        setAiDraft(null);
+        setAiAssistMessage({
+          tone: "error",
+          text: typeof responseBody.error === "string"
+            ? responseBody.error
+            : "AI Assist Parse failed. Please try again.",
+        });
+        return;
+      }
+
+      setAiDraft(sanitizeAiParseResult(responseBody.result));
+      setAiAssistResponseNote("Mock AI Assist response from local API route. No OpenAI request was made.");
+      setAiAssistMessage(null);
+    } catch {
+      setAiDraft(null);
+      setAiAssistResponseNote("");
+      setAiAssistMessage({
+        tone: "error",
+        text: "AI Assist Parse failed. Local mock API route did not respond.",
+      });
+    } finally {
+      setAiAssistLoading(false);
+    }
   }
 
   async function resolveCompany() {
@@ -3855,6 +3865,7 @@ export default function Home() {
                     setBookingMessage(event.target.value);
                     setAiDraft(null);
                     setAiAssistMessage(null);
+                    setAiAssistResponseNote("");
                   }}
                   placeholder="Paste WhatsApp, email, or screenshot OCR text here."
                   value={bookingMessage}
@@ -3895,12 +3906,21 @@ export default function Home() {
                         ? "border-indigo-300 bg-indigo-50 text-indigo-900 hover:bg-indigo-100"
                         : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                     }`}
-                    disabled={!aiAssistSafetyAccepted}
+                    disabled={!aiAssistSafetyAccepted || aiAssistLoading}
                     onClick={handleMockAiAssistParse}
                     type="button"
                   >
                     AI Assist Parse (Mock)
                   </button>
+                  {aiAssistLoading ? (
+                    <p
+                      aria-live="polite"
+                      className="text-xs font-medium text-indigo-900"
+                      data-ai-assist-loading="true"
+                    >
+                      Loading mock AI Assist draft...
+                    </p>
+                  ) : null}
                   {!aiAssistSafetyAccepted ? (
                     <p
                       className="text-xs font-medium text-indigo-900"
@@ -3943,6 +3963,11 @@ export default function Home() {
                   <p className="mt-1 text-sm text-indigo-950">
                     AI draft is for review only. It does not save bookings.
                   </p>
+                  {aiAssistResponseNote ? (
+                    <p className="mt-1 text-sm font-medium text-indigo-950">
+                      {aiAssistResponseNote}
+                    </p>
+                  ) : null}
                   {aiDraft.rawWarnings.length > 0 ? (
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-indigo-900">
                       {aiDraft.rawWarnings.map((warning) => (

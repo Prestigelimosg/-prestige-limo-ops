@@ -767,11 +767,11 @@ async function runChromeTest() {
     );
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
-      const originalFetch = window.fetch.bind(window);
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = (...args) => {
         const target = args[0]?.url || args[0];
         window.__prestigeFetchCalls.push(String(target));
-        return originalFetch(...args);
+        return window.__prestigeOriginalFetch(...args);
       };
     })()`);
 
@@ -990,7 +990,20 @@ async function runChromeTest() {
     const savedCountBeforeAiAssist = await evaluate(
       `document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || ""`,
     );
-    await evaluate(`window.__prestigeFetchCalls = []`);
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        window.__prestigeFetchCalls.push(String(target));
+
+        if (String(target).includes("/api/ai-parse")) {
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+
+        return window.__prestigeOriginalFetch(...args);
+      };
+    })()`);
 
     const clickedMockAiAssist = await evaluate(`(() => {
       const aiButton = [...document.querySelectorAll("button")].find(
@@ -1005,6 +1018,14 @@ async function runChromeTest() {
       return true;
     })()`);
     assert.equal(clickedMockAiAssist, true, "Expected AI Assist Parse (Mock) button to be clickable");
+
+    const aiAssistLoadingText = await waitForCondition(
+      () =>
+        evaluate(`document.querySelector("[data-ai-assist-loading='true']")?.textContent.trim() || ""`),
+      5000,
+      "AI Assist loading state",
+    );
+    assert.equal(aiAssistLoadingText, "Loading mock AI Assist draft...");
 
     const aiDraftState = await waitForCondition(
       async () => {
@@ -1055,13 +1076,17 @@ async function runChromeTest() {
     );
 
     assert.match(aiDraftState.bodyText, /AI draft is for review only\. It does not save bookings\./);
-    assert.match(aiDraftState.bodyText, /Mock AI Assist is not connected to OpenAI yet/);
+    assert.match(
+      aiDraftState.bodyText,
+      /Mock AI Assist response from local API route\. No OpenAI request was made\./,
+    );
+    assert.match(aiDraftState.bodyText, /Mock response only — review required/);
     assert.equal(aiDraftState.draftIsNearButtonRow, true, "Expected AI draft panel near AI button row");
     assert.equal(aiDraftState.localWarningCount, 0, "Expected empty AI Assist warning to clear after draft");
     assert.deepEqual(
       aiDraftState.fetchCalls,
-      [],
-      `Expected mock AI Assist to make no network calls, got ${aiDraftState.fetchCalls.join(", ")}`,
+      ["/api/ai-parse"],
+      `Expected mock AI Assist to call only local /api/ai-parse, got ${aiDraftState.fetchCalls.join(", ")}`,
     );
     assert.equal(
       aiDraftState.savedCount,

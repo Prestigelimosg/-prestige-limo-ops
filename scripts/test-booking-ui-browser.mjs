@@ -184,7 +184,7 @@ const routeNameAirportPickupOnlyDepartureInternalSample =
     "luthergrahambk@prestigelimo.sg",
   );
 const freeformTransferMultiLocationSample =
-  "organise viano tomorrow 11am pickup andrew shenton way send him to MAS building pickup john follow by Asia sq then to capital tower";
+  "organise viano on 20/05/2026 11am pickup andrew shenton way send him to MAS building pickup john follow by Asia sq then to capital tower";
 const dspItinerarySample = `Hi William, we need a car for Drew tomorrow, please refer to the below schedule:
 From Grand Hyatt to Ritz-Carlton Singapore (by 10am); 12pm BDC office; 1:30pm Temasek Office, 60B Orchard Road, Tower 2, The Atrium@Orchard, Singapore; 3:30pm 8 Marina View, Asia Square Tower 1, #37-01, Singapore 018960; 6pm Ritz-Carlton`;
 const numberedEventDspItinerarySample = `@Fikeri A40 7941
@@ -1688,7 +1688,7 @@ async function runChromeTest() {
     );
     assert.equal(freeformTransferState.fields.bookingType, "TRF");
     assert.equal(freeformTransferState.fields.vehicle, "VVV");
-    assert.equal(freeformTransferState.fields.pickupDate, "2026-05-19");
+    assert.equal(freeformTransferState.fields.pickupDate, "2026-05-20");
     assert.equal(freeformTransferState.fields.pickupTime, "1100hrs");
     assert.equal(freeformTransferState.fields.flight, "");
     assert.equal(freeformTransferState.fields.pickup, "Shenton Way");

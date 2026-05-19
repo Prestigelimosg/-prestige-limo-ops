@@ -266,6 +266,7 @@ type RateOverrideDraft = {
 };
 
 type DriverProfileDraft = {
+  driverId: string;
   driverName: string;
   contactNumber: string;
   vehicleType: string;
@@ -287,6 +288,7 @@ const initialRateOverrideDraft: RateOverrideDraft = {
 };
 
 const initialDriverProfileDraft: DriverProfileDraft = {
+  driverId: "",
   driverName: "",
   contactNumber: "",
   vehicleType: "",
@@ -3092,11 +3094,14 @@ export default function Home() {
     setMessage({ tone: "info", text: "Saving driver profile..." });
 
     try {
-      let existingDriver: DriverRecord | null = drivers.find(
-        (driver) => clean(driver.driver_name).toLowerCase() === driverName.toLowerCase(),
-      ) ?? null;
+      let existingDriverId = clean(driverProfileDraft.driverId);
+      let existingDriver: DriverRecord | null = existingDriverId
+        ? drivers.find((driver) => String(driver.id) === existingDriverId) ?? null
+        : drivers.find(
+            (driver) => clean(driver.driver_name).toLowerCase() === driverName.toLowerCase(),
+          ) ?? null;
 
-      if (!existingDriver) {
+      if (!existingDriverId && !existingDriver) {
         const existingResult = await supabase
           .from("drivers")
           .select("id, driver_name, contact_number, vehicle_type, plate_number, payout_preferences, driver_payout_rules, availability_status, notes, preferred_areas, airport_permit_notes")
@@ -3111,6 +3116,8 @@ export default function Home() {
         existingDriver = existingResult.data as DriverRecord | null;
       }
 
+      existingDriverId = existingDriverId || clean(existingDriver?.id ? String(existingDriver.id) : "");
+
       const payload = {
         driver_name: driverName,
         contact_number: clean(driverProfileDraft.contactNumber) || null,
@@ -3124,8 +3131,8 @@ export default function Home() {
         airport_permit_notes: clean(driverProfileDraft.airportPermitNotes) || null,
         updated_at: new Date().toISOString(),
       };
-      const result = existingDriver
-        ? await supabase.from("drivers").update(payload).eq("id", existingDriver.id)
+      const result = existingDriverId
+        ? await supabase.from("drivers").update(payload).eq("id", existingDriverId)
         : await supabase.from("drivers").insert(payload);
 
       if (result.error) {
@@ -4943,6 +4950,7 @@ export default function Home() {
 	                      key={driver.id}
 	                      onClick={() =>
 	                        setDriverProfileDraft({
+	                          driverId: String(driver.id),
 	                          driverName: clean(driver.driver_name),
 	                          contactNumber: clean(driver.contact_number),
 	                          vehicleType: clean(driver.vehicle_type),

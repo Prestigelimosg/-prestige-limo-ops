@@ -1913,11 +1913,26 @@ async function runChromeTest() {
 
     await evaluate(`(() => {
       const savedDriver = ${JSON.stringify(reusableDriverProfileFixture)};
+      window.__prestigeSavedDriver = savedDriver;
       const jsonResponse = (body, status = 200) =>
         new Response(JSON.stringify(body), {
           status,
           headers: { "content-type": "application/json" },
         });
+      const persistDriverBody = (bodyText) => {
+        if (!bodyText) {
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(bodyText);
+          window.__prestigeSavedDriver = {
+            ...(window.__prestigeSavedDriver || savedDriver),
+            ...parsed,
+            id: (window.__prestigeSavedDriver || savedDriver).id,
+          };
+        } catch {}
+      };
 
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
@@ -1952,14 +1967,16 @@ async function runChromeTest() {
           }
 
           if (method === "GET") {
-            return jsonResponse([savedDriver]);
+            return jsonResponse([window.__prestigeSavedDriver || savedDriver]);
           }
 
           if (method === "POST") {
+            persistDriverBody(bodyText);
             return jsonResponse([], 201);
           }
 
           if (method === "PATCH") {
+            persistDriverBody(bodyText);
             return jsonResponse([]);
           }
         }
@@ -2222,6 +2239,191 @@ async function runChromeTest() {
     assert.equal(selectedDriverProfileState.fields.depPayout, "66");
     assert.equal(selectedDriverProfileState.fields.trfPayout, "58");
     assert.equal(selectedDriverProfileState.fields.dspPayout, "52");
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedRenamedDriverProfileSave = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const labels = [...document.querySelectorAll("label")];
+      const fieldForLabel = (labelText) => {
+        const label = labels.find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        return label?.querySelector("input, select, textarea") || null;
+      };
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, value);
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      const driverName = fieldForLabel("Driver name");
+      const contactNumber = fieldForLabel("Contact number");
+      const vehicleType = fieldForLabel("Vehicle type");
+      const plateNumber = fieldForLabel("Plate number");
+      const availability = fieldForLabel("Availability");
+      const preferredAreas = fieldForLabel("Preferred areas");
+      const payoutPreferences = fieldForLabel("Payout preferences");
+      const airportPermitNotes = fieldForLabel("Airport permit notes");
+      const driverNotes = fieldForLabel("Driver notes");
+      const mngPayout = fieldForLabel("MNG payout");
+      const depPayout = fieldForLabel("DEP payout");
+      const trfPayout = fieldForLabel("TRF payout");
+      const dspPayout = fieldForLabel("DSP payout");
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Driver Profile",
+      );
+
+      if (
+        !driverName ||
+        !contactNumber ||
+        !vehicleType ||
+        !plateNumber ||
+        !availability ||
+        !preferredAreas ||
+        !payoutPreferences ||
+        !airportPermitNotes ||
+        !driverNotes ||
+        !mngPayout ||
+        !depPayout ||
+        !trfPayout ||
+        !dspPayout ||
+        !saveButton ||
+        saveButton.disabled
+      ) {
+        return false;
+      }
+
+      setValue(driverName, "RENAMED REUSABLE PROFILE TEST DRIVER");
+      setValue(contactNumber, "+65 8222 3333");
+      setValue(vehicleType, "Viano");
+      setValue(plateNumber, "SLR902R");
+      setValue(availability, "available");
+      setValue(preferredAreas, "Sentosa, Orchard");
+      setValue(payoutPreferences, "Prefers VIP and city jobs");
+      setValue(airportPermitNotes, "Renewed Changi permit");
+      setValue(driverNotes, "Renamed reusable profile note");
+      setValue(mngPayout, "80");
+      setValue(depPayout, "70");
+      setValue(trfPayout, "60");
+      setValue(dspPayout, "55");
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedRenamedDriverProfileSave,
+      true,
+      "Expected renamed existing driver profile to be saveable",
+    );
+
+    const renamedDriverProfileSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const saveButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Save Driver Profile",
+          );
+          const statusPanel = document.querySelector("[data-status-panel='global']");
+          const driverButton = [...document.querySelectorAll("button")].find(
+            (button) =>
+              button.innerText.includes("RENAMED REUSABLE PROFILE TEST DRIVER") &&
+              button.innerText.includes("SLR902R"),
+          );
+          const saveButtonRect = saveButton?.getBoundingClientRect();
+          const statusRect = statusPanel?.getBoundingClientRect();
+          const updateRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
+            (entry) => entry.method === "PATCH" && String(entry.url).includes("/rest/v1/drivers"),
+          );
+          const insertRequests = (window.__prestigeDriverProfileRequestBodies || []).filter(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/drivers"),
+          );
+          const bookingRequests = (window.__prestigeDriverProfileRequestBodies || []).filter((entry) =>
+            String(entry.url).includes("/rest/v1/bookings"),
+          );
+
+          return {
+            driverButtonText: driverButton?.innerText || "",
+            fetchCalls: window.__prestigeFetchCalls || [],
+            insertRequestCount: insertRequests.length,
+            bookingRequestCount: bookingRequests.length,
+            requestBodies: window.__prestigeDriverProfileRequestBodies || [],
+            statusText: statusPanel?.textContent.trim() || "",
+            statusDistanceFromSaveButton:
+              saveButtonRect && statusRect ? Math.abs(statusRect.top - saveButtonRect.bottom) : null,
+            updateRequest: updateRequest ? { url: updateRequest.url, body: updateRequest.body } : null,
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.statusText === "Driver profile saved." &&
+          candidateState?.driverButtonText?.includes("RENAMED REUSABLE PROFILE TEST DRIVER")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "renamed reusable driver profile updates existing id",
+    );
+
+    assert.deepEqual(
+      renamedDriverProfileSaveState.unhandledSupabaseCalls,
+      [],
+      `Expected renamed driver profile Supabase calls to be mocked, got ${renamedDriverProfileSaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.ok(
+      renamedDriverProfileSaveState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
+      `Expected renamed driver profile save to call only drivers REST endpoints, got ${renamedDriverProfileSaveState.fetchCalls.join(", ")}`,
+    );
+    assert.ok(
+      renamedDriverProfileSaveState.fetchCalls.every((call) => !call.includes("driver_name=ilike")),
+      `Expected selected driver id update to avoid name lookup, got ${renamedDriverProfileSaveState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(
+      renamedDriverProfileSaveState.insertRequestCount,
+      0,
+      "Expected renamed existing driver profile to avoid inserting a duplicate driver",
+    );
+    assert.equal(
+      renamedDriverProfileSaveState.bookingRequestCount,
+      0,
+      "Expected driver profile edit not to update booking assignment rows",
+    );
+    assert.match(
+      renamedDriverProfileSaveState.updateRequest?.url || "",
+      /\/rest\/v1\/drivers.*id=eq\.901/,
+    );
+    assert.match(renamedDriverProfileSaveState.driverButtonText, /available/);
+    assert.match(renamedDriverProfileSaveState.driverButtonText, /Plate:\s*SLR902R/);
+    assert.ok(
+      renamedDriverProfileSaveState.statusDistanceFromSaveButton !== null &&
+        renamedDriverProfileSaveState.statusDistanceFromSaveButton <= 120,
+      `Expected renamed driver profile saved status near Save Driver Profile button, got ${renamedDriverProfileSaveState.statusDistanceFromSaveButton}px`,
+    );
+    assert.equal(
+      renamedDriverProfileSaveState.updateRequest?.body?.driver_name,
+      "RENAMED REUSABLE PROFILE TEST DRIVER",
+    );
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.contact_number, "+65 8222 3333");
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.vehicle_type, "Viano");
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.plate_number, "SLR902R");
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.availability_status, "available");
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.preferred_areas, "Sentosa, Orchard");
+    assert.equal(
+      renamedDriverProfileSaveState.updateRequest?.body?.payout_preferences,
+      "Prefers VIP and city jobs",
+    );
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.airport_permit_notes, "Renewed Changi permit");
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.notes, "Renamed reusable profile note");
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.MNG?.min, 80);
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.MNG?.max, 80);
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DEP?.min, 70);
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DEP?.max, 70);
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.TRF?.min, 60);
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.TRF?.max, 60);
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DSP?.amount, 55);
+    assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DSP?.perHour, true);
 
     await clickTab("Dashboard", "Operations Dashboard");
     const dashboardAfterDriverProfileSaveState = await evaluate(`(() => {

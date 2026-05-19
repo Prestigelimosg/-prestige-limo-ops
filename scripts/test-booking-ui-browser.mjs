@@ -170,6 +170,47 @@ const dashboardDriverAssignmentFixture = {
     traveler_name: "DASHBOARD DRIVER TEST TRAVELER",
   },
 };
+const completedSavedBookingFixture = {
+  id: "ui-completed-load-fixture",
+  company_id: 801,
+  booker_id: 802,
+  traveler_id: 803,
+  booking_type: "DEP",
+  vehicle: "AVF",
+  pickup_time: "1730",
+  pickup_address: "Mandarin Oriental Singapore",
+  dropoff_address: "Changi Airport T1",
+  flight_no: "SQ888",
+  route: "Mandarin Oriental Singapore > Changi Airport T1",
+  pax: 1,
+  job_card:
+    "AVF DEP\n30 May 2026, 1730hrs\nFlight: SQ888\nMandarin Oriental Singapore > Changi Airport T1\nCompany: COMPLETED TEST COMPANY\nPassenger: COMPLETED TEST TRAVELER\nPax: 1",
+  status: "completed",
+  driver_id: null,
+  driver_name: "COMPLETED TEST DRIVER",
+  driver_contact: "+65 8444 8888",
+  driver_plate_number: "SLE888C",
+  customer_price_amount: 90,
+  driver_payout_amount: 65,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:50:00.000Z",
+  updated_at: "2026-05-18T23:50:00.000Z",
+  companies: {
+    company_name: "COMPLETED TEST COMPANY",
+    domain: "completed.example.com",
+  },
+  bookers: {
+    booker_name: "COMPLETED TEST BOOKER",
+    email: "booker@completed.example.com",
+    phone: "+65 8333 8888",
+  },
+  travelers: {
+    traveler_name: "COMPLETED TEST TRAVELER",
+  },
+};
 const mrLeeNoCompanySavedBookingFixture = {
   id: "ui-mr-lee-no-company-save-fixture",
   company_id: null,
@@ -748,7 +789,7 @@ async function runChromeTest() {
         ?.textContent.trim() || "",
       tabLabels: [...document.querySelectorAll("button[role='tab']")].map((button) => button.textContent.trim()),
     }))()`);
-    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Bookings", "Dashboard", "Drivers", "Rates"]);
+    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"]);
     assert.equal(initialTabState.selectedTab, "Dispatch");
 
     await evaluate(`window.__prestigeErrors = [];
@@ -1604,6 +1645,7 @@ async function runChromeTest() {
       const loadedBookings = [
         ${JSON.stringify(loadedSavedBookingFixture)},
         ${JSON.stringify(dashboardDriverAssignmentFixture)},
+        ${JSON.stringify(completedSavedBookingFixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
@@ -2025,6 +2067,166 @@ async function runChromeTest() {
       [],
       `Expected Recent Load this booking to make no save/load network call, got ${recentLoadedBookingState.fetchCalls.join(", ")}`,
     );
+
+    const seededCompletedLoadStaleMessage = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+
+      if (!textarea) {
+        return false;
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(textarea.constructor.prototype, "value");
+      descriptor?.set?.call(textarea, "stale completed tab intake message");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea.dispatchEvent(new Event("change", { bubbles: true }));
+      return textarea.value === "stale completed tab intake message";
+    })()`);
+    assert.equal(
+      seededCompletedLoadStaleMessage,
+      true,
+      "Expected stale intake message to be seeded before Completed tab load",
+    );
+
+    await clickTab("Completed", "Completed Bookings");
+
+    const completedTabState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const completedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETED TEST COMPANY") &&
+              candidate.innerText.includes("SQ888"),
+          );
+          const activeArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("LOADED SAVED COMPANY") ||
+              candidate.innerText.includes("DASHBOARD DRIVER TEST COMPANY"),
+          );
+
+          return bodyText.includes("Completed Bookings") && completedArticle
+            ? {
+                activeArticleText: activeArticle?.innerText || "",
+                bodyText,
+                completedArticleText: completedArticle.innerText,
+                hasCompletedLoadButton: Boolean(
+                  completedArticle.querySelector("[data-completed-load-booking='true']"),
+                ),
+              }
+            : false;
+        })()`),
+      10000,
+      "Completed tab filtered booking list",
+    );
+
+    assert.match(completedTabState.completedArticleText, /completed/);
+    assert.match(completedTabState.completedArticleText, /COMPLETED TEST TRAVELER/);
+    assert.equal(completedTabState.hasCompletedLoadButton, true);
+    assert.equal(
+      completedTabState.activeArticleText,
+      "",
+      "Expected active bookings not to appear in the Completed tab",
+    );
+
+    await evaluate(`window.__prestigeFetchCalls = []`);
+
+    const clickedCompletedLoadThisBooking = await evaluate(`(() => {
+      const loadThisBookingButton = document.querySelector("[data-completed-load-booking='true']");
+
+      if (!loadThisBookingButton || loadThisBookingButton.disabled) {
+        return false;
+      }
+
+      loadThisBookingButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedCompletedLoadThisBooking,
+      true,
+      "Expected Completed Load this booking button to be clickable",
+    );
+
+    const completedLoadedBookingState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const labels = [...document.querySelectorAll("label")];
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldValue = (labelText) => {
+            const label = labels.find((candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText);
+            const control = label?.querySelector("input, select, textarea");
+
+            return control?.value || "";
+          };
+          const preTextByHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading?.parentElement || null;
+
+            while (node) {
+              const pre = node.querySelector("pre");
+
+              if (pre) {
+                return pre.innerText;
+              }
+
+              node = node.parentElement;
+            }
+
+            return "";
+          };
+
+          return {
+            activeTab: [...document.querySelectorAll("button[role='tab']")]
+              .find((button) => button.getAttribute("aria-selected") === "true")
+              ?.textContent.trim() || "",
+            aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
+            aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
+            fetchCalls: window.__prestigeFetchCalls || [],
+            jobCardPreview: preTextByHeading("Job Card Preview"),
+            driverDispatch: preTextByHeading("Driver Dispatch"),
+            pastedMessage: document.querySelector("textarea")?.value || "",
+            fields: {
+              company: fieldValue("Company / Account"),
+              bookingType: fieldValue("Booking type"),
+              vehicle: fieldValue("Vehicle"),
+              pickup: fieldValue("Pickup"),
+              dropoff: fieldValue("Drop-off"),
+              flight: fieldValue("Flight number"),
+              name: fieldValue("Passenger name") || fieldValue("Name"),
+              driverName: fieldValue("Driver Name"),
+            },
+          };
+        })()`);
+
+        return candidateState?.fields?.company === "COMPLETED TEST COMPANY" &&
+          candidateState?.fields?.flight === "SQ888"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "Completed Load this booking form state",
+    );
+
+    assert.equal(completedLoadedBookingState.activeTab, "Dispatch");
+    assert.equal(completedLoadedBookingState.aiDraftExists, false);
+    assert.equal(completedLoadedBookingState.aiFeedbackExists, false);
+    assert.equal(completedLoadedBookingState.pastedMessage, "");
+    assert.deepEqual(
+      completedLoadedBookingState.fetchCalls,
+      [],
+      `Expected Completed Load this booking to make no save/load network call, got ${completedLoadedBookingState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(completedLoadedBookingState.fields.bookingType, "DEP");
+    assert.equal(completedLoadedBookingState.fields.vehicle, "AVF");
+    assert.equal(completedLoadedBookingState.fields.pickup, "Mandarin Oriental Singapore");
+    assert.equal(completedLoadedBookingState.fields.dropoff, "Changi Airport T1");
+    assert.equal(completedLoadedBookingState.fields.name, "COMPLETED TEST TRAVELER");
+    assert.equal(completedLoadedBookingState.fields.driverName, "COMPLETED TEST DRIVER");
+    assert.match(completedLoadedBookingState.jobCardPreview, /SQ888/);
+    assert.match(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST COMPANY/);
+    assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST DRIVER/);
+    assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST TRAVELER/);
 
     const clickedClearBeforeCrmSave = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(

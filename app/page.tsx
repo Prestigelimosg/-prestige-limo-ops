@@ -194,11 +194,12 @@ type CopyFeedback = Message & {
   target: "jobCard" | "driverDispatch";
 };
 
-type AppTab = "dispatch" | "bookings" | "dashboard" | "drivers" | "rates";
+type AppTab = "dispatch" | "bookings" | "completed" | "dashboard" | "drivers" | "rates";
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "dispatch", label: "Dispatch" },
   { id: "bookings", label: "Bookings" },
+  { id: "completed", label: "Completed" },
   { id: "dashboard", label: "Dashboard" },
   { id: "drivers", label: "Drivers" },
   { id: "rates", label: "Rates" },
@@ -1736,6 +1737,13 @@ export default function Home() {
         );
       });
   }, [bookings, searchTerm]);
+  const completedBookings = useMemo(
+    () =>
+      bookings.filter(
+        (bookingRecord) => clean(bookingRecord.status).toLowerCase() === "completed",
+      ),
+    [bookings],
+  );
 
   const multiBookingPreviewItems = Array.isArray(multiBookingNotice?.extractedBookingsPreview)
     ? multiBookingNotice.extractedBookingsPreview.filter(Boolean)
@@ -3931,6 +3939,66 @@ export default function Home() {
       No bookings loaded.
     </div>
   );
+  const completedBookingsPanel = completedBookings.length > 0 ? (
+    <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+      <h3 className="text-sm font-semibold text-slate-800">Completed Bookings</h3>
+      <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
+        {completedBookings.map((savedBooking) => {
+          const routePoints = getRoutePoints(savedBooking);
+          const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
+          const dropoff =
+            clean(savedBooking.dropoff_address) ||
+            routePoints[routePoints.length - 1] ||
+            "Drop-off";
+          const routeText = routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`;
+          const createdAt = formatCreatedAt(savedBooking.created_at);
+
+          return (
+            <article
+              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+              key={`completed-${savedBooking.id}`}
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1 text-slate-700">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-slate-950">
+                      {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                    </p>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${bookingStatusClass(
+                        savedBooking.status,
+                      )}`}
+                    >
+                      {savedBooking.status || "completed"}
+                    </span>
+                  </div>
+                  <p>
+                    {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
+                    Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
+                    {getBookingName(savedBooking) || "Unknown"}
+                  </p>
+                  <p>{routeText}</p>
+                  {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                </div>
+                <button
+                  className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  data-completed-load-booking="true"
+                  onClick={() => loadSelectedBooking(savedBooking)}
+                  type="button"
+                >
+                  Load this booking
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  ) : (
+    <div className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-slate-500">
+      No completed bookings loaded yet.
+    </div>
+  );
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -3962,7 +4030,7 @@ export default function Home() {
 
         <nav
           aria-label="Primary operations tabs"
-          className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-white p-2 shadow-sm sm:grid-cols-5"
+          className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-white p-2 shadow-sm sm:grid-cols-3 lg:grid-cols-6"
           role="tablist"
         >
           {appTabs.map((tab) => {
@@ -4702,6 +4770,19 @@ export default function Home() {
           </div>
           {statusPanel}
           {recentBookingsPanel}
+        </section>
+        ) : null}
+
+        {activeTab === "completed" ? (
+        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Completed</h2>
+            <p className="text-sm text-slate-500">
+              Review loaded bookings with completed status. This view is read-only.
+            </p>
+          </div>
+          {statusPanel}
+          {completedBookingsPanel}
         </section>
         ) : null}
 

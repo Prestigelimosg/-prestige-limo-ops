@@ -11,10 +11,11 @@ const chromeBinary =
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9226);
 const browserErrors = [];
 const browserConsoleErrors = [];
-const tabLabels = ["Dispatch", "Bookings", "Dashboard", "Drivers", "Rates"];
+const tabLabels = ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"];
 const tabExpectedText = {
   Dispatch: "Create Job Card",
   Bookings: "Load Bookings",
+  Completed: "No completed bookings loaded yet.",
   Dashboard: "Operations Dashboard",
   Drivers: "Driver Database",
   Rates: "Load Rates",
@@ -22,6 +23,8 @@ const tabExpectedText = {
 const responsiveTabViewports = [
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
   { height: 915, label: "mobile 412px", mobile: true, scale: 2.625, width: 412 },
+  { height: 1024, label: "iPad/tablet 768px", mobile: true, scale: 2, width: 768 },
+  { height: 1366, label: "Android tablet 1024px", mobile: false, scale: 1, width: 1024 },
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
 const requiredVisibleText = [
@@ -32,6 +35,7 @@ const requiredVisibleText = [
   "Job Card Preview",
   "Driver Dispatch",
   "Load Bookings",
+  "No completed bookings loaded yet.",
   "Operations Dashboard",
   "Driver Database",
   "Save Driver Profile",

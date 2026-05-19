@@ -170,6 +170,57 @@ const dashboardDriverAssignmentFixture = {
     traveler_name: "DASHBOARD DRIVER TEST TRAVELER",
   },
 };
+const mrLeeNoCompanySavedBookingFixture = {
+  id: "ui-mr-lee-no-company-save-fixture",
+  company_id: null,
+  booker_id: null,
+  traveler_id: null,
+  booking_type: "DEP",
+  vehicle: "AVF",
+  pickup_time: "0700",
+  pickup_address: "10 Scotts Road",
+  dropoff_address: "Changi Airport",
+  flight_no: "SQ306",
+  route: "10 Scotts Road > Changi Airport",
+  pax: 2,
+  job_card:
+    "AVF DEP\n20 May 2026, 0700hrs\nFlight: SQ306\n10 Scotts Road > Changi Airport\nName: Mr Lee\nPax: 2",
+  status: "confirmed",
+  driver_id: null,
+  driver_name: null,
+  driver_contact: null,
+  driver_plate_number: null,
+  customer_price_amount: 85,
+  driver_payout_amount: 65,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-19T02:00:00.000Z",
+  updated_at: "2026-05-19T02:00:00.000Z",
+  companies: null,
+  bookers: null,
+  travelers: null,
+};
+const mrLeeExistingCompanySavedBookingFixture = {
+  ...mrLeeNoCompanySavedBookingFixture,
+  id: "ui-mr-lee-existing-company-save-fixture",
+  company_id: 901,
+  traveler_id: 903,
+  job_card:
+    "AVF DEP\n20 May 2026, 0700hrs\nFlight: SQ306\n10 Scotts Road > Changi Airport\nCompany: EXISTING CRM COMPANY\nName: Mr Lee\nPax: 2",
+  companies: {
+    company_name: "EXISTING CRM COMPANY",
+    domain: "existing-crm.example.com",
+  },
+  travelers: {
+    traveler_name: "Mr Lee",
+  },
+};
+const mrLeeCrmFailureSavedBookingFixture = {
+  ...mrLeeNoCompanySavedBookingFixture,
+  id: "ui-mr-lee-crm-failure-save-fixture",
+};
 const multiBookingPreviewSample = `Hi William.
 
 Tomorrow:
@@ -2598,7 +2649,549 @@ async function runChromeTest() {
     assert.equal(airportDepartureState.fields.dropoff, "Changi Airport");
     assert.equal(airportDepartureState.fields.name, "Mr Lee");
     assert.equal(airportDepartureState.fields.pax, "2");
+    assert.equal(airportDepartureState.fields.company, "");
     assert.doesNotMatch(airportDepartureState.fieldText, /airport for|Changi Airport T[1-4]/i);
+    assert.doesNotMatch(
+      airportDepartureState.visibleText,
+      /Missing pickup date|Missing pickup time|Missing pickup|Missing drop-off|Missing traveler \/ name/,
+    );
+
+    await evaluate(`(() => {
+      const savedBooking = ${JSON.stringify(mrLeeNoCompanySavedBookingFixture)};
+      const jsonResponse = (body, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      window.__prestigeFetchCalls = [];
+      window.__prestigeMrLeeSaveRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const url = String(target);
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
+        if (bodyText) {
+          try {
+            window.__prestigeMrLeeSaveRequestBodies.push({
+              method,
+              url,
+              body: JSON.parse(bodyText),
+            });
+          } catch {
+            window.__prestigeMrLeeSaveRequestBodies.push({ method, url, body: bodyText });
+          }
+        }
+
+        if (!url.includes("/rest/v1/")) {
+          return window.__prestigeOriginalFetch(...args);
+        }
+
+        if (url.includes("/rest/v1/bookers") && method === "GET") {
+          return jsonResponse([]);
+        }
+
+        if (url.includes("/rest/v1/travelers") && method === "GET") {
+          return jsonResponse([]);
+        }
+
+        if (url.includes("/rest/v1/bookings")) {
+          if (method === "POST") {
+            return jsonResponse({ id: savedBooking.id }, 201);
+          }
+
+          if (method === "GET") {
+            return jsonResponse([savedBooking]);
+          }
+        }
+
+        window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+        return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
+      };
+    })()`);
+
+    const clickedMrLeeNoCompanySave = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Booking + CRM",
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedMrLeeNoCompanySave, true, "Expected Mr Lee no-company save button to be clickable");
+
+    const mrLeeNoCompanySaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+          );
+          const recentArticle = [...document.querySelectorAll("article")].find(
+            (article) =>
+              article.innerText.includes("SQ306") &&
+              article.innerText.includes("Mr Lee") &&
+              [...article.querySelectorAll("button")].some(
+                (button) =>
+                  button.textContent.trim() === "Load this booking" &&
+                  !button.matches("[data-dashboard-load-booking='true']"),
+              ),
+          );
+
+          return bodyText.includes("Booking saved successfully: ${mrLeeNoCompanySavedBookingFixture.id}")
+            ? {
+                bodyText,
+                articleText: recentArticle?.innerText || "",
+                fetchCalls: window.__prestigeFetchCalls || [],
+                requestBodies: window.__prestigeMrLeeSaveRequestBodies || [],
+                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+                bookingInsert: bookingInsert?.body || null,
+              }
+            : false;
+        })()`);
+
+        return candidateState?.articleText?.includes("SQ306") ? candidateState : false;
+      },
+      10000,
+      "Mr Lee no-company successful save",
+    );
+
+    assert.deepEqual(
+      mrLeeNoCompanySaveState.unhandledSupabaseCalls,
+      [],
+      `Expected Mr Lee no-company save to mock every Supabase call, got ${mrLeeNoCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.company_id, null);
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booker_id, null);
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.traveler_id, null);
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking_type, "DEP");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.vehicle, "AVF");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pickup_address, "10 Scotts Road");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.dropoff_address, "Changi Airport");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.flight_no, "SQ306");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pax, 2);
+    assert.equal(
+      mrLeeNoCompanySaveState.fetchCalls.some(
+        (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),
+      ),
+      false,
+      "Expected blank Company / Account not to create a fake company",
+    );
+    assert.equal(
+      mrLeeNoCompanySaveState.fetchCalls.some(
+        (call) =>
+          (call.includes("/rest/v1/bookers") || call.includes("/rest/v1/travelers")) &&
+          call.startsWith("POST "),
+      ),
+      false,
+      "Expected blank Company / Account not to create CRM booker/traveler records",
+    );
+    assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved successfully\. CRM update failed/i);
+    assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved, but CRM update failed/i);
+    assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Company:\s*(?:Mr Lee|Internal Account|Draft)/i);
+
+    const clickedMrLeeNoCompanyRecentLoad = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("SQ306") &&
+          candidate.innerText.includes("Mr Lee") &&
+          [...candidate.querySelectorAll("button")].some(
+            (button) =>
+              button.textContent.trim() === "Load this booking" &&
+              !button.matches("[data-dashboard-load-booking='true']"),
+          ),
+      );
+      const loadButton = [...(article?.querySelectorAll("button") || [])].find(
+        (button) =>
+          button.textContent.trim() === "Load this booking" &&
+          !button.matches("[data-dashboard-load-booking='true']"),
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedMrLeeNoCompanyRecentLoad, true, "Expected Mr Lee saved booking to reload from Recent Bookings");
+
+    const mrLeeNoCompanyReloadState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.flight === "SQ306" &&
+          candidateState?.fields?.pickup === "10 Scotts Road" &&
+          candidateState?.fields?.dropoff === "Changi Airport"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "Mr Lee no-company saved booking reload",
+    );
+
+    assert.equal(mrLeeNoCompanyReloadState.fields.company, "");
+    assert.equal(mrLeeNoCompanyReloadState.fields.bookingType, "DEP");
+    assert.equal(mrLeeNoCompanyReloadState.fields.vehicle, "AVF");
+    assert.equal(mrLeeNoCompanyReloadState.fields.pickupDate, "2026-05-20");
+    assert.equal(mrLeeNoCompanyReloadState.fields.pickupTime, "0700hrs");
+    assert.equal(mrLeeNoCompanyReloadState.fields.flight, "SQ306");
+    assert.equal(mrLeeNoCompanyReloadState.fields.pickup, "10 Scotts Road");
+    assert.equal(mrLeeNoCompanyReloadState.fields.dropoff, "Changi Airport");
+    assert.equal(mrLeeNoCompanyReloadState.fields.name, "Mr Lee");
+    assert.equal(mrLeeNoCompanyReloadState.fields.pax, "2");
+
+    const setExistingCompanyOnMrLee = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const label = [...document.querySelectorAll("label")].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Company / Account",
+      );
+      const input = label?.querySelector("input");
+
+      if (!input) {
+        return false;
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+      descriptor?.set?.call(input, "EXISTING CRM COMPANY");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(setExistingCompanyOnMrLee, true, "Expected Company / Account to be editable for existing company save");
+
+    await evaluate(`(() => {
+      const savedBooking = ${JSON.stringify(mrLeeExistingCompanySavedBookingFixture)};
+      const companyRecord = {
+        id: savedBooking.company_id,
+        company_name: savedBooking.companies.company_name,
+        domain: savedBooking.companies.domain,
+        customer_rates: {},
+        driver_payout_rules: {},
+        transzend_excel_privacy: false,
+      };
+      const travelerRecord = {
+        id: savedBooking.traveler_id,
+        company_id: savedBooking.company_id,
+        traveler_name: savedBooking.travelers.traveler_name,
+        preferred_vehicle: savedBooking.vehicle,
+        default_address: savedBooking.pickup_address,
+        default_pickup_address: savedBooking.pickup_address,
+        default_dropoff_address: "",
+        booker_id: null,
+        booker_name: null,
+        booker_contact: null,
+        booker_email: null,
+        customer_rates: {},
+        driver_payout_rules: {},
+      };
+      const savedAddressRecord = {
+        id: 904,
+        company_id: savedBooking.company_id,
+        traveler_id: savedBooking.traveler_id,
+        label: "Default",
+        address: savedBooking.pickup_address,
+        address_role: "traveler_default",
+        is_default: true,
+        use_count: 1,
+      };
+      const jsonResponse = (body, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      window.__prestigeFetchCalls = [];
+      window.__prestigeExistingCompanySaveRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeExistingCompanyLookupCount = 0;
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const url = String(target);
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
+        if (bodyText) {
+          try {
+            window.__prestigeExistingCompanySaveRequestBodies.push({
+              method,
+              url,
+              body: JSON.parse(bodyText),
+            });
+          } catch {
+            window.__prestigeExistingCompanySaveRequestBodies.push({ method, url, body: bodyText });
+          }
+        }
+
+        if (!url.includes("/rest/v1/")) {
+          return window.__prestigeOriginalFetch(...args);
+        }
+
+        if (url.includes("/rest/v1/companies")) {
+          if (method === "GET") {
+            window.__prestigeExistingCompanyLookupCount += 1;
+            return jsonResponse(window.__prestigeExistingCompanyLookupCount === 1 ? [] : companyRecord);
+          }
+
+          if (method === "POST") {
+            return jsonResponse(
+              {
+                code: "23505",
+                message: 'duplicate key value violates unique constraint "companies_company_name_key"',
+              },
+              409,
+            );
+          }
+        }
+
+        if (url.includes("/rest/v1/travelers")) {
+          if (method === "GET") {
+            return jsonResponse([]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse(travelerRecord, 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({});
+          }
+        }
+
+        if (url.includes("/rest/v1/saved_addresses")) {
+          if (method === "GET") {
+            return jsonResponse([]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse(savedAddressRecord, 201);
+          }
+        }
+
+        if (url.includes("/rest/v1/bookings")) {
+          if (method === "POST") {
+            return jsonResponse({ id: savedBooking.id }, 201);
+          }
+
+          if (method === "GET") {
+            return jsonResponse([savedBooking]);
+          }
+        }
+
+        window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+        return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
+      };
+    })()`);
+
+    const clickedMrLeeExistingCompanySave = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Booking + CRM",
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedMrLeeExistingCompanySave,
+      true,
+      "Expected Mr Lee existing-company save button to be clickable",
+    );
+
+    const mrLeeExistingCompanySaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const bookingInsert = (window.__prestigeExistingCompanySaveRequestBodies || []).find(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+          );
+
+          return bodyText.includes("Booking saved successfully: ${mrLeeExistingCompanySavedBookingFixture.id}")
+            ? {
+                bodyText,
+                fetchCalls: window.__prestigeFetchCalls || [],
+                requestBodies: window.__prestigeExistingCompanySaveRequestBodies || [],
+                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+                bookingInsert: bookingInsert?.body || null,
+              }
+            : false;
+        })()`);
+
+        return candidateState || false;
+      },
+      10000,
+      "Mr Lee existing-company duplicate recovery save",
+    );
+
+    assert.deepEqual(
+      mrLeeExistingCompanySaveState.unhandledSupabaseCalls,
+      [],
+      `Expected Mr Lee existing-company save to mock every Supabase call, got ${mrLeeExistingCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.company_id, 901);
+    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.traveler_id, 903);
+    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.booking_type, "DEP");
+    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.pickup_address, "10 Scotts Road");
+    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.dropoff_address, "Changi Airport");
+    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.flight_no, "SQ306");
+    assert.equal(
+      mrLeeExistingCompanySaveState.fetchCalls.some(
+        (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),
+      ),
+      true,
+      "Expected duplicate company insert race to be exercised",
+    );
+    assert.doesNotMatch(mrLeeExistingCompanySaveState.bodyText, /CRM update failed/i);
+
+    const setCrmFailureCompanyOnMrLee = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const label = [...document.querySelectorAll("label")].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Company / Account",
+      );
+      const input = label?.querySelector("input");
+
+      if (!input) {
+        return false;
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+      descriptor?.set?.call(input, "CRM FAILURE COMPANY");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(setCrmFailureCompanyOnMrLee, true, "Expected Company / Account to be editable for CRM failure save");
+
+    await evaluate(`(() => {
+      const savedBooking = ${JSON.stringify(mrLeeCrmFailureSavedBookingFixture)};
+      const jsonResponse = (body, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      window.__prestigeFetchCalls = [];
+      window.__prestigeCrmFailureSaveRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const url = String(target);
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
+        if (bodyText) {
+          try {
+            window.__prestigeCrmFailureSaveRequestBodies.push({
+              method,
+              url,
+              body: JSON.parse(bodyText),
+            });
+          } catch {
+            window.__prestigeCrmFailureSaveRequestBodies.push({ method, url, body: bodyText });
+          }
+        }
+
+        if (!url.includes("/rest/v1/")) {
+          return window.__prestigeOriginalFetch(...args);
+        }
+
+        if (url.includes("/rest/v1/companies")) {
+          if (method === "GET") {
+            return jsonResponse([]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse({ message: "CRM service unavailable" }, 500);
+          }
+        }
+
+        if (url.includes("/rest/v1/bookers") && method === "GET") {
+          return jsonResponse([]);
+        }
+
+        if (url.includes("/rest/v1/travelers") && method === "GET") {
+          return jsonResponse([]);
+        }
+
+        if (url.includes("/rest/v1/bookings")) {
+          if (method === "POST") {
+            return jsonResponse({ id: savedBooking.id }, 201);
+          }
+
+          if (method === "GET") {
+            return jsonResponse([savedBooking]);
+          }
+        }
+
+        window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+        return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
+      };
+    })()`);
+
+    const clickedMrLeeCrmFailureSave = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Booking + CRM",
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedMrLeeCrmFailureSave, true, "Expected Mr Lee CRM failure save button to be clickable");
+
+    const mrLeeCrmFailureSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const bookingInsert = (window.__prestigeCrmFailureSaveRequestBodies || []).find(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+          );
+
+          return bodyText.includes("Booking saved, but CRM update failed:")
+            ? {
+                bodyText,
+                fetchCalls: window.__prestigeFetchCalls || [],
+                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+                bookingInsert: bookingInsert?.body || null,
+              }
+            : false;
+        })()`);
+
+        return candidateState || false;
+      },
+      10000,
+      "Mr Lee CRM failure save warning",
+    );
+
+    assert.deepEqual(
+      mrLeeCrmFailureSaveState.unhandledSupabaseCalls,
+      [],
+      `Expected Mr Lee CRM failure save to mock every Supabase call, got ${mrLeeCrmFailureSaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(mrLeeCrmFailureSaveState.bookingInsert?.company_id, null);
+    assert.match(mrLeeCrmFailureSaveState.bodyText, /Booking saved, but CRM update failed: CRM service unavailable/);
+    assert.doesNotMatch(mrLeeCrmFailureSaveState.bodyText, /Booking saved successfully\. CRM update failed/i);
+    assert.doesNotMatch(mrLeeCrmFailureSaveState.bodyText, /Booking saved successfully: ui-mr-lee-crm-failure-save-fixture/);
+
+    await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
 
     const clickedClearBeforeExactPaste = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(

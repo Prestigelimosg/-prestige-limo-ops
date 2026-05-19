@@ -2274,11 +2274,15 @@ export default function Home() {
       return companyRecord;
     }
 
-    if (companyName) {
+    async function getCompanyBySafeName(safeCompanyName: string) {
+      if (!safeCompanyName) {
+        return null;
+      }
+
       const existingByName = await client
         .from("companies")
         .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
-        .ilike("company_name", companyName)
+        .ilike("company_name", safeCompanyName)
         .limit(1)
         .maybeSingle();
 
@@ -2286,8 +2290,14 @@ export default function Home() {
         throw new Error(existingByName.error.message);
       }
 
-      if (existingByName.data) {
-        return existingByName.data as CompanyRecord;
+      return (existingByName.data as CompanyRecord | null) ?? null;
+    }
+
+    if (companyName) {
+      const existingByName = await getCompanyBySafeName(companyName);
+
+      if (existingByName) {
+        return existingByName;
       }
     }
 
@@ -2365,14 +2375,16 @@ export default function Home() {
       }
     }
 
+    const companyNameToCreate = companyName || domain;
+
+    if (!companyNameToCreate) {
+      return blankCompanyRecord("");
+    }
+
     const createdCompany = await client
       .from("companies")
       .insert({
-        company_name:
-          companyName ||
-          domain ||
-          (bookerName && bookerName.toLowerCase() !== personName.toLowerCase() ? bookerName : "") ||
-          "Internal Account",
+        company_name: companyNameToCreate,
         domain: domain || null,
         customer_rates: {},
         driver_payout_rules: {},
@@ -2381,6 +2393,20 @@ export default function Home() {
       .single();
 
     if (createdCompany.error) {
+      const duplicateCompanyName =
+        createdCompany.error.code === "23505" ||
+        /duplicate key value violates unique constraint "companies_company_name_key"/i.test(
+          createdCompany.error.message,
+        );
+
+      if (duplicateCompanyName) {
+        const existingByName = await getCompanyBySafeName(companyNameToCreate);
+
+        if (existingByName) {
+          return existingByName;
+        }
+      }
+
       throw new Error(createdCompany.error.message);
     }
 
@@ -3151,8 +3177,10 @@ export default function Home() {
 
       try {
         company = await resolveCompany();
-        booker = await resolveBooker(company.id);
-        name = await resolveName(company.id, booker);
+        if (company.id) {
+          booker = await resolveBooker(company.id);
+          name = await resolveName(company.id, booker);
+        }
       } catch (error) {
         crmUpdateFailed = true;
         crmErrorMessage = error instanceof Error ? error.message : "Unknown CRM update error.";
@@ -3240,7 +3268,7 @@ export default function Home() {
         setMessage(saveMessage);
         setBookingSaveMessage(saveMessage);
       } else {
-        if (!crmUpdateFailed) {
+        if (!crmUpdateFailed && company.id) {
           try {
             await rememberNameCrmDetails(company.id, name?.id ?? null);
           } catch (error) {
@@ -3278,7 +3306,7 @@ export default function Home() {
         const saveMessage = {
           tone: crmUpdateFailed ? "error" : "success",
           text: crmUpdateFailed
-            ? `Booking saved successfully. CRM update failed: ${crmErrorMessage || "Unknown CRM error."}`
+            ? `Booking saved, but CRM update failed: ${crmErrorMessage || "Unknown CRM error."}`
             : `Booking saved successfully: ${savedBooking.id}`,
         } satisfies Message;
 

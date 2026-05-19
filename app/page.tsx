@@ -3962,7 +3962,7 @@ export default function Home() {
 
         <nav
           aria-label="Primary operations tabs"
-          className="flex gap-2 overflow-x-auto rounded-lg border border-stone-200 bg-white p-2 shadow-sm"
+          className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-white p-2 shadow-sm sm:grid-cols-5"
           role="tablist"
         >
           {appTabs.map((tab) => {
@@ -3971,7 +3971,7 @@ export default function Home() {
             return (
               <button
                 aria-selected={selected}
-                className={`h-10 rounded-md px-4 text-sm font-semibold transition ${
+                className={`h-10 w-full rounded-md px-3 text-sm font-semibold transition ${
                   selected
                     ? "bg-slate-950 text-white"
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"

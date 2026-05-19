@@ -19,6 +19,11 @@ const tabExpectedText = {
   Drivers: "Driver Database",
   Rates: "Load Rates",
 };
+const responsiveTabViewports = [
+  { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
+  { height: 915, label: "mobile 412px", mobile: true, scale: 2.625, width: 412 },
+  { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
+];
 const requiredVisibleText = [
   "Prestige Limo",
   "Booking",
@@ -335,6 +340,137 @@ async function runChromeTest() {
       );
     };
 
+    const waitForTabs = () =>
+      waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const labels = [...document.querySelectorAll("button[role='tab']")].map(
+              (button) => button.textContent.trim(),
+            );
+
+            return ${JSON.stringify(tabLabels)}.every((label) => labels.includes(label));
+          })()`),
+        10000,
+        "Prestige Limo app tabs",
+      );
+
+    const setViewportAndReload = async (viewport) => {
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: viewport.scale,
+        height: viewport.height,
+        mobile: viewport.mobile,
+        width: viewport.width,
+      });
+
+      const viewportLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url: appUrl });
+      await viewportLoadEvent;
+      await waitForTabs();
+    };
+
+    const checkResponsiveTabs = async (viewport) => {
+      await setViewportAndReload(viewport);
+
+      const tabStates = [];
+      for (const label of tabLabels) {
+        await clickTab(label);
+        const tabState = await evaluate(`(() => {
+          const doc = document.documentElement;
+          const nav = document.querySelector("nav[role='tablist']");
+          const buttons = [...document.querySelectorAll("button[role='tab']")].map((button) => {
+            const rect = button.getBoundingClientRect();
+
+            return {
+              bottom: Math.round(rect.bottom),
+              height: Math.round(rect.height),
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              selected: button.getAttribute("aria-selected") === "true",
+              text: button.textContent.trim(),
+              top: Math.round(rect.top),
+              width: Math.round(rect.width),
+            };
+          });
+          const selected = buttons.find((button) => button.selected);
+          const expectedText = ${JSON.stringify(tabExpectedText)}[${JSON.stringify(label)}] || "";
+
+          return {
+            activeTab: selected?.text || "",
+            bodyScrollWidth: document.body.scrollWidth,
+            docClientWidth: doc.clientWidth,
+            docScrollWidth: doc.scrollWidth,
+            expectedTextVisible: expectedText ? document.body.innerText.includes(expectedText) : true,
+            navClientWidth: nav?.clientWidth || 0,
+            navScrollWidth: nav?.scrollWidth || 0,
+            tabButtons: buttons,
+          };
+        })()`);
+
+        const overflowingWidth = Math.max(tabState.docScrollWidth, tabState.bodyScrollWidth);
+        const offscreenTabs = tabState.tabButtons.filter(
+          (button) => button.left < 0 || button.right > tabState.docClientWidth || button.width <= 0,
+        );
+        const smallTouchTargets = tabState.tabButtons.filter(
+          (button) => button.height < 40 || button.width < 64,
+        );
+
+        assert.equal(
+          overflowingWidth <= tabState.docClientWidth + 2,
+          true,
+          `${viewport.label} ${label}: expected no document-level horizontal overflow`,
+        );
+        assert.equal(
+          tabState.navScrollWidth <= tabState.navClientWidth + 2,
+          true,
+          `${viewport.label} ${label}: expected tabs not to require horizontal scrolling`,
+        );
+        assert.deepEqual(
+          offscreenTabs,
+          [],
+          `${viewport.label} ${label}: expected all tabs visible within viewport`,
+        );
+        assert.deepEqual(
+          smallTouchTargets,
+          [],
+          `${viewport.label} ${label}: expected comfortable tab touch targets`,
+        );
+        assert.equal(tabState.activeTab, label, `${viewport.label}: expected selected tab ${label}`);
+        assert.equal(
+          tabState.expectedTextVisible,
+          true,
+          `${viewport.label} ${label}: expected tab content to be visible`,
+        );
+
+        if (label === "Dispatch") {
+          const dispatchControlsVisible = await evaluate(`document.body.innerText.includes("AI Assist Parse (Mock)") &&
+            document.body.innerText.includes("Create Job Card") &&
+            document.body.innerText.includes("Clear Message")`);
+          assert.equal(
+            dispatchControlsVisible,
+            true,
+            `${viewport.label}: expected Dispatch tab controls visible`,
+          );
+        }
+
+        tabStates.push({
+          activeTab: tabState.activeTab,
+          docClientWidth: tabState.docClientWidth,
+          docScrollWidth: tabState.docScrollWidth,
+          label,
+          navClientWidth: tabState.navClientWidth,
+          navScrollWidth: tabState.navScrollWidth,
+          tabButtons: tabState.tabButtons.map((button) => ({
+            height: button.height,
+            text: button.text,
+            width: button.width,
+          })),
+          viewport: viewport.label,
+        });
+      }
+
+      return tabStates;
+    };
+
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];
       window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
@@ -345,18 +481,7 @@ async function runChromeTest() {
         originalError.apply(console, args);
       };`);
 
-    await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const labels = [...document.querySelectorAll("button[role='tab']")].map(
-            (button) => button.textContent.trim(),
-          );
-
-          return ${JSON.stringify(tabLabels)}.every((label) => labels.includes(label));
-        })()`),
-      10000,
-      "Prestige Limo app tabs",
-    );
+    await waitForTabs();
 
     const visibleSnapshots = [];
     const buttonLabels = [];
@@ -374,6 +499,11 @@ async function runChromeTest() {
       errors: await evaluate("window.__prestigeErrors || []"),
       visibleText: visibleSnapshots.join("\n\n"),
     };
+    state.responsiveTabs = [];
+    for (const viewport of responsiveTabViewports) {
+      const responsiveStates = await checkResponsiveTabs(viewport);
+      state.responsiveTabs.push(...responsiveStates);
+    }
     state.errors = [...browserErrors, ...(state.errors || [])];
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 

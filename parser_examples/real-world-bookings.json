@@ -1064,6 +1064,26 @@
     }
   },
   {
+    "id": "freeform-airport-departure-to-airport-for-flight",
+    "categories": [
+      "freeform airport departure",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "referenceDate": "2026-05-19T12:00:00+08:00",
+    "input": "Please arrange Alphard tomorrow 7am pickup Mr Lee from 10 Scotts Road to airport for SQ306. 2 pax.",
+    "expected": {
+      "bookingType": "DEP",
+      "vehicle": "AVF",
+      "date": "2026-05-20",
+      "time": "0700hrs",
+      "flight": "SQ306",
+      "pickup": "10 Scotts Road",
+      "dropoff": "Changi Airport",
+      "name": "Mr Lee",
+      "pax": "2"
+    }
+  },
+  {
     "id": "freeform-airport-transfer-return-transfer-shared-stay-address",
     "categories": [
       "airport departure plus return arrival split",

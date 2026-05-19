@@ -2409,9 +2409,18 @@ function detectRoute(text: string, flight = "") {
 
   const fromToMatch = text.match(/\bfrom\s+(.+?)\s+to\s+(.+?)(?=\.|,|\n|$)/i);
   if (fromToMatch?.[1] && fromToMatch?.[2]) {
+    const rawRouteDropoff = clean(fromToMatch[2]);
+
+    if (flight && /^(?:changi\s+)?airport\b/i.test(rawRouteDropoff)) {
+      return {
+        pickup: cleanLocation(fromToMatch[1]),
+        dropoff: airportLocationFromText(rawRouteDropoff),
+      };
+    }
+
     return {
       pickup: cleanLocation(fromToMatch[1]),
-      dropoff: cleanLocation(fromToMatch[2]),
+      dropoff: cleanLocation(rawRouteDropoff),
     };
   }
 

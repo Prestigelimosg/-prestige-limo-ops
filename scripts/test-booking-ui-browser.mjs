@@ -118,6 +118,7 @@ EA to Mark Colodny, Co-Head of US Private Equity
 & Chairman of Global Technology
 Warburg Pincus`;
 const airportTransferReturnTransferSample = "Hi, can I arrange for a airport transfer tomorrow at 645 pick for SQ108. And the return transfer on Friday at 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o";
+const airportDepartureToAirportForFlightSample = "Please arrange Alphard tomorrow 7am pickup Mr Lee from 10 Scotts Road to airport for SQ306. 2 pax.";
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
 Order total amount	S$130.00
@@ -1823,6 +1824,95 @@ async function runChromeTest() {
     assert.equal(selectedAirportArrivalState.fields.name, "Mr Peter");
     assert.equal(selectedAirportArrivalState.fields.pax, "1");
     assert.doesNotMatch(selectedAirportArrivalState.fieldText, /Changi Airport T[1-4]/);
+
+    const focusedAirportDepartureTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(
+      focusedAirportDepartureTextarea,
+      true,
+      "Expected booking message textarea to be focused for airport departure to airport sample",
+    );
+
+    await client.send("Input.insertText", { text: airportDepartureToAirportForFlightSample });
+
+    const filledAirportDepartureTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(airportDepartureToAirportForFlightSample)}`,
+    );
+    assert.equal(
+      filledAirportDepartureTextarea,
+      true,
+      "Expected airport departure to airport booking message textarea to be filled",
+    );
+
+    const clickedAirportDepartureParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedAirportDepartureParse,
+      true,
+      "Expected Create Job Card button to parse airport departure to airport sample",
+    );
+
+    const airportDepartureState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        if (
+          candidateState?.fields?.bookingType === "DEP" &&
+          candidateState?.fields?.flight === "SQ306" &&
+          candidateState?.fields?.dropoff === "Changi Airport"
+        ) {
+          return candidateState;
+        }
+
+        return false;
+      },
+      10000,
+      "parsed airport departure to airport UI state",
+    );
+    airportDepartureState.errors = [...browserErrors, ...(airportDepartureState.errors || [])];
+    airportDepartureState.consoleErrors = [
+      ...browserConsoleErrors,
+      ...(airportDepartureState.consoleErrors || []),
+    ];
+
+    assert.deepEqual(
+      airportDepartureState.errors,
+      [],
+      `Expected no browser runtime errors, got ${airportDepartureState.errors.join("\n")}`,
+    );
+    assert.deepEqual(
+      airportDepartureState.consoleErrors,
+      [],
+      `Expected no browser console errors, got ${airportDepartureState.consoleErrors.join("\n")}`,
+    );
+    assert.equal(airportDepartureState.fields.bookingType, "DEP");
+    assert.equal(airportDepartureState.fields.vehicle, "AVF");
+    assert.equal(airportDepartureState.fields.pickupDate, "2026-05-20");
+    assert.equal(airportDepartureState.fields.pickupTime, "0700hrs");
+    assert.equal(airportDepartureState.fields.flight, "SQ306");
+    assert.equal(airportDepartureState.fields.pickup, "10 Scotts Road");
+    assert.equal(airportDepartureState.fields.dropoff, "Changi Airport");
+    assert.equal(airportDepartureState.fields.name, "Mr Lee");
+    assert.equal(airportDepartureState.fields.pax, "2");
+    assert.doesNotMatch(airportDepartureState.fieldText, /airport for|Changi Airport T[1-4]/i);
 
     const clickedClearBeforeExactPaste = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(

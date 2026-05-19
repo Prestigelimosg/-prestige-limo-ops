@@ -129,6 +129,47 @@ const loadedSavedBookingFixture = {
     traveler_name: "LOADED SAVED TRAVELER",
   },
 };
+const dashboardDriverAssignmentFixture = {
+  id: "ui-dashboard-driver-assignment-fixture",
+  company_id: 701,
+  booker_id: 702,
+  traveler_id: 703,
+  booking_type: "MNG",
+  vehicle: "AVF",
+  pickup_time: "1115",
+  pickup_address: "Changi Airport",
+  dropoff_address: "The Fullerton Hotel Singapore",
+  flight_no: "SQ777",
+  route: "Changi Airport > The Fullerton Hotel Singapore",
+  pax: 2,
+  job_card:
+    "AVF MNG\n29 May 2026, 1115hrs\nFlight: SQ777\nChangi Airport > The Fullerton Hotel Singapore\nPassenger: DASHBOARD DRIVER TEST TRAVELER\nPax: 2",
+  status: "confirmed",
+  driver_id: null,
+  driver_name: null,
+  driver_contact: null,
+  driver_plate_number: null,
+  customer_price_amount: 95,
+  driver_payout_amount: 70,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:55:00.000Z",
+  updated_at: "2026-05-18T23:55:00.000Z",
+  companies: {
+    company_name: "DASHBOARD DRIVER TEST COMPANY",
+    domain: "dashboard-driver.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD DRIVER TEST BOOKER",
+    email: "booker@dashboard-driver.example.com",
+    phone: "+65 8666 0000",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD DRIVER TEST TRAVELER",
+  },
+};
 const multiBookingPreviewSample = `Hi William.
 
 Tomorrow:
@@ -1254,12 +1295,18 @@ async function runChromeTest() {
     assert.equal(aiDraftState.fields.name, state.fields.name);
 
     await evaluate(`(() => {
-      const loadedBookings = [${JSON.stringify(loadedSavedBookingFixture)}];
+      const loadedBookings = [
+        ${JSON.stringify(loadedSavedBookingFixture)},
+        ${JSON.stringify(dashboardDriverAssignmentFixture)},
+      ];
       window.__prestigeFetchCalls = [];
+      window.__prestigeDashboardDriverAssignmentBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
         const target = args[0]?.url || args[0];
         const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
 
@@ -1270,6 +1317,31 @@ async function runChromeTest() {
         ) {
           return new Response(JSON.stringify(loadedBookings), {
             status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (
+          method === "PATCH" &&
+          String(target).includes("/rest/v1/bookings") &&
+          String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}")
+        ) {
+          try {
+            window.__prestigeDashboardDriverAssignmentBodies.push(JSON.parse(bodyText));
+          } catch {
+            window.__prestigeDashboardDriverAssignmentBodies.push(bodyText);
+          }
+
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (String(target).includes("/rest/v1/")) {
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${target}\`);
+          return new Response(JSON.stringify({ message: "Unhandled Supabase mock" }), {
+            status: 500,
             headers: { "content-type": "application/json" },
           });
         }
@@ -1305,6 +1377,157 @@ async function runChromeTest() {
       10000,
       "mock loaded recent and dashboard booking",
     );
+
+    await evaluate(`window.__prestigeFetchCalls = []`);
+
+    const clickedDashboardAssignDriver = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ777") &&
+          [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign Driver"),
+      );
+
+      if (!article) {
+        return false;
+      }
+
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const fieldForLabel = (labelText) => {
+        const label = [...article.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        return label?.querySelector("input, select, textarea") || null;
+      };
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, value);
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      const driverName = fieldForLabel("Driver Name");
+      const driverContact = fieldForLabel("Driver Contact");
+      const driverPlate = fieldForLabel("Driver Car Plate");
+      const payoutOverride = fieldForLabel("Override Payout");
+      const payoutReason = fieldForLabel("Override Reason");
+      const driverNotes = fieldForLabel("Driver Notes");
+      const includePayout = [...article.querySelectorAll("label")].find((candidate) =>
+        candidate.innerText.includes("Include payout")
+      )?.querySelector("input[type='checkbox']");
+      const assignButton = [...article.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Assign Driver",
+      );
+
+      if (
+        !driverName ||
+        !driverContact ||
+        !driverPlate ||
+        !payoutOverride ||
+        !payoutReason ||
+        !driverNotes ||
+        !includePayout ||
+        !assignButton ||
+        assignButton.disabled
+      ) {
+        return false;
+      }
+
+      setValue(driverName, "DASHBOARD TEST DRIVER");
+      setValue(driverContact, "+65 8555 7777");
+      setValue(driverPlate, "SLC777D");
+      setValue(payoutOverride, "82");
+      setValue(payoutReason, "Dashboard assignment test");
+      setValue(driverNotes, "Meet at arrival belt");
+
+      if (!includePayout.checked) {
+        includePayout.click();
+      }
+
+      assignButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDashboardAssignDriver, true, "Expected dashboard Assign Driver button to be clickable");
+
+    const dashboardAssignmentState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const labels = [...document.querySelectorAll("label")];
+          const fieldValue = (labelText) => {
+            const label = labels.find((candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText);
+            const control = label?.querySelector("input, select, textarea");
+
+            if (!control) {
+              return "";
+            }
+
+            if (control.tagName === "SELECT") {
+              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+            }
+
+            return control.value || "";
+          };
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+              candidate.innerText.includes("SQ777") &&
+              [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign Driver"),
+          );
+
+          return {
+            articleText: article?.innerText || "",
+            bodyText: document.body.innerText,
+            fields: {
+              company: fieldValue("Company / Account"),
+              flight: fieldValue("Flight number"),
+              driverName: fieldValue("Driver Name"),
+            },
+            fetchCalls: window.__prestigeFetchCalls || [],
+            assignmentBodies: window.__prestigeDashboardDriverAssignmentBodies || [],
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.bodyText?.includes("Driver assigned.") &&
+          candidateState?.articleText?.includes("Driver: DASHBOARD TEST DRIVER")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "dashboard driver assignment success state",
+    );
+
+    assert.deepEqual(
+      dashboardAssignmentState.unhandledSupabaseCalls,
+      [],
+      `Expected dashboard assignment Supabase calls to be mocked, got ${dashboardAssignmentState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      dashboardAssignmentState.fetchCalls.length,
+      1,
+      `Expected dashboard assignment to make one mocked booking PATCH, got ${dashboardAssignmentState.fetchCalls.join(", ")}`,
+    );
+    assert.match(
+      dashboardAssignmentState.fetchCalls[0],
+      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardDriverAssignmentFixture.id}`),
+    );
+    assert.equal(dashboardAssignmentState.assignmentBodies.length, 1);
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_name, "DASHBOARD TEST DRIVER");
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_contact, "+65 8555 7777");
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_plate_number, "SLC777D");
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_payout_override, 82);
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_payout_reason, "Dashboard assignment test");
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_notes, "Meet at arrival belt");
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_dispatch_include_payout, true);
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.status, "assigned");
+    assert.match(dashboardAssignmentState.articleText, /assigned/);
+    assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
+    assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
+    assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
+    assert.equal(dashboardAssignmentState.fields.company, "BROWSER UI TEST COMPANY");
+    assert.equal(dashboardAssignmentState.fields.flight, "SQ333");
+    assert.equal(dashboardAssignmentState.fields.driverName, "TEST DRIVER CRM 20260516");
 
     await evaluate(`window.__prestigeFetchCalls = []`);
 

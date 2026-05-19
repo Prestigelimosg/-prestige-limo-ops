@@ -3901,9 +3901,9 @@ export default function Home() {
                   </label>
                   <button
                     aria-describedby={!aiAssistSafetyAccepted ? "ai-assist-safety-helper" : undefined}
-                    className={`h-10 rounded-md border px-4 text-sm font-semibold transition ${
+                    className={`h-8 self-start rounded-md border px-3 text-xs font-medium transition ${
                       aiAssistSafetyAccepted
-                        ? "border-indigo-300 bg-indigo-50 text-indigo-900 hover:bg-indigo-100"
+                        ? "border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50"
                         : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                     }`}
                     disabled={!aiAssistSafetyAccepted || aiAssistLoading}

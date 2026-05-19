@@ -3362,10 +3362,7 @@ export default function Home() {
 
   function loadSelectedBooking(bookingRecord: BookingRecord) {
     setBooking(() => bookingRecordToForm(bookingRecord));
-    setParsedDebugBooking(null);
-    setShowParserDebug(false);
-    setMultiBookingNotice(null);
-    clearReviewAndSaveState();
+    clearBookingMessageInput();
     setMessage({
       tone: "success",
       text: `Booking ${bookingRecord.id || clean(bookingRecord.flight_no) || getBookingDateKey(bookingRecord)} loaded.`,

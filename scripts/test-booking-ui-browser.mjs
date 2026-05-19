@@ -29,6 +29,47 @@ Pax: 2
 Child seat: 2 booster seat
 Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
+const loadedSavedBookingFixture = {
+  id: "ui-cleanup-load-fixture",
+  company_id: 501,
+  booker_id: 502,
+  traveler_id: 503,
+  booking_type: "DEP",
+  vehicle: "VAN",
+  pickup_time: "0945",
+  pickup_address: "Raffles Hotel Singapore",
+  dropoff_address: "Changi Airport T2",
+  flight_no: "SQ999",
+  route: "Raffles Hotel Singapore > Changi Airport T2",
+  pax: 3,
+  job_card:
+    "VAN DEP\n28 May 2026, 0945hrs\nFlight: SQ999\nRaffles Hotel Singapore > Changi Airport T2\nPassenger: LOADED SAVED TRAVELER\nPax: 3",
+  status: "confirmed",
+  driver_id: null,
+  driver_name: "LOADED SAVED DRIVER",
+  driver_contact: "+65 8888 0000",
+  driver_plate_number: "SLA1234X",
+  customer_price_amount: 120,
+  driver_payout_amount: 75,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-19T00:00:00.000Z",
+  updated_at: "2026-05-19T00:00:00.000Z",
+  companies: {
+    company_name: "LOADED SAVED COMPANY",
+    domain: "loadedsaved.example.com",
+  },
+  bookers: {
+    booker_name: "LOADED SAVED BOOKER",
+    email: "booker@loadedsaved.example.com",
+    phone: "+65 8777 0000",
+  },
+  travelers: {
+    traveler_name: "LOADED SAVED TRAVELER",
+  },
+};
 const multiBookingPreviewSample = `Hi William.
 
 Tomorrow:
@@ -1099,6 +1140,163 @@ async function runChromeTest() {
     assert.equal(aiDraftState.fields.pickup, state.fields.pickup);
     assert.equal(aiDraftState.fields.dropoff, state.fields.dropoff);
     assert.equal(aiDraftState.fields.name, state.fields.name);
+
+    await evaluate(`(() => {
+      const loadedBookings = [${JSON.stringify(loadedSavedBookingFixture)}];
+      window.__prestigeFetchCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+        if (
+          method === "GET" &&
+          String(target).includes("/rest/v1/bookings") &&
+          String(target).includes("select=")
+        ) {
+          return new Response(JSON.stringify(loadedBookings), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        return window.__prestigeOriginalFetch(...args);
+      };
+    })()`);
+
+    const clickedLoadBookings = await evaluate(`(() => {
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Bookings",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedLoadBookings, true, "Expected Load Bookings button to be clickable");
+
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("Recent Bookings") &&
+            bodyText.includes("LOADED SAVED COMPANY") &&
+            [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking");
+        })()`),
+      10000,
+      "mock loaded recent booking",
+    );
+
+    await evaluate(`window.__prestigeFetchCalls = []`);
+
+    const clickedLoadThisBooking = await evaluate(`(() => {
+      const loadThisBookingButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load this booking",
+      );
+
+      if (!loadThisBookingButton || loadThisBookingButton.disabled) {
+        return false;
+      }
+
+      loadThisBookingButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedLoadThisBooking, true, "Expected Load this booking button to be clickable");
+
+    const loadedBookingState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const labels = [...document.querySelectorAll("label")];
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldValue = (labelText) => {
+            const label = labels.find((candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText);
+            const control = label?.querySelector("input, select, textarea");
+
+            if (!control) {
+              return "";
+            }
+
+            if (control.tagName === "SELECT") {
+              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+            }
+
+            return control.value || "";
+          };
+          const preTextByHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading?.parentElement || null;
+
+            while (node) {
+              const pre = node.querySelector("pre");
+
+              if (pre) {
+                return pre.innerText;
+              }
+
+              node = node.parentElement;
+            }
+
+            return "";
+          };
+
+          return {
+            bodyText,
+            aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
+            aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
+            fetchCalls: window.__prestigeFetchCalls || [],
+            jobCardPreview: preTextByHeading("Job Card Preview"),
+            driverDispatch: preTextByHeading("Driver Dispatch"),
+            pastedMessage: document.querySelector("textarea")?.value || "",
+            fields: {
+              company: fieldValue("Company / Account"),
+              bookingType: fieldValue("Booking type"),
+              vehicle: fieldValue("Vehicle"),
+              pickup: fieldValue("Pickup"),
+              dropoff: fieldValue("Drop-off"),
+              flight: fieldValue("Flight number"),
+              name: fieldValue("Passenger name") || fieldValue("Name"),
+            },
+          };
+        })()`);
+
+        return candidateState?.fields?.company === "LOADED SAVED COMPANY" &&
+          candidateState?.fields?.flight === "SQ999"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "loaded saved booking after stale AI cleanup",
+    );
+
+    assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
+    assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
+    assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
+    assert.deepEqual(
+      loadedBookingState.fetchCalls,
+      [],
+      `Expected Load this booking to make no save/load network call, got ${loadedBookingState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(loadedBookingState.fields.bookingType, "DEP");
+    assert.equal(loadedBookingState.fields.vehicle, "VAN");
+    assert.equal(loadedBookingState.fields.pickup, "Raffles Hotel Singapore");
+    assert.equal(loadedBookingState.fields.dropoff, "Changi Airport T2");
+    assert.equal(loadedBookingState.fields.name, "LOADED SAVED TRAVELER");
+    assert.match(loadedBookingState.jobCardPreview, /SQ999/);
+    assert.match(loadedBookingState.jobCardPreview, /LOADED SAVED COMPANY/);
+    assert.match(loadedBookingState.driverDispatch, /LOADED SAVED DRIVER/);
+    assert.match(loadedBookingState.driverDispatch, /LOADED SAVED TRAVELER/);
+    assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
+
+    await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
 
     const focusedMultiBookingTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

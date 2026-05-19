@@ -702,6 +702,39 @@ async function runChromeTest() {
       return result.result?.value;
     };
 
+    const clickTab = async (label, expectedText = "") => {
+      const clicked = await evaluate(`(() => {
+        const tab = [...document.querySelectorAll("button[role='tab'], button")].find(
+          (button) => button.textContent.trim() === ${JSON.stringify(label)},
+        );
+
+        if (!tab || tab.disabled) {
+          return false;
+        }
+
+        tab.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected ${label} tab to be clickable`);
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
+              (button) =>
+                button.textContent.trim() === ${JSON.stringify(label)} &&
+                button.getAttribute("aria-selected") === "true",
+            );
+
+            return Boolean(selectedTab) && ${
+              expectedText ? `document.body.innerText.includes(${JSON.stringify(expectedText)})` : "true"
+            };
+          })()`),
+        10000,
+        `${label} tab content`,
+      );
+    };
+
     await waitForCondition(
       () =>
         evaluate(`Boolean(document.querySelector("textarea")) &&
@@ -709,6 +742,15 @@ async function runChromeTest() {
       10000,
       "booking parse controls",
     );
+    const initialTabState = await evaluate(`(() => ({
+      selectedTab: [...document.querySelectorAll("button[role='tab']")]
+        .find((button) => button.getAttribute("aria-selected") === "true")
+        ?.textContent.trim() || "",
+      tabLabels: [...document.querySelectorAll("button[role='tab']")].map((button) => button.textContent.trim()),
+    }))()`);
+    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Bookings", "Dashboard", "Drivers", "Rates"]);
+    assert.equal(initialTabState.selectedTab, "Dispatch");
+
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];
       window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
@@ -1401,6 +1443,8 @@ async function runChromeTest() {
       };
     })()`);
 
+    await clickTab("Bookings", "Load Bookings");
+
     const clickedLoadBookings = await evaluate(`(() => {
       const loadButton = [...document.querySelectorAll("button")].find(
         (button) => button.textContent.trim() === "Load Bookings",
@@ -1422,11 +1466,23 @@ async function runChromeTest() {
 
           return bodyText.includes("Recent Bookings") &&
             bodyText.includes("LOADED SAVED COMPANY") &&
-            Boolean(document.querySelector("[data-dashboard-load-booking='true']")) &&
             [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking");
         })()`),
       10000,
-      "mock loaded recent and dashboard booking",
+      "mock loaded recent booking",
+    );
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+            Boolean(document.querySelector("[data-dashboard-load-booking='true']"));
+        })()`),
+      10000,
+      "mock loaded dashboard booking",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);
@@ -1576,9 +1632,14 @@ async function runChromeTest() {
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
     assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
-    assert.equal(dashboardAssignmentState.fields.company, "BROWSER UI TEST COMPANY");
-    assert.equal(dashboardAssignmentState.fields.flight, "SQ333");
-    assert.equal(dashboardAssignmentState.fields.driverName, "TEST DRIVER CRM 20260516");
+
+    await clickTab("Dispatch", "Create Job Card");
+    const dispatchDraftAfterDashboardAssignment = await evaluate(extractStateScript);
+    assert.equal(dispatchDraftAfterDashboardAssignment.fields.company, "BROWSER UI TEST COMPANY");
+    assert.equal(dispatchDraftAfterDashboardAssignment.fields.flight, "SQ333");
+    assert.equal(dispatchDraftAfterDashboardAssignment.fields.driverName, "TEST DRIVER CRM 20260516");
+
+    await clickTab("Dashboard", "Operations Dashboard");
 
     await evaluate(`window.__prestigeFetchCalls = []`);
 
@@ -1686,6 +1747,8 @@ async function runChromeTest() {
     assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
 
     await evaluate(`window.__prestigeFetchCalls = []`);
+
+    await clickTab("Bookings", "Recent Bookings");
 
     const clickedRecentLoadThisBooking = await evaluate(`(() => {
       const loadThisBookingButton = [...document.querySelectorAll("button")].find(
@@ -2028,6 +2091,8 @@ async function runChromeTest() {
     assert.equal(crmSaveState.bookingInsert?.child_seat_type, "booster seat");
     assert.equal(crmSaveState.bookingInsert?.customer_rate_override, 160);
     assert.equal(crmSaveState.bookingInsert?.driver_name, "TEST DRIVER CRM 20260516");
+
+    await clickTab("Bookings", "Recent Bookings");
 
     await waitForCondition(
       () =>
@@ -2735,21 +2800,10 @@ async function runChromeTest() {
           const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
             (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
           );
-          const recentArticle = [...document.querySelectorAll("article")].find(
-            (article) =>
-              article.innerText.includes("SQ306") &&
-              article.innerText.includes("Mr Lee") &&
-              [...article.querySelectorAll("button")].some(
-                (button) =>
-                  button.textContent.trim() === "Load this booking" &&
-                  !button.matches("[data-dashboard-load-booking='true']"),
-              ),
-          );
 
           return bodyText.includes("Booking saved successfully: ${mrLeeNoCompanySavedBookingFixture.id}")
             ? {
                 bodyText,
-                articleText: recentArticle?.innerText || "",
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeMrLeeSaveRequestBodies || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -2758,7 +2812,7 @@ async function runChromeTest() {
             : false;
         })()`);
 
-        return candidateState?.articleText?.includes("SQ306") ? candidateState : false;
+        return candidateState || false;
       },
       10000,
       "Mr Lee no-company successful save",
@@ -2797,6 +2851,25 @@ async function runChromeTest() {
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved successfully\. CRM update failed/i);
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved, but CRM update failed/i);
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Company:\s*(?:Mr Lee|Internal Account|Draft)/i);
+
+    await clickTab("Bookings", "Recent Bookings");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          return [...document.querySelectorAll("article")].some(
+            (article) =>
+              article.innerText.includes("SQ306") &&
+              article.innerText.includes("Mr Lee") &&
+              [...article.querySelectorAll("button")].some(
+                (button) =>
+                  button.textContent.trim() === "Load this booking" &&
+                  !button.matches("[data-dashboard-load-booking='true']"),
+              ),
+          );
+        })()`),
+      10000,
+      "Mr Lee no-company saved booking in Recent Bookings",
+    );
 
     const clickedMrLeeNoCompanyRecentLoad = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(

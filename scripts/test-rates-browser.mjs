@@ -272,6 +272,41 @@ async function runChromeTest() {
       return result.result?.value;
     };
 
+    const clickTab = async (label, expectedText = "") => {
+      const clicked = await evaluate(`(() => {
+        const tab = [...document.querySelectorAll("button[role='tab']")].find(
+          (button) => button.textContent.trim() === ${JSON.stringify(label)},
+        );
+
+        if (!tab || tab.disabled) {
+          return false;
+        }
+
+        tab.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected ${label} tab to be clickable`);
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
+              (button) =>
+                button.textContent.trim() === ${JSON.stringify(label)} &&
+                button.getAttribute("aria-selected") === "true",
+            );
+
+            return Boolean(selectedTab) && ${
+              expectedText ? `document.body.innerText.includes(${JSON.stringify(expectedText)})` : "true"
+            };
+          })()`),
+        10000,
+        `${label} tab content`,
+      );
+    };
+
+    await clickTab("Rates", "Load Rates");
+
     await waitForCondition(
       () =>
         evaluate(`document.body.innerText.includes("Rates") &&

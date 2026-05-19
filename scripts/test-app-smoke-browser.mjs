@@ -11,6 +11,14 @@ const chromeBinary =
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9226);
 const browserErrors = [];
 const browserConsoleErrors = [];
+const tabLabels = ["Dispatch", "Bookings", "Dashboard", "Drivers", "Rates"];
+const tabExpectedText = {
+  Dispatch: "Create Job Card",
+  Bookings: "Load Bookings",
+  Dashboard: "Operations Dashboard",
+  Drivers: "Driver Database",
+  Rates: "Load Rates",
+};
 const requiredVisibleText = [
   "Prestige Limo",
   "Booking",
@@ -18,6 +26,9 @@ const requiredVisibleText = [
   "Route Extras & Child Seat",
   "Job Card Preview",
   "Driver Dispatch",
+  "Load Bookings",
+  "Operations Dashboard",
+  "Driver Database",
   "Rates",
   "Saved Rate Overrides",
 ];
@@ -291,6 +302,38 @@ async function runChromeTest() {
       return result.result?.value;
     };
 
+    const clickTab = async (label) => {
+      const clicked = await evaluate(`(() => {
+        const tab = [...document.querySelectorAll("button[role='tab']")].find(
+          (button) => button.textContent.trim() === ${JSON.stringify(label)},
+        );
+
+        if (!tab || tab.disabled) {
+          return false;
+        }
+
+        tab.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected ${label} tab to be clickable`);
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
+              (button) =>
+                button.textContent.trim() === ${JSON.stringify(label)} &&
+                button.getAttribute("aria-selected") === "true",
+            );
+            const expectedText = ${JSON.stringify(tabExpectedText[label] || "")};
+
+            return Boolean(selectedTab) && (!expectedText || document.body.innerText.includes(expectedText));
+          })()`),
+        10000,
+        `${label} tab content`,
+      );
+    };
+
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];
       window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
@@ -301,27 +344,35 @@ async function runChromeTest() {
         originalError.apply(console, args);
       };`);
 
-    const state = await waitForCondition(
-      async () => {
-        const visibleText = await evaluate("document.body?.innerText || ''");
-        const hasRequiredText = requiredVisibleText.every((text) => visibleText.includes(text));
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const labels = [...document.querySelectorAll("button[role='tab']")].map(
+            (button) => button.textContent.trim(),
+          );
 
-        if (!hasRequiredText) {
-          return false;
-        }
-
-        return {
-          buttonLabels: await evaluate(
-            `[...document.querySelectorAll("button")].map((button) => button.textContent.trim())`,
-          ),
-          consoleErrors: await evaluate("window.__prestigeConsoleErrors || []"),
-          errors: await evaluate("window.__prestigeErrors || []"),
-          visibleText,
-        };
-      },
+          return ${JSON.stringify(tabLabels)}.every((label) => labels.includes(label));
+        })()`),
       10000,
-      "Prestige Limo app sections",
+      "Prestige Limo app tabs",
     );
+
+    const visibleSnapshots = [];
+    const buttonLabels = [];
+    for (const label of tabLabels) {
+      await clickTab(label);
+      visibleSnapshots.push(await evaluate("document.body?.innerText || ''"));
+      buttonLabels.push(
+        ...(await evaluate(`[...document.querySelectorAll("button")].map((button) => button.textContent.trim())`)),
+      );
+    }
+
+    const state = {
+      buttonLabels: [...new Set(buttonLabels)],
+      consoleErrors: await evaluate("window.__prestigeConsoleErrors || []"),
+      errors: await evaluate("window.__prestigeErrors || []"),
+      visibleText: visibleSnapshots.join("\n\n"),
+    };
     state.errors = [...browserErrors, ...(state.errors || [])];
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 

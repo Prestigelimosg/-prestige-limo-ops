@@ -190,6 +190,16 @@ type Message = {
   text: string;
 };
 
+type AppTab = "dispatch" | "bookings" | "dashboard" | "drivers" | "rates";
+
+const appTabs: Array<{ id: AppTab; label: string }> = [
+  { id: "dispatch", label: "Dispatch" },
+  { id: "bookings", label: "Bookings" },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "drivers", label: "Drivers" },
+  { id: "rates", label: "Rates" },
+];
+
 type AiDraftBooking = AiParseResult["bookings"][number];
 
 type ParsedBooking = Partial<BookingForm> & {
@@ -1448,6 +1458,7 @@ function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: Driver
 
 export default function Home() {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
+  const [activeTab, setActiveTab] = useState<AppTab>("dispatch");
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
   const [parsedDebugBooking, setParsedDebugBooking] = useState<ParsedDebugBooking | null>(null);
@@ -3390,6 +3401,7 @@ export default function Home() {
 
   function loadSelectedBooking(bookingRecord: BookingRecord) {
     setBooking(() => bookingRecordToForm(bookingRecord));
+    setActiveTab("dispatch");
     clearBookingMessageInput();
     setMessage({
       tone: "success",
@@ -3839,6 +3851,63 @@ export default function Home() {
     </div>
   );
 
+  const statusPanel = (
+    <div className={`rounded-md border px-4 py-3 text-sm ${statusClass(message.tone)}`}>
+      {message.text}
+    </div>
+  );
+
+  const recentBookingsPanel = bookings.length > 0 ? (
+    <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+      <h3 className="text-sm font-semibold text-slate-800">Recent Bookings</h3>
+      <div className="mt-3 max-h-80 space-y-2 overflow-auto">
+        {bookings.map((savedBooking) => {
+          const routePoints = getRoutePoints(savedBooking);
+          const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
+          const dropoff =
+            clean(savedBooking.dropoff_address) ||
+            routePoints[routePoints.length - 1] ||
+            "Drop-off";
+          const routeText = routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`;
+          const createdAt = formatCreatedAt(savedBooking.created_at);
+
+          return (
+            <article
+              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+              key={`recent-${savedBooking.id}`}
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1 text-slate-700">
+                  <p className="font-semibold text-slate-950">
+                    {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                  </p>
+                  <p>
+                    {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
+                    Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
+                    {getBookingName(savedBooking) || "Unknown"}
+                  </p>
+                  <p>{routeText}</p>
+                  {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                </div>
+                <button
+                  className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  onClick={() => loadSelectedBooking(savedBooking)}
+                  type="button"
+                >
+                  Load this booking
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  ) : (
+    <div className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-slate-500">
+      No bookings loaded.
+    </div>
+  );
+
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -3867,6 +3936,34 @@ export default function Home() {
           </div>
         </header>
 
+        <nav
+          aria-label="Primary operations tabs"
+          className="flex gap-2 overflow-x-auto rounded-lg border border-stone-200 bg-white p-2 shadow-sm"
+          role="tablist"
+        >
+          {appTabs.map((tab) => {
+            const selected = activeTab === tab.id;
+
+            return (
+              <button
+                aria-selected={selected}
+                className={`h-10 rounded-md px-4 text-sm font-semibold transition ${
+                  selected
+                    ? "bg-slate-950 text-white"
+                    : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
+                }`}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                type="button"
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {activeTab === "dispatch" ? (
         <section className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -4480,65 +4577,10 @@ export default function Home() {
               >
                 {saving ? "Saving..." : "Save Booking + CRM"}
               </button>
-              <button
-                className="h-12 rounded-md border border-slate-300 bg-white px-5 text-base font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                disabled={loading}
-                onClick={() => loadBookings()}
-                type="button"
-              >
-                {loading ? "Loading..." : "Load Bookings"}
-              </button>
             </div>
             {bookingSaveMessage ? (
               <div className={`mt-3 rounded-md border px-4 py-3 text-sm ${statusClass(bookingSaveMessage.tone)}`}>
                 {bookingSaveMessage.text}
-              </div>
-            ) : null}
-
-            {bookings.length > 0 ? (
-              <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-                <h3 className="text-sm font-semibold text-slate-800">Recent Bookings</h3>
-                <div className="mt-3 max-h-80 space-y-2 overflow-auto">
-                  {bookings.map((savedBooking) => {
-                    const routePoints = getRoutePoints(savedBooking);
-                    const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
-                    const dropoff =
-                      clean(savedBooking.dropoff_address) ||
-                      routePoints[routePoints.length - 1] ||
-                      "Drop-off";
-                    const routeText = routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`;
-                    const createdAt = formatCreatedAt(savedBooking.created_at);
-
-                    return (
-                      <article
-                        className="rounded-md border border-stone-200 bg-white p-3 text-sm"
-                        key={`recent-${savedBooking.id}`}
-                      >
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-1 text-slate-700">
-                            <p className="font-semibold text-slate-950">
-                              {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                            </p>
-                            <p>
-                              {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
-                              Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
-                              {getBookingName(savedBooking) || "Unknown"}
-                            </p>
-                            <p>{routeText}</p>
-                            {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
-                          </div>
-                          <button
-                            className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                            onClick={() => loadSelectedBooking(savedBooking)}
-                            type="button"
-                          >
-                            Load this booking
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
               </div>
             ) : null}
           </div>
@@ -4593,12 +4635,33 @@ export default function Home() {
               </pre>
             </div>
 
-            <div className={`rounded-md border px-4 py-3 text-sm ${statusClass(message.tone)}`}>
-              {message.text}
-            </div>
+            {statusPanel}
           </aside>
-	        </section>
+        </section>
+        ) : null}
 
+        {activeTab === "bookings" ? (
+        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Bookings</h2>
+              <p className="text-sm text-slate-500">Load saved bookings and reopen them in Dispatch.</p>
+            </div>
+            <button
+              className="h-12 rounded-md border border-slate-300 bg-white px-5 text-base font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+              disabled={loading}
+              onClick={() => loadBookings()}
+              type="button"
+            >
+              {loading ? "Loading..." : "Load Bookings"}
+            </button>
+          </div>
+          {statusPanel}
+          {recentBookingsPanel}
+        </section>
+        ) : null}
+
+        {activeTab === "drivers" ? (
 	        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
 	          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
 	            <div>
@@ -4624,6 +4687,7 @@ export default function Home() {
 	              </button>
 	            </div>
 	          </div>
+            {statusPanel}
 
 	          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
 	            <div className="grid gap-3 sm:grid-cols-2">
@@ -4795,7 +4859,9 @@ export default function Home() {
 	            </div>
 	          </div>
 	        </section>
+        ) : null}
 
+        {activeTab === "rates" ? (
 	        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -4821,6 +4887,7 @@ export default function Home() {
               </button>
             </div>
           </div>
+          {statusPanel}
 
           <div className="grid gap-5 lg:grid-cols-2">
             <div>
@@ -5135,7 +5202,9 @@ export default function Home() {
             </div>
           </div>
         </section>
+        ) : null}
 
+        {activeTab === "dashboard" ? (
         <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -5165,6 +5234,7 @@ export default function Home() {
               </button>
             </div>
           </div>
+          {statusPanel}
 
           <div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">
             <div>
@@ -5200,6 +5270,7 @@ export default function Home() {
             ) : null}
           </div>
         </section>
+        ) : null}
       </div>
     </main>
   );

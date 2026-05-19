@@ -273,32 +273,37 @@ async function runChromeTest() {
     };
 
     const clickTab = async (label, expectedText = "") => {
-      const clicked = await evaluate(`(() => {
-        const tab = [...document.querySelectorAll("button[role='tab']")].find(
-          (button) => button.textContent.trim() === ${JSON.stringify(label)},
-        );
-
-        if (!tab || tab.disabled) {
-          return false;
-        }
-
-        tab.click();
-        return true;
-      })()`);
-      assert.equal(clicked, true, `Expected ${label} tab to be clickable`);
-
       await waitForCondition(
         () =>
           evaluate(`(() => {
+            const tab = [...document.querySelectorAll("button[role='tab']")].find(
+              (button) => button.textContent.trim() === ${JSON.stringify(label)},
+            );
+            const expectedText = ${JSON.stringify(expectedText)};
+            const isSelected = () =>
+              Boolean(
+                [...document.querySelectorAll("button[role='tab']")].find(
+                  (button) =>
+                    button.textContent.trim() === ${JSON.stringify(label)} &&
+                    button.getAttribute("aria-selected") === "true",
+                ),
+              );
+
+            if (!tab || tab.disabled) {
+              return false;
+            }
+
+            if (!isSelected()) {
+              tab.click();
+            }
+
             const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
               (button) =>
                 button.textContent.trim() === ${JSON.stringify(label)} &&
                 button.getAttribute("aria-selected") === "true",
             );
 
-            return Boolean(selectedTab) && ${
-              expectedText ? `document.body.innerText.includes(${JSON.stringify(expectedText)})` : "true"
-            };
+            return Boolean(selectedTab) && (!expectedText || document.body.innerText.includes(expectedText));
           })()`),
         10000,
         `${label} tab content`,

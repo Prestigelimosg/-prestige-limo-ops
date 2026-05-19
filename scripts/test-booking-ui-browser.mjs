@@ -525,6 +525,72 @@ async function runChromeTest() {
         originalError.apply(console, args);
       };`);
 
+    const initialAiAssistSafetyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const aiButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+          );
+          const parseButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Parse Booking",
+          );
+          const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
+          const helper = document.querySelector("[data-ai-assist-safety-helper='true']");
+          const gate = document.querySelector("[data-ai-assist-gate='true']");
+
+          return aiButton && checkbox && helper && gate?.contains(aiButton) && gate?.contains(helper)
+            ? {
+                aiButtonDisabled: aiButton.disabled,
+                checkboxChecked: checkbox.checked,
+                helperText: helper.textContent.trim(),
+                gateText: gate.innerText || "",
+                parseButtonDisabled: Boolean(parseButton?.disabled),
+              }
+            : false;
+        })()`),
+      10000,
+      "AI Assist safety gate default state",
+    );
+    assert.equal(initialAiAssistSafetyState.aiButtonDisabled, true);
+    assert.equal(initialAiAssistSafetyState.checkboxChecked, false);
+    assert.equal(initialAiAssistSafetyState.parseButtonDisabled, false);
+    assert.equal(
+      initialAiAssistSafetyState.helperText,
+      "Tick the AI safety checkbox to enable AI Assist.",
+    );
+    assert.match(initialAiAssistSafetyState.gateText, /I understand AI Assist is review-only/);
+    assert.match(initialAiAssistSafetyState.gateText, /AI Assist Parse \(Mock\)/);
+
+    const enabledAiAssistSafetyState = await waitForCondition(
+      async () => {
+        const state = await evaluate(`(() => {
+          const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
+          const aiButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+          );
+
+          if (!checkbox || !aiButton) {
+            return false;
+          }
+
+          if (!checkbox.checked) {
+            checkbox.click();
+          }
+
+          return {
+            aiButtonDisabled: aiButton.disabled,
+            checkboxChecked: checkbox.checked,
+            helperCount: document.querySelectorAll("[data-ai-assist-safety-helper='true']").length,
+          };
+        })()`);
+
+        return state?.checkboxChecked && !state?.aiButtonDisabled ? state : false;
+      },
+      10000,
+      "AI Assist safety checkbox enabling button",
+    );
+    assert.equal(enabledAiAssistSafetyState.helperCount, 0);
+
     const clickedEmptyAiAssist = await evaluate(`(() => {
       const aiButton = [...document.querySelectorAll("button")].find(
         (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
@@ -537,7 +603,7 @@ async function runChromeTest() {
       aiButton.click();
       return true;
     })()`);
-    assert.equal(clickedEmptyAiAssist, true, "Expected AI Assist Parse (Mock) button to exist");
+    assert.equal(clickedEmptyAiAssist, true, "Expected enabled AI Assist Parse (Mock) button to be clickable");
 
     const emptyAiAssistPlacement = await waitForCondition(
       () =>
@@ -546,7 +612,7 @@ async function runChromeTest() {
           const aiButton = [...document.querySelectorAll("button")].find(
             (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
           );
-          const buttonRow = aiButton?.parentElement;
+          const controls = document.querySelector("[data-ai-assist-controls='true']");
           const feedback = document.querySelector("[data-ai-assist-feedback='true']");
           const textNodes = [];
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -561,22 +627,83 @@ async function runChromeTest() {
           }
 
           return feedback?.textContent.trim() === messageText &&
-            feedback.previousElementSibling === buttonRow
+            controls?.contains(aiButton) &&
+            feedback.previousElementSibling === controls
             ? {
                 directTextCount: textNodes.filter((text) => text === messageText).length,
                 feedbackText: feedback.textContent.trim(),
-                buttonRowText: buttonRow?.innerText || "",
+                controlsText: controls?.innerText || "",
               }
             : false;
         })()`),
       10000,
       "empty AI Assist friendly message near controls",
     );
-    assert.match(emptyAiAssistPlacement.buttonRowText, /AI Assist Parse \(Mock\)/);
+    assert.match(emptyAiAssistPlacement.controlsText, /AI Assist Parse \(Mock\)/);
     assert.equal(
       emptyAiAssistPlacement.directTextCount,
       1,
       "Expected exactly one local empty AI Assist warning",
+    );
+
+    const disabledAgainAiAssistSafetyState = await waitForCondition(
+      async () => {
+        const state = await evaluate(`(() => {
+          const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
+          const aiButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+          );
+
+          if (!checkbox || !aiButton) {
+            return false;
+          }
+
+          if (checkbox.checked) {
+            checkbox.click();
+          }
+
+          const helper = document.querySelector("[data-ai-assist-safety-helper='true']");
+
+          return {
+            aiButtonDisabled: aiButton.disabled,
+            checkboxChecked: checkbox.checked,
+            helperText: helper?.textContent.trim() || "",
+          };
+        })()`);
+
+        return !state?.checkboxChecked && state?.aiButtonDisabled ? state : false;
+      },
+      10000,
+      "AI Assist safety checkbox disabling button again",
+    );
+    assert.equal(
+      disabledAgainAiAssistSafetyState.helperText,
+      "Tick the AI safety checkbox to enable AI Assist.",
+    );
+
+    await waitForCondition(
+      async () => {
+        const state = await evaluate(`(() => {
+          const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
+          const aiButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+          );
+
+          if (!checkbox || !aiButton) {
+            return false;
+          }
+
+          if (!checkbox.checked) {
+            checkbox.click();
+          }
+
+          return checkbox.checked && !aiButton.disabled;
+        })()`);
+
+        return state ? true : false;
+      },
+      10000,
+      "AI Assist safety checkbox re-enabling button",
     );
 
     const focusedNeedsReviewTextarea = await evaluate(`(() => {
@@ -904,9 +1031,7 @@ async function runChromeTest() {
             bodyText,
             draftIsNearButtonRow:
               document.querySelector("[data-ai-assist-draft='true']")?.previousElementSibling ===
-              [...document.querySelectorAll("button")].find(
-                (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
-              )?.parentElement,
+              document.querySelector("[data-ai-assist-controls='true']"),
             localWarningCount: document.querySelectorAll("[data-ai-assist-feedback='true']").length,
             fetchCalls: window.__prestigeFetchCalls || [],
             savedCount: bodyText.match(/Saved\\s+(\\d+)/)?.[1] || "",

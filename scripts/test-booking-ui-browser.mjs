@@ -1274,6 +1274,219 @@ async function runChromeTest() {
 
     assertBookingUiState(state);
 
+    await evaluate(`(() => {
+      window.__prestigeCopiedTexts = [];
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            window.__prestigeCopiedTexts.push(String(text));
+          },
+        },
+      });
+    })()`);
+
+    const clickedJobCardCopy = await evaluate(`(() => {
+      const sectionForHeading = (headingText) => {
+        const heading = [...document.querySelectorAll("h2")].find(
+          (candidate) => candidate.textContent.trim() === headingText,
+        );
+        let node = heading;
+
+        while (node && node !== document.body) {
+          if (
+            node.querySelector?.("pre") &&
+            [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+          ) {
+            return node;
+          }
+
+          node = node.parentElement;
+        }
+
+        return null;
+      };
+      const section = sectionForHeading("Job Card Preview");
+      const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Copy",
+      );
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedJobCardCopy, true, "Expected Job Card Preview Copy button to be clickable");
+
+    const jobCardCopyPlacementState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const sectionForHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading;
+
+            while (node && node !== document.body) {
+              if (
+                node.querySelector?.("pre") &&
+                [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+              ) {
+                return node;
+              }
+
+              node = node.parentElement;
+            }
+
+            return null;
+          };
+          const section = sectionForHeading("Job Card Preview");
+          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Copy",
+          );
+          const feedback = section?.querySelector("[data-copy-feedback='job-card']");
+
+          if (feedback?.textContent.trim() !== "Job card copied.") {
+            return false;
+          }
+
+          const feedbackRect = feedback.getBoundingClientRect();
+          const buttonRect = copyButton.getBoundingClientRect();
+          const allFeedback = [...document.querySelectorAll("[data-copy-feedback]")].map((element) => ({
+            target: element.getAttribute("data-copy-feedback"),
+            text: element.textContent.trim(),
+          }));
+
+          return {
+            allFeedback,
+            copiedTexts: window.__prestigeCopiedTexts || [],
+            distanceFromButton: Math.abs(feedbackRect.top - buttonRect.bottom),
+            globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+              .filter((element) => /copied/i.test(element.innerText))
+              .map((element) => element.innerText.trim()),
+          };
+        })()`),
+      10000,
+      "Job Card Preview local copy feedback",
+    );
+
+    assert.deepEqual(jobCardCopyPlacementState.globalCopyMessages, []);
+    assert.equal(jobCardCopyPlacementState.allFeedback.length, 1);
+    assert.deepEqual(jobCardCopyPlacementState.allFeedback[0], {
+      target: "job-card",
+      text: "Job card copied.",
+    });
+    assert.ok(
+      jobCardCopyPlacementState.distanceFromButton <= 80,
+      `Expected Job Card copy feedback to be close to its button, got ${jobCardCopyPlacementState.distanceFromButton}px`,
+    );
+    assert.match(jobCardCopyPlacementState.copiedTexts[0] || "", /Flight: SQ333/);
+
+    const clickedDriverDispatchCopy = await evaluate(`(() => {
+      const sectionForHeading = (headingText) => {
+        const heading = [...document.querySelectorAll("h2")].find(
+          (candidate) => candidate.textContent.trim() === headingText,
+        );
+        let node = heading;
+
+        while (node && node !== document.body) {
+          if (
+            node.querySelector?.("pre") &&
+            [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+          ) {
+            return node;
+          }
+
+          node = node.parentElement;
+        }
+
+        return null;
+      };
+      const section = sectionForHeading("Driver Dispatch");
+      const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Copy",
+      );
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDriverDispatchCopy, true, "Expected Driver Dispatch Copy button to be clickable");
+
+    const driverDispatchCopyPlacementState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const sectionForHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading;
+
+            while (node && node !== document.body) {
+              if (
+                node.querySelector?.("pre") &&
+                [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+              ) {
+                return node;
+              }
+
+              node = node.parentElement;
+            }
+
+            return null;
+          };
+          const section = sectionForHeading("Driver Dispatch");
+          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Copy",
+          );
+          const feedback = section?.querySelector("[data-copy-feedback='driver-dispatch']");
+
+          if (feedback?.textContent.trim() !== "Driver dispatch copied.") {
+            return false;
+          }
+
+          const feedbackRect = feedback.getBoundingClientRect();
+          const buttonRect = copyButton.getBoundingClientRect();
+          const allFeedback = [...document.querySelectorAll("[data-copy-feedback]")].map((element) => ({
+            target: element.getAttribute("data-copy-feedback"),
+            text: element.textContent.trim(),
+          }));
+
+          return {
+            allFeedback,
+            copiedTexts: window.__prestigeCopiedTexts || [],
+            distanceFromButton: Math.abs(feedbackRect.top - buttonRect.bottom),
+            globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+              .filter((element) => /copied/i.test(element.innerText))
+              .map((element) => element.innerText.trim()),
+          };
+        })()`),
+      10000,
+      "Driver Dispatch local copy feedback",
+    );
+
+    assert.deepEqual(driverDispatchCopyPlacementState.globalCopyMessages, []);
+    assert.equal(driverDispatchCopyPlacementState.allFeedback.length, 1);
+    assert.deepEqual(driverDispatchCopyPlacementState.allFeedback[0], {
+      target: "driver-dispatch",
+      text: "Driver dispatch copied.",
+    });
+    assert.ok(
+      driverDispatchCopyPlacementState.distanceFromButton <= 80,
+      `Expected Driver Dispatch copy feedback to be close to its button, got ${driverDispatchCopyPlacementState.distanceFromButton}px`,
+    );
+    assert.match(
+      driverDispatchCopyPlacementState.copiedTexts[
+        driverDispatchCopyPlacementState.copiedTexts.length - 1
+      ] || "",
+      /DRIVER DISPATCH/,
+    );
+
     const savedCountBeforeAiAssist = await evaluate(
       `document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || ""`,
     );

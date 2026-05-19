@@ -190,6 +190,10 @@ type Message = {
   text: string;
 };
 
+type CopyFeedback = Message & {
+  target: "jobCard" | "driverDispatch";
+};
+
 type AppTab = "dispatch" | "bookings" | "dashboard" | "drivers" | "rates";
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
@@ -1490,6 +1494,7 @@ export default function Home() {
   const [savingRates, setSavingRates] = useState(false);
   const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | null>(null);
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [message, setMessage] = useState<Message>({
     tone: "info",
@@ -3412,9 +3417,13 @@ export default function Home() {
   async function copyJobCard() {
     try {
       await navigator.clipboard.writeText(jobCardPreview);
-      setMessage({ tone: "success", text: "Job card copied." });
+      setCopyFeedback({ target: "jobCard", tone: "success", text: "Job card copied." });
     } catch {
-      setMessage({ tone: "error", text: "Copy failed. Select the preview text manually." });
+      setCopyFeedback({
+        target: "jobCard",
+        tone: "error",
+        text: "Copy failed. Select the preview text manually.",
+      });
     }
   }
 
@@ -3433,9 +3442,17 @@ export default function Home() {
   async function copyDraftDriverDispatch() {
     try {
       await navigator.clipboard.writeText(draftDriverDispatchCard);
-      setMessage({ tone: "success", text: "Draft driver dispatch copied." });
+      setCopyFeedback({
+        target: "driverDispatch",
+        tone: "success",
+        text: "Driver dispatch copied.",
+      });
     } catch {
-      setMessage({ tone: "error", text: "Copy failed. Select the dispatch preview manually." });
+      setCopyFeedback({
+        target: "driverDispatch",
+        tone: "error",
+        text: "Copy failed. Select the dispatch preview manually.",
+      });
     }
   }
 
@@ -3852,7 +3869,10 @@ export default function Home() {
   );
 
   const statusPanel = (
-    <div className={`rounded-md border px-4 py-3 text-sm ${statusClass(message.tone)}`}>
+    <div
+      className={`rounded-md border px-4 py-3 text-sm ${statusClass(message.tone)}`}
+      data-status-panel="global"
+    >
       {message.text}
     </div>
   );
@@ -4592,23 +4612,33 @@ export default function Home() {
                   <h2 className="text-xl font-semibold">Job Card Preview</h2>
                   <p className="text-sm text-slate-500">WhatsApp-ready driver message.</p>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  {parsedDebugBooking ? (
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    {parsedDebugBooking ? (
+                      <button
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        onClick={() => setShowParserDebug((current) => !current)}
+                        type="button"
+                      >
+                        {showParserDebug ? "Hide parser debug" : "Show parser debug"}
+                      </button>
+                    ) : null}
                     <button
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                      onClick={() => setShowParserDebug((current) => !current)}
+                      onClick={copyJobCard}
                       type="button"
                     >
-                      {showParserDebug ? "Hide parser debug" : "Show parser debug"}
+                      Copy
                     </button>
+                  </div>
+                  {copyFeedback?.target === "jobCard" ? (
+                    <div
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
+                      data-copy-feedback="job-card"
+                    >
+                      {copyFeedback.text}
+                    </div>
                   ) : null}
-                  <button
-                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                    onClick={copyJobCard}
-                    type="button"
-                  >
-                    Copy
-                  </button>
                 </div>
               </div>
               <pre className="whitespace-pre-wrap rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm">
@@ -4622,13 +4652,23 @@ export default function Home() {
                   <h2 className="text-xl font-semibold">Driver Dispatch</h2>
                   <p className="text-sm text-slate-500">Internal WhatsApp copy for assigned driver.</p>
                 </div>
-                <button
-                  className="rounded-md border border-sky-300 px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-50"
-                  onClick={copyDraftDriverDispatch}
-                  type="button"
-                >
-                  Copy
-                </button>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <button
+                    className="rounded-md border border-sky-300 px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-50"
+                    onClick={copyDraftDriverDispatch}
+                    type="button"
+                  >
+                    Copy
+                  </button>
+                  {copyFeedback?.target === "driverDispatch" ? (
+                    <div
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
+                      data-copy-feedback="driver-dispatch"
+                    >
+                      {copyFeedback.text}
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <pre className="whitespace-pre-wrap rounded-lg bg-sky-50 p-4 text-sm leading-6 text-slate-900 shadow-sm">
                 {draftDriverDispatchCard}

@@ -211,6 +211,24 @@ const completedSavedBookingFixture = {
     traveler_name: "COMPLETED TEST TRAVELER",
   },
 };
+const reusableDriverProfileFixture = {
+  id: 901,
+  driver_name: "REUSABLE PROFILE TEST DRIVER",
+  contact_number: "+65 8111 2222",
+  vehicle_type: "Alphard",
+  plate_number: "SLL901P",
+  payout_preferences: "Prefers airport and CBD jobs",
+  driver_payout_rules: {
+    MNG: { min: 76, max: 76 },
+    DEP: { min: 66, max: 66 },
+    TRF: { min: 58, max: 58 },
+    DSP: { amount: 52 },
+  },
+  availability_status: "busy",
+  notes: "Reusable profile save test note",
+  preferred_areas: "Changi, Marina Bay",
+  airport_permit_notes: "Has Changi permit",
+};
 const mrLeeNoCompanySavedBookingFixture = {
   id: "ui-mr-lee-no-company-save-fixture",
   company_id: null,
@@ -1890,6 +1908,335 @@ async function runChromeTest() {
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
     assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
+
+    await clickTab("Drivers", "Driver Database");
+
+    await evaluate(`(() => {
+      const savedDriver = ${JSON.stringify(reusableDriverProfileFixture)};
+      const jsonResponse = (body, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const url = String(target);
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
+        if (bodyText) {
+          try {
+            window.__prestigeDriverProfileRequestBodies.push({
+              method,
+              url,
+              body: JSON.parse(bodyText),
+            });
+          } catch {
+            window.__prestigeDriverProfileRequestBodies.push({ method, url, body: bodyText });
+          }
+        }
+
+        if (!url.includes("/rest/v1/")) {
+          return window.__prestigeOriginalFetch(...args);
+        }
+
+        if (url.includes("/rest/v1/drivers")) {
+          if (method === "GET" && url.includes("driver_name=ilike")) {
+            return jsonResponse(null);
+          }
+
+          if (method === "GET") {
+            return jsonResponse([savedDriver]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse([], 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse([]);
+          }
+        }
+
+        window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+        return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
+      };
+    })()`);
+
+    const clickedSaveDriverProfile = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const labels = [...document.querySelectorAll("label")];
+      const fieldForLabel = (labelText) => {
+        const label = labels.find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        return label?.querySelector("input, select, textarea") || null;
+      };
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, value);
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      const driverName = fieldForLabel("Driver name");
+      const contactNumber = fieldForLabel("Contact number");
+      const vehicleType = fieldForLabel("Vehicle type");
+      const plateNumber = fieldForLabel("Plate number");
+      const availability = fieldForLabel("Availability");
+      const preferredAreas = fieldForLabel("Preferred areas");
+      const payoutPreferences = fieldForLabel("Payout preferences");
+      const airportPermitNotes = fieldForLabel("Airport permit notes");
+      const driverNotes = fieldForLabel("Driver notes");
+      const mngPayout = fieldForLabel("MNG payout");
+      const depPayout = fieldForLabel("DEP payout");
+      const trfPayout = fieldForLabel("TRF payout");
+      const dspPayout = fieldForLabel("DSP payout");
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Driver Profile",
+      );
+
+      if (
+        !driverName ||
+        !contactNumber ||
+        !vehicleType ||
+        !plateNumber ||
+        !availability ||
+        !preferredAreas ||
+        !payoutPreferences ||
+        !airportPermitNotes ||
+        !driverNotes ||
+        !mngPayout ||
+        !depPayout ||
+        !trfPayout ||
+        !dspPayout ||
+        !saveButton ||
+        saveButton.disabled
+      ) {
+        return false;
+      }
+
+      setValue(driverName, "REUSABLE PROFILE TEST DRIVER");
+      setValue(contactNumber, "+65 8111 2222");
+      setValue(vehicleType, "Alphard");
+      setValue(plateNumber, "SLL901P");
+      setValue(availability, "busy");
+      setValue(preferredAreas, "Changi, Marina Bay");
+      setValue(payoutPreferences, "Prefers airport and CBD jobs");
+      setValue(airportPermitNotes, "Has Changi permit");
+      setValue(driverNotes, "Reusable profile save test note");
+      setValue(mngPayout, "76");
+      setValue(depPayout, "66");
+      setValue(trfPayout, "58");
+      setValue(dspPayout, "52");
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedSaveDriverProfile, true, "Expected Save Driver Profile button to be clickable");
+
+    const driverProfileSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const labels = [...document.querySelectorAll("label")];
+          const fieldValue = (labelText) => {
+            const label = labels.find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            const control = label?.querySelector("input, select, textarea");
+
+            if (!control) {
+              return "";
+            }
+
+            if (control.tagName === "SELECT") {
+              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+            }
+
+            return control.value || "";
+          };
+          const saveButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Save Driver Profile",
+          );
+          const statusPanel = document.querySelector("[data-status-panel='global']");
+          const driverButton = [...document.querySelectorAll("button")].find(
+            (button) =>
+              button.innerText.includes("REUSABLE PROFILE TEST DRIVER") &&
+              button.innerText.includes("SLL901P"),
+          );
+          const saveButtonRect = saveButton?.getBoundingClientRect();
+          const statusRect = statusPanel?.getBoundingClientRect();
+          const saveRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/drivers"),
+          );
+
+          return {
+            bodyText: document.body.innerText,
+            driverButtonText: driverButton?.innerText || "",
+            fetchCalls: window.__prestigeFetchCalls || [],
+            requestBodies: window.__prestigeDriverProfileRequestBodies || [],
+            saveRequest: saveRequest?.body || null,
+            statusText: statusPanel?.textContent.trim() || "",
+            statusDistanceFromSaveButton:
+              saveButtonRect && statusRect ? Math.abs(statusRect.top - saveButtonRect.bottom) : null,
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+            fields: {
+              driverName: fieldValue("Driver name"),
+              contactNumber: fieldValue("Contact number"),
+              vehicleType: fieldValue("Vehicle type"),
+              plateNumber: fieldValue("Plate number"),
+            },
+          };
+        })()`);
+
+        return candidateState?.statusText === "Driver profile saved." &&
+          candidateState?.driverButtonText?.includes("REUSABLE PROFILE TEST DRIVER")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "mock reusable driver profile save",
+    );
+
+    assert.deepEqual(
+      driverProfileSaveState.unhandledSupabaseCalls,
+      [],
+      `Expected all driver profile Supabase calls to be mocked, got ${driverProfileSaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.ok(
+      driverProfileSaveState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
+      `Expected driver profile save to call only mocked drivers REST endpoints, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
+    );
+    assert.ok(
+      driverProfileSaveState.fetchCalls.every((call) => !call.includes("/rest/v1/bookings")),
+      `Expected driver profile save not to update bookings, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
+    );
+    assert.match(driverProfileSaveState.driverButtonText, /busy/);
+    assert.match(driverProfileSaveState.driverButtonText, /Plate:\s*SLL901P/);
+    assert.ok(
+      driverProfileSaveState.statusDistanceFromSaveButton !== null &&
+        driverProfileSaveState.statusDistanceFromSaveButton <= 120,
+      `Expected Driver profile saved status near Save Driver Profile button, got ${driverProfileSaveState.statusDistanceFromSaveButton}px`,
+    );
+    assert.equal(driverProfileSaveState.saveRequest?.driver_name, "REUSABLE PROFILE TEST DRIVER");
+    assert.equal(driverProfileSaveState.saveRequest?.contact_number, "+65 8111 2222");
+    assert.equal(driverProfileSaveState.saveRequest?.vehicle_type, "Alphard");
+    assert.equal(driverProfileSaveState.saveRequest?.plate_number, "SLL901P");
+    assert.equal(driverProfileSaveState.saveRequest?.availability_status, "busy");
+    assert.equal(driverProfileSaveState.saveRequest?.preferred_areas, "Changi, Marina Bay");
+    assert.equal(driverProfileSaveState.saveRequest?.payout_preferences, "Prefers airport and CBD jobs");
+    assert.equal(driverProfileSaveState.saveRequest?.airport_permit_notes, "Has Changi permit");
+    assert.equal(driverProfileSaveState.saveRequest?.notes, "Reusable profile save test note");
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.MNG?.min, 76);
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.MNG?.max, 76);
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.DEP?.min, 66);
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.DEP?.max, 66);
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.TRF?.min, 58);
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.TRF?.max, 58);
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.DSP?.amount, 52);
+    assert.equal(driverProfileSaveState.saveRequest?.driver_payout_rules?.DSP?.perHour, true);
+    assert.equal(driverProfileSaveState.fields.driverName, "");
+    assert.equal(driverProfileSaveState.fields.contactNumber, "");
+    assert.equal(driverProfileSaveState.fields.vehicleType, "");
+    assert.equal(driverProfileSaveState.fields.plateNumber, "");
+
+    const clickedSavedDriverProfile = await evaluate(`(() => {
+      const driverButton = [...document.querySelectorAll("button")].find(
+        (button) =>
+          button.innerText.includes("REUSABLE PROFILE TEST DRIVER") &&
+          button.innerText.includes("SLL901P"),
+      );
+
+      if (!driverButton || driverButton.disabled) {
+        return false;
+      }
+
+      driverButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedSavedDriverProfile, true, "Expected saved driver profile to be selectable");
+
+    const selectedDriverProfileState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const labels = [...document.querySelectorAll("label")];
+          const fieldValue = (labelText) => {
+            const label = labels.find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            const control = label?.querySelector("input, select, textarea");
+
+            if (!control) {
+              return "";
+            }
+
+            if (control.tagName === "SELECT") {
+              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+            }
+
+            return control.value || "";
+          };
+
+          return {
+            fields: {
+              driverName: fieldValue("Driver name"),
+              contactNumber: fieldValue("Contact number"),
+              vehicleType: fieldValue("Vehicle type"),
+              plateNumber: fieldValue("Plate number"),
+              availability: fieldValue("Availability"),
+              preferredAreas: fieldValue("Preferred areas"),
+              payoutPreferences: fieldValue("Payout preferences"),
+              airportPermitNotes: fieldValue("Airport permit notes"),
+              driverNotes: fieldValue("Driver notes"),
+              mngPayout: fieldValue("MNG payout"),
+              depPayout: fieldValue("DEP payout"),
+              trfPayout: fieldValue("TRF payout"),
+              dspPayout: fieldValue("DSP payout"),
+            },
+          };
+        })()`);
+
+        return candidateState?.fields?.driverName === "REUSABLE PROFILE TEST DRIVER"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "saved driver profile reloads form",
+    );
+
+    assert.equal(selectedDriverProfileState.fields.contactNumber, "+65 8111 2222");
+    assert.equal(selectedDriverProfileState.fields.vehicleType, "Alphard");
+    assert.equal(selectedDriverProfileState.fields.plateNumber, "SLL901P");
+    assert.equal(selectedDriverProfileState.fields.availability, "Busy");
+    assert.equal(selectedDriverProfileState.fields.preferredAreas, "Changi, Marina Bay");
+    assert.equal(selectedDriverProfileState.fields.payoutPreferences, "Prefers airport and CBD jobs");
+    assert.equal(selectedDriverProfileState.fields.airportPermitNotes, "Has Changi permit");
+    assert.equal(selectedDriverProfileState.fields.driverNotes, "Reusable profile save test note");
+    assert.equal(selectedDriverProfileState.fields.mngPayout, "76");
+    assert.equal(selectedDriverProfileState.fields.depPayout, "66");
+    assert.equal(selectedDriverProfileState.fields.trfPayout, "58");
+    assert.equal(selectedDriverProfileState.fields.dspPayout, "52");
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    const dashboardAfterDriverProfileSaveState = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ777"),
+      );
+
+      return {
+        articleText: article?.innerText || "",
+      };
+    })()`);
+    assert.match(dashboardAfterDriverProfileSaveState.articleText, /Assign driver to this booking/);
+    assert.match(dashboardAfterDriverProfileSaveState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
 
     await clickTab("Dispatch", "Create Job Card");
     const dispatchDraftAfterDashboardAssignment = await evaluate(extractStateScript);

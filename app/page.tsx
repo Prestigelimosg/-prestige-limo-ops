@@ -3567,6 +3567,15 @@ export default function Home() {
                 ) : null}
               </div>
 
+              <button
+                className="mt-4 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                data-dashboard-load-booking="true"
+                onClick={() => loadSelectedBooking(savedBooking)}
+                type="button"
+              >
+                Load this booking
+              </button>
+
               <div className="mt-4 rounded-md border border-stone-200 bg-white p-3">
 	                <div className="grid gap-3 sm:grid-cols-2">
 	                  <label className="sm:col-span-2">

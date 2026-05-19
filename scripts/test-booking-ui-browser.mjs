@@ -1187,18 +1187,17 @@ async function runChromeTest() {
 
           return bodyText.includes("Recent Bookings") &&
             bodyText.includes("LOADED SAVED COMPANY") &&
+            Boolean(document.querySelector("[data-dashboard-load-booking='true']")) &&
             [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking");
         })()`),
       10000,
-      "mock loaded recent booking",
+      "mock loaded recent and dashboard booking",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);
 
-    const clickedLoadThisBooking = await evaluate(`(() => {
-      const loadThisBookingButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Load this booking",
-      );
+    const clickedDashboardLoadThisBooking = await evaluate(`(() => {
+      const loadThisBookingButton = document.querySelector("[data-dashboard-load-booking='true']");
 
       if (!loadThisBookingButton || loadThisBookingButton.disabled) {
         return false;
@@ -1207,7 +1206,11 @@ async function runChromeTest() {
       loadThisBookingButton.click();
       return true;
     })()`);
-    assert.equal(clickedLoadThisBooking, true, "Expected Load this booking button to be clickable");
+    assert.equal(
+      clickedDashboardLoadThisBooking,
+      true,
+      "Expected dashboard Load this booking button to be clickable",
+    );
 
     const loadedBookingState = await waitForCondition(
       async () => {
@@ -1274,7 +1277,7 @@ async function runChromeTest() {
           : false;
       },
       10000,
-      "loaded saved booking after stale AI cleanup",
+      "dashboard loaded saved booking after stale AI cleanup",
     );
 
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
@@ -1295,6 +1298,68 @@ async function runChromeTest() {
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED DRIVER/);
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED TRAVELER/);
     assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
+
+    await evaluate(`window.__prestigeFetchCalls = []`);
+
+    const clickedRecentLoadThisBooking = await evaluate(`(() => {
+      const loadThisBookingButton = [...document.querySelectorAll("button")].find(
+        (button) =>
+          button.textContent.trim() === "Load this booking" &&
+          !button.matches("[data-dashboard-load-booking='true']"),
+      );
+
+      if (!loadThisBookingButton || loadThisBookingButton.disabled) {
+        return false;
+      }
+
+      loadThisBookingButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedRecentLoadThisBooking,
+      true,
+      "Expected Recent Bookings Load this booking button to remain clickable",
+    );
+
+    const recentLoadedBookingState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const labels = [...document.querySelectorAll("label")];
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldValue = (labelText) => {
+            const label = labels.find((candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText);
+            const control = label?.querySelector("input, select, textarea");
+
+            return control?.value || "";
+          };
+
+          return {
+            aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
+            aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
+            fetchCalls: window.__prestigeFetchCalls || [],
+            fields: {
+              company: fieldValue("Company / Account"),
+              flight: fieldValue("Flight number"),
+            },
+          };
+        })()`);
+
+        return candidateState?.fields?.company === "LOADED SAVED COMPANY" &&
+          candidateState?.fields?.flight === "SQ999"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "recent loaded saved booking still works",
+    );
+
+    assert.equal(recentLoadedBookingState.aiDraftExists, false);
+    assert.equal(recentLoadedBookingState.aiFeedbackExists, false);
+    assert.deepEqual(
+      recentLoadedBookingState.fetchCalls,
+      [],
+      `Expected Recent Load this booking to make no save/load network call, got ${recentLoadedBookingState.fetchCalls.join(", ")}`,
+    );
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
 

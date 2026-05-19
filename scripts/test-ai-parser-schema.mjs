@@ -1,10 +1,61 @@
 import assert from "node:assert/strict";
 import {
   allowedAiBookingTypes,
+  aiParseJsonSchema,
   sanitizeAiParseResult,
 } from "../lib/ai-parser-schema.ts";
 
 assert.deepEqual(allowedAiBookingTypes, ["MNG", "DEP", "TRF", "DSP"]);
+
+const bookingFields = [
+  "bookingType",
+  "companyAccount",
+  "bookerName",
+  "bookerEmail",
+  "bookerContact",
+  "passengerName",
+  "pax",
+  "vehicle",
+  "pickupDate",
+  "pickupTime",
+  "flightNumber",
+  "pickup",
+  "dropoff",
+  "extraStopLocation",
+  "extraStops",
+  "customerPriceOverride",
+  "notes",
+  "confidence",
+  "needsReviewReasons",
+];
+
+assert.equal(aiParseJsonSchema.type, "object");
+assert.equal(aiParseJsonSchema.additionalProperties, false);
+assert.deepEqual(aiParseJsonSchema.required, [
+  "multipleBookingsDetected",
+  "bookings",
+  "rawWarnings",
+]);
+assert.deepEqual(Object.keys(aiParseJsonSchema.properties), [
+  "multipleBookingsDetected",
+  "bookings",
+  "rawWarnings",
+]);
+assert.equal(aiParseJsonSchema.properties.bookings.type, "array");
+
+const bookingSchema = aiParseJsonSchema.properties.bookings.items;
+assert.equal(bookingSchema.type, "object");
+assert.equal(bookingSchema.additionalProperties, false);
+assert.deepEqual(bookingSchema.required, bookingFields);
+assert.deepEqual(Object.keys(bookingSchema.properties), bookingFields);
+assert.deepEqual(
+  bookingSchema.properties.bookingType.enum.filter(Boolean),
+  ["MNG", "DEP", "TRF", "DSP"],
+);
+assert.equal(bookingSchema.properties.confidence.minimum, 0);
+assert.equal(bookingSchema.properties.confidence.maximum, 1);
+assert.equal(bookingSchema.properties.needsReviewReasons.items.type, "string");
+assert.equal(aiParseJsonSchema.properties.rawWarnings.items.type, "string");
 
 const validResult = sanitizeAiParseResult({
   multipleBookingsDetected: false,
@@ -69,6 +120,15 @@ assert.equal(invalidBookingType.bookings[0].bookingType, "");
 assert.deepEqual(invalidBookingType.bookings[0].needsReviewReasons, [
   "Invalid booking type from AI output",
 ]);
+
+const unclearFieldsResult = sanitizeAiParseResult({ bookings: [{ confidence: 0.5 }] });
+assert.equal(unclearFieldsResult.bookings[0].bookingType, "");
+assert.equal(unclearFieldsResult.bookings[0].companyAccount, "");
+assert.equal(unclearFieldsResult.bookings[0].pickupDate, "");
+assert.equal(unclearFieldsResult.bookings[0].pickupTime, "");
+assert.equal(unclearFieldsResult.bookings[0].flightNumber, "");
+assert.equal(unclearFieldsResult.bookings[0].pickup, "");
+assert.equal(unclearFieldsResult.bookings[0].dropoff, "");
 
 assert.equal(
   sanitizeAiParseResult({ bookings: [{ companyAccount: "gmail.com", confidence: 0.5 }] })

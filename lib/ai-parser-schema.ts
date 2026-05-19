@@ -30,6 +30,71 @@ export type AiParseResult = {
   rawWarnings: string[];
 };
 
+export const aiParseJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["multipleBookingsDetected", "bookings", "rawWarnings"],
+  properties: {
+    multipleBookingsDetected: { type: "boolean" },
+    bookings: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "bookingType",
+          "companyAccount",
+          "bookerName",
+          "bookerEmail",
+          "bookerContact",
+          "passengerName",
+          "pax",
+          "vehicle",
+          "pickupDate",
+          "pickupTime",
+          "flightNumber",
+          "pickup",
+          "dropoff",
+          "extraStopLocation",
+          "extraStops",
+          "customerPriceOverride",
+          "notes",
+          "confidence",
+          "needsReviewReasons",
+        ],
+        properties: {
+          bookingType: { type: "string", enum: ["", ...allowedAiBookingTypes] },
+          companyAccount: { type: "string" },
+          bookerName: { type: "string" },
+          bookerEmail: { type: "string" },
+          bookerContact: { type: "string" },
+          passengerName: { type: "string" },
+          pax: { type: "string" },
+          vehicle: { type: "string" },
+          pickupDate: { type: "string" },
+          pickupTime: { type: "string" },
+          flightNumber: { type: "string" },
+          pickup: { type: "string" },
+          dropoff: { type: "string" },
+          extraStopLocation: { type: "string" },
+          extraStops: { type: "string" },
+          customerPriceOverride: { type: "string" },
+          notes: { type: "string" },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          needsReviewReasons: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+      },
+    },
+    rawWarnings: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+} as const;
+
 const publicEmailDomains = new Set([
   "126.com",
   "163.com",

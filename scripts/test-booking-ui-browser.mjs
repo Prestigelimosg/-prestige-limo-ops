@@ -29,6 +29,65 @@ Pax: 2
 Child seat: 2 booster seat
 Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
+const crmSavedBookingFixture = {
+  id: "ui-crm-save-fixture",
+  company_id: 601,
+  booker_id: 602,
+  traveler_id: 603,
+  booking_type: "MNG",
+  vehicle: "AVF",
+  pickup_time: "1530",
+  pickup_address: "Changi Airport T3",
+  dropoff_address: "Raffles Hotel Singapore",
+  flight_no: "SQ333",
+  route: "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
+  pax: 2,
+  job_card:
+    "AVF MNG\n27 May 2026, 1530hrs\nFlight: SQ333\nChangi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore\nCompany: BROWSER UI TEST COMPANY\nName: BROWSER UI TEST TRAVELER\nPax: 2\nChild seat: 2 x booster seat",
+  status: "assigned",
+  driver_id: null,
+  driver_name: "TEST DRIVER CRM 20260516",
+  driver_contact: null,
+  driver_plate_number: null,
+  customer_rate: 85,
+  customer_rate_unit: "job",
+  customer_price_amount: 160,
+  customer_rate_override: 160,
+  customer_price_override_reason: "Parsed from message: $160.00",
+  driver_payout_min: 65,
+  driver_payout_max: 75,
+  driver_payout_amount: 95,
+  driver_payout_override: null,
+  driver_payout_reason: null,
+  driver_payout_unit: "job",
+  driver_notes: null,
+  driver_dispatch_include_payout: false,
+  midnight_surcharge: 0,
+  midnight_payout: 0,
+  extra_stop_count: 1,
+  extra_stop_surcharge: 15,
+  extra_stop_payout: 10,
+  child_seat_required: true,
+  child_seat_count: 2,
+  child_seat_type: "booster seat",
+  child_seat_customer_surcharge: 30,
+  child_seat_driver_payout: 20,
+  pricing_source: "manual",
+  created_at: "2026-05-19T01:00:00.000Z",
+  updated_at: "2026-05-19T01:00:00.000Z",
+  companies: {
+    company_name: "BROWSER UI TEST COMPANY",
+    domain: "example.com",
+  },
+  bookers: {
+    booker_name: "BROWSER UI TEST BOOKER",
+    email: "browserui@example.com",
+    phone: "+65 9000 0333",
+  },
+  travelers: {
+    traveler_name: "BROWSER UI TEST TRAVELER",
+  },
+};
 const loadedSavedBookingFixture = {
   id: "ui-cleanup-load-fixture",
   company_id: 501,
@@ -1413,6 +1472,410 @@ async function runChromeTest() {
       [],
       `Expected Recent Load this booking to make no save/load network call, got ${recentLoadedBookingState.fetchCalls.join(", ")}`,
     );
+
+    const clickedClearBeforeCrmSave = await evaluate(`(() => {
+      const clearButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Clear",
+      );
+
+      if (!clearButton || clearButton.disabled) {
+        return false;
+      }
+
+      clearButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedClearBeforeCrmSave, true, "Expected Clear button before CRM save test");
+
+    const focusedCrmSaveTextarea = await evaluate(`(() => {
+      const textarea = document.querySelector("textarea");
+      if (!textarea) {
+        return false;
+      }
+
+      textarea.focus();
+      textarea.select();
+      return document.activeElement === textarea;
+    })()`);
+    assert.equal(focusedCrmSaveTextarea, true, "Expected textarea to be focused for CRM save test");
+
+    await client.send("Input.insertText", { text: bookingSample });
+
+    const filledCrmSaveTextarea = await evaluate(
+      `document.querySelector("textarea")?.value === ${JSON.stringify(bookingSample)}`,
+    );
+    assert.equal(filledCrmSaveTextarea, true, "Expected CRM save sample textarea to be filled");
+
+    const clickedCrmSaveParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedCrmSaveParse, true, "Expected Create Job Card button before CRM save");
+
+    await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
+          candidateState?.fields?.flight === "SQ333" &&
+          candidateState?.fields?.extraStopLocation === "Marina Bay Sands"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "parsed booking UI state before CRM save",
+    );
+
+    await evaluate(`(() => {
+      const savedBooking = ${JSON.stringify(crmSavedBookingFixture)};
+      const companyRecord = {
+        id: savedBooking.company_id,
+        company_name: savedBooking.companies.company_name,
+        domain: savedBooking.companies.domain,
+        customer_rates: {},
+        driver_payout_rules: {},
+        transzend_excel_privacy: false,
+      };
+      const bookerRecord = {
+        id: savedBooking.booker_id,
+        company_id: savedBooking.company_id,
+        booker_name: savedBooking.bookers.booker_name,
+        email: savedBooking.bookers.email,
+        phone: savedBooking.bookers.phone,
+      };
+      const travelerRecord = {
+        id: savedBooking.traveler_id,
+        company_id: savedBooking.company_id,
+        traveler_name: savedBooking.travelers.traveler_name,
+        preferred_vehicle: savedBooking.vehicle,
+        default_address: savedBooking.dropoff_address,
+        default_pickup_address: "",
+        default_dropoff_address: savedBooking.dropoff_address,
+        booker_id: savedBooking.booker_id,
+        booker_name: savedBooking.bookers.booker_name,
+        booker_contact: savedBooking.bookers.phone,
+        booker_email: savedBooking.bookers.email,
+        customer_rates: {},
+        driver_payout_rules: {},
+      };
+      const savedAddressRecord = {
+        id: 604,
+        company_id: savedBooking.company_id,
+        traveler_id: savedBooking.traveler_id,
+        label: "Default",
+        address: savedBooking.dropoff_address,
+        address_role: "traveler_default",
+        is_default: true,
+        use_count: 1,
+      };
+      const jsonResponse = (body, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      window.__prestigeFetchCalls = [];
+      window.__prestigeSaveRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const url = String(target);
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
+        if (bodyText) {
+          try {
+            window.__prestigeSaveRequestBodies.push({
+              method,
+              url,
+              body: JSON.parse(bodyText),
+            });
+          } catch {
+            window.__prestigeSaveRequestBodies.push({ method, url, body: bodyText });
+          }
+        }
+
+        if (!url.includes("/rest/v1/")) {
+          return window.__prestigeOriginalFetch(...args);
+        }
+
+        if (url.includes("/rest/v1/companies")) {
+          if (method === "GET") {
+            return jsonResponse([]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse(companyRecord, 201);
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled company mock" }, 500);
+        }
+
+        if (url.includes("/rest/v1/bookers")) {
+          if (method === "GET") {
+            return jsonResponse([]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse(bookerRecord, 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({});
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled booker mock" }, 500);
+        }
+
+        if (url.includes("/rest/v1/travelers")) {
+          if (method === "GET") {
+            return jsonResponse([]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse(travelerRecord, 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({});
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled traveler mock" }, 500);
+        }
+
+        if (url.includes("/rest/v1/saved_addresses")) {
+          if (method === "GET") {
+            return jsonResponse([]);
+          }
+
+          if (method === "POST") {
+            return jsonResponse(savedAddressRecord, 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({});
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled saved address mock" }, 500);
+        }
+
+        if (url.includes("/rest/v1/bookings")) {
+          if (method === "POST") {
+            return jsonResponse({ id: savedBooking.id }, 201);
+          }
+
+          if (method === "GET") {
+            return jsonResponse([savedBooking]);
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled booking mock" }, 500);
+        }
+
+        window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+        return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
+      };
+    })()`);
+
+    const clickedSaveBookingCrm = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Booking + CRM",
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedSaveBookingCrm, true, "Expected Save Booking + CRM button to be clickable");
+
+    const crmSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+          );
+
+          return bodyText.includes("Booking saved successfully: ${crmSavedBookingFixture.id}")
+            ? {
+                bodyText,
+                fetchCalls: window.__prestigeFetchCalls || [],
+                requestBodies: window.__prestigeSaveRequestBodies || [],
+                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+                bookingInsert: bookingInsert?.body || null,
+              }
+            : false;
+        })()`);
+
+        return candidateState || false;
+      },
+      10000,
+      "mock successful Save Booking + CRM",
+    );
+
+    assert.deepEqual(
+      crmSaveState.unhandledSupabaseCalls,
+      [],
+      `Expected all Supabase calls to be mocked, got ${crmSaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.ok(
+      crmSaveState.fetchCalls.every((call) => call.includes("/rest/v1/")),
+      `Expected CRM save test to make only mocked Supabase REST calls, got ${crmSaveState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(crmSaveState.bookingInsert?.company_id, crmSavedBookingFixture.company_id);
+    assert.equal(crmSaveState.bookingInsert?.booker_id, crmSavedBookingFixture.booker_id);
+    assert.equal(crmSaveState.bookingInsert?.traveler_id, crmSavedBookingFixture.traveler_id);
+    assert.equal(crmSaveState.bookingInsert?.booking_type, "MNG");
+    assert.equal(crmSaveState.bookingInsert?.vehicle, "AVF");
+    assert.equal(crmSaveState.bookingInsert?.pickup_address, "Changi Airport T3");
+    assert.equal(crmSaveState.bookingInsert?.dropoff_address, "Raffles Hotel Singapore");
+    assert.equal(crmSaveState.bookingInsert?.flight_no, "SQ333");
+    assert.equal(crmSaveState.bookingInsert?.pax, 2);
+    assert.equal(crmSaveState.bookingInsert?.extra_stop_count, 1);
+    assert.equal(crmSaveState.bookingInsert?.child_seat_required, true);
+    assert.equal(crmSaveState.bookingInsert?.child_seat_count, 2);
+    assert.equal(crmSaveState.bookingInsert?.child_seat_type, "booster seat");
+    assert.equal(crmSaveState.bookingInsert?.customer_rate_override, 160);
+    assert.equal(crmSaveState.bookingInsert?.driver_name, "TEST DRIVER CRM 20260516");
+
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const recentBookingButton = [...document.querySelectorAll("article")].some(
+            (article) =>
+              article.innerText.includes("BROWSER UI TEST COMPANY") &&
+              article.innerText.includes("SQ333") &&
+              [...article.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking"),
+          );
+
+          return bodyText.includes("Recent Bookings") && recentBookingButton;
+        })()`),
+      10000,
+      "saved CRM booking in Recent Bookings",
+    );
+
+    const clickedSavedCrmRecentLoad = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("BROWSER UI TEST COMPANY") &&
+          candidate.innerText.includes("SQ333"),
+      );
+      const button = [...(article?.querySelectorAll("button") || [])].find(
+        (candidate) => candidate.textContent.trim() === "Load this booking",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedSavedCrmRecentLoad, true, "Expected saved CRM Recent Booking to load");
+
+    const crmReloadState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const labels = [...document.querySelectorAll("label")];
+          const fieldValue = (labelText) => {
+            const label = labels.find((candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText);
+            const control = label?.querySelector("input, select, textarea");
+
+            if (!control) {
+              return "";
+            }
+
+            if (control.tagName === "SELECT") {
+              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+            }
+
+            return control.value || "";
+          };
+          const pres = [...document.querySelectorAll("pre")].map((pre) => pre.innerText);
+
+          return {
+            bodyText: document.body.innerText,
+            fields: {
+              company: fieldValue("Company / Account"),
+              bookingType: fieldValue("Booking type"),
+              vehicle: fieldValue("Vehicle"),
+              pickupDate: fieldValue("Pickup date"),
+              pickupTime: fieldValue("Pickup time"),
+              flight: fieldValue("Flight number"),
+              pickup: fieldValue("Pickup"),
+              extraStopLocation: fieldValue("Extra stop location"),
+              extraStopCount: fieldValue("Extra Stops"),
+              dropoff: fieldValue("Drop-off"),
+              booker: fieldValue("Booker"),
+              bookerContact: fieldValue("Booker WhatsApp / Contact"),
+              bookerEmail: fieldValue("Booker email (optional)"),
+              name: fieldValue("Passenger name") || fieldValue("Name"),
+              pax: fieldValue("Pax"),
+              childSeatRequired: fieldValue("Child seat required"),
+              childSeatCount: fieldValue("Child seat count"),
+              childSeatType: fieldValue("Child seat type / note"),
+              customerPriceOverride: fieldValue("Customer Price Override"),
+              driverName: fieldValue("Driver Name"),
+            },
+            jobCardPreview: pres.find((text) => text.includes("Flight: SQ333")) || "",
+            driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
+          };
+        })()`);
+
+        return candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
+          candidateState?.fields?.flight === "SQ333"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "reloaded CRM saved booking form state",
+    );
+
+    assert.equal(crmReloadState.fields.company, "BROWSER UI TEST COMPANY");
+    assert.equal(crmReloadState.fields.booker, "BROWSER UI TEST BOOKER");
+    assert.equal(crmReloadState.fields.bookerContact, "+65 9000 0333");
+    assert.equal(crmReloadState.fields.bookerEmail, "browserui@example.com");
+    assert.equal(crmReloadState.fields.name, "BROWSER UI TEST TRAVELER");
+    assert.equal(crmReloadState.fields.pax, "2");
+    assert.equal(crmReloadState.fields.vehicle, "AVF");
+    assert.equal(crmReloadState.fields.bookingType, "MNG");
+    assert.equal(crmReloadState.fields.pickupDate, "2026-05-27");
+    assert.equal(crmReloadState.fields.pickupTime, "1530hrs");
+    assert.equal(crmReloadState.fields.flight, "SQ333");
+    assert.equal(crmReloadState.fields.pickup, "Changi Airport T3");
+    assert.equal(crmReloadState.fields.extraStopLocation, "Marina Bay Sands");
+    assert.equal(crmReloadState.fields.extraStopCount, "1");
+    assert.equal(crmReloadState.fields.dropoff, "Raffles Hotel Singapore");
+    assert.match(crmReloadState.fields.childSeatRequired, /Yes/i);
+    assert.equal(crmReloadState.fields.childSeatCount, "2");
+    assert.equal(crmReloadState.fields.childSeatType, "booster seat");
+    assert.equal(crmReloadState.fields.customerPriceOverride, "160");
+    assert.equal(crmReloadState.fields.driverName, "TEST DRIVER CRM 20260516");
+    assert.match(crmReloadState.jobCardPreview, /Marina Bay Sands/);
+    assert.match(crmReloadState.jobCardPreview, /Child seat: 2 x booster seat/);
+    assert.match(crmReloadState.driverDispatch, /TEST DRIVER CRM 20260516/);
+    assert.match(crmReloadState.driverDispatch, /BROWSER UI TEST TRAVELER/);
+    assert.doesNotMatch(crmReloadState.bodyText, /Company:\s*gmail\.com/i);
+    assert.doesNotMatch(crmReloadState.bodyText, /Company:\s*prestigelimo\.sg/i);
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
 

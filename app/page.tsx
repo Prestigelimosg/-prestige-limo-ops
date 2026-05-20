@@ -1040,6 +1040,53 @@ function finiteNumber(value: unknown) {
   return Number.isFinite(parsedValue) ? parsedValue : null;
 }
 
+function bookingCardPriceAmounts(bookingRecord: BookingRecord) {
+  const childSeatCount = normalizeChildSeatCount(
+    Boolean(bookingRecord.child_seat_required) || Boolean(finiteNumber(bookingRecord.child_seat_count)),
+    bookingRecord.child_seat_count,
+  );
+  const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count);
+  const customerBasePrice = finiteNumber(bookingRecord.customer_rate);
+  const driverBasePayout = finiteNumber(bookingRecord.driver_payout_min);
+  const customerPrice =
+    finiteNumber(bookingRecord.customer_price_amount) ??
+    finiteNumber(bookingRecord.customer_rate_override) ??
+    (customerBasePrice === null
+      ? null
+      : customerBasePrice +
+        (finiteNumber(bookingRecord.midnight_surcharge) ?? 0) +
+        extraStopCount * (finiteNumber(bookingRecord.extra_stop_surcharge) ?? 0) +
+        (finiteNumber(bookingRecord.child_seat_customer_surcharge) ??
+          childSeatCount * defaultChildSeatCustomerSurcharge));
+  const driverPrice =
+    finiteNumber(bookingRecord.driver_payout_override) ??
+    (driverBasePayout === null
+      ? null
+      : driverBasePayout +
+        (finiteNumber(bookingRecord.midnight_payout) ?? 0) +
+        extraStopCount * (finiteNumber(bookingRecord.extra_stop_payout) ?? 0) +
+        (finiteNumber(bookingRecord.child_seat_driver_payout) ?? childSeatCount * defaultChildSeatDriverPayout)) ??
+    finiteNumber(bookingRecord.driver_payout_amount);
+
+  return {
+    customerPrice,
+    driverPrice,
+  };
+}
+
+function bookingCardPriceLine(bookingRecord: BookingRecord) {
+  const { customerPrice, driverPrice } = bookingCardPriceAmounts(bookingRecord);
+
+  if (customerPrice === null && driverPrice === null) {
+    return "";
+  }
+
+  const customerText = customerPrice === null ? "—" : `$${formatCompactMoney(customerPrice)}`;
+  const driverText = driverPrice === null ? "—" : `$${formatCompactMoney(driverPrice)}`;
+
+  return `Customer ${customerText} / Driver ${driverText}`;
+}
+
 function positiveRateOrDefault(value: unknown, fallback: number) {
   const numericValue = finiteNumber(value);
 
@@ -1339,7 +1386,7 @@ function calculateSavedDriverPayout(
     extraStopCount * extraStopPayout;
   const childSeatDriverAmount = numericRate(bookingRecord.child_seat_driver_payout);
   const storedBasePayout =
-    numericRate(bookingRecord.driver_payout_max) ||
+    numericRate(bookingRecord.driver_payout_min) ||
     Math.max(
       0,
       numericRate(bookingRecord.driver_payout_amount) -
@@ -1686,8 +1733,8 @@ function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: Driver
   const payoutAmount =
     numericRate(driverDraft.payoutOverride) ||
     numericRate(bookingRecord.driver_payout_override) ||
-    numericRate(bookingRecord.driver_payout_amount) ||
-    numericRate(bookingRecord.driver_payout_max);
+    bookingCardPriceAmounts(bookingRecord).driverPrice ||
+    numericRate(bookingRecord.driver_payout_amount);
   const includePayout = driverDraft.includePayout || Boolean(bookingRecord.driver_dispatch_include_payout);
   const childSeatLine = bookingRecord.child_seat_required
     ? formatChildSeatNote(bookingRecord.child_seat_count, bookingRecord.child_seat_type)
@@ -4430,6 +4477,8 @@ export default function Home() {
           const bookerName = getBookerName(savedBooking);
           const travelerName = getBookingName(savedBooking);
           const driverName = clean(savedBooking.driver_name) || clean(driverDraft.driverName);
+          const priceAmounts = bookingCardPriceAmounts(savedBooking);
+          const priceLine = bookingCardPriceLine(savedBooking);
           const hasDriver = Boolean(driverName);
           const hasSavedDriver = Boolean(clean(savedBooking.driver_name) || savedBooking.driver_id);
           const driverAssignmentMessage = driverAssignmentMessages[bookingId] ?? null;
@@ -4488,12 +4537,7 @@ export default function Home() {
                 {normalizeExtraStopCount(savedBooking.extra_stop_count) > 0 ? (
                   <p>Extra stops: {normalizeExtraStopCount(savedBooking.extra_stop_count)}</p>
                 ) : null}
-                {savedBooking.customer_price_amount || savedBooking.driver_payout_amount ? (
-                  <p>
-                    Customer ${savedBooking.customer_price_amount ?? savedBooking.customer_rate ?? 0} / Driver $
-                    {savedBooking.driver_payout_amount ?? savedBooking.driver_payout_max ?? 0}
-                  </p>
-                ) : null}
+                {priceLine ? <p>{priceLine}</p> : null}
                 {savedBooking.customer_price_override_reason ? (
                   <p>Customer override: {savedBooking.customer_price_override_reason}</p>
                 ) : null}
@@ -4662,7 +4706,7 @@ export default function Home() {
                         onChange={(event) =>
                           updateDriverDraft(savedBooking, "payoutOverride", event.target.value)
                         }
-                        placeholder={`${savedBooking.driver_payout_amount || savedBooking.driver_payout_max || ""}`}
+                        placeholder={`${priceAmounts.driverPrice ?? ""}`}
                         type="number"
                         value={driverDraft.payoutOverride}
                       />
@@ -4948,6 +4992,7 @@ export default function Home() {
           const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
             ? rawBookingCompletionMessage
             : null;
+          const priceLine = bookingCardPriceLine(savedBooking);
 
           return (
             <article
@@ -4965,6 +5010,7 @@ export default function Home() {
                     {getBookingName(savedBooking) || "Unknown"}
                   </p>
                   <p>{routeText}</p>
+                  {priceLine ? <p>{priceLine}</p> : null}
                   {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                 </div>
                 <div className="flex flex-col gap-2">
@@ -5090,6 +5136,7 @@ export default function Home() {
               const bookingCompletionMessage = isUndoCompletionMessage(rawBookingCompletionMessage)
                 ? rawBookingCompletionMessage
                 : null;
+              const priceLine = bookingCardPriceLine(savedBooking);
 
               return (
                 <article
@@ -5116,6 +5163,7 @@ export default function Home() {
                         {getBookingName(savedBooking) || "Unknown"}
                       </p>
                       <p>{routeText}</p>
+                      {priceLine ? <p>{priceLine}</p> : null}
                       {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                     </div>
                     <div className="flex flex-col gap-2">

@@ -195,15 +195,36 @@ const persistedRealLutherGrahamFixture = {
   company_id: null,
   booker_id: 906102,
   traveler_id: 906103,
-  pickup_time: "0800",
-  pickup_address: "756 Woodlands Ave 4",
-  dropoff_address: "Changi Airport T2",
-  flight_no: "TR288",
-  route: "756 Woodlands Ave 4 > Changi Airport T2",
+  booking_type: "DEP",
+  vehicle: "AVF",
+  pickup_time: "0420",
+  pickup_address: "160 Watten Estate Rd, Singapore 287610",
+  dropoff_address: "Changi Airport",
+  flight_no: "SQ265",
+  route:
+    "160 Watten Estate Rd, Singapore 287610 > 405 Sin Ming Ave, Singapore 570405 > Bedok South Avenue 2, Block 10B HDB Bedok South, Singapore 10B Bedok S Ave 2, Block 10B, Singapore 461010 > Changi Airport",
   job_card:
-    "E class DEP\n06 May 2026, 0800hrs\nFlight: TR288\n756 Woodlands Ave 4 > Changi Airport T2\nBooker: Luther Graham\nPassenger: Edien Joy\nPax: 2",
+    "AVF DEP\n30 Apr 2026, 0420hrs\nFlight: SQ265\n160 Watten Estate Rd, Singapore 287610 > 405 Sin Ming Ave, Singapore 570405 > Bedok South Avenue 2, Block 10B HDB Bedok South, Singapore 10B Bedok S Ave 2, Block 10B, Singapore 461010 > Changi Airport\nBooker: Luther Graham\nPassenger: Luther Graham\nPax: 3",
   status: "confirmed",
   driver_name: "REGULAR REAL DRIVER",
+  customer_rate: 75,
+  customer_price_amount: 160,
+  customer_rate_override: 160,
+  customer_price_override_reason: "Parsed from message: $160.00",
+  driver_payout_min: 55,
+  driver_payout_max: 65,
+  driver_payout_amount: 95,
+  driver_payout_override: null,
+  extra_stop_count: 2,
+  midnight_payout: 10,
+  midnight_surcharge: 15,
+  extra_stop_surcharge: 15,
+  extra_stop_payout: 10,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  child_seat_customer_surcharge: 0,
+  child_seat_driver_payout: 0,
   created_at: "2026-05-18T02:00:00.000Z",
   updated_at: "2026-05-18T02:00:00.000Z",
   companies: null,
@@ -213,7 +234,7 @@ const persistedRealLutherGrahamFixture = {
     phone: "+65 8091 2613",
   },
   travelers: {
-    traveler_name: "Edien Joy",
+    traveler_name: "Luther Graham",
   },
 };
 const persistedRealAlisonLimFixture = {
@@ -401,6 +422,46 @@ const completedSavedBookingFixture = {
   },
   travelers: {
     traveler_name: "COMPLETED TEST TRAVELER",
+  },
+};
+const completedCustomerOnlyPriceFixture = {
+  ...completedSavedBookingFixture,
+  id: "ui-completed-customer-only-price-fixture",
+  company_id: 806,
+  booker_id: 807,
+  traveler_id: 808,
+  pickup_time: "1810",
+  pickup_address: "Marina Bay Sands",
+  dropoff_address: "Seletar Airport",
+  flight_no: "SQ785",
+  route: "Marina Bay Sands > Seletar Airport",
+  job_card:
+    "AVF TRF\n30 May 2026, 1810hrs\nFlight: SQ785\nMarina Bay Sands > Seletar Airport\nCompany: PRICE DISPLAY COMPANY\nPassenger: PRICE DISPLAY CUSTOMER ONLY TRAVELER\nPax: 1",
+  status: "completed",
+  driver_id: null,
+  driver_name: "PRICE DISPLAY DRIVER",
+  driver_contact: "+65 8444 7805",
+  driver_plate_number: "SLE785P",
+  customer_rate: 140,
+  customer_price_amount: 140,
+  driver_payout_min: null,
+  driver_payout_max: null,
+  driver_payout_amount: null,
+  driver_payout_override: null,
+  driver_payout_reason: null,
+  created_at: "2026-05-18T23:49:30.000Z",
+  updated_at: "2026-05-18T23:49:30.000Z",
+  companies: {
+    company_name: "PRICE DISPLAY COMPANY",
+    domain: "price-display.example.com",
+  },
+  bookers: {
+    booker_name: "PRICE DISPLAY BOOKER",
+    email: "booker@price-display.example.com",
+    phone: "+65 8333 7805",
+  },
+  travelers: {
+    traveler_name: "PRICE DISPLAY CUSTOMER ONLY TRAVELER",
   },
 };
 const dashboardCompletionActionFixture = {
@@ -2244,6 +2305,7 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardDriverAssignmentFixture)},
         ${JSON.stringify(dashboardAssignedDriverClearFixture)},
         ${JSON.stringify(completedSavedBookingFixture)},
+        ${JSON.stringify(completedCustomerOnlyPriceFixture)},
         ${JSON.stringify(dashboardCompletionActionFixture)},
         ${JSON.stringify(completedUndoAssignedFixture)},
         ${JSON.stringify(completedUndoConfirmedFixture)},
@@ -2395,7 +2457,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeBookingsState.savedCount,
-      "15",
+      "16",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate the visible Saved count",
     );
     assert.equal(
@@ -2424,8 +2486,8 @@ async function runChromeTest() {
       hiddenLegacyMrLeeBookingsState.articles.some(
         (articleText) =>
           articleText.includes("Luther Graham") &&
-          articleText.includes("Edien Joy") &&
-          articleText.includes("TR288"),
+          articleText.includes("SQ265") &&
+          articleText.includes("30 Apr 2026"),
       ),
       true,
       "Expected real Luther Graham booking to remain visible in Recent Bookings",
@@ -2449,6 +2511,40 @@ async function runChromeTest() {
       ),
       true,
       "Expected real Nicole Yap / Mr. Rohan Singh booking with harmless test note to remain visible in Recent Bookings",
+    );
+    const recentLoadedPriceArticle = hiddenLegacyMrLeeBookingsState.articles.find((articleText) =>
+      articleText.includes("LOADED SAVED TRAVELER") && articleText.includes("SQ999"),
+    );
+    const recentCustomerOnlyPriceArticle = hiddenLegacyMrLeeBookingsState.articles.find((articleText) =>
+      articleText.includes("PRICE DISPLAY CUSTOMER ONLY TRAVELER") && articleText.includes("SQ785"),
+    );
+    const recentLutherPriceArticle = hiddenLegacyMrLeeBookingsState.articles.find((articleText) =>
+      articleText.includes("Luther Graham") && articleText.includes("SQ265") && articleText.includes("30 Apr 2026"),
+    );
+    assert.match(
+      recentLoadedPriceArticle || "",
+      /Customer \$120 \/ Driver \$75/,
+      "Expected Bookings card to show saved customer and driver prices",
+    );
+    assert.match(
+      recentCustomerOnlyPriceArticle || "",
+      /Customer \$140 \/ Driver —/,
+      "Expected Bookings card to show missing driver price as a dash, not zero",
+    );
+    assert.doesNotMatch(
+      recentCustomerOnlyPriceArticle || "",
+      /Driver \$0(?:\.00)?/,
+      "Expected Bookings card not to invent a $0 driver price when it is missing",
+    );
+    assert.match(
+      recentLutherPriceArticle || "",
+      /Customer \$160 \/ Driver \$85/,
+      "Expected Bookings card to use the saved lower driver payout plus extras when no final driver amount is stored",
+    );
+    assert.doesNotMatch(
+      recentLutherPriceArticle || "",
+      /Driver \$95/,
+      "Expected Bookings card not to display the saved driver payout range maximum as the actual payout",
     );
 
     await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
@@ -2579,7 +2675,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeDashboardState.matchingCount,
-      "15",
+      "16",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate Dashboard matching count",
     );
     assert.equal(
@@ -2608,8 +2704,8 @@ async function runChromeTest() {
       hiddenLegacyMrLeeDashboardState.articles.some(
         (articleText) =>
           articleText.includes("Luther Graham") &&
-          articleText.includes("Edien Joy") &&
-          articleText.includes("TR288"),
+          articleText.includes("SQ265") &&
+          articleText.includes("30 Apr 2026"),
       ),
       true,
       "Expected real Luther Graham booking to remain visible on Dashboard",
@@ -2633,6 +2729,73 @@ async function runChromeTest() {
       ),
       true,
       "Expected real Nicole Yap / Mr. Rohan Singh booking with harmless test note to remain visible on Dashboard",
+    );
+    const dashboardLoadedPriceArticle = hiddenLegacyMrLeeDashboardState.articles.find((articleText) =>
+      articleText.includes("LOADED SAVED TRAVELER") && articleText.includes("SQ999"),
+    );
+    const dashboardCustomerOnlyPriceArticle = hiddenLegacyMrLeeDashboardState.articles.find((articleText) =>
+      articleText.includes("PRICE DISPLAY CUSTOMER ONLY TRAVELER") && articleText.includes("SQ785"),
+    );
+    const dashboardLutherPriceArticle = hiddenLegacyMrLeeDashboardState.articles.find((articleText) =>
+      articleText.includes("Luther Graham") && articleText.includes("SQ265") && articleText.includes("30 Apr 2026"),
+    );
+    assert.match(
+      dashboardLoadedPriceArticle || "",
+      /Customer \$120 \/ Driver \$75/,
+      "Expected Dashboard card to show saved customer and driver prices",
+    );
+    assert.match(
+      dashboardCustomerOnlyPriceArticle || "",
+      /Customer \$140 \/ Driver —/,
+      "Expected Dashboard card to show missing driver price as a dash, not zero",
+    );
+    assert.doesNotMatch(
+      dashboardCustomerOnlyPriceArticle || "",
+      /Driver \$0(?:\.00)?/,
+      "Expected Dashboard card not to invent a $0 driver price when it is missing",
+    );
+    assert.match(
+      dashboardLutherPriceArticle || "",
+      /Customer \$160 \/ Driver \$85/,
+      "Expected Dashboard card to use the saved lower driver payout plus extras when no final driver amount is stored",
+    );
+    assert.doesNotMatch(
+      dashboardLutherPriceArticle || "",
+      /Driver \$95/,
+      "Expected Dashboard card not to display the saved driver payout range maximum as the actual payout",
+    );
+    const dashboardLutherPayoutInputState = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("Luther Graham") &&
+          candidate.innerText.includes("SQ265") &&
+          candidate.innerText.includes("30 Apr 2026"),
+      );
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const payoutLabel = [...(article?.querySelectorAll("label") || [])].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Override Payout",
+      );
+      const payoutInput = payoutLabel?.querySelector("input");
+
+      return {
+        placeholder: payoutInput?.getAttribute("placeholder") || "",
+        value: payoutInput?.value || "",
+      };
+    })()`);
+    assert.equal(
+      dashboardLutherPayoutInputState.placeholder,
+      "85",
+      "Expected Dashboard assignment Override Payout placeholder to show the actual lower payout plus extras",
+    );
+    assert.equal(
+      dashboardLutherPayoutInputState.value,
+      "",
+      "Expected Dashboard assignment Override Payout not to prefill a stale payout as an override",
+    );
+    assert.notEqual(
+      dashboardLutherPayoutInputState.placeholder,
+      "95",
+      "Expected Dashboard assignment Override Payout not to use the saved max/range payout",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);
@@ -3302,7 +3465,7 @@ async function runChromeTest() {
     });
     assert.match(markedOtwState.articleText, /Driver:\s*DASHBOARD STATUS FLOW DRIVER/);
     assert.match(markedOtwState.articleText, /Route:\s*Changi Airport T1\s+\S\s+Ritz Carlton Singapore/);
-    assert.match(markedOtwState.articleText, /Customer \$120 \/ Driver \$78/);
+    assert.match(markedOtwState.articleText, /Customer \$120 \/ Driver \$82/);
 
     await exerciseDashboardStatusAction({
       dataAttribute: "data-dashboard-mark-pob",
@@ -3526,7 +3689,7 @@ async function runChromeTest() {
     );
     assert.match(dashboardCompletionState.articleText, /Driver:\s*COMPLETION ACTION DRIVER/);
     assert.match(dashboardCompletionState.articleText, /Route:\s*Changi Airport T3\s+\S\s+Capella Singapore/);
-    assert.match(dashboardCompletionState.articleText, /Customer \$115 \/ Driver \$75/);
+    assert.match(dashboardCompletionState.articleText, /Customer \$115 \/ Driver \$80/);
     assert.ok(
       dashboardCompletionState.localMessageDistance !== null &&
         dashboardCompletionState.localMessageDistance <= 120,
@@ -4668,6 +4831,61 @@ async function runChromeTest() {
       `Expected Recent Load this booking to make no save/load network call, got ${recentLoadedBookingState.fetchCalls.join(", ")}`,
     );
 
+    await clickTab("Bookings", "Recent Bookings");
+    const clickedLutherRecentLoadThisBooking = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("Luther Graham") &&
+          candidate.innerText.includes("SQ265") &&
+          candidate.innerText.includes("30 Apr 2026"),
+      );
+      const loadThisBookingButton = [...(article?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Load this booking",
+      );
+
+      if (!loadThisBookingButton || loadThisBookingButton.disabled) {
+        return false;
+      }
+
+      loadThisBookingButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedLutherRecentLoadThisBooking,
+      true,
+      "Expected Luther Graham booking Load this booking button to remain clickable",
+    );
+
+    const lutherLoadedPricingState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.flight === "SQ265" &&
+          candidateState?.fields?.name === "Luther Graham" &&
+          candidateState?.pricingPanel?.includes("$160.00") &&
+          candidateState?.pricingPanel?.includes("$85.00")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "Luther Graham loaded saved booking pricing",
+    );
+    assert.match(
+      lutherLoadedPricingState.pricingPanel,
+      /Customer\s+\$160\.00/,
+      "Expected Dispatch loaded pricing to match the saved customer card price",
+    );
+    assert.match(
+      lutherLoadedPricingState.pricingPanel,
+      /Driver\s+\$85\.00/,
+      "Expected Dispatch loaded pricing to match the saved driver card price",
+    );
+    assert.doesNotMatch(
+      lutherLoadedPricingState.pricingPanel,
+      /Driver\s+\$95\.00/,
+      "Expected Dispatch loaded pricing not to use the saved driver payout range maximum",
+    );
+
     const seededCompletedLoadStaleMessage = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
 
@@ -4698,6 +4916,11 @@ async function runChromeTest() {
               candidate.innerText.includes("COMPLETED TEST COMPANY") &&
               candidate.innerText.includes("SQ888"),
           );
+          const customerOnlyPriceArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("PRICE DISPLAY CUSTOMER ONLY TRAVELER") &&
+              candidate.innerText.includes("SQ785"),
+          );
           const activeArticle = [...document.querySelectorAll("article")].find(
             (candidate) =>
               candidate.innerText.includes("LOADED SAVED COMPANY") ||
@@ -4709,6 +4932,7 @@ async function runChromeTest() {
                 activeArticleText: activeArticle?.innerText || "",
                 bodyText,
                 completedArticleText: completedArticle.innerText,
+                customerOnlyPriceArticleText: customerOnlyPriceArticle?.innerText || "",
                 hasCompletedLoadButton: Boolean(
                   completedArticle.querySelector("[data-completed-load-booking='true']"),
                 ),
@@ -4721,6 +4945,21 @@ async function runChromeTest() {
 
     assert.match(completedTabState.completedArticleText, /Completed/i);
     assert.match(completedTabState.completedArticleText, /COMPLETED TEST TRAVELER/);
+    assert.match(
+      completedTabState.completedArticleText,
+      /Customer \$90 \/ Driver \$65/,
+      "Expected Completed card to show saved customer and driver prices",
+    );
+    assert.match(
+      completedTabState.customerOnlyPriceArticleText,
+      /Customer \$140 \/ Driver —/,
+      "Expected Completed card to show missing driver price as a dash, not zero",
+    );
+    assert.doesNotMatch(
+      completedTabState.customerOnlyPriceArticleText,
+      /Driver \$0(?:\.00)?/,
+      "Expected Completed card not to invent a $0 driver price when it is missing",
+    );
     assert.equal(completedTabState.hasCompletedLoadButton, true);
     assert.equal(
       completedTabState.activeArticleText,

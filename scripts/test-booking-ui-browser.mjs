@@ -578,6 +578,11 @@ const reusableDriverProfileFixture = {
   preferred_areas: "Changi, Marina Bay",
   airport_permit_notes: "Has Changi permit",
 };
+const mrLeeSaveTravelerName = "BROWSER UI TEST Mr Lee";
+const mrLeeExpectedPickupDate = "2026-05-20";
+const mrLeeExpectedPickupTime = "0700hrs";
+const mrLeeExpectedStoragePickupTime = "0700";
+const mrLeeExpectedCardDateTime = "20 May 2026, 0700hrs";
 const mrLeeNoCompanySavedBookingFixture = {
   id: "ui-mr-lee-no-company-save-fixture",
   company_id: null,
@@ -592,7 +597,7 @@ const mrLeeNoCompanySavedBookingFixture = {
   route: "10 Scotts Road > Changi Airport",
   pax: 2,
   job_card:
-    "AVF DEP\n20 May 2026, 0700hrs\nFlight: SQ306\n10 Scotts Road > Changi Airport\nName: Mr Lee\nPax: 2",
+    `AVF DEP\n${mrLeeExpectedCardDateTime}\nFlight: SQ306\n10 Scotts Road > Changi Airport\nName: ${mrLeeSaveTravelerName}\nPax: 2`,
   status: "confirmed",
   driver_id: null,
   driver_name: null,
@@ -610,19 +615,33 @@ const mrLeeNoCompanySavedBookingFixture = {
   bookers: null,
   travelers: null,
 };
+const legacyMrLeeNoCompanySavedBookingFixture = {
+  ...mrLeeNoCompanySavedBookingFixture,
+  job_card:
+    `AVF DEP\n${mrLeeExpectedCardDateTime}\nFlight: SQ306\n10 Scotts Road > Changi Airport\nName: Mr Lee\nPax: 2`,
+};
+const legacyMrLeeCompletedDuplicateFixture = {
+  ...legacyMrLeeNoCompanySavedBookingFixture,
+  id: "ui-mr-lee-completed-legacy-duplicate-fixture",
+  status: "completed",
+  customer_price_amount: 75,
+  driver_payout_amount: 65,
+  created_at: "2026-05-19T02:30:00.000Z",
+  updated_at: "2026-05-19T02:30:00.000Z",
+};
 const mrLeeExistingCompanySavedBookingFixture = {
   ...mrLeeNoCompanySavedBookingFixture,
   id: "ui-mr-lee-existing-company-save-fixture",
   company_id: 901,
   traveler_id: 903,
   job_card:
-    "AVF DEP\n20 May 2026, 0700hrs\nFlight: SQ306\n10 Scotts Road > Changi Airport\nCompany: EXISTING CRM COMPANY\nName: Mr Lee\nPax: 2",
+    `AVF DEP\n${mrLeeExpectedCardDateTime}\nFlight: SQ306\n10 Scotts Road > Changi Airport\nCompany: EXISTING CRM COMPANY\nName: ${mrLeeSaveTravelerName}\nPax: 2`,
   companies: {
     company_name: "EXISTING CRM COMPANY",
     domain: "existing-crm.example.com",
   },
   travelers: {
-    traveler_name: "Mr Lee",
+    traveler_name: mrLeeSaveTravelerName,
   },
 };
 const mrLeeCrmFailureSavedBookingFixture = {
@@ -844,6 +863,49 @@ function normalizeConsoleMessages(values) {
   return values.map(String).join(" ");
 }
 
+function bookingPatchCalls(fetchCalls) {
+  return fetchCalls.filter(
+    (call) => call.startsWith("PATCH ") && call.includes("/rest/v1/bookings"),
+  );
+}
+
+function installSupabaseRestNetworkGuard(client, blockedSupabaseRequests, blockedSupabaseMutationRequests) {
+  client.on("Fetch.requestPaused", ({ requestId, request }) => {
+    const method = request?.method || "GET";
+    const url = request?.url || "";
+    const isReadOnlyRequest = method === "GET" || method === "HEAD" || method === "OPTIONS";
+    blockedSupabaseRequests.push(`${method} ${url}`);
+    if (!isReadOnlyRequest) {
+      blockedSupabaseMutationRequests.push(`${method} ${url}`);
+    }
+
+    const responseHeaders = [
+      { name: "access-control-allow-headers", value: "apikey, authorization, content-type, prefer, x-client-info" },
+      { name: "access-control-allow-methods", value: "GET, POST, PATCH, DELETE, OPTIONS" },
+      { name: "access-control-allow-origin", value: "*" },
+      { name: "content-type", value: "application/json" },
+    ];
+    const responseBody = method === "GET" ? [] : {
+      message:
+        "Blocked unmocked Supabase REST call in browser test. Add an explicit mock before this action.",
+    };
+
+    client
+      .send("Fetch.fulfillRequest", {
+        body: Buffer.from(JSON.stringify(responseBody)).toString("base64"),
+        requestId,
+        responseCode: isReadOnlyRequest ? 200 : 500,
+        responseHeaders,
+        responsePhrase: "Blocked Supabase call in browser test",
+      })
+      .catch(() => {});
+  });
+
+  return client.send("Fetch.enable", {
+    patterns: [{ requestStage: "Request", urlPattern: "*://*/rest/v1/*" }],
+  });
+}
+
 async function waitForCondition(check, timeoutMs = 10000, description = "browser condition") {
   const startedAt = Date.now();
 
@@ -1045,6 +1107,8 @@ function assertBookingUiState(state) {
 
 async function runChromeTest() {
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "prestige-limo-booking-ui-chrome-"));
+  const blockedSupabaseRequests = [];
+  const blockedSupabaseMutationRequests = [];
   const chrome = spawn(
     chromeBinary,
     [
@@ -1095,6 +1159,7 @@ async function runChromeTest() {
 
     await client.send("Runtime.enable");
     await client.send("Page.enable");
+    await installSupabaseRestNetworkGuard(client, blockedSupabaseRequests, blockedSupabaseMutationRequests);
 
     const loadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: appUrl });
@@ -2040,6 +2105,8 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardOtwRevertConfirmedFixture)},
         ${JSON.stringify(dashboardPobRevertFixture)},
         ${JSON.stringify(dashboardOtwClearDriverFixture)},
+        ${JSON.stringify(legacyMrLeeNoCompanySavedBookingFixture)},
+        ${JSON.stringify(legacyMrLeeCompletedDuplicateFixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
@@ -2111,6 +2178,20 @@ async function runChromeTest() {
           }
         }
 
+        if (
+          method === "GET" &&
+          (
+            String(target).includes("/rest/v1/travelers") ||
+            String(target).includes("/rest/v1/companies") ||
+            String(target).includes("/rest/v1/saved_addresses")
+          )
+        ) {
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         if (String(target).includes("/rest/v1/")) {
           window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${target}\`);
           return new Response(JSON.stringify({ message: "Unhandled Supabase mock" }), {
@@ -2150,6 +2231,30 @@ async function runChromeTest() {
         })()`),
       10000,
       "mock loaded recent booking",
+    );
+
+    const hiddenLegacyMrLeeBookingsState = await evaluate(`(() => {
+      const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+      return {
+        articles,
+        savedCount: document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || "",
+      };
+    })()`);
+    assert.equal(
+      hiddenLegacyMrLeeBookingsState.savedCount,
+      "12",
+      "Expected hidden legacy Mr Lee browser-test duplicates not to inflate the visible Saved count",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeBookingsState.articles.some((articleText) => articleText.includes("SQ306")),
+      false,
+      "Expected stale legacy Mr Lee browser-test duplicates to be isolated from Recent Bookings",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeBookingsState.articles.some((articleText) => articleText.includes("BROWSER UI TEST Mr Lee")),
+      false,
+      "Expected stale legacy Mr Lee browser-test duplicates not to appear as visible Recent Bookings cards",
     );
 
     await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
@@ -2268,6 +2373,30 @@ async function runChromeTest() {
         })()`),
       10000,
       "mock loaded dashboard booking",
+    );
+
+    const hiddenLegacyMrLeeDashboardState = await evaluate(`(() => {
+      const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+      return {
+        articles,
+        matchingCount: document.body.innerText.match(/MATCHING\\s+(\\d+)/)?.[1] || "",
+      };
+    })()`);
+    assert.equal(
+      hiddenLegacyMrLeeDashboardState.matchingCount,
+      "12",
+      "Expected hidden legacy Mr Lee browser-test duplicates not to inflate Dashboard matching count",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeDashboardState.articles.some((articleText) => articleText.includes("SQ306")),
+      false,
+      "Expected stale legacy Mr Lee browser-test duplicates to be isolated from Dashboard cards",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeDashboardState.articles.some((articleText) => articleText.includes("BROWSER UI TEST Mr Lee")),
+      false,
+      "Expected stale legacy Mr Lee browser-test duplicates not to appear as visible Dashboard cards",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);
@@ -2402,13 +2531,14 @@ async function runChromeTest() {
       [],
       `Expected dashboard assignment Supabase calls to be mocked, got ${dashboardAssignmentState.unhandledSupabaseCalls.join(", ")}`,
     );
+    const dashboardAssignmentBookingPatches = bookingPatchCalls(dashboardAssignmentState.fetchCalls);
     assert.equal(
-      dashboardAssignmentState.fetchCalls.length,
+      dashboardAssignmentBookingPatches.length,
       1,
       `Expected dashboard assignment to make one mocked booking PATCH, got ${dashboardAssignmentState.fetchCalls.join(", ")}`,
     );
     assert.match(
-      dashboardAssignmentState.fetchCalls[0],
+      dashboardAssignmentBookingPatches[0],
       new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardDriverAssignmentFixture.id}`),
     );
     assert.ok(
@@ -2655,13 +2785,14 @@ async function runChromeTest() {
       [],
       `Expected clear assigned driver Supabase calls to be mocked, got ${clearedAssignedDriverState.unhandledSupabaseCalls.join(", ")}`,
     );
+    const clearedAssignedDriverBookingPatches = bookingPatchCalls(clearedAssignedDriverState.fetchCalls);
     assert.equal(
-      clearedAssignedDriverState.fetchCalls.length,
+      clearedAssignedDriverBookingPatches.length,
       1,
       `Expected clear assigned driver to make one mocked booking PATCH, got ${clearedAssignedDriverState.fetchCalls.join(", ")}`,
     );
     assert.match(
-      clearedAssignedDriverState.fetchCalls[0],
+      clearedAssignedDriverBookingPatches[0],
       new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardAssignedDriverClearFixture.id}`),
     );
     assert.ok(
@@ -2773,13 +2904,14 @@ async function runChromeTest() {
       [],
       `Expected OTW clear assigned driver Supabase calls to be mocked, got ${clearedOtwAssignedDriverState.unhandledSupabaseCalls.join(", ")}`,
     );
+    const clearedOtwAssignedDriverBookingPatches = bookingPatchCalls(clearedOtwAssignedDriverState.fetchCalls);
     assert.equal(
-      clearedOtwAssignedDriverState.fetchCalls.length,
+      clearedOtwAssignedDriverBookingPatches.length,
       1,
       `Expected OTW clear assigned driver to make one mocked booking PATCH, got ${clearedOtwAssignedDriverState.fetchCalls.join(", ")}`,
     );
     assert.match(
-      clearedOtwAssignedDriverState.fetchCalls[0],
+      clearedOtwAssignedDriverBookingPatches[0],
       new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardOtwClearDriverFixture.id}`),
     );
     assert.equal(clearedOtwAssignedDriverState.assignmentBodies.length, 1);
@@ -2884,13 +3016,14 @@ async function runChromeTest() {
         [],
         `Expected ${description} Supabase calls to be mocked, got ${statusState.unhandledSupabaseCalls.join(", ")}`,
       );
+      const statusBookingPatches = bookingPatchCalls(statusState.fetchCalls);
       assert.equal(
-        statusState.fetchCalls.length,
+        statusBookingPatches.length,
         1,
         `Expected ${description} to make one mocked booking PATCH, got ${statusState.fetchCalls.join(", ")}`,
       );
       assert.match(
-        statusState.fetchCalls[0],
+        statusBookingPatches[0],
         new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${fixture.id}`),
       );
       assert.ok(
@@ -3056,6 +3189,15 @@ async function runChromeTest() {
             completionRequests: window.__prestigeBookingCompletionRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+            hasAssignButton: Boolean(article?.querySelector("[data-dashboard-assign-driver='${dashboardCompletionActionFixture.id}']")),
+            hasAssignmentPanel: Boolean(
+              [...(article?.querySelectorAll("h4") || [])].find(
+                (heading) => heading.textContent.trim() === "Assign driver to this booking",
+              ),
+            ),
+            hasClearDriverButton: Boolean(article?.querySelector("[data-dashboard-clear-driver='${dashboardCompletionActionFixture.id}']")),
+            hasCopyDriverDispatchButton: Boolean(article?.querySelector("[data-dashboard-copy-driver-dispatch='${dashboardCompletionActionFixture.id}']")),
+            hasCopyJobCardButton: Boolean(article?.querySelector("[data-dashboard-copy-job-card='${dashboardCompletionActionFixture.id}']")),
             hasMarkButton: Boolean(article?.querySelector("[data-dashboard-mark-completed='${dashboardCompletionActionFixture.id}']")),
             localMessageDistance:
               loadButtonRect && messageRect ? Math.abs(messageRect.top - loadButtonRect.bottom) : null,
@@ -3079,13 +3221,14 @@ async function runChromeTest() {
       [],
       `Expected mark completed Supabase calls to be mocked, got ${dashboardCompletionState.unhandledSupabaseCalls.join(", ")}`,
     );
+    const dashboardCompletionBookingPatches = bookingPatchCalls(dashboardCompletionState.fetchCalls);
     assert.equal(
-      dashboardCompletionState.fetchCalls.length,
+      dashboardCompletionBookingPatches.length,
       1,
       `Expected mark completed to make one mocked booking PATCH, got ${dashboardCompletionState.fetchCalls.join(", ")}`,
     );
     assert.match(
-      dashboardCompletionState.fetchCalls[0],
+      dashboardCompletionBookingPatches[0],
       new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardCompletionActionFixture.id}`),
     );
     assert.equal(dashboardCompletionState.completionRequests.length, 1);
@@ -3106,6 +3249,31 @@ async function runChromeTest() {
       "Expected Mark completed feedback not to duplicate in the global status panel",
     );
     assert.equal(dashboardCompletionState.hasMarkButton, false);
+    assert.equal(
+      dashboardCompletionState.hasAssignmentPanel,
+      false,
+      "Expected completed Dashboard card not to show assignment controls",
+    );
+    assert.equal(
+      dashboardCompletionState.hasAssignButton,
+      false,
+      "Expected completed Dashboard card not to offer Assign to this booking",
+    );
+    assert.equal(
+      dashboardCompletionState.hasClearDriverButton,
+      false,
+      "Expected completed Dashboard card not to offer Clear assigned driver",
+    );
+    assert.equal(
+      dashboardCompletionState.hasCopyDriverDispatchButton,
+      false,
+      "Expected completed Dashboard card not to offer Driver Dispatch copy",
+    );
+    assert.equal(
+      dashboardCompletionState.hasCopyJobCardButton,
+      false,
+      "Expected completed Dashboard card not to offer WhatsApp Job Card copy",
+    );
     assert.match(dashboardCompletionState.articleText, /Driver:\s*COMPLETION ACTION DRIVER/);
     assert.match(dashboardCompletionState.articleText, /Route:\s*Changi Airport T3\s+\S\s+Capella Singapore/);
     assert.match(dashboardCompletionState.articleText, /Customer \$115 \/ Driver \$75/);
@@ -3221,13 +3389,14 @@ async function runChromeTest() {
       [],
       `Expected undo completed assigned Supabase calls to be mocked, got ${undoAssignedCompletionState.unhandledSupabaseCalls.join(", ")}`,
     );
+    const undoAssignedCompletionBookingPatches = bookingPatchCalls(undoAssignedCompletionState.fetchCalls);
     assert.equal(
-      undoAssignedCompletionState.fetchCalls.length,
+      undoAssignedCompletionBookingPatches.length,
       1,
       `Expected undo completed assigned to make one mocked booking PATCH, got ${undoAssignedCompletionState.fetchCalls.join(", ")}`,
     );
     assert.match(
-      undoAssignedCompletionState.fetchCalls[0],
+      undoAssignedCompletionBookingPatches[0],
       new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${completedUndoAssignedFixture.id}`),
     );
     assert.equal(undoAssignedCompletionState.completionRequests.length, 1);
@@ -3325,13 +3494,14 @@ async function runChromeTest() {
       [],
       `Expected undo completed confirmed Supabase calls to be mocked, got ${undoConfirmedCompletionState.unhandledSupabaseCalls.join(", ")}`,
     );
+    const undoConfirmedCompletionBookingPatches = bookingPatchCalls(undoConfirmedCompletionState.fetchCalls);
     assert.equal(
-      undoConfirmedCompletionState.fetchCalls.length,
+      undoConfirmedCompletionBookingPatches.length,
       1,
       `Expected undo completed confirmed to make one mocked booking PATCH, got ${undoConfirmedCompletionState.fetchCalls.join(", ")}`,
     );
     assert.match(
-      undoConfirmedCompletionState.fetchCalls[0],
+      undoConfirmedCompletionBookingPatches[0],
       new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${completedUndoConfirmedFixture.id}`),
     );
     assert.equal(undoConfirmedCompletionState.completionRequests.length, 1);
@@ -5381,18 +5551,45 @@ async function runChromeTest() {
     );
     assert.equal(airportDepartureState.fields.bookingType, "DEP");
     assert.equal(airportDepartureState.fields.vehicle, "AVF");
-    assert.equal(airportDepartureState.fields.pickupDate, "2026-05-20");
-    assert.equal(airportDepartureState.fields.pickupTime, "0700hrs");
+    assert.equal(airportDepartureState.fields.pickupDate, mrLeeExpectedPickupDate);
+    assert.equal(airportDepartureState.fields.pickupTime, mrLeeExpectedPickupTime);
     assert.equal(airportDepartureState.fields.flight, "SQ306");
     assert.equal(airportDepartureState.fields.pickup, "10 Scotts Road");
     assert.equal(airportDepartureState.fields.dropoff, "Changi Airport");
     assert.equal(airportDepartureState.fields.name, "Mr Lee");
     assert.equal(airportDepartureState.fields.pax, "2");
     assert.equal(airportDepartureState.fields.company, "");
+    assert.ok(
+      airportDepartureState.jobCardPreview.includes(mrLeeExpectedCardDateTime),
+      "Expected parsed Mr Lee test job card preview to preserve exact pickup date/time",
+    );
     assert.doesNotMatch(airportDepartureState.fieldText, /airport for|Changi Airport T[1-4]/i);
     assert.doesNotMatch(
       airportDepartureState.visibleText,
       /Missing pickup date|Missing pickup time|Missing pickup|Missing drop-off|Missing traveler \/ name/,
+    );
+
+    const markedMrLeeSaveFixture = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const label = [...document.querySelectorAll("label")].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Passenger name",
+      );
+      const input = label?.querySelector("input");
+
+      if (!input) {
+        return false;
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+      descriptor?.set?.call(input, ${JSON.stringify(mrLeeSaveTravelerName)});
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return input.value === ${JSON.stringify(mrLeeSaveTravelerName)};
+    })()`);
+    assert.equal(
+      markedMrLeeSaveFixture,
+      true,
+      "Expected Mr Lee save fixture to be marked visibly as a browser UI test booking before saving",
     );
 
     await evaluate(`(() => {
@@ -5502,9 +5699,19 @@ async function runChromeTest() {
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.traveler_id, null);
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking_type, "DEP");
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.vehicle, "AVF");
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pickup_time, mrLeeExpectedStoragePickupTime);
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pickup_address, "10 Scotts Road");
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.dropoff_address, "Changi Airport");
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.flight_no, "SQ306");
+    assert.ok(
+      (mrLeeNoCompanySaveState.bookingInsert?.job_card || "").includes(mrLeeExpectedCardDateTime),
+      "Expected saved Mr Lee browser fixture job card to preserve exact pickup date/time",
+    );
+    assert.match(
+      mrLeeNoCompanySaveState.bookingInsert?.job_card || "",
+      /BROWSER UI TEST Mr Lee/,
+      "Expected saved browser fixture job card to be visibly test-only",
+    );
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pax, 2);
     assert.equal(
       mrLeeNoCompanySaveState.fetchCalls.some(
@@ -5527,29 +5734,124 @@ async function runChromeTest() {
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Company:\s*(?:Mr Lee|Internal Account|Draft)/i);
 
     await clickTab("Bookings", "Recent Bookings");
-    await waitForCondition(
+    const mrLeeNoCompanyRecentCardState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          return [...document.querySelectorAll("article")].some(
-            (article) =>
-              article.innerText.includes("SQ306") &&
-              article.innerText.includes("Mr Lee") &&
-              [...article.querySelectorAll("button")].some(
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("SQ306") &&
+              candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}) &&
+              [...candidate.querySelectorAll("button")].some(
                 (button) =>
                   button.textContent.trim() === "Load this booking" &&
                   !button.matches("[data-dashboard-load-booking='true']"),
               ),
           );
+
+          return article
+            ? {
+                articleText: article.innerText,
+                hasLoadButton: [...article.querySelectorAll("button")].some(
+                  (button) =>
+                    button.textContent.trim() === "Load this booking" &&
+                    !button.matches("[data-dashboard-load-booking='true']"),
+                ),
+              }
+            : false;
         })()`),
       10000,
       "Mr Lee no-company saved booking in Recent Bookings",
     );
+    assert.equal(mrLeeNoCompanyRecentCardState.hasLoadButton, true);
+    assert.match(mrLeeNoCompanyRecentCardState.articleText, /BROWSER UI TEST Mr Lee/);
+    assert.ok(
+      mrLeeNoCompanyRecentCardState.articleText.includes(mrLeeExpectedCardDateTime),
+      "Expected Bookings card to show exact Mr Lee test pickup date/time",
+    );
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    const mrLeeNoCompanyDashboardCardState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("SQ306") &&
+              candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}),
+          );
+
+          return article
+            ? {
+                articleText: article.innerText,
+                hasDashboardLoadButton: Boolean(article.querySelector("[data-dashboard-load-booking='true']")),
+              }
+            : false;
+        })()`),
+      10000,
+      "Mr Lee no-company saved booking on Dashboard",
+    );
+    assert.equal(mrLeeNoCompanyDashboardCardState.hasDashboardLoadButton, true);
+    assert.match(mrLeeNoCompanyDashboardCardState.articleText, /BROWSER UI TEST Mr Lee/);
+    assert.ok(
+      mrLeeNoCompanyDashboardCardState.articleText.includes(mrLeeExpectedCardDateTime),
+      "Expected Dashboard card to show exact Mr Lee test pickup date/time",
+    );
+
+    await evaluate(`window.__prestigeCopiedTexts = []`);
+    const clickedLegacyMrLeeDashboardCopy = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("SQ306") &&
+          candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}),
+      );
+      const copyButton = article?.querySelector("[data-dashboard-copy-job-card='${mrLeeNoCompanySavedBookingFixture.id}']");
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedLegacyMrLeeDashboardCopy,
+      true,
+      "Expected legacy Mr Lee Dashboard Copy WhatsApp Job Card button to be clickable",
+    );
+
+    const legacyMrLeeDashboardCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const copiedText = (window.__prestigeCopiedTexts || []).slice(-1)[0] || "";
+          const feedback = document.querySelector("[data-dashboard-copy-feedback='${mrLeeNoCompanySavedBookingFixture.id}:jobCard']");
+
+          return feedback?.textContent.trim() === "Booking job card copied."
+            ? {
+                copiedText,
+                feedbackText: feedback.textContent.trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "legacy Mr Lee Dashboard job card copy",
+    );
+    assert.match(legacyMrLeeDashboardCopyState.copiedText, /BROWSER UI TEST Mr Lee/);
+    assert.doesNotMatch(
+      legacyMrLeeDashboardCopyState.copiedText,
+      /^Name:\s*Mr Lee\s*$/im,
+      "Expected copied legacy Mr Lee job card not to expose plain unmarked Mr Lee",
+    );
+    assert.ok(
+      legacyMrLeeDashboardCopyState.copiedText.includes(mrLeeExpectedCardDateTime),
+      "Expected copied legacy Mr Lee job card to preserve exact pickup date/time",
+    );
+
+    await clickTab("Bookings", "Recent Bookings");
 
     const clickedMrLeeNoCompanyRecentLoad = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
         (candidate) =>
           candidate.innerText.includes("SQ306") &&
-          candidate.innerText.includes("Mr Lee") &&
+          candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}) &&
           [...candidate.querySelectorAll("button")].some(
             (button) =>
               button.textContent.trim() === "Load this booking" &&
@@ -5588,13 +5890,17 @@ async function runChromeTest() {
     assert.equal(mrLeeNoCompanyReloadState.fields.company, "");
     assert.equal(mrLeeNoCompanyReloadState.fields.bookingType, "DEP");
     assert.equal(mrLeeNoCompanyReloadState.fields.vehicle, "AVF");
-    assert.equal(mrLeeNoCompanyReloadState.fields.pickupDate, "2026-05-20");
-    assert.equal(mrLeeNoCompanyReloadState.fields.pickupTime, "0700hrs");
+    assert.equal(mrLeeNoCompanyReloadState.fields.pickupDate, mrLeeExpectedPickupDate);
+    assert.equal(mrLeeNoCompanyReloadState.fields.pickupTime, mrLeeExpectedPickupTime);
     assert.equal(mrLeeNoCompanyReloadState.fields.flight, "SQ306");
     assert.equal(mrLeeNoCompanyReloadState.fields.pickup, "10 Scotts Road");
     assert.equal(mrLeeNoCompanyReloadState.fields.dropoff, "Changi Airport");
-    assert.equal(mrLeeNoCompanyReloadState.fields.name, "Mr Lee");
+    assert.equal(mrLeeNoCompanyReloadState.fields.name, mrLeeSaveTravelerName);
     assert.equal(mrLeeNoCompanyReloadState.fields.pax, "2");
+    assert.ok(
+      mrLeeNoCompanyReloadState.jobCardPreview.includes(mrLeeExpectedCardDateTime),
+      "Expected loaded Mr Lee test booking preview to preserve exact pickup date/time",
+    );
 
     const setExistingCompanyOnMrLee = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
@@ -5794,6 +6100,11 @@ async function runChromeTest() {
     assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.pickup_address, "10 Scotts Road");
     assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.dropoff_address, "Changi Airport");
     assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.flight_no, "SQ306");
+    assert.match(
+      mrLeeExistingCompanySaveState.bookingInsert?.job_card || "",
+      /BROWSER UI TEST Mr Lee/,
+      "Expected existing-company save fixture job card to remain visibly test-only",
+    );
     assert.equal(
       mrLeeExistingCompanySaveState.fetchCalls.some(
         (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),
@@ -6902,6 +7213,11 @@ async function runChromeTest() {
       emptyCompletedUndoState.globalStatusText,
       "Completion undone.",
       "Expected single undo feedback not to duplicate in the global status panel",
+    );
+    assert.deepEqual(
+      blockedSupabaseMutationRequests,
+      [],
+      `Expected no browser test Supabase write calls to reach the network guard. Blocked unmocked writes:\n${blockedSupabaseMutationRequests.join("\n")}`,
     );
 
     console.log(JSON.stringify(state, null, 2));

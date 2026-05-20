@@ -1395,7 +1395,26 @@ function getJobCardName(jobCard: string | null) {
   return clean(match?.[1]);
 }
 
+const legacyBrowserTestBookingName = "BROWSER UI TEST Mr Lee";
+
+function isLegacyMrLeeBrowserTestBooking(bookingRecord: BookingRecord) {
+  const travelerName = clean(bookingRecord.travelers?.traveler_name) || getJobCardName(bookingRecord.job_card);
+
+  return (
+    clean(travelerName).toLowerCase() === "mr lee" &&
+    clean(bookingRecord.flight_no).toUpperCase() === "SQ306" &&
+    clean(bookingRecord.pickup_address).toLowerCase() === "10 scotts road" &&
+    clean(bookingRecord.dropoff_address).toLowerCase() === "changi airport" &&
+    getBookingDateKey(bookingRecord) === "2026-05-20" &&
+    formatPickupTime(bookingRecord.pickup_time) === "0700hrs"
+  );
+}
+
 function getBookingName(bookingRecord: BookingRecord) {
+  if (isLegacyMrLeeBrowserTestBooking(bookingRecord)) {
+    return legacyBrowserTestBookingName;
+  }
+
   return clean(bookingRecord.travelers?.traveler_name) || getJobCardName(bookingRecord.job_card);
 }
 
@@ -1535,9 +1554,22 @@ function stripBookerFromJobCard(jobCard: string) {
     .trim();
 }
 
+function markLegacyBrowserTestJobCard(bookingRecord: BookingRecord, jobCard: string) {
+  if (!isLegacyMrLeeBrowserTestBooking(bookingRecord)) {
+    return jobCard;
+  }
+
+  const markedJobCard = jobCard.replace(
+    /^(\s*(?:name|passenger)\s*:\s*)Mr Lee\s*$/im,
+    `$1${legacyBrowserTestBookingName}`,
+  );
+
+  return markedJobCard === jobCard ? `${jobCard}\nName: ${legacyBrowserTestBookingName}` : markedJobCard;
+}
+
 function getBookingJobCard(bookingRecord: BookingRecord) {
   if (bookingRecord.job_card) {
-    return stripBookerFromJobCard(bookingRecord.job_card);
+    return markLegacyBrowserTestJobCard(bookingRecord, stripBookerFromJobCard(bookingRecord.job_card));
   }
 
   const childSeatLine = bookingRecord.child_seat_required
@@ -1850,10 +1882,14 @@ export default function Home() {
       .join("\n\n");
   }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
 
+  const operationalBookings = useMemo(
+    () => bookings.filter((bookingRecord) => !isLegacyMrLeeBrowserTestBooking(bookingRecord)),
+    [bookings],
+  );
   const dashboardBookings = useMemo(() => {
     const query = clean(searchTerm).toLowerCase();
 
-    return bookings
+    return operationalBookings
       .filter((bookingRecord) => {
         if (!query) {
           return true;
@@ -1885,20 +1921,20 @@ export default function Home() {
           normaliseTimeForSort(secondBooking.pickup_time)
         );
       });
-  }, [bookings, searchTerm]);
+  }, [operationalBookings, searchTerm]);
   const completedBookings = useMemo(
     () =>
-      bookings.filter(
+      operationalBookings.filter(
         (bookingRecord) => clean(bookingRecord.status).toLowerCase() === "completed",
       ),
-    [bookings],
+    [operationalBookings],
   );
   const filteredRecentBookings = useMemo(
     () =>
-      bookings.filter((bookingRecord) =>
+      operationalBookings.filter((bookingRecord) =>
         bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm),
       ),
-    [bookings, bookingsSearchTerm],
+    [operationalBookings, bookingsSearchTerm],
   );
   const filteredCompletedBookings = useMemo(
     () =>
@@ -1909,7 +1945,7 @@ export default function Home() {
   );
   const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
-  const loadedBookingIds = new Set(bookings.map((bookingRecord) => String(bookingRecord.id)));
+  const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => String(bookingRecord.id)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => String(bookingRecord.id)));
   const completedTabCompletionMessages = Object.entries(bookingCompletionMessages).filter(
     ([bookingId, completionMessage]) =>
@@ -4254,164 +4290,166 @@ export default function Home() {
                 </div>
               ) : null}
 
-              <div className="mt-4 rounded-md border border-stone-200 bg-white p-3">
-                <div className="mb-3">
-                  <h4 className="text-sm font-semibold text-slate-900">Assign driver to this booking</h4>
-                  <p className="mt-1 text-xs text-slate-500">This updates the selected booking only.</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="sm:col-span-2">
-                    <span className="mb-1 block text-xs font-medium text-slate-600">
-                      Driver
-                    </span>
-                    <select
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      onChange={(event) =>
-                        updateDriverDraft(savedBooking, "driverId", event.target.value)
-                      }
-                      value={driverDraft.driverId}
-                    >
-                      <option value="">Manual / unselected</option>
-                      {showSavedDashboardDriverOption ? (
-                        <option disabled={selectedDraftDriverIsInactive} value={driverDraft.driverId}>
-                          Saved:{" "}
-                          {clean(driverDraft.driverName) ||
-                            clean(selectedDraftDriver?.driver_name) ||
-                            `Driver ${driverDraft.driverId}`}
-                          {selectedDraftDriverIsInactive ? " (inactive)" : ""}
-                        </option>
-                      ) : null}
-                      {assignableDrivers.map((driver) => (
-                        <option key={driver.id} value={driver.id}>
-                          {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-slate-600">
-                      Driver Name
-                    </span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      onChange={(event) =>
-                        updateDriverDraft(savedBooking, "driverName", event.target.value)
-                      }
-                      placeholder="Driver name"
-                      value={driverDraft.driverName}
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-slate-600">
-                      Driver Contact
-                    </span>
-                    <input
-                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                      onChange={(event) =>
-                        updateDriverDraft(savedBooking, "driverContact", event.target.value)
-                      }
-                      placeholder="Phone / WhatsApp"
-	                      value={driverDraft.driverContact}
-	                    />
-	                  </label>
-	                  <label>
-	                    <span className="mb-1 block text-xs font-medium text-slate-600">
-	                      Driver Car Plate
-	                    </span>
-	                    <input
-	                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-	                      onChange={(event) =>
-	                        updateDriverDraft(savedBooking, "driverPlate", event.target.value)
-	                      }
-	                      placeholder="Plate: —"
-	                      value={driverDraft.driverPlate}
-	                    />
-	                  </label>
-	                  <label>
-	                    <span className="mb-1 block text-xs font-medium text-slate-600">
-	                      Override Payout
-	                    </span>
-	                    <input
-	                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-	                      min={0}
-	                      onChange={(event) =>
-	                        updateDriverDraft(savedBooking, "payoutOverride", event.target.value)
-	                      }
-	                      placeholder={`${savedBooking.driver_payout_amount || savedBooking.driver_payout_max || ""}`}
-	                      type="number"
-	                      value={driverDraft.payoutOverride}
-	                    />
-	                  </label>
-	                  <label>
-	                    <span className="mb-1 block text-xs font-medium text-slate-600">
-	                      Override Reason
-	                    </span>
-	                    <input
-	                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-	                      onChange={(event) =>
-	                        updateDriverDraft(savedBooking, "payoutReason", event.target.value)
-	                      }
-	                      placeholder="Tuas / VIP / midnight"
-	                      value={driverDraft.payoutReason}
-	                    />
-	                  </label>
-	                  <label className="sm:col-span-2">
-	                    <span className="mb-1 block text-xs font-medium text-slate-600">
-	                      Driver Notes
-	                    </span>
-	                    <input
-	                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-	                      onChange={(event) =>
-	                        updateDriverDraft(savedBooking, "notes", event.target.value)
-	                      }
-	                      placeholder="Assignment notes"
-	                      value={driverDraft.notes}
-	                    />
-	                  </label>
-	                  <label className="flex items-center gap-2 text-sm text-slate-700">
-	                    <input
-	                      checked={driverDraft.includePayout}
-	                      onChange={(event) =>
-	                        updateDriverDraft(savedBooking, "includePayout", event.target.checked)
-	                      }
-	                      type="checkbox"
-	                    />
-	                    Include payout
-	                  </label>
-	                </div>
-                <button
-                  className="mt-3 h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                  data-dashboard-assign-driver={bookingId}
-                  disabled={assigningBookingId === bookingId}
-                  onClick={() => assignDriver(savedBooking)}
-                  type="button"
-                >
-                  {assigningBookingId === bookingId ? "Assigning..." : "Assign to this booking"}
-                </button>
-                {hasSavedDriver ? (
+              {!isCompleted ? (
+                <div className="mt-4 rounded-md border border-stone-200 bg-white p-3">
+                  <div className="mb-3">
+                    <h4 className="text-sm font-semibold text-slate-900">Assign driver to this booking</h4>
+                    <p className="mt-1 text-xs text-slate-500">This updates the selected booking only.</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Driver
+                      </span>
+                      <select
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "driverId", event.target.value)
+                        }
+                        value={driverDraft.driverId}
+                      >
+                        <option value="">Manual / unselected</option>
+                        {showSavedDashboardDriverOption ? (
+                          <option disabled={selectedDraftDriverIsInactive} value={driverDraft.driverId}>
+                            Saved:{" "}
+                            {clean(driverDraft.driverName) ||
+                              clean(selectedDraftDriver?.driver_name) ||
+                              `Driver ${driverDraft.driverId}`}
+                            {selectedDraftDriverIsInactive ? " (inactive)" : ""}
+                          </option>
+                        ) : null}
+                        {assignableDrivers.map((driver) => (
+                          <option key={driver.id} value={driver.id}>
+                            {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Driver Name
+                      </span>
+                      <input
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "driverName", event.target.value)
+                        }
+                        placeholder="Driver name"
+                        value={driverDraft.driverName}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Driver Contact
+                      </span>
+                      <input
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "driverContact", event.target.value)
+                        }
+                        placeholder="Phone / WhatsApp"
+                        value={driverDraft.driverContact}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Driver Car Plate
+                      </span>
+                      <input
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "driverPlate", event.target.value)
+                        }
+                        placeholder="Plate: —"
+                        value={driverDraft.driverPlate}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Override Payout
+                      </span>
+                      <input
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        min={0}
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "payoutOverride", event.target.value)
+                        }
+                        placeholder={`${savedBooking.driver_payout_amount || savedBooking.driver_payout_max || ""}`}
+                        type="number"
+                        value={driverDraft.payoutOverride}
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Override Reason
+                      </span>
+                      <input
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "payoutReason", event.target.value)
+                        }
+                        placeholder="Tuas / VIP / midnight"
+                        value={driverDraft.payoutReason}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Driver Notes
+                      </span>
+                      <input
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "notes", event.target.value)
+                        }
+                        placeholder="Assignment notes"
+                        value={driverDraft.notes}
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        checked={driverDraft.includePayout}
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "includePayout", event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      Include payout
+                    </label>
+                  </div>
                   <button
-                    className="mt-2 h-10 w-full rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                    data-dashboard-clear-driver={bookingId}
+                    className="mt-3 h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    data-dashboard-assign-driver={bookingId}
                     disabled={assigningBookingId === bookingId}
-                    onClick={() => clearAssignedDriver(savedBooking)}
+                    onClick={() => assignDriver(savedBooking)}
                     type="button"
                   >
-                    {assigningBookingId === bookingId ? "Clearing..." : "Clear assigned driver"}
+                    {assigningBookingId === bookingId ? "Assigning..." : "Assign to this booking"}
                   </button>
-                ) : null}
-                {driverAssignmentMessage ? (
-                  <p
-                    className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
-                      driverAssignmentMessage.tone,
-                    )}`}
-                    data-driver-assignment-message={bookingId}
-                  >
-                    {driverAssignmentMessage.text}
-                  </p>
-                ) : null}
-              </div>
+                  {hasSavedDriver ? (
+                    <button
+                      className="mt-2 h-10 w-full rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-dashboard-clear-driver={bookingId}
+                      disabled={assigningBookingId === bookingId}
+                      onClick={() => clearAssignedDriver(savedBooking)}
+                      type="button"
+                    >
+                      {assigningBookingId === bookingId ? "Clearing..." : "Clear assigned driver"}
+                    </button>
+                  ) : null}
+                  {driverAssignmentMessage ? (
+                    <p
+                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
+                        driverAssignmentMessage.tone,
+                      )}`}
+                      data-driver-assignment-message={bookingId}
+                    >
+                      {driverAssignmentMessage.text}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
-              {isAssigned || hasDriver ? (
+              {!isCompleted && (isAssigned || hasDriver) ? (
                 <div className="mt-4 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-slate-800">
                   <p className="font-semibold text-sky-900">Dispatch</p>
                   <p className="mt-1">Driver: {clean(savedBooking.driver_name) || driverDraft.driverName}</p>
@@ -4440,23 +4478,27 @@ export default function Home() {
                 </div>
               ) : null}
 
-              <button
-                className="mt-4 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                data-dashboard-copy-job-card={bookingId}
-                onClick={() => copySavedJobCard(savedBooking)}
-                type="button"
-              >
-                Copy WhatsApp Job Card
-              </button>
-              {jobCardCopyMessage ? (
-                <p
-                  className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
-                    jobCardCopyMessage.tone,
-                  )}`}
-                  data-dashboard-copy-feedback={`${bookingId}:jobCard`}
-                >
-                  {jobCardCopyMessage.text}
-                </p>
+              {!isCompleted ? (
+                <>
+                  <button
+                    className="mt-4 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                    data-dashboard-copy-job-card={bookingId}
+                    onClick={() => copySavedJobCard(savedBooking)}
+                    type="button"
+                  >
+                    Copy WhatsApp Job Card
+                  </button>
+                  {jobCardCopyMessage ? (
+                    <p
+                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
+                        jobCardCopyMessage.tone,
+                      )}`}
+                      data-dashboard-copy-feedback={`${bookingId}:jobCard`}
+                    >
+                      {jobCardCopyMessage.text}
+                    </p>
+                  ) : null}
+                </>
               ) : null}
             </article>
           );
@@ -4555,7 +4597,7 @@ export default function Home() {
     </div>
   );
 
-  const recentBookingsPanel = bookings.length > 0 ? (
+  const recentBookingsPanel = operationalBookings.length > 0 ? (
     <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
@@ -4836,7 +4878,7 @@ export default function Home() {
           <div className="grid grid-cols-3 gap-2 text-center sm:min-w-80">
             <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
               <p className="text-xs text-slate-500">Saved</p>
-              <p className="text-lg font-semibold">{bookings.length}</p>
+              <p className="text-lg font-semibold">{operationalBookings.length}</p>
             </div>
             <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
               <p className="text-xs text-slate-500">Status</p>
@@ -5813,7 +5855,7 @@ export default function Home() {
 	                      <p className="text-xs text-slate-500">
 	                        Assigned jobs:{" "}
 	                        {
-	                          bookings.filter(
+	                          operationalBookings.filter(
 	                            (bookingRecord) =>
 	                              bookingRecord.driver_id === driver.id ||
 	                              clean(bookingRecord.driver_name).toLowerCase() === clean(driver.driver_name).toLowerCase(),

@@ -372,8 +372,8 @@ Jill Van Cook
 EA to Mark Colodny, Co-Head of US Private Equity
 & Chairman of Global Technology
 Warburg Pincus`;
-const airportTransferReturnTransferSample = "Hi, can I arrange for a airport transfer tomorrow at 645 pick for SQ108. And the return transfer on Friday at 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o";
-const airportDepartureToAirportForFlightSample = "Please arrange Alphard tomorrow 7am pickup Mr Lee from 10 Scotts Road to airport for SQ306. 2 pax.";
+const airportTransferReturnTransferSample = "Hi, can I arrange for a airport transfer on 20/05/26, 645 pick for SQ108. And the return transfer on 22/05/26, 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o";
+const airportDepartureToAirportForFlightSample = "Please arrange Alphard on 20/05/26, 7am pickup Mr Lee from 10 Scotts Road to airport for SQ306. 2 pax.";
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
 Order total amount	S$130.00

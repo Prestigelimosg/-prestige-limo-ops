@@ -1399,6 +1399,31 @@ function getBookerName(bookingRecord: BookingRecord) {
   return clean(bookingRecord.bookers?.booker_name) || clean(jobCardBooker?.[1]);
 }
 
+function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: string) {
+  const query = clean(searchValue).toLowerCase();
+
+  if (!query) {
+    return true;
+  }
+
+  const searchableText = [
+    getBookingName(bookingRecord),
+    getBookerName(bookingRecord),
+    getBookingCompany(bookingRecord),
+    bookingRecord.flight_no,
+    bookingRecord.pickup_address,
+    bookingRecord.dropoff_address,
+    bookingRecord.route,
+    bookingRecord.driver_name,
+    bookingRecord.booking_type,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return searchableText.includes(query);
+}
+
 function formatDashboardRoute(bookingRecord: BookingRecord) {
   const routePoints = getRoutePoints(bookingRecord);
   const pickup = formatPrivacySafePlace(
@@ -1594,6 +1619,8 @@ export default function Home() {
   const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
+  const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rateSettings, setRateSettings] = useState<RateSettings>(initialRateSettings);
@@ -1858,6 +1885,22 @@ export default function Home() {
       ),
     [bookings],
   );
+  const filteredRecentBookings = useMemo(
+    () =>
+      bookings.filter((bookingRecord) =>
+        bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm),
+      ),
+    [bookings, bookingsSearchTerm],
+  );
+  const filteredCompletedBookings = useMemo(
+    () =>
+      completedBookings.filter((bookingRecord) =>
+        bookingMatchesLocalSearch(bookingRecord, completedSearchTerm),
+      ),
+    [completedBookings, completedSearchTerm],
+  );
+  const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
+  const hasCompletedSearch = Boolean(clean(completedSearchTerm));
   const loadedBookingIds = new Set(bookings.map((bookingRecord) => String(bookingRecord.id)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => String(bookingRecord.id)));
   const completedTabCompletionMessages = Object.entries(bookingCompletionMessages).filter(
@@ -4451,9 +4494,45 @@ export default function Home() {
 
   const recentBookingsPanel = bookings.length > 0 ? (
     <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-      <h3 className="text-sm font-semibold text-slate-800">Recent Bookings</h3>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-800">Recent Bookings</h3>
+          <p className="text-xs text-slate-500">Search only the bookings currently loaded below.</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row lg:min-w-[460px]">
+          <label className="flex-1">
+            <span className="sr-only">Search loaded bookings</span>
+            <input
+              className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+              data-bookings-search-input="true"
+              onChange={(event) => setBookingsSearchTerm(event.target.value)}
+              placeholder="Search passenger, company, flight, route, driver"
+              type="search"
+              value={bookingsSearchTerm}
+            />
+          </label>
+          {hasBookingsSearch ? (
+            <button
+              className="h-11 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              onClick={() => setBookingsSearchTerm("")}
+              type="button"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {hasBookingsSearch && filteredRecentBookings.length === 0 ? (
+        <p
+          className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          data-bookings-search-empty="true"
+        >
+          No matching bookings found.
+        </p>
+      ) : null}
+      {filteredRecentBookings.length > 0 ? (
       <div className="mt-3 max-h-80 space-y-2 overflow-auto">
-        {bookings.map((savedBooking) => {
+        {filteredRecentBookings.map((savedBooking) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
           const dropoff =
@@ -4522,6 +4601,7 @@ export default function Home() {
           );
         })}
       </div>
+      ) : null}
     </div>
   ) : (
     <div className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-slate-500">
@@ -4557,9 +4637,45 @@ export default function Home() {
       ) : null}
       {completedBookings.length > 0 ? (
         <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-          <h3 className="text-sm font-semibold text-slate-800">Completed Bookings</h3>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Completed Bookings</h3>
+              <p className="text-xs text-slate-500">Search completed bookings already loaded in this browser.</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row lg:min-w-[460px]">
+              <label className="flex-1">
+                <span className="sr-only">Search completed bookings</span>
+                <input
+                  className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                  data-completed-search-input="true"
+                  onChange={(event) => setCompletedSearchTerm(event.target.value)}
+                  placeholder="Search passenger, company, flight, route, driver"
+                  type="search"
+                  value={completedSearchTerm}
+                />
+              </label>
+              {hasCompletedSearch ? (
+                <button
+                  className="h-11 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => setCompletedSearchTerm("")}
+                  type="button"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {hasCompletedSearch && filteredCompletedBookings.length === 0 ? (
+            <p
+              className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              data-completed-search-empty="true"
+            >
+              No matching completed bookings found.
+            </p>
+          ) : null}
+          {filteredCompletedBookings.length > 0 ? (
           <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
-            {completedBookings.map((savedBooking) => {
+            {filteredCompletedBookings.map((savedBooking) => {
               const routePoints = getRoutePoints(savedBooking);
               const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
               const dropoff =
@@ -4635,6 +4751,7 @@ export default function Home() {
               );
             })}
           </div>
+          ) : null}
         </div>
       ) : null}
       {completedBookings.length === 0 ? completedEmptyState : null}

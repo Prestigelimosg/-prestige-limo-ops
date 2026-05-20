@@ -1114,6 +1114,24 @@ async function runChromeTest() {
       );
     };
 
+    const setInputValue = async (selector, value, description) => {
+      const didSetValue = await evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(selector)});
+
+        if (!input) {
+          return false;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return input.value === ${JSON.stringify(value)};
+      })()`);
+
+      assert.equal(didSetValue, true, `Expected ${description} input to be editable`);
+    };
+
     await waitForCondition(
       () =>
         evaluate(`Boolean(document.querySelector("textarea")) &&
@@ -2101,6 +2119,108 @@ async function runChromeTest() {
         })()`),
       10000,
       "mock loaded recent booking",
+    );
+
+    await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("LOADED SAVED TRAVELER") &&
+            !document.body.innerText.includes("DASHBOARD DRIVER TEST TRAVELER");
+        })()`),
+      10000,
+      "Bookings search by passenger",
+    );
+
+    await setInputValue("[data-bookings-search-input='true']", "DASHBOARD DRIVER TEST COMPANY", "Bookings search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("DASHBOARD DRIVER TEST COMPANY") &&
+            !document.body.innerText.includes("LOADED SAVED TRAVELER");
+        })()`),
+      10000,
+      "Bookings search by company",
+    );
+
+    await setInputValue("[data-bookings-search-input='true']", "SQ888", "Bookings search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("COMPLETED TEST TRAVELER") &&
+            !document.body.innerText.includes("LOADED SAVED TRAVELER");
+        })()`),
+      10000,
+      "Bookings search by flight",
+    );
+
+    await setInputValue("[data-bookings-search-input='true']", "Raffles Hotel Singapore", "Bookings search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("LOADED SAVED TRAVELER") &&
+            !document.body.innerText.includes("COMPLETED TEST TRAVELER");
+        })()`),
+      10000,
+      "Bookings search by route",
+    );
+
+    await setInputValue("[data-bookings-search-input='true']", "COMPLETED TEST DRIVER", "Bookings search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("COMPLETED TEST TRAVELER") &&
+            !document.body.innerText.includes("LOADED SAVED TRAVELER");
+        })()`),
+      10000,
+      "Bookings search by driver",
+    );
+
+    await setInputValue("[data-bookings-search-input='true']", "NO LOCAL BOOKING MATCH", "Bookings search");
+    const bookingsNoMatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const state = {
+            articles: [...document.querySelectorAll("article")].map((article) => article.innerText),
+            noMatchText: document.querySelector("[data-bookings-search-empty='true']")?.textContent.trim() || "",
+          };
+
+          return state.noMatchText === "No matching bookings found." ? state : false;
+        })()`),
+      10000,
+      "Bookings search no-match state",
+    );
+    assert.deepEqual(bookingsNoMatchState.articles, []);
+    assert.equal(bookingsNoMatchState.noMatchText, "No matching bookings found.");
+
+    await setInputValue("[data-bookings-search-input='true']", "", "Bookings search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("LOADED SAVED TRAVELER") &&
+            bodyText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+            bodyText.includes("COMPLETED TEST TRAVELER") &&
+            !document.querySelector("[data-bookings-search-empty='true']");
+        })()`),
+      10000,
+      "Bookings search cleared",
     );
 
     await clickTab("Dashboard", "Operations Dashboard");
@@ -3927,6 +4047,82 @@ async function runChromeTest() {
       completedTabState.activeArticleText,
       "",
       "Expected active bookings not to appear in the Completed tab",
+    );
+
+    await setInputValue("[data-completed-search-input='true']", "COMPLETED TEST TRAVELER", "Completed search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("COMPLETED TEST TRAVELER") &&
+            !document.body.innerText.includes("COMPLETED UNDO ASSIGNED TRAVELER");
+        })()`),
+      10000,
+      "Completed search by passenger",
+    );
+
+    await setInputValue("[data-completed-search-input='true']", "SQ888", "Completed search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("COMPLETED TEST TRAVELER") &&
+            !document.body.innerText.includes("COMPLETED UNDO ASSIGNED TRAVELER");
+        })()`),
+      10000,
+      "Completed search by flight",
+    );
+
+    await setInputValue("[data-completed-search-input='true']", "COMPLETED TEST DRIVER", "Completed search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("COMPLETED TEST TRAVELER") &&
+            !document.body.innerText.includes("COMPLETED UNDO ASSIGNED TRAVELER");
+        })()`),
+      10000,
+      "Completed search by driver",
+    );
+
+    await setInputValue("[data-completed-search-input='true']", "NO COMPLETED LOCAL MATCH", "Completed search");
+    const completedNoMatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const state = {
+            articles: [...document.querySelectorAll("article")].map((article) => article.innerText),
+            emptyStateVisible: document.body.innerText.includes("No completed bookings loaded yet."),
+            noMatchText: document.querySelector("[data-completed-search-empty='true']")?.textContent.trim() || "",
+          };
+
+          return state.noMatchText === "No matching completed bookings found." ? state : false;
+        })()`),
+      10000,
+      "Completed search no-match state",
+    );
+    assert.deepEqual(completedNoMatchState.articles, []);
+    assert.equal(completedNoMatchState.emptyStateVisible, false);
+    assert.equal(completedNoMatchState.noMatchText, "No matching completed bookings found.");
+
+    await setInputValue("[data-completed-search-input='true']", "", "Completed search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("COMPLETED TEST TRAVELER") &&
+            bodyText.includes("DASHBOARD STATUS FLOW TRAVELER") &&
+            bodyText.includes("COMPLETION ACTION TEST TRAVELER") &&
+            !document.querySelector("[data-completed-search-empty='true']");
+        })()`),
+      10000,
+      "Completed search cleared",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);

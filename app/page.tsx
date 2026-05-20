@@ -196,6 +196,8 @@ type CopyFeedback = Message & {
   target: "jobCard" | "driverDispatch";
 };
 
+type BookingCopyTarget = "driverDispatch" | "jobCard";
+
 type AppTab = "dispatch" | "bookings" | "completed" | "dashboard" | "drivers" | "rates";
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
@@ -1609,6 +1611,8 @@ export default function Home() {
   const [driverAssignmentMessages, setDriverAssignmentMessages] =
     useState<Record<string, Message>>({});
   const [bookingCompletionMessages, setBookingCompletionMessages] =
+    useState<Record<string, Message>>({});
+  const [bookingCopyMessages, setBookingCopyMessages] =
     useState<Record<string, Message>>({});
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const [driverProfileDraft, setDriverProfileDraft] =
@@ -3710,12 +3714,35 @@ export default function Home() {
   }
 
   async function copySavedJobCard(bookingRecord: BookingRecord) {
+    const bookingId = String(bookingRecord.id);
+
     try {
       await navigator.clipboard.writeText(getBookingJobCard(bookingRecord));
-      setMessage({ tone: "success", text: "Booking job card copied." });
+      setBookingCopyMessage(bookingId, "jobCard", {
+        tone: "success",
+        text: "Booking job card copied.",
+      });
     } catch {
-      setMessage({ tone: "error", text: "Copy failed. Select the booking details manually." });
+      setBookingCopyMessage(bookingId, "jobCard", {
+        tone: "error",
+        text: "Copy failed. Select the booking details manually.",
+      });
     }
+  }
+
+  function bookingCopyMessageKey(bookingId: string, target: BookingCopyTarget) {
+    return `${bookingId}:${target}`;
+  }
+
+  function setBookingCopyMessage(
+    bookingId: string,
+    target: BookingCopyTarget,
+    nextMessage: Message,
+  ) {
+    setBookingCopyMessages((current) => ({
+      ...current,
+      [bookingCopyMessageKey(bookingId, target)]: nextMessage,
+    }));
   }
 
   function setBookingCompletionMessage(bookingId: string, nextMessage: Message | null) {
@@ -4035,11 +4062,19 @@ export default function Home() {
   }
 
   async function copyDriverDispatch(bookingRecord: BookingRecord) {
+    const bookingId = String(bookingRecord.id);
+
     try {
       await navigator.clipboard.writeText(getDriverDispatchCard(bookingRecord, getDriverDraft(bookingRecord)));
-      setMessage({ tone: "success", text: "Driver dispatch copied." });
+      setBookingCopyMessage(bookingId, "driverDispatch", {
+        tone: "success",
+        text: "Driver dispatch copied.",
+      });
     } catch {
-      setMessage({ tone: "error", text: "Copy failed. Select the dispatch details manually." });
+      setBookingCopyMessage(bookingId, "driverDispatch", {
+        tone: "error",
+        text: "Copy failed. Select the dispatch details manually.",
+      });
     }
   }
 
@@ -4076,6 +4111,10 @@ export default function Home() {
           const bookingCompletionMessage = isDashboardStatusMessage(rawBookingCompletionMessage)
             ? rawBookingCompletionMessage
             : null;
+          const driverDispatchCopyMessage =
+            bookingCopyMessages[bookingCopyMessageKey(bookingId, "driverDispatch")] ?? null;
+          const jobCardCopyMessage =
+            bookingCopyMessages[bookingCopyMessageKey(bookingId, "jobCard")] ?? null;
           const revertStatusLabel = isPob
             ? "Revert to OTW"
             : `Revert to ${hasSavedDriver ? "assigned" : "confirmed"}`;
@@ -4380,21 +4419,43 @@ export default function Home() {
                   ) : null}
                   <button
                     className="mt-3 h-10 w-full rounded-md border border-sky-300 bg-white px-3 text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
+                    data-dashboard-copy-driver-dispatch={bookingId}
                     onClick={() => copyDriverDispatch(savedBooking)}
                     type="button"
                   >
                     Copy Driver Dispatch
                   </button>
+                  {driverDispatchCopyMessage ? (
+                    <p
+                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
+                        driverDispatchCopyMessage.tone,
+                      )}`}
+                      data-dashboard-copy-feedback={`${bookingId}:driverDispatch`}
+                    >
+                      {driverDispatchCopyMessage.text}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 
               <button
                 className="mt-4 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                data-dashboard-copy-job-card={bookingId}
                 onClick={() => copySavedJobCard(savedBooking)}
                 type="button"
               >
                 Copy WhatsApp Job Card
               </button>
+              {jobCardCopyMessage ? (
+                <p
+                  className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
+                    jobCardCopyMessage.tone,
+                  )}`}
+                  data-dashboard-copy-feedback={`${bookingId}:jobCard`}
+                >
+                  {jobCardCopyMessage.text}
+                </p>
+              ) : null}
             </article>
           );
         })}

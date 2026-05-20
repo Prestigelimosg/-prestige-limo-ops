@@ -2403,6 +2403,130 @@ async function runChromeTest() {
       `Expected Assign to this booking status near Assign to this booking button, got ${dashboardAssignmentState.localMessageDistance}px`,
     );
 
+    await evaluate(`window.__prestigeCopiedTexts = []`);
+
+    const clickedDashboardCopyDriverDispatch = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ777"),
+      );
+      const copyButton = article?.querySelector("[data-dashboard-copy-driver-dispatch='${dashboardDriverAssignmentFixture.id}']");
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedDashboardCopyDriverDispatch,
+      true,
+      "Expected Dashboard Copy Driver Dispatch button to be clickable",
+    );
+
+    const dashboardDriverDispatchCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+              candidate.innerText.includes("SQ777"),
+          );
+          const copyButton = article?.querySelector("[data-dashboard-copy-driver-dispatch='${dashboardDriverAssignmentFixture.id}']");
+          const feedback = article?.querySelector("[data-dashboard-copy-feedback='${dashboardDriverAssignmentFixture.id}:driverDispatch']");
+          const buttonRect = copyButton?.getBoundingClientRect();
+          const feedbackRect = feedback?.getBoundingClientRect();
+
+          return feedback?.textContent.trim() === "Driver dispatch copied."
+            ? {
+                copiedTexts: window.__prestigeCopiedTexts || [],
+                distanceFromButton:
+                  buttonRect && feedbackRect ? Math.abs(feedbackRect.top - buttonRect.bottom) : null,
+                feedbackText: feedback.textContent.trim(),
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "Dashboard driver dispatch local copy feedback",
+    );
+    assert.equal(dashboardDriverDispatchCopyState.feedbackText, "Driver dispatch copied.");
+    assert.deepEqual(dashboardDriverDispatchCopyState.globalCopyMessages, []);
+    assert.ok(
+      dashboardDriverDispatchCopyState.distanceFromButton !== null &&
+        dashboardDriverDispatchCopyState.distanceFromButton <= 120,
+      `Expected Dashboard Driver Dispatch copy feedback near its button, got ${dashboardDriverDispatchCopyState.distanceFromButton}px`,
+    );
+    assert.match(
+      dashboardDriverDispatchCopyState.copiedTexts[0] || "",
+      /DASHBOARD TEST DRIVER/,
+    );
+
+    const clickedDashboardCopyJobCard = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ777"),
+      );
+      const copyButton = article?.querySelector("[data-dashboard-copy-job-card='${dashboardDriverAssignmentFixture.id}']");
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedDashboardCopyJobCard,
+      true,
+      "Expected Dashboard Copy WhatsApp Job Card button to be clickable",
+    );
+
+    const dashboardJobCardCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+              candidate.innerText.includes("SQ777"),
+          );
+          const copyButton = article?.querySelector("[data-dashboard-copy-job-card='${dashboardDriverAssignmentFixture.id}']");
+          const feedback = article?.querySelector("[data-dashboard-copy-feedback='${dashboardDriverAssignmentFixture.id}:jobCard']");
+          const buttonRect = copyButton?.getBoundingClientRect();
+          const feedbackRect = feedback?.getBoundingClientRect();
+
+          return feedback?.textContent.trim() === "Booking job card copied."
+            ? {
+                copiedTexts: window.__prestigeCopiedTexts || [],
+                distanceFromButton:
+                  buttonRect && feedbackRect ? Math.abs(feedbackRect.top - buttonRect.bottom) : null,
+                feedbackText: feedback.textContent.trim(),
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "Dashboard job card local copy feedback",
+    );
+    assert.equal(dashboardJobCardCopyState.feedbackText, "Booking job card copied.");
+    assert.deepEqual(dashboardJobCardCopyState.globalCopyMessages, []);
+    assert.ok(
+      dashboardJobCardCopyState.distanceFromButton !== null &&
+        dashboardJobCardCopyState.distanceFromButton <= 120,
+      `Expected Dashboard WhatsApp Job Card copy feedback near its button, got ${dashboardJobCardCopyState.distanceFromButton}px`,
+    );
+    assert.match(
+      dashboardJobCardCopyState.copiedTexts[dashboardJobCardCopyState.copiedTexts.length - 1] || "",
+      /SQ777/,
+    );
+
     const assignedDriverClearInitialState = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
         (candidate) =>

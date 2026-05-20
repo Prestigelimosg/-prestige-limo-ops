@@ -27,6 +27,14 @@ const responsiveTabViewports = [
   { height: 1366, label: "Android tablet 1024px", mobile: false, scale: 1, width: 1024 },
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
+const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
+const driverDemoViewports = [
+  { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
+  { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
+  { height: 915, label: "mobile 412px", mobile: true, scale: 2.625, width: 412 },
+  { height: 1024, label: "tablet 768px", mobile: true, scale: 2, width: 768 },
+  { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
+];
 const requiredVisibleText = [
   "Prestige Limo",
   "Booking",
@@ -475,6 +483,242 @@ async function runChromeTest() {
       return tabStates;
     };
 
+    const setDriverDemoViewportAndLoad = async (viewport) => {
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: viewport.scale,
+        height: viewport.height,
+        mobile: viewport.mobile,
+        width: viewport.width,
+      });
+
+      const viewportLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url: driverDemoUrl });
+      await viewportLoadEvent;
+      await waitForCondition(
+        () => evaluate(`document.body.innerText.includes("Prestige Limo Driver Job")`),
+        10000,
+        `${viewport.label} driver job demo route`,
+      );
+      await evaluate(`(() => {
+        window.__driverDemoFetchCalls = [];
+        const originalFetch = window.__driverDemoOriginalFetch || window.fetch.bind(window);
+        window.__driverDemoOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const target = args[0]?.url || args[0];
+          window.__driverDemoFetchCalls.push(String(target));
+          return originalFetch(...args);
+        };
+      })()`);
+    };
+
+    const clickDriverDemoButton = async (selector, description) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(selector)});
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+    };
+
+    const checkDriverDemoRoute = async (viewport) => {
+      await setDriverDemoViewportAndLoad(viewport);
+
+      const initialState = await evaluate(`(() => {
+        const text = document.body.innerText;
+        const lowerText = text.toLowerCase();
+        const doc = document.documentElement;
+        const body = document.body;
+        const inputs = [...document.querySelectorAll("input")].map((input) => ({
+          height: Math.round(input.getBoundingClientRect().height),
+          label: input.closest("label")?.innerText.trim() || "",
+          type: input.getAttribute("type") || "",
+          width: Math.round(input.getBoundingClientRect().width),
+        }));
+        const buttons = [...document.querySelectorAll("button")].map((button) => ({
+          height: Math.round(button.getBoundingClientRect().height),
+          text: button.textContent.trim(),
+          width: Math.round(button.getBoundingClientRect().width),
+        }));
+
+        return {
+          adminTabsVisible: document.querySelectorAll("button[role='tab']").length,
+          bodyScrollWidth: body.scrollWidth,
+          buttonLabels: buttons.map((button) => button.text),
+          buttons,
+          docClientWidth: doc.clientWidth,
+          docScrollWidth: doc.scrollWidth,
+          forbiddenText: [
+            "pricing",
+            "payout",
+            "crm",
+            "booker email",
+            "internal notes",
+            "dispatch",
+            "dashboard",
+            "rates",
+          ].filter((value) => lowerText.includes(value)),
+          inputs,
+          text,
+          warningVisible: Boolean(document.querySelector("[data-driver-demo-warning]")),
+        };
+      })()`);
+
+      const overflowingWidth = Math.max(initialState.docScrollWidth, initialState.bodyScrollWidth);
+      const smallInputs = initialState.inputs.filter((input) => input.height < 44 || input.width < 220);
+      const smallButtons = initialState.buttons.filter((button) => button.height < 44 || button.width < 96);
+
+      assert.equal(
+        overflowingWidth <= initialState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected driver demo to avoid horizontal document overflow`,
+      );
+      assert.equal(initialState.warningVisible, true, `${viewport.label}: expected driver demo warning`);
+      assert.equal(initialState.adminTabsVisible, 0, `${viewport.label}: expected no admin tabs`);
+      assert.deepEqual(
+        initialState.forbiddenText,
+        [],
+        `${viewport.label}: expected no pricing, payout, CRM, or admin text on driver demo`,
+      );
+      assert.deepEqual(
+        ["Driver name", "Mobile number", "Car plate", "Vehicle model"].filter(
+          (label) => !initialState.inputs.some((input) => input.label.includes(label)),
+        ),
+        [],
+        `${viewport.label}: expected all driver detail fields`,
+      );
+      assert.deepEqual(
+        initialState.inputs.map((input) => input.type),
+        ["text", "tel", "text", "text"],
+        `${viewport.label}: expected mobile-friendly input types`,
+      );
+      assert.deepEqual(smallInputs, [], `${viewport.label}: expected comfortable driver inputs`);
+      assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver buttons`);
+      assert.deepEqual(
+        ["Save Driver Details", "OTW", "POB", "Job Completed"].filter(
+          (label) => !initialState.buttonLabels.includes(label),
+        ),
+        [],
+        `${viewport.label}: expected all driver action buttons`,
+      );
+      assert.equal(
+        initialState.text.includes("Demo only — not connected to live bookings yet."),
+        true,
+        `${viewport.label}: expected exact demo-only warning`,
+      );
+
+      await clickDriverDemoButton("[data-driver-demo-save-details]", `${viewport.label} Save Driver Details`);
+      const savedDetailsState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-save-details]");
+            const message = document.querySelector("[data-driver-demo-details-message]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === "Driver details saved."
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} driver details saved message`,
+      );
+      assert.equal(savedDetailsState.messageText, "Driver details saved.");
+      assert.equal(
+        savedDetailsState.distance <= 16,
+        true,
+        `${viewport.label}: expected driver details saved message close to button`,
+      );
+
+      const statusChecks = [
+        { label: "OTW", message: "Status updated: OTW" },
+        { label: "POB", message: "Status updated: POB" },
+        { label: "Job Completed", message: "Status updated: Completed" },
+      ];
+
+      for (const statusCheck of statusChecks) {
+        await clickDriverDemoButton(
+          `[data-driver-demo-status="${statusCheck.label}"]`,
+          `${viewport.label} ${statusCheck.label}`,
+        );
+        const statusState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const statusLabel = ${JSON.stringify(statusCheck.label)};
+              const expectedMessage = ${JSON.stringify(statusCheck.message)};
+              const button = document.querySelector(\`[data-driver-demo-status="\${statusLabel}"]\`);
+              const message = document.querySelector(\`[data-driver-demo-status-message="\${statusLabel}"]\`);
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+
+              return message?.textContent.trim() === expectedMessage
+                ? {
+                    currentStatus: document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "",
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    messageCount: document.querySelectorAll("[data-driver-demo-status-message]").length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} ${statusCheck.label} status message`,
+        );
+
+        assert.equal(statusState.currentStatus, statusCheck.label);
+        assert.equal(statusState.messageText, statusCheck.message);
+        assert.equal(statusState.messageCount, 1);
+        assert.equal(
+          statusState.distance <= 16,
+          true,
+          `${viewport.label}: expected ${statusCheck.label} status message close to button`,
+        );
+      }
+
+      const networkState = await evaluate(`(() => {
+        const resourceCalls = performance.getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .filter((name) =>
+            name.includes("/rest/v1/") ||
+            name.includes("/api/") ||
+            name.toLowerCase().includes("supabase"),
+          );
+
+        return {
+          fetchCalls: window.__driverDemoFetchCalls || [],
+          resourceCalls,
+        };
+      })()`);
+
+      assert.deepEqual(
+        networkState.fetchCalls,
+        [],
+        `${viewport.label}: expected driver demo actions not to call fetch`,
+      );
+      assert.deepEqual(
+        networkState.resourceCalls,
+        [],
+        `${viewport.label}: expected no Supabase/API resources on driver demo route`,
+      );
+
+      return {
+        buttons: initialState.buttonLabels,
+        docClientWidth: initialState.docClientWidth,
+        docScrollWidth: initialState.docScrollWidth,
+        inputs: initialState.inputs.map((input) => ({
+          label: input.label.split("\\n")[0],
+          type: input.type,
+        })),
+        viewport: viewport.label,
+      };
+    };
+
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];
       window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
@@ -507,6 +751,10 @@ async function runChromeTest() {
     for (const viewport of responsiveTabViewports) {
       const responsiveStates = await checkResponsiveTabs(viewport);
       state.responsiveTabs.push(...responsiveStates);
+    }
+    state.driverJobDemo = [];
+    for (const viewport of driverDemoViewports) {
+      state.driverJobDemo.push(await checkDriverDemoRoute(viewport));
     }
     state.errors = [...browserErrors, ...(state.errors || [])];
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];

@@ -9,6 +9,15 @@ type DriverDetails = {
   vehicleModel: string;
 };
 
+type ParseFeedback = {
+  tone: "success" | "warning";
+  text: string;
+};
+
+type ParsedDriverDetails = Partial<DriverDetails> & {
+  paymentDetailsDetected: boolean;
+};
+
 const mockJobDetails = [
   { label: "Date/time", value: "27 May 2026, 1530hrs" },
   { label: "Booking type", value: "MNG / Arrival" },
@@ -27,6 +36,114 @@ const statusOptions = [
   { label: "Job Completed", message: "Status updated: Completed" },
 ];
 
+const paymentDetailsPattern = /\b(paynow|pay now|bank|account|acct)\b/i;
+const vehicleModelPattern =
+  /\b(alphard|vellfire|hiace|mercedes|benz|bmw|audi|toyota|honda|hyundai|kia|lexus|estima|camry|viano|voxy|noah|prius|combi|maxi\s?cab|mpv|van|bus|e\s?class|s\s?class)\b/i;
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function cleanParsedValue(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function lineValue(text: string, labels: string[]) {
+  const labelPattern = labels.map(escapeRegExp).join("|");
+  const matcher = new RegExp(`^\\s*(?:${labelPattern})\\s*(?::|=|-)\\s*(.+?)\\s*$`, "i");
+
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(matcher);
+
+    if (match?.[1]) {
+      return cleanParsedValue(match[1]);
+    }
+  }
+
+  return "";
+}
+
+function driverDetailLines(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map(cleanParsedValue)
+    .filter(Boolean);
+}
+
+function isPaymentDetailLine(line: string) {
+  return paymentDetailsPattern.test(line);
+}
+
+function hasFieldLabel(line: string) {
+  return /^\s*[^:=\-]{1,32}\s*(?::|=|-)\s*\S/.test(line);
+}
+
+function phoneDigits(line: string) {
+  return line.replace(/\D/g, "");
+}
+
+function isPhoneLikeLine(line: string) {
+  if (!/^[+\d\s().-]+$/.test(line)) {
+    return false;
+  }
+
+  const digits = phoneDigits(line);
+
+  if (digits.length === 8) {
+    return /^[3689]/.test(digits);
+  }
+
+  return digits.length === 10 && digits.startsWith("65") && /^[3689]/.test(digits.slice(2));
+}
+
+function isSingaporePlateLine(line: string) {
+  const compactPlate = line.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  return /^[A-Z]{1,3}\d{1,4}[A-Z]$/.test(compactPlate);
+}
+
+function isVehicleModelLine(line: string) {
+  if (hasFieldLabel(line) || isPhoneLikeLine(line) || isSingaporePlateLine(line) || /\d{5,}/.test(line)) {
+    return false;
+  }
+
+  return vehicleModelPattern.test(line);
+}
+
+function isNameLikeLine(line: string) {
+  if (hasFieldLabel(line) || isPhoneLikeLine(line) || isSingaporePlateLine(line) || isVehicleModelLine(line)) {
+    return false;
+  }
+
+  return /^[A-Za-z][A-Za-z .'-]{1,59}$/.test(line);
+}
+
+function freeformLineValue(lines: string[], predicate: (line: string) => boolean) {
+  for (const line of lines) {
+    if (!isPaymentDetailLine(line) && predicate(line)) {
+      return line;
+    }
+  }
+
+  return "";
+}
+
+function parseDriverDetailsText(text: string): ParsedDriverDetails {
+  const lines = driverDetailLines(text);
+  const labelledMobile = lineValue(text, ["contact", "mobile", "phone", "tel", "telephone", "hp", "handphone"]);
+  const labelledName = lineValue(text, ["driver name", "name", "driver"]);
+  const labelledPlate = lineValue(text, ["car plate", "plate number", "plate", "vehicle no", "car no"]);
+  const labelledVehicleModel = lineValue(text, ["vehicle model", "vehicle", "model"]);
+
+  return {
+    mobile: labelledMobile || freeformLineValue(lines, isPhoneLikeLine),
+    name: labelledName || freeformLineValue(lines, isNameLikeLine),
+    paymentDetailsDetected: lines.some(isPaymentDetailLine),
+    plate: labelledPlate || freeformLineValue(lines, isSingaporePlateLine),
+    vehicleModel: labelledVehicleModel || freeformLineValue(lines, isVehicleModelLine),
+  };
+}
+
 export default function DriverJobDemoPage() {
   const [driverDetails, setDriverDetails] = useState<DriverDetails>({
     name: "",
@@ -34,6 +151,9 @@ export default function DriverJobDemoPage() {
     plate: "",
     vehicleModel: "",
   });
+  const [pastedDriverDetails, setPastedDriverDetails] = useState("");
+  const [parseFeedback, setParseFeedback] = useState<ParseFeedback | null>(null);
+  const [paymentHelperVisible, setPaymentHelperVisible] = useState(false);
   const [detailsMessage, setDetailsMessage] = useState("");
   const [status, setStatus] = useState("Assigned");
   const [statusMessage, setStatusMessage] = useState("");
@@ -44,6 +164,38 @@ export default function DriverJobDemoPage() {
       ...currentDetails,
       [field]: value,
     }));
+  }
+
+  function parsePastedDriverDetails() {
+    const parsedDetails = parseDriverDetailsText(pastedDriverDetails);
+    const nextDetails = {
+      mobile: parsedDetails.mobile || driverDetails.mobile,
+      name: parsedDetails.name || driverDetails.name,
+      plate: parsedDetails.plate || driverDetails.plate,
+      vehicleModel: parsedDetails.vehicleModel || driverDetails.vehicleModel,
+    };
+    const detectedFieldCount = [
+      parsedDetails.name,
+      parsedDetails.mobile,
+      parsedDetails.plate,
+      parsedDetails.vehicleModel,
+    ].filter(Boolean).length;
+
+    setPaymentHelperVisible(parsedDetails.paymentDetailsDetected);
+
+    if (detectedFieldCount === 0) {
+      setParseFeedback({
+        tone: "warning",
+        text: "No driver details detected. Please check the pasted text.",
+      });
+      return;
+    }
+
+    setDriverDetails(nextDetails);
+    setParseFeedback({
+      tone: "success",
+      text: "Driver details parsed. Please review before saving.",
+    });
   }
 
   function saveDriverDetails() {
@@ -99,6 +251,45 @@ export default function DriverJobDemoPage() {
             Driver Details
           </h2>
           <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+            <label className="block space-y-1 text-sm font-semibold text-slate-700">
+              <span>Paste Driver Details</span>
+              <textarea
+                className="min-h-32 w-full rounded-md border border-stone-300 bg-white px-3 py-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                data-driver-demo-paste-details="true"
+                onChange={(event) => setPastedDriverDetails(event.target.value)}
+                value={pastedDriverDetails}
+              />
+            </label>
+            <div className="space-y-2">
+              <button
+                className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
+                data-driver-demo-parse-details="true"
+                onClick={parsePastedDriverDetails}
+                type="button"
+              >
+                Parse Driver Details
+              </button>
+              {parseFeedback ? (
+                <p
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                    parseFeedback.tone === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-amber-200 bg-amber-50 text-amber-900"
+                  }`}
+                  data-driver-demo-parse-message="true"
+                >
+                  {parseFeedback.text}
+                </p>
+              ) : null}
+              {paymentHelperVisible ? (
+                <p
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
+                  data-driver-demo-payment-helper="true"
+                >
+                  Payment details were detected but not saved in this demo.
+                </p>
+              ) : null}
+            </div>
             <label className="block space-y-1 text-sm font-semibold text-slate-700">
               <span>Driver name</span>
               <input

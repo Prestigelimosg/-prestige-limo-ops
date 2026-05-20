@@ -539,7 +539,13 @@ async function runChromeTest() {
           type: input.getAttribute("type") || "",
           width: Math.round(input.getBoundingClientRect().width),
         }));
+        const textareas = [...document.querySelectorAll("textarea")].map((textarea) => ({
+          height: Math.round(textarea.getBoundingClientRect().height),
+          label: textarea.closest("label")?.innerText.trim() || "",
+          width: Math.round(textarea.getBoundingClientRect().width),
+        }));
         const buttons = [...document.querySelectorAll("button")].map((button) => ({
+          className: button.className,
           height: Math.round(button.getBoundingClientRect().height),
           text: button.textContent.trim(),
           width: Math.round(button.getBoundingClientRect().width),
@@ -564,12 +570,14 @@ async function runChromeTest() {
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
+          textareas,
           warningVisible: Boolean(document.querySelector("[data-driver-demo-warning]")),
         };
       })()`);
 
       const overflowingWidth = Math.max(initialState.docScrollWidth, initialState.bodyScrollWidth);
       const smallInputs = initialState.inputs.filter((input) => input.height < 44 || input.width < 220);
+      const smallTextareas = initialState.textareas.filter((textarea) => textarea.height < 96 || textarea.width < 220);
       const smallButtons = initialState.buttons.filter((button) => button.height < 44 || button.width < 96);
 
       assert.equal(
@@ -596,19 +604,139 @@ async function runChromeTest() {
         ["text", "tel", "text", "text"],
         `${viewport.label}: expected mobile-friendly input types`,
       );
+      assert.deepEqual(
+        ["Paste Driver Details"].filter(
+          (label) => !initialState.textareas.some((textarea) => textarea.label.includes(label)),
+        ),
+        [],
+        `${viewport.label}: expected driver details paste textarea`,
+      );
       assert.deepEqual(smallInputs, [], `${viewport.label}: expected comfortable driver inputs`);
+      assert.deepEqual(smallTextareas, [], `${viewport.label}: expected comfortable paste textarea`);
       assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver buttons`);
       assert.deepEqual(
-        ["Save Driver Details", "OTW", "POB", "Job Completed"].filter(
+        ["Parse Driver Details", "Save Driver Details", "OTW", "POB", "Job Completed"].filter(
           (label) => !initialState.buttonLabels.includes(label),
         ),
         [],
         `${viewport.label}: expected all driver action buttons`,
       );
+      assert.deepEqual(
+        ["Parse Driver Details", "Save Driver Details"].filter((label) => {
+          const button = initialState.buttons.find((candidate) => candidate.text === label);
+          return !button?.className.includes("bg-slate-950") || !button.className.includes("text-white");
+        }),
+        [],
+        `${viewport.label}: expected driver details actions to use primary button styling`,
+      );
       assert.equal(
         initialState.text.includes("Demo only — not connected to live bookings yet."),
         true,
         `${viewport.label}: expected exact demo-only warning`,
+      );
+
+      const parseDriverDetailsSample = async (sample, description) => {
+        const pastedDriverDetails = await evaluate(`(() => {
+          const textarea = document.querySelector("[data-driver-demo-paste-details]");
+          if (!textarea) return false;
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+          setter?.call(textarea, ${JSON.stringify(sample)});
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          return true;
+        })()`);
+        assert.equal(pastedDriverDetails, true, `${viewport.label}: expected paste textarea to accept ${description}`);
+
+        await clickDriverDemoButton("[data-driver-demo-parse-details]", `${viewport.label} Parse Driver Details`);
+        return waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const parseButton = document.querySelector("[data-driver-demo-parse-details]");
+              const parseMessage = document.querySelector("[data-driver-demo-parse-message]");
+              const paymentHelper = document.querySelector("[data-driver-demo-payment-helper]");
+              const buttonRect = parseButton?.getBoundingClientRect();
+              const messageRect = parseMessage?.getBoundingClientRect();
+
+              const state = {
+                helperText: paymentHelper?.textContent.trim() || "",
+                messageDistance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                messageText: parseMessage?.textContent.trim() || "",
+                mobile: document.querySelector("[data-driver-demo-mobile]")?.value || "",
+                name: document.querySelector("[data-driver-demo-name]")?.value || "",
+                plate: document.querySelector("[data-driver-demo-plate]")?.value || "",
+                vehicleModel: document.querySelector("[data-driver-demo-vehicle-model]")?.value || "",
+              };
+
+              return state.messageText === "Driver details parsed. Please review before saving." &&
+                state.helperText === "Payment details were detected but not saved in this demo."
+                ? state
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} parsed ${description}`,
+        );
+      };
+
+      const labelledDriverDetails = [
+        "Name: Ah Seng",
+        "Contact: 91234567",
+        "Plate: S1234Z",
+        "Vehicle model: Toyota Alphard",
+        "PayNow: 81234567",
+        "Bank: 123-456-789",
+      ].join("\n");
+
+      const labelledDetailsState = await parseDriverDetailsSample(labelledDriverDetails, "labelled driver details");
+      assert.equal(labelledDetailsState.name, "Ah Seng");
+      assert.equal(labelledDetailsState.mobile, "91234567");
+      assert.equal(labelledDetailsState.plate, "S1234Z");
+      assert.equal(labelledDetailsState.vehicleModel, "Toyota Alphard");
+      assert.equal(
+        labelledDetailsState.messageDistance <= 16,
+        true,
+        `${viewport.label}: expected parse feedback close to Parse Driver Details`,
+      );
+      assert.notEqual(
+        labelledDetailsState.mobile,
+        "81234567",
+        `${viewport.label}: expected PayNow number not to overwrite explicit contact number`,
+      );
+      assert.notEqual(
+        labelledDetailsState.plate,
+        "123-456-789",
+        `${viewport.label}: expected bank details not to populate car plate`,
+      );
+      assert.notEqual(
+        labelledDetailsState.vehicleModel,
+        "123-456-789",
+        `${viewport.label}: expected bank details not to populate vehicle model`,
+      );
+
+      await setDriverDemoViewportAndLoad(viewport);
+
+      const freeformDriverDetails = [
+        "Juraimi",
+        "Alphard HS/ Black",
+        "SNH4429M",
+        "8189 5041",
+        "8200 8671(Paynow)",
+      ].join("\n");
+      const freeformDetailsState = await parseDriverDetailsSample(
+        freeformDriverDetails,
+        "freeform Juraimi driver details",
+      );
+      assert.equal(freeformDetailsState.name, "Juraimi");
+      assert.equal(freeformDetailsState.vehicleModel, "Alphard HS/ Black");
+      assert.equal(freeformDetailsState.plate, "SNH4429M");
+      assert.equal(freeformDetailsState.mobile.replace(/\D/g, ""), "81895041");
+      assert.notEqual(
+        freeformDetailsState.mobile.replace(/\D/g, ""),
+        "82008671",
+        `${viewport.label}: expected PayNow number not to overwrite freeform mobile number`,
+      );
+      assert.equal(
+        freeformDetailsState.messageDistance <= 16,
+        true,
+        `${viewport.label}: expected freeform parse feedback close to Parse Driver Details`,
       );
 
       await clickDriverDemoButton("[data-driver-demo-save-details]", `${viewport.label} Save Driver Details`);
@@ -715,6 +843,7 @@ async function runChromeTest() {
           label: input.label.split("\\n")[0],
           type: input.type,
         })),
+        textareas: initialState.textareas.map((textarea) => textarea.label.split("\\n")[0]),
         viewport: viewport.label,
       };
     };

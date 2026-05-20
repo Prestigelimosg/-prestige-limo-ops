@@ -748,8 +748,8 @@ async function runChromeTest() {
             (element) => element.textContent.trim() === "Company Overrides",
           );
           const panel = heading?.parentElement;
-          const rows = [...(panel?.querySelectorAll("button") || [])].filter(
-            (button) => button.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
+          const rows = [...(panel?.querySelectorAll("[data-rate-company-override-row]") || [])].filter(
+            (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
           );
 
           return rows.length === 1 && rows[0].innerText.includes("Customer: MNG 90.00");
@@ -772,8 +772,8 @@ async function runChromeTest() {
             (element) => element.textContent.trim() === "Company Overrides",
           );
           const panel = heading?.parentElement;
-          const rows = [...(panel?.querySelectorAll("button") || [])].filter(
-            (button) => button.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
+          const rows = [...(panel?.querySelectorAll("[data-rate-company-override-row]") || [])].filter(
+            (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
           );
 
           if (
@@ -828,6 +828,97 @@ async function runChromeTest() {
       duplicateSaveState.globalOverrideMessages,
       0,
       "Expected duplicate save feedback not to duplicate in the top Rates status panel",
+    );
+
+    const clickedRemoveDuplicateOverride = await evaluate(`(() => {
+      const heading = [...document.querySelectorAll("h4")].find(
+        (element) => element.textContent.trim() === "Company Overrides",
+      );
+      const panel = heading?.parentElement;
+      const row = [...(panel?.querySelectorAll("[data-rate-company-override-row]") || [])].find(
+        (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
+      );
+      const removeButton = [...(row?.querySelectorAll("[data-rate-company-remove]") || [])].find(
+        (button) => button.textContent.trim() === "Remove override",
+      );
+
+      if (!removeButton || removeButton.disabled) {
+        return false;
+      }
+
+      window.__prestigeRemoveRateButtonBottom = removeButton.getBoundingClientRect().bottom;
+      removeButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedRemoveDuplicateOverride, true, "Expected duplicate company Remove override button to be clickable");
+
+    const removeOverrideState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const heading = [...document.querySelectorAll("h4")].find(
+            (element) => element.textContent.trim() === "Company Overrides",
+          );
+          const panel = heading?.parentElement;
+          const rows = [...(panel?.querySelectorAll("[data-rate-company-override-row]") || [])].filter(
+            (element) => element.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
+          );
+          const feedback = document.querySelector("[data-rate-feedback='company-overrides']");
+          const globalStatusPanels = [...document.querySelectorAll("[data-status-panel='global']")];
+
+          if (
+            !feedback ||
+            !feedback.textContent.includes("DUPLICATE RATE SAFETY TEST override removed.") ||
+            rows.length !== 0 ||
+            panel?.innerText.includes("Customer: MNG 95.00")
+          ) {
+            return false;
+          }
+
+          const feedbackRect = feedback.getBoundingClientRect();
+
+          return {
+            distance: Math.abs(feedbackRect.top - (window.__prestigeRemoveRateButtonBottom || feedbackRect.top)),
+            feedbackText: feedback.textContent.trim(),
+            globalRemoveMessages: globalStatusPanels.filter((panel) =>
+              panel.textContent.includes("override removed."),
+            ).length,
+            rowCount: rows.length,
+            updateCalls: window.__prestigeRateDuplicateStore?.updateCalls || [],
+            unexpectedCalls: window.__prestigeRateDuplicateStore?.unexpectedCalls || [],
+          };
+        })()`),
+      10000,
+      "rate override remove refresh",
+    );
+    assert.equal(removeOverrideState.rowCount, 0, "Expected removed override row to leave the saved company list");
+    assert.equal(
+      removeOverrideState.updateCalls.length,
+      3,
+      `Expected remove override to make a third PATCH update, got ${removeOverrideState.updateCalls.length}`,
+    );
+    assert.deepEqual(
+      removeOverrideState.updateCalls.at(-1)?.payload?.customer_rates,
+      {},
+      "Expected remove override PATCH to clear customer_rates",
+    );
+    assert.deepEqual(
+      removeOverrideState.updateCalls.at(-1)?.payload?.driver_payout_rules,
+      {},
+      "Expected remove override PATCH to clear driver_payout_rules",
+    );
+    assert.deepEqual(
+      removeOverrideState.unexpectedCalls,
+      [],
+      `Expected remove override mock to avoid inserts/unhandled calls, got ${removeOverrideState.unexpectedCalls.join(", ")}`,
+    );
+    assert.ok(
+      removeOverrideState.distance <= 120,
+      `Expected remove override feedback near the clicked row, got ${removeOverrideState.distance}px`,
+    );
+    assert.equal(
+      removeOverrideState.globalRemoveMessages,
+      0,
+      "Expected remove override feedback not to duplicate in the top Rates status panel",
     );
 
     console.log(JSON.stringify(state, null, 2));

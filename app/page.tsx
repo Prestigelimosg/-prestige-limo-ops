@@ -192,6 +192,10 @@ type Message = {
   text: string;
 };
 
+type RateOverrideListMessage = Message & {
+  recordId?: number;
+};
+
 type CopyFeedback = Message & {
   target: "jobCard" | "driverDispatch";
 };
@@ -1754,8 +1758,10 @@ export default function Home() {
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
-  const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | null>(null);
+  const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | "remove-override" | null>(null);
   const [rateMessageTarget, setRateMessageTarget] = useState<"header" | "override">("header");
+  const [rateOverrideListMessages, setRateOverrideListMessages] =
+    useState<{ company?: RateOverrideListMessage; boss?: RateOverrideListMessage }>({});
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
@@ -1890,13 +1896,23 @@ export default function Home() {
   const hasNeedsReviewWarnings = needsReviewWarnings.length > 0;
   const reviewWarningsAccepted = hasNeedsReviewWarnings && acceptedReviewWarningKey === needsReviewAcceptanceKey;
 
-  const companyOverrideRecords = useMemo(
-    () => rateCompanies.filter((companyRecord) => hasRateOverrideValues(companyRecord)),
-    [rateCompanies],
+  const displayedCompanyOverrideRecords = useMemo(
+    () =>
+      rateCompanies.filter(
+        (companyRecord) =>
+          hasRateOverrideValues(companyRecord) ||
+          rateOverrideListMessages.company?.recordId === companyRecord.id,
+      ),
+    [rateCompanies, rateOverrideListMessages.company?.recordId],
   );
-  const bossOverrideRecords = useMemo(
-    () => rateTravelers.filter((travelerRecord) => hasRateOverrideValues(travelerRecord)),
-    [rateTravelers],
+  const displayedBossOverrideRecords = useMemo(
+    () =>
+      rateTravelers.filter(
+        (travelerRecord) =>
+          hasRateOverrideValues(travelerRecord) ||
+          rateOverrideListMessages.boss?.recordId === travelerRecord.id,
+      ),
+    [rateTravelers, rateOverrideListMessages.boss?.recordId],
   );
   const assignableDrivers = useMemo(() => drivers.filter(isAssignableDriver), [drivers]);
 
@@ -3371,6 +3387,164 @@ export default function Home() {
           "Save rate override failed: ",
         ),
       });
+    } finally {
+      setRateAction(null);
+      setSavingRates(false);
+    }
+  }
+
+  async function removeCompanyRateOverride(companyRecord: CompanyRecord) {
+    const companyName = clean(companyRecord.company_name) || "this company";
+
+    setRateOverrideListMessages((current) => ({
+      ...current,
+      company: { tone: "info", text: `Removing ${companyName} override...`, recordId: companyRecord.id },
+    }));
+
+    if (!supabase) {
+      setRateOverrideListMessages((current) => ({
+        ...current,
+        company: {
+          tone: "error",
+          text: "Remove override failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+          recordId: companyRecord.id,
+        },
+      }));
+      return;
+    }
+
+    setSavingRates(true);
+    setRateAction("remove-override");
+
+    try {
+      const { error } = await supabase
+        .from("companies")
+        .update({
+          customer_rates: {},
+          driver_payout_rules: {},
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", companyRecord.id);
+
+      if (error) {
+        throw new Error(formatSupabaseError(error));
+      }
+
+      setRateCompanies((current) =>
+        current.map((candidate) =>
+          candidate.id === companyRecord.id
+            ? { ...candidate, customer_rates: {}, driver_payout_rules: {} }
+            : candidate,
+        ),
+      );
+      setRateOverrideDraft((current) => {
+        const currentCompany = clean(current.companyName).toLowerCase();
+        const removedCompany = clean(companyRecord.company_name).toLowerCase();
+
+        if (current.bossName || currentCompany !== removedCompany) {
+          return current;
+        }
+
+        return {
+          ...current,
+          customerRates: {},
+          driverPayoutRules: {},
+        };
+      });
+      setRateOverrideListMessages((current) => ({
+        ...current,
+        company: { tone: "success", text: `${companyName} override removed.`, recordId: companyRecord.id },
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown override remove error.";
+
+      setRateOverrideListMessages((current) => ({
+        ...current,
+        company: {
+          tone: "error",
+          text: formatRatesSetupError(errorMessage, "Remove override failed: "),
+          recordId: companyRecord.id,
+        },
+      }));
+    } finally {
+      setRateAction(null);
+      setSavingRates(false);
+    }
+  }
+
+  async function removeBossRateOverride(travelerRecord: TravelerRecord) {
+    const bossName = clean(travelerRecord.traveler_name) || "this boss/name";
+
+    setRateOverrideListMessages((current) => ({
+      ...current,
+      boss: { tone: "info", text: `Removing ${bossName} override...`, recordId: travelerRecord.id },
+    }));
+
+    if (!supabase) {
+      setRateOverrideListMessages((current) => ({
+        ...current,
+        boss: {
+          tone: "error",
+          text: "Remove override failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+          recordId: travelerRecord.id,
+        },
+      }));
+      return;
+    }
+
+    setSavingRates(true);
+    setRateAction("remove-override");
+
+    try {
+      const { error } = await supabase
+        .from("travelers")
+        .update({
+          customer_rates: {},
+          driver_payout_rules: {},
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", travelerRecord.id);
+
+      if (error) {
+        throw new Error(formatSupabaseError(error));
+      }
+
+      setRateTravelers((current) =>
+        current.map((candidate) =>
+          candidate.id === travelerRecord.id
+            ? { ...candidate, customer_rates: {}, driver_payout_rules: {} }
+            : candidate,
+        ),
+      );
+      setRateOverrideDraft((current) => {
+        const currentBoss = clean(current.bossName).toLowerCase();
+        const removedBoss = clean(travelerRecord.traveler_name).toLowerCase();
+
+        if (currentBoss !== removedBoss) {
+          return current;
+        }
+
+        return {
+          ...current,
+          customerRates: {},
+          driverPayoutRules: {},
+        };
+      });
+      setRateOverrideListMessages((current) => ({
+        ...current,
+        boss: { tone: "success", text: `${bossName} override removed.`, recordId: travelerRecord.id },
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown override remove error.";
+
+      setRateOverrideListMessages((current) => ({
+        ...current,
+        boss: {
+          tone: "error",
+          text: formatRatesSetupError(errorMessage, "Remove override failed: "),
+          recordId: travelerRecord.id,
+        },
+      }));
     } finally {
       setRateAction(null);
       setSavingRates(false);
@@ -6257,34 +6431,78 @@ export default function Home() {
                   <div className="mt-2 max-h-56 space-y-2 overflow-auto">
                     {!ratesLoaded ? (
                       <p className="text-sm text-slate-500">Load rates to view saved company overrides.</p>
-                    ) : companyOverrideRecords.length === 0 ? (
+                    ) : displayedCompanyOverrideRecords.length === 0 ? (
                       <p className="text-sm text-slate-500">No company overrides found.</p>
                     ) : (
-                      companyOverrideRecords.map((companyRecord) => {
+                      displayedCompanyOverrideRecords.map((companyRecord) => {
+                        const rowMessage =
+                          rateOverrideListMessages.company?.recordId === companyRecord.id
+                            ? rateOverrideListMessages.company
+                            : null;
+                        const hasOverrideValues = hasRateOverrideValues(companyRecord);
+
+                        if (!hasOverrideValues && rowMessage) {
+                          return (
+                            <div
+                              className={`rounded-md border px-3 py-2 text-sm ${statusClass(rowMessage.tone)}`}
+                              data-rate-feedback="company-overrides"
+                              key={`company-message-${companyRecord.id}`}
+                            >
+                              {rowMessage.text}
+                            </div>
+                          );
+                        }
+
                         const summary = formatOverrideSummary(
                           companyRecord.customer_rates,
                           companyRecord.driver_payout_rules,
                         );
 
                         return (
-                          <button
-                            className="w-full rounded-md border border-stone-200 bg-white p-3 text-left text-sm transition hover:bg-stone-50"
+                          <div
+                            className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+                            data-rate-company-override-row={companyRecord.id}
                             key={companyRecord.id}
-                            onClick={() =>
-                              setRateOverrideDraft({
-                                companyName: clean(companyRecord.company_name),
-                                bossName: "",
-                                customerRates: normalizeCustomerRateRules(companyRecord.customer_rates),
-                                driverPayoutRules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
-                                transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
-                              })
-                            }
-                            type="button"
                           >
                             <p className="font-medium">{companyRecord.company_name}</p>
                             <p className="text-xs text-slate-600">{summary.customerText}</p>
                             <p className="text-xs text-slate-600">{summary.driverText}</p>
-                          </button>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <button
+                                className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                                disabled={savingRates}
+                                onClick={() =>
+                                  setRateOverrideDraft({
+                                    companyName: clean(companyRecord.company_name),
+                                    bossName: "",
+                                    customerRates: normalizeCustomerRateRules(companyRecord.customer_rates),
+                                    driverPayoutRules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
+                                    transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
+                                  })
+                                }
+                                type="button"
+                              >
+                                Load for editing
+                              </button>
+                              <button
+                                className="h-9 rounded-md border border-red-200 px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-red-300"
+                                data-rate-company-remove={companyRecord.id}
+                                disabled={savingRates}
+                                onClick={() => removeCompanyRateOverride(companyRecord)}
+                                type="button"
+                              >
+                                {rateAction === "remove-override" ? "Removing..." : "Remove override"}
+                              </button>
+                            </div>
+                            {rowMessage ? (
+                              <div
+                                className={`mt-2 rounded-md border px-3 py-2 text-sm ${statusClass(rowMessage.tone)}`}
+                                data-rate-feedback="company-overrides"
+                              >
+                                {rowMessage.text}
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })
                     )}
@@ -6296,32 +6514,41 @@ export default function Home() {
                   <div className="mt-2 max-h-56 space-y-2 overflow-auto">
                     {!ratesLoaded ? (
                       <p className="text-sm text-slate-500">Load rates to view saved boss/name overrides.</p>
-                    ) : bossOverrideRecords.length === 0 ? (
+                    ) : displayedBossOverrideRecords.length === 0 ? (
                       <p className="text-sm text-slate-500">No boss/name overrides found.</p>
                     ) : (
-                      bossOverrideRecords.map((travelerRecord) => {
+                      displayedBossOverrideRecords.map((travelerRecord) => {
                         const companyRecord = rateCompanies.find(
                           (company) => company.id === travelerRecord.company_id,
                         );
+                        const rowMessage =
+                          rateOverrideListMessages.boss?.recordId === travelerRecord.id
+                            ? rateOverrideListMessages.boss
+                            : null;
+                        const hasOverrideValues = hasRateOverrideValues(travelerRecord);
+
+                        if (!hasOverrideValues && rowMessage) {
+                          return (
+                            <div
+                              className={`rounded-md border px-3 py-2 text-sm ${statusClass(rowMessage.tone)}`}
+                              data-rate-feedback="boss-overrides"
+                              key={`boss-message-${travelerRecord.id}`}
+                            >
+                              {rowMessage.text}
+                            </div>
+                          );
+                        }
+
                         const summary = formatOverrideSummary(
                           travelerRecord.customer_rates,
                           travelerRecord.driver_payout_rules,
                         );
 
                         return (
-                          <button
-                            className="w-full rounded-md border border-stone-200 bg-white p-3 text-left text-sm transition hover:bg-stone-50"
+                          <div
+                            className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+                            data-rate-boss-override-row={travelerRecord.id}
                             key={travelerRecord.id}
-                            onClick={() =>
-                              setRateOverrideDraft({
-                                companyName: clean(companyRecord?.company_name),
-                                bossName: clean(travelerRecord.traveler_name),
-                                customerRates: normalizeCustomerRateRules(travelerRecord.customer_rates),
-                                driverPayoutRules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
-                                transzendExcelPrivacy: Boolean(companyRecord?.transzend_excel_privacy),
-                              })
-                            }
-                            type="button"
                           >
                             <p className="font-medium">{travelerRecord.traveler_name}</p>
                             <p className="text-xs text-slate-500">
@@ -6329,7 +6556,42 @@ export default function Home() {
                             </p>
                             <p className="text-xs text-slate-600">{summary.customerText}</p>
                             <p className="text-xs text-slate-600">{summary.driverText}</p>
-                          </button>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <button
+                                className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                                disabled={savingRates}
+                                onClick={() =>
+                                  setRateOverrideDraft({
+                                    companyName: clean(companyRecord?.company_name),
+                                    bossName: clean(travelerRecord.traveler_name),
+                                    customerRates: normalizeCustomerRateRules(travelerRecord.customer_rates),
+                                    driverPayoutRules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
+                                    transzendExcelPrivacy: Boolean(companyRecord?.transzend_excel_privacy),
+                                  })
+                                }
+                                type="button"
+                              >
+                                Load for editing
+                              </button>
+                              <button
+                                className="h-9 rounded-md border border-red-200 px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-red-300"
+                                data-rate-boss-remove={travelerRecord.id}
+                                disabled={savingRates}
+                                onClick={() => removeBossRateOverride(travelerRecord)}
+                                type="button"
+                              >
+                                {rateAction === "remove-override" ? "Removing..." : "Remove override"}
+                              </button>
+                            </div>
+                            {rowMessage ? (
+                              <div
+                                className={`mt-2 rounded-md border px-3 py-2 text-sm ${statusClass(rowMessage.tone)}`}
+                                data-rate-feedback="boss-overrides"
+                              >
+                                {rowMessage.text}
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })
                     )}

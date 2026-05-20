@@ -466,6 +466,32 @@ function isAssignableDriver(driver: DriverRecord) {
   return !isInactiveDriver(driver);
 }
 
+function hasBookingDriver(bookingRecord: Pick<BookingRecord, "driver_id" | "driver_name">) {
+  return Boolean(bookingRecord.driver_id || clean(bookingRecord.driver_name));
+}
+
+function undoCompletedStatus(bookingRecord: Pick<BookingRecord, "driver_id" | "driver_name">) {
+  return hasBookingDriver(bookingRecord) ? "assigned" : "confirmed";
+}
+
+function isMarkCompletionMessage(message: Message | null | undefined) {
+  return Boolean(
+    message &&
+      (message.text === "Marking booking completed..." ||
+        message.text === "Booking marked completed." ||
+        message.text.startsWith("Mark completed failed")),
+  );
+}
+
+function isUndoCompletionMessage(message: Message | null | undefined) {
+  return Boolean(
+    message &&
+      (message.text === "Undoing completion..." ||
+        message.text === "Completion undone." ||
+        message.text.startsWith("Undo completed failed")),
+  );
+}
+
 function getNeedsReviewWarnings(booking: BookingForm) {
   const warnings: string[] = [];
   const bookingType = normalizeBookingType(booking.bookingType);
@@ -1490,6 +1516,8 @@ export default function Home() {
   const [driverDrafts, setDriverDrafts] = useState<Record<string, DriverDraft>>({});
   const [driverAssignmentMessages, setDriverAssignmentMessages] =
     useState<Record<string, Message>>({});
+  const [bookingCompletionMessages, setBookingCompletionMessages] =
+    useState<Record<string, Message>>({});
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
@@ -1497,6 +1525,7 @@ export default function Home() {
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
   const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
   const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
+  const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1761,6 +1790,19 @@ export default function Home() {
         (bookingRecord) => clean(bookingRecord.status).toLowerCase() === "completed",
       ),
     [bookings],
+  );
+  const completedBookingIds = new Set(completedBookings.map((bookingRecord) => String(bookingRecord.id)));
+  const completedTabCompletionMessages = Object.entries(bookingCompletionMessages).filter(
+    ([bookingId, completionMessage]) =>
+      !completedBookingIds.has(bookingId) &&
+      completionMessage.text === "Completion undone." &&
+      isUndoCompletionMessage(completionMessage),
+  );
+  const completedTabMessageIds = new Set(completedTabCompletionMessages.map(([bookingId]) => bookingId));
+  const completedTabBookings = bookings.filter(
+    (bookingRecord) =>
+      completedBookingIds.has(String(bookingRecord.id)) ||
+      completedTabMessageIds.has(String(bookingRecord.id)),
   );
 
   const multiBookingPreviewItems = Array.isArray(multiBookingNotice?.extractedBookingsPreview)
@@ -3570,6 +3612,97 @@ export default function Home() {
     }
   }
 
+  function setBookingCompletionMessage(bookingId: string, nextMessage: Message | null) {
+    setBookingCompletionMessages((current) => {
+      if (!nextMessage) {
+        const nextMessages = { ...current };
+        delete nextMessages[bookingId];
+        return nextMessages;
+      } else {
+        return { [bookingId]: nextMessage };
+      }
+    });
+  }
+
+  async function updateBookingStatusOnly(
+    bookingRecord: BookingRecord,
+    nextStatus: "assigned" | "confirmed" | "completed",
+    loadingText: string,
+    successText: string,
+    errorPrefix: string,
+  ) {
+    const bookingId = String(bookingRecord.id);
+
+    if (!supabase) {
+      const errorMessage = {
+        tone: "error",
+        text: `${errorPrefix}: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.`,
+      } satisfies Message;
+      setBookingCompletionMessage(bookingId, errorMessage);
+      return;
+    }
+
+    const loadingMessage = { tone: "info", text: loadingText } satisfies Message;
+    setCompletingBookingId(bookingId);
+    setBookingCompletionMessage(bookingId, loadingMessage);
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from("bookings")
+        .update({
+          status: nextStatus,
+          updated_at: updatedAt,
+        })
+        .eq("id", bookingRecord.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setBookings((current) =>
+        current.map((currentBooking) =>
+          currentBooking.id === bookingRecord.id
+            ? {
+                ...currentBooking,
+                status: nextStatus,
+                updated_at: updatedAt,
+              }
+            : currentBooking,
+        ),
+      );
+
+      const successMessage = { tone: "success", text: successText } satisfies Message;
+      setBookingCompletionMessage(bookingId, successMessage);
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Unknown booking status error.";
+      const errorMessage = { tone: "error", text: `${errorPrefix}: ${errorText}` } satisfies Message;
+      setBookingCompletionMessage(bookingId, errorMessage);
+    } finally {
+      setCompletingBookingId(null);
+    }
+  }
+
+  async function markBookingCompleted(bookingRecord: BookingRecord) {
+    await updateBookingStatusOnly(
+      bookingRecord,
+      "completed",
+      "Marking booking completed...",
+      "Booking marked completed.",
+      "Mark completed failed",
+    );
+  }
+
+  async function undoBookingCompleted(bookingRecord: BookingRecord) {
+    await updateBookingStatusOnly(
+      bookingRecord,
+      undoCompletedStatus(bookingRecord),
+      "Undoing completion...",
+      "Completion undone.",
+      "Undo completed failed",
+    );
+  }
+
   async function clearAssignedDriver(bookingRecord: BookingRecord) {
     const bookingId = String(bookingRecord.id);
     const nextStatus = clean(bookingRecord.status).toLowerCase() === "assigned"
@@ -3786,6 +3919,7 @@ export default function Home() {
           const driverDraft = getDriverDraft(savedBooking);
           const bookingId = String(savedBooking.id);
           const isAssigned = clean(savedBooking.status).toLowerCase() === "assigned";
+          const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
           const bookingType = clean(savedBooking.booking_type) || "Booking";
           const vehicle = clean(savedBooking.vehicle) || "Vehicle";
           const bookerName = getBookerName(savedBooking);
@@ -3794,6 +3928,10 @@ export default function Home() {
           const hasDriver = Boolean(driverName);
           const hasSavedDriver = Boolean(clean(savedBooking.driver_name) || savedBooking.driver_id);
           const driverAssignmentMessage = driverAssignmentMessages[bookingId] ?? null;
+          const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
+          const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
+            ? rawBookingCompletionMessage
+            : null;
           const selectedDraftDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
           const selectedDraftDriverIsInactive = Boolean(
             selectedDraftDriver && isInactiveDriver(selectedDraftDriver),
@@ -3857,6 +3995,32 @@ export default function Home() {
               >
                 Load this booking
               </button>
+
+              {!isCompleted || bookingCompletionMessage ? (
+                <div className="mt-2">
+                  {!isCompleted ? (
+                    <button
+                      className="h-10 w-full rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-dashboard-mark-completed={bookingId}
+                      disabled={completingBookingId === bookingId}
+                      onClick={() => markBookingCompleted(savedBooking)}
+                      type="button"
+                    >
+                      {completingBookingId === bookingId ? "Marking..." : "Mark completed"}
+                    </button>
+                  ) : null}
+                  {bookingCompletionMessage ? (
+                    <p
+                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
+                        bookingCompletionMessage.tone,
+                      )}`}
+                      data-booking-completion-message={bookingId}
+                    >
+                      {bookingCompletionMessage.text}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="mt-4 rounded-md border border-stone-200 bg-white p-3">
                 <div className="mb-3">
@@ -4150,6 +4314,12 @@ export default function Home() {
             "Drop-off";
           const routeText = routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`;
           const createdAt = formatCreatedAt(savedBooking.created_at);
+          const bookingId = String(savedBooking.id);
+          const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
+          const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
+          const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
+            ? rawBookingCompletionMessage
+            : null;
 
           return (
             <article
@@ -4169,13 +4339,36 @@ export default function Home() {
                   <p>{routeText}</p>
                   {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                 </div>
-                <button
-                  className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  onClick={() => loadSelectedBooking(savedBooking)}
-                  type="button"
-                >
-                  Load this booking
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    onClick={() => loadSelectedBooking(savedBooking)}
+                    type="button"
+                  >
+                    Load this booking
+                  </button>
+                  {!isCompleted ? (
+                    <button
+                      className="h-10 rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-bookings-mark-completed={bookingId}
+                      disabled={completingBookingId === bookingId}
+                      onClick={() => markBookingCompleted(savedBooking)}
+                      type="button"
+                    >
+                      {completingBookingId === bookingId ? "Marking..." : "Mark completed"}
+                    </button>
+                  ) : null}
+                  {bookingCompletionMessage ? (
+                    <p
+                      className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+                        bookingCompletionMessage.tone,
+                      )}`}
+                      data-booking-completion-message={bookingId}
+                    >
+                      {bookingCompletionMessage.text}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </article>
           );
@@ -4187,65 +4380,133 @@ export default function Home() {
       No bookings loaded.
     </div>
   );
-  const completedBookingsPanel = completedBookings.length > 0 ? (
-    <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-      <h3 className="text-sm font-semibold text-slate-800">Completed Bookings</h3>
-      <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
-        {completedBookings.map((savedBooking) => {
-          const routePoints = getRoutePoints(savedBooking);
-          const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
-          const dropoff =
-            clean(savedBooking.dropoff_address) ||
-            routePoints[routePoints.length - 1] ||
-            "Drop-off";
-          const routeText = routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`;
-          const createdAt = formatCreatedAt(savedBooking.created_at);
-
-          return (
-            <article
-              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
-              key={`completed-${savedBooking.id}`}
-            >
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1 text-slate-700">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-950">
-                      {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                    </p>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${bookingStatusClass(
-                        savedBooking.status,
-                      )}`}
-                    >
-                      {savedBooking.status || "completed"}
-                    </span>
-                  </div>
-                  <p>
-                    {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
-                    Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
-                    {getBookingName(savedBooking) || "Unknown"}
-                  </p>
-                  <p>{routeText}</p>
-                  {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
-                </div>
-                <button
-                  className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  data-completed-load-booking="true"
-                  onClick={() => loadSelectedBooking(savedBooking)}
-                  type="button"
-                >
-                  Load this booking
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  ) : (
+  const completedEmptyState = (
     <div className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm text-slate-500">
       No completed bookings loaded yet.
     </div>
+  );
+  const completedBookingsPanel = (
+    <>
+      {completedTabBookings.length > 0 ? (
+        <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+          <h3 className="text-sm font-semibold text-slate-800">Completed Bookings</h3>
+          <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
+            {completedTabBookings.map((savedBooking) => {
+              const routePoints = getRoutePoints(savedBooking);
+              const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
+              const dropoff =
+                clean(savedBooking.dropoff_address) ||
+                routePoints[routePoints.length - 1] ||
+                "Drop-off";
+              const routeText = routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`;
+              const createdAt = formatCreatedAt(savedBooking.created_at);
+              const bookingId = String(savedBooking.id);
+              const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
+              const bookingCompletionMessage = isUndoCompletionMessage(rawBookingCompletionMessage)
+                ? rawBookingCompletionMessage
+                : null;
+              const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
+
+              if (!isCompleted && bookingCompletionMessage?.text === "Completion undone.") {
+                return (
+                  <div
+                    className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+                    data-completed-undo-feedback-card={bookingId}
+                    key={`completed-message-${bookingId}`}
+                  >
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-1 text-slate-700">
+                        <p className="font-semibold text-slate-950">
+                          {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                        </p>
+                        <p>
+                          {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
+                          Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
+                          {getBookingName(savedBooking) || "Unknown"}
+                        </p>
+                        <p>{routeText}</p>
+                        {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <p
+                          className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+                            bookingCompletionMessage.tone,
+                          )}`}
+                          data-booking-completion-message={bookingId}
+                        >
+                          {bookingCompletionMessage.text}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <article
+                  className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+                  key={`completed-${savedBooking.id}`}
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-1 text-slate-700">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-slate-950">
+                          {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                        </p>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${bookingStatusClass(
+                            savedBooking.status,
+                          )}`}
+                        >
+                          {savedBooking.status || "completed"}
+                        </span>
+                      </div>
+                      <p>
+                        {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
+                        Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
+                        {getBookingName(savedBooking) || "Unknown"}
+                      </p>
+                      <p>{routeText}</p>
+                      {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                        data-completed-load-booking="true"
+                        onClick={() => loadSelectedBooking(savedBooking)}
+                        type="button"
+                      >
+                        Load this booking
+                      </button>
+                      <button
+                        className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-completed-undo-booking={bookingId}
+                        disabled={completingBookingId === bookingId}
+                        onClick={() => undoBookingCompleted(savedBooking)}
+                        type="button"
+                      >
+                        {completingBookingId === bookingId ? "Undoing..." : "Undo completed"}
+                      </button>
+                      {bookingCompletionMessage ? (
+                        <p
+                          className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+                            bookingCompletionMessage.tone,
+                          )}`}
+                          data-booking-completion-message={bookingId}
+                        >
+                          {bookingCompletionMessage.text}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+      {completedBookings.length === 0 ? completedEmptyState : null}
+    </>
   );
 
   return (
@@ -5028,7 +5289,7 @@ export default function Home() {
           <div className="mb-4">
             <h2 className="text-xl font-semibold">Completed</h2>
             <p className="text-sm text-slate-500">
-              Review loaded bookings with completed status. This view is read-only.
+              Review completed bookings and undo completion when needed.
             </p>
           </div>
           {statusPanel}

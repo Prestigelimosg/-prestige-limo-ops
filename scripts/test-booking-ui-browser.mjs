@@ -256,6 +256,157 @@ const completedSavedBookingFixture = {
     traveler_name: "COMPLETED TEST TRAVELER",
   },
 };
+const dashboardCompletionActionFixture = {
+  id: "ui-dashboard-completion-action-fixture",
+  company_id: 811,
+  booker_id: 812,
+  traveler_id: 813,
+  booking_type: "MNG",
+  vehicle: "AVF",
+  pickup_time: "1845",
+  pickup_address: "Changi Airport T3",
+  dropoff_address: "Capella Singapore",
+  flight_no: "SQ779",
+  route: "Changi Airport T3 > Capella Singapore",
+  pax: 2,
+  job_card:
+    "AVF MNG\n30 May 2026, 1845hrs\nFlight: SQ779\nChangi Airport T3 > Capella Singapore\nCompany: COMPLETION ACTION TEST COMPANY\nPassenger: COMPLETION ACTION TEST TRAVELER\nPax: 2",
+  status: "assigned",
+  driver_id: 901,
+  driver_name: "COMPLETION ACTION DRIVER",
+  driver_contact: "+65 8111 7799",
+  driver_plate_number: "SLC779C",
+  customer_price_amount: 115,
+  driver_payout_amount: 75,
+  driver_payout_override: 80,
+  driver_payout_reason: "Completion action should preserve driver payout",
+  driver_notes: "Completion action should preserve notes",
+  driver_dispatch_include_payout: true,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:49:00.000Z",
+  updated_at: "2026-05-18T23:49:00.000Z",
+  companies: {
+    company_name: "COMPLETION ACTION TEST COMPANY",
+    domain: "completion-action.example.com",
+  },
+  bookers: {
+    booker_name: "COMPLETION ACTION TEST BOOKER",
+    email: "booker@completion-action.example.com",
+    phone: "+65 8333 7799",
+  },
+  travelers: {
+    traveler_name: "COMPLETION ACTION TEST TRAVELER",
+  },
+};
+const completedUndoAssignedFixture = {
+  id: "ui-completed-undo-assigned-fixture",
+  company_id: 821,
+  booker_id: 822,
+  traveler_id: 823,
+  booking_type: "MNG",
+  vehicle: "AVF",
+  pickup_time: "1930",
+  pickup_address: "Changi Airport T2",
+  dropoff_address: "Mandarin Oriental Singapore",
+  flight_no: "SQ889",
+  route: "Changi Airport T2 > Mandarin Oriental Singapore",
+  pax: 1,
+  job_card:
+    "AVF MNG\n30 May 2026, 1930hrs\nFlight: SQ889\nChangi Airport T2 > Mandarin Oriental Singapore\nCompany: COMPLETED UNDO ASSIGNED COMPANY\nPassenger: COMPLETED UNDO ASSIGNED TRAVELER\nPax: 1",
+  status: "completed",
+  driver_id: 901,
+  driver_name: "COMPLETED UNDO DRIVER",
+  driver_contact: "+65 8444 8899",
+  driver_plate_number: "SLE889C",
+  customer_price_amount: 100,
+  driver_payout_amount: 70,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:48:00.000Z",
+  updated_at: "2026-05-18T23:48:00.000Z",
+  companies: {
+    company_name: "COMPLETED UNDO ASSIGNED COMPANY",
+    domain: "completed-undo-assigned.example.com",
+  },
+  bookers: {
+    booker_name: "COMPLETED UNDO ASSIGNED BOOKER",
+    email: "booker@completed-undo-assigned.example.com",
+    phone: "+65 8333 8899",
+  },
+  travelers: {
+    traveler_name: "COMPLETED UNDO ASSIGNED TRAVELER",
+  },
+};
+const completedUndoConfirmedFixture = {
+  id: "ui-completed-undo-confirmed-fixture",
+  company_id: 831,
+  booker_id: 832,
+  traveler_id: 833,
+  booking_type: "DEP",
+  vehicle: "AVF",
+  pickup_time: "2015",
+  pickup_address: "The Fullerton Hotel Singapore",
+  dropoff_address: "Changi Airport T1",
+  flight_no: "SQ890",
+  route: "The Fullerton Hotel Singapore > Changi Airport T1",
+  pax: 1,
+  job_card:
+    "AVF DEP\n30 May 2026, 2015hrs\nFlight: SQ890\nThe Fullerton Hotel Singapore > Changi Airport T1\nCompany: COMPLETED UNDO CONFIRMED COMPANY\nPassenger: COMPLETED UNDO CONFIRMED TRAVELER\nPax: 1",
+  status: "completed",
+  driver_id: null,
+  driver_name: null,
+  driver_contact: null,
+  driver_plate_number: null,
+  customer_price_amount: 92,
+  driver_payout_amount: 65,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:47:00.000Z",
+  updated_at: "2026-05-18T23:47:00.000Z",
+  companies: {
+    company_name: "COMPLETED UNDO CONFIRMED COMPANY",
+    domain: "completed-undo-confirmed.example.com",
+  },
+  bookers: {
+    booker_name: "COMPLETED UNDO CONFIRMED BOOKER",
+    email: "booker@completed-undo-confirmed.example.com",
+    phone: "+65 8333 8900",
+  },
+  travelers: {
+    traveler_name: "COMPLETED UNDO CONFIRMED TRAVELER",
+  },
+};
+const completedEmptyStateUndoFixture = {
+  ...completedUndoConfirmedFixture,
+  id: "ui-completed-empty-state-undo-fixture",
+  company_id: 841,
+  booker_id: 842,
+  traveler_id: 843,
+  flight_no: "SQ891",
+  job_card:
+    "AVF DEP\n30 May 2026, 2115hrs\nFlight: SQ891\nThe Fullerton Hotel Singapore > Changi Airport T1\nCompany: COMPLETED EMPTY STATE COMPANY\nPassenger: COMPLETED EMPTY STATE TRAVELER\nPax: 1",
+  created_at: "2026-05-18T23:46:00.000Z",
+  updated_at: "2026-05-18T23:46:00.000Z",
+  companies: {
+    company_name: "COMPLETED EMPTY STATE COMPANY",
+    domain: "completed-empty-state.example.com",
+  },
+  bookers: {
+    booker_name: "COMPLETED EMPTY STATE BOOKER",
+    email: "booker@completed-empty-state.example.com",
+    phone: "+65 8333 8910",
+  },
+  travelers: {
+    traveler_name: "COMPLETED EMPTY STATE TRAVELER",
+  },
+};
 const reusableDriverProfileFixture = {
   id: 901,
   driver_name: "REUSABLE PROFILE TEST DRIVER",
@@ -1710,9 +1861,13 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardDriverAssignmentFixture)},
         ${JSON.stringify(dashboardAssignedDriverClearFixture)},
         ${JSON.stringify(completedSavedBookingFixture)},
+        ${JSON.stringify(dashboardCompletionActionFixture)},
+        ${JSON.stringify(completedUndoAssignedFixture)},
+        ${JSON.stringify(completedUndoConfirmedFixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
+      window.__prestigeBookingCompletionRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -1733,24 +1888,46 @@ async function runChromeTest() {
           });
         }
 
-        if (
-          method === "PATCH" &&
-          String(target).includes("/rest/v1/bookings") &&
-          (
-            String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}") ||
-            String(target).includes("id=eq.${dashboardAssignedDriverClearFixture.id}")
-          )
-        ) {
+        if (method === "PATCH" && String(target).includes("/rest/v1/bookings")) {
+          let parsedBody = bodyText;
+
           try {
-            window.__prestigeDashboardDriverAssignmentBodies.push(JSON.parse(bodyText));
-          } catch {
-            window.__prestigeDashboardDriverAssignmentBodies.push(bodyText);
+            parsedBody = JSON.parse(bodyText);
+          } catch {}
+
+          const parsedBodyKeys = parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+            ? Object.keys(parsedBody)
+            : [];
+          const isStatusOnlyPatch = parsedBodyKeys.length > 0 &&
+            parsedBodyKeys.every((key) => ["status", "updated_at"].includes(key));
+          const isCompletionFixture =
+            String(target).includes("id=eq.${dashboardCompletionActionFixture.id}") ||
+            String(target).includes("id=eq.${completedUndoAssignedFixture.id}") ||
+            String(target).includes("id=eq.${completedUndoConfirmedFixture.id}");
+
+          if (isStatusOnlyPatch && isCompletionFixture) {
+            window.__prestigeBookingCompletionRequests.push({
+              body: parsedBody,
+              url: String(target),
+            });
+
+            return new Response(JSON.stringify([]), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
           }
 
-          return new Response(JSON.stringify([]), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
+          if (
+            String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}") ||
+            String(target).includes("id=eq.${dashboardAssignedDriverClearFixture.id}")
+          ) {
+            window.__prestigeDashboardDriverAssignmentBodies.push(parsedBody);
+
+            return new Response(JSON.stringify([]), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
         }
 
         if (String(target).includes("/rest/v1/")) {
@@ -2102,6 +2279,328 @@ async function runChromeTest() {
       clearedAssignedDriverState.localMessageDistance !== null &&
         clearedAssignedDriverState.localMessageDistance <= 120,
       `Expected clear assigned driver status near assignment controls, got ${clearedAssignedDriverState.localMessageDistance}px`,
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedDashboardMarkCompleted = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+          candidate.innerText.includes("SQ779"),
+      );
+      const markButton = article?.querySelector("[data-dashboard-mark-completed='${dashboardCompletionActionFixture.id}']");
+
+      if (!markButton || markButton.disabled) {
+        return false;
+      }
+
+      markButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDashboardMarkCompleted, true, "Expected Dashboard Mark completed button to be clickable");
+
+    const dashboardCompletionState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+              candidate.innerText.includes("SQ779"),
+          );
+          const completionMessage = article?.querySelector("[data-booking-completion-message='${dashboardCompletionActionFixture.id}']");
+          const loadButton = article?.querySelector("[data-dashboard-load-booking='true']");
+          const messageRect = completionMessage?.getBoundingClientRect();
+          const loadButtonRect = loadButton?.getBoundingClientRect();
+          const localSuccessMessages = [...document.querySelectorAll("[data-booking-completion-message]")]
+            .filter((message) => message.textContent.trim() === "Booking marked completed.");
+
+          return {
+            articleText: article?.innerText || "",
+            completionRequests: window.__prestigeBookingCompletionRequests || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+            globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+            hasMarkButton: Boolean(article?.querySelector("[data-dashboard-mark-completed='${dashboardCompletionActionFixture.id}']")),
+            localMessageDistance:
+              loadButtonRect && messageRect ? Math.abs(messageRect.top - loadButtonRect.bottom) : null,
+            localMessageText: completionMessage?.textContent.trim() || "",
+            localSuccessMessageCount: localSuccessMessages.length,
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.localMessageText === "Booking marked completed." &&
+          candidateState?.articleText?.includes("completed")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "dashboard mark completed success state",
+    );
+
+    assert.deepEqual(
+      dashboardCompletionState.unhandledSupabaseCalls,
+      [],
+      `Expected mark completed Supabase calls to be mocked, got ${dashboardCompletionState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      dashboardCompletionState.fetchCalls.length,
+      1,
+      `Expected mark completed to make one mocked booking PATCH, got ${dashboardCompletionState.fetchCalls.join(", ")}`,
+    );
+    assert.match(
+      dashboardCompletionState.fetchCalls[0],
+      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardCompletionActionFixture.id}`),
+    );
+    assert.equal(dashboardCompletionState.completionRequests.length, 1);
+    assert.match(
+      dashboardCompletionState.completionRequests[0]?.url || "",
+      new RegExp(`\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardCompletionActionFixture.id}`),
+    );
+    assert.deepEqual(
+      Object.keys(dashboardCompletionState.completionRequests[0]?.body || {}).sort(),
+      ["status", "updated_at"],
+    );
+    assert.equal(dashboardCompletionState.completionRequests[0]?.body?.status, "completed");
+    assert.match(dashboardCompletionState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(dashboardCompletionState.localSuccessMessageCount, 1);
+    assert.notEqual(
+      dashboardCompletionState.globalStatusText,
+      "Booking marked completed.",
+      "Expected Mark completed feedback not to duplicate in the global status panel",
+    );
+    assert.equal(dashboardCompletionState.hasMarkButton, false);
+    assert.match(dashboardCompletionState.articleText, /Driver:\s*COMPLETION ACTION DRIVER/);
+    assert.match(dashboardCompletionState.articleText, /Route:\s*Changi Airport T3\s+\S\s+Capella Singapore/);
+    assert.match(dashboardCompletionState.articleText, /Customer \$115 \/ Driver \$75/);
+    assert.ok(
+      dashboardCompletionState.localMessageDistance !== null &&
+        dashboardCompletionState.localMessageDistance <= 120,
+      `Expected Mark completed status near booking controls, got ${dashboardCompletionState.localMessageDistance}px`,
+    );
+
+    await clickTab("Completed", "Completed Bookings");
+
+    const markedCompletedTabState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const completedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+              candidate.innerText.includes("SQ779"),
+          );
+
+          return completedArticle
+            ? {
+                articleText: completedArticle.innerText,
+                hasMarkCompletedSuccessMessage: Boolean(
+                  completedArticle.querySelector("[data-booking-completion-message='${dashboardCompletionActionFixture.id}']"),
+                ),
+                hasUndoButton: Boolean(
+                  completedArticle.querySelector("[data-completed-undo-booking='${dashboardCompletionActionFixture.id}']"),
+                ),
+              }
+            : false;
+        })()`),
+      10000,
+      "marked completed booking in Completed tab",
+    );
+
+    assert.match(markedCompletedTabState.articleText, /completed/);
+    assert.match(markedCompletedTabState.articleText, /COMPLETION ACTION TEST COMPANY/);
+    assert.equal(
+      markedCompletedTabState.hasMarkCompletedSuccessMessage,
+      false,
+      "Expected Mark completed success feedback not to move into the Completed tab card",
+    );
+    assert.equal(
+      markedCompletedTabState.hasUndoButton,
+      true,
+      "Expected marked completed booking to offer Undo completed in Completed tab",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedUndoAssignedCompletion = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("COMPLETED UNDO ASSIGNED TRAVELER") &&
+          candidate.innerText.includes("SQ889"),
+      );
+      const undoButton = article?.querySelector("[data-completed-undo-booking='${completedUndoAssignedFixture.id}']");
+
+      if (!undoButton || undoButton.disabled) {
+        return false;
+      }
+
+      undoButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedUndoAssignedCompletion, true, "Expected Undo completed button with driver to be clickable");
+
+    const undoAssignedCompletionState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const completedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETED UNDO ASSIGNED TRAVELER") &&
+              candidate.innerText.includes("SQ889"),
+          );
+          const completionMessage = document.querySelector("[data-booking-completion-message='${completedUndoAssignedFixture.id}']");
+          const feedbackCard = document.querySelector("[data-completed-undo-feedback-card='${completedUndoAssignedFixture.id}']");
+          const localUndoMessages = [...document.querySelectorAll("[data-booking-completion-message]")]
+            .filter((message) => message.textContent.trim() === "Completion undone.");
+
+          return {
+            articleText: completedArticle?.innerText || "",
+            completionRequests: window.__prestigeBookingCompletionRequests || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+            globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+            localUndoMessageCount: localUndoMessages.length,
+            messageText: completionMessage?.textContent.trim() || "",
+            messageIsInFeedbackCard: Boolean(feedbackCard?.contains(completionMessage)),
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.messageText === "Completion undone." &&
+          !candidateState?.articleText
+          ? candidateState
+          : false;
+      },
+      10000,
+      "undo completed assigned success state",
+    );
+
+    assert.deepEqual(
+      undoAssignedCompletionState.unhandledSupabaseCalls,
+      [],
+      `Expected undo completed assigned Supabase calls to be mocked, got ${undoAssignedCompletionState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      undoAssignedCompletionState.fetchCalls.length,
+      1,
+      `Expected undo completed assigned to make one mocked booking PATCH, got ${undoAssignedCompletionState.fetchCalls.join(", ")}`,
+    );
+    assert.match(
+      undoAssignedCompletionState.fetchCalls[0],
+      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${completedUndoAssignedFixture.id}`),
+    );
+    assert.equal(undoAssignedCompletionState.completionRequests.length, 1);
+    assert.deepEqual(
+      Object.keys(undoAssignedCompletionState.completionRequests[0]?.body || {}).sort(),
+      ["status", "updated_at"],
+    );
+    assert.equal(undoAssignedCompletionState.completionRequests[0]?.body?.status, "assigned");
+    assert.match(undoAssignedCompletionState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(undoAssignedCompletionState.localUndoMessageCount, 1);
+    assert.equal(
+      undoAssignedCompletionState.messageIsInFeedbackCard,
+      true,
+      "Expected undo completion feedback to remain in the local completed booking action area",
+    );
+    assert.notEqual(
+      undoAssignedCompletionState.globalStatusText,
+      "Completion undone.",
+      "Expected Undo completed feedback not to duplicate in the global status panel",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedUndoConfirmedCompletion = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("COMPLETED UNDO CONFIRMED TRAVELER") &&
+          candidate.innerText.includes("SQ890"),
+      );
+      const undoButton = article?.querySelector("[data-completed-undo-booking='${completedUndoConfirmedFixture.id}']");
+
+      if (!undoButton || undoButton.disabled) {
+        return false;
+      }
+
+      undoButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedUndoConfirmedCompletion, true, "Expected Undo completed button without driver to be clickable");
+
+    const undoConfirmedCompletionState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const completedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETED UNDO CONFIRMED TRAVELER") &&
+              candidate.innerText.includes("SQ890"),
+          );
+          const completionMessage = document.querySelector("[data-booking-completion-message='${completedUndoConfirmedFixture.id}']");
+          const feedbackCard = document.querySelector("[data-completed-undo-feedback-card='${completedUndoConfirmedFixture.id}']");
+          const localUndoMessages = [...document.querySelectorAll("[data-booking-completion-message]")]
+            .filter((message) => message.textContent.trim() === "Completion undone.");
+
+          return {
+            articleText: completedArticle?.innerText || "",
+            completionRequests: window.__prestigeBookingCompletionRequests || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+            globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+            localUndoMessageCount: localUndoMessages.length,
+            messageText: completionMessage?.textContent.trim() || "",
+            messageIsInFeedbackCard: Boolean(feedbackCard?.contains(completionMessage)),
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.messageText === "Completion undone." &&
+          !candidateState?.articleText
+          ? candidateState
+          : false;
+      },
+      10000,
+      "undo completed confirmed success state",
+    );
+
+    assert.deepEqual(
+      undoConfirmedCompletionState.unhandledSupabaseCalls,
+      [],
+      `Expected undo completed confirmed Supabase calls to be mocked, got ${undoConfirmedCompletionState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      undoConfirmedCompletionState.fetchCalls.length,
+      1,
+      `Expected undo completed confirmed to make one mocked booking PATCH, got ${undoConfirmedCompletionState.fetchCalls.join(", ")}`,
+    );
+    assert.match(
+      undoConfirmedCompletionState.fetchCalls[0],
+      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${completedUndoConfirmedFixture.id}`),
+    );
+    assert.equal(undoConfirmedCompletionState.completionRequests.length, 1);
+    assert.deepEqual(
+      Object.keys(undoConfirmedCompletionState.completionRequests[0]?.body || {}).sort(),
+      ["status", "updated_at"],
+    );
+    assert.equal(undoConfirmedCompletionState.completionRequests[0]?.body?.status, "confirmed");
+    assert.match(undoConfirmedCompletionState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(undoConfirmedCompletionState.localUndoMessageCount, 1);
+    assert.equal(
+      undoConfirmedCompletionState.messageIsInFeedbackCard,
+      true,
+      "Expected undo completion feedback without driver to remain in the local completed booking action area",
+    );
+    assert.notEqual(
+      undoConfirmedCompletionState.globalStatusText,
+      "Completion undone.",
+      "Expected Undo completed feedback without driver not to duplicate in the global status panel",
     );
 
     await clickTab("Drivers", "Driver Database");
@@ -5380,6 +5879,166 @@ async function runChromeTest() {
       /1 HarbourFront Avenue, Keppel Bay Tower > One Raffles Quay, North Tower > Capital Tower > BDC office/,
     );
     assert.doesNotMatch(timedScheduleState.driverDispatch, /Pickup > Drop-off|Marina Bay Sands|#02-01|#39-01/);
+
+    await evaluate(`(() => {
+      const singleCompletedBooking = ${JSON.stringify(completedEmptyStateUndoFixture)};
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+        if (
+          method === "GET" &&
+          String(target).includes("/rest/v1/bookings") &&
+          String(target).includes("select=")
+        ) {
+          return new Response(JSON.stringify([singleCompletedBooking]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (
+          method === "PATCH" &&
+          String(target).includes("/rest/v1/bookings") &&
+          String(target).includes("id=eq.${completedEmptyStateUndoFixture.id}")
+        ) {
+          try {
+            window.__prestigeBookingCompletionRequests.push({
+              body: JSON.parse(bodyText),
+              url: String(target),
+            });
+          } catch {
+            window.__prestigeBookingCompletionRequests.push({
+              body: bodyText,
+              url: String(target),
+            });
+          }
+
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (String(target).includes("/rest/v1/")) {
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${target}\`);
+          return new Response(JSON.stringify({ message: "Unhandled Supabase mock" }), {
+            status: 500,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        return window.__prestigeOriginalFetch(...args);
+      };
+    })()`);
+
+    await clickTab("Bookings", "Load Bookings");
+
+    const clickedEmptyStateLoadBookings = await evaluate(`(() => {
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Bookings",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedEmptyStateLoadBookings, true, "Expected empty-state Load Bookings button to be clickable");
+
+    await waitForCondition(
+      () =>
+        evaluate(`document.body.innerText.includes("COMPLETED EMPTY STATE TRAVELER")`),
+      10000,
+      "single completed booking loaded for empty-state undo test",
+    );
+
+    await clickTab("Completed", "Completed Bookings");
+
+    const clickedEmptyStateUndoCompletion = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("COMPLETED EMPTY STATE TRAVELER") &&
+          candidate.innerText.includes("SQ891"),
+      );
+      const undoButton = article?.querySelector("[data-completed-undo-booking='${completedEmptyStateUndoFixture.id}']");
+
+      if (!undoButton || undoButton.disabled) {
+        return false;
+      }
+
+      undoButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedEmptyStateUndoCompletion,
+      true,
+      "Expected single completed booking Undo completed button to be clickable",
+    );
+
+    const emptyCompletedUndoState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const completedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETED EMPTY STATE TRAVELER") &&
+              candidate.innerText.includes("SQ891"),
+          );
+          const completionMessage = document.querySelector("[data-booking-completion-message='${completedEmptyStateUndoFixture.id}']");
+          const feedbackCard = document.querySelector("[data-completed-undo-feedback-card='${completedEmptyStateUndoFixture.id}']");
+          const localUndoMessages = [...document.querySelectorAll("[data-booking-completion-message]")]
+            .filter((message) => message.textContent.trim() === "Completion undone.");
+
+          return {
+            articleText: completedArticle?.innerText || "",
+            completionRequests: window.__prestigeBookingCompletionRequests || [],
+            emptyStateVisible: document.body.innerText.includes("No completed bookings loaded yet."),
+            globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+            localUndoMessageCount: localUndoMessages.length,
+            messageText: completionMessage?.textContent.trim() || "",
+            messageIsInFeedbackCard: Boolean(feedbackCard?.contains(completionMessage)),
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.messageText === "Completion undone." &&
+          candidateState?.emptyStateVisible &&
+          !candidateState?.articleText
+          ? candidateState
+          : false;
+      },
+      10000,
+      "empty completed list after undo",
+    );
+
+    assert.deepEqual(
+      emptyCompletedUndoState.unhandledSupabaseCalls,
+      [],
+      `Expected single undo Supabase calls to be mocked, got ${emptyCompletedUndoState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(emptyCompletedUndoState.completionRequests.length, 1);
+    assert.deepEqual(
+      Object.keys(emptyCompletedUndoState.completionRequests[0]?.body || {}).sort(),
+      ["status", "updated_at"],
+    );
+    assert.equal(emptyCompletedUndoState.completionRequests[0]?.body?.status, "confirmed");
+    assert.equal(emptyCompletedUndoState.localUndoMessageCount, 1);
+    assert.equal(emptyCompletedUndoState.messageIsInFeedbackCard, true);
+    assert.equal(emptyCompletedUndoState.emptyStateVisible, true);
+    assert.notEqual(
+      emptyCompletedUndoState.globalStatusText,
+      "Completion undone.",
+      "Expected single undo feedback not to duplicate in the global status panel",
+    );
 
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {

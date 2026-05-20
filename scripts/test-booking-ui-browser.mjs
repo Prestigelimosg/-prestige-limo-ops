@@ -2815,11 +2815,15 @@ async function runChromeTest() {
           return {
             articleText: completedArticle?.innerText || "",
             completionRequests: window.__prestigeBookingCompletionRequests || [],
+            feedbackCardText: feedbackCard?.textContent.trim() || "",
             fetchCalls: window.__prestigeFetchCalls || [],
             globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
             localUndoMessageCount: localUndoMessages.length,
             messageText: completionMessage?.textContent.trim() || "",
             messageIsInFeedbackCard: Boolean(feedbackCard?.contains(completionMessage)),
+            staleBookingTextVisible:
+              document.body.innerText.includes("COMPLETED UNDO ASSIGNED TRAVELER") ||
+              document.body.innerText.includes("SQ889"),
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
           };
         })()`);
@@ -2859,6 +2863,16 @@ async function runChromeTest() {
       undoAssignedCompletionState.messageIsInFeedbackCard,
       true,
       "Expected undo completion feedback to remain in the local completed booking action area",
+    );
+    assert.equal(
+      undoAssignedCompletionState.staleBookingTextVisible,
+      false,
+      "Expected undone assigned booking details to be removed from the Completed tab",
+    );
+    assert.doesNotMatch(
+      undoAssignedCompletionState.feedbackCardText,
+      /COMPLETED UNDO ASSIGNED TRAVELER|SQ889/,
+      "Expected assigned undo feedback not to render stale completed booking details",
     );
     assert.notEqual(
       undoAssignedCompletionState.globalStatusText,
@@ -2905,11 +2919,15 @@ async function runChromeTest() {
           return {
             articleText: completedArticle?.innerText || "",
             completionRequests: window.__prestigeBookingCompletionRequests || [],
+            feedbackCardText: feedbackCard?.textContent.trim() || "",
             fetchCalls: window.__prestigeFetchCalls || [],
             globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
             localUndoMessageCount: localUndoMessages.length,
             messageText: completionMessage?.textContent.trim() || "",
             messageIsInFeedbackCard: Boolean(feedbackCard?.contains(completionMessage)),
+            staleBookingTextVisible:
+              document.body.innerText.includes("COMPLETED UNDO CONFIRMED TRAVELER") ||
+              document.body.innerText.includes("SQ890"),
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
           };
         })()`);
@@ -2949,6 +2967,16 @@ async function runChromeTest() {
       undoConfirmedCompletionState.messageIsInFeedbackCard,
       true,
       "Expected undo completion feedback without driver to remain in the local completed booking action area",
+    );
+    assert.equal(
+      undoConfirmedCompletionState.staleBookingTextVisible,
+      false,
+      "Expected undone confirmed booking details to be removed from the Completed tab",
+    );
+    assert.doesNotMatch(
+      undoConfirmedCompletionState.feedbackCardText,
+      /COMPLETED UNDO CONFIRMED TRAVELER|SQ890/,
+      "Expected confirmed undo feedback not to render stale completed booking details",
     );
     assert.notEqual(
       undoConfirmedCompletionState.globalStatusText,
@@ -6368,17 +6396,22 @@ async function runChromeTest() {
             articleText: completedArticle?.innerText || "",
             completionRequests: window.__prestigeBookingCompletionRequests || [],
             emptyStateVisible: document.body.innerText.includes("No completed bookings loaded yet."),
+            feedbackCardText: feedbackCard?.textContent.trim() || "",
             globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
             localUndoMessageCount: localUndoMessages.length,
             messageText: completionMessage?.textContent.trim() || "",
             messageIsInFeedbackCard: Boolean(feedbackCard?.contains(completionMessage)),
+            staleBookingTextVisible:
+              document.body.innerText.includes("COMPLETED EMPTY STATE TRAVELER") ||
+              document.body.innerText.includes("SQ891"),
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
           };
         })()`);
 
         return candidateState?.messageText === "Completion undone." &&
           candidateState?.emptyStateVisible &&
-          !candidateState?.articleText
+          !candidateState?.articleText &&
+          !candidateState?.staleBookingTextVisible
           ? candidateState
           : false;
       },
@@ -6400,6 +6433,16 @@ async function runChromeTest() {
     assert.equal(emptyCompletedUndoState.localUndoMessageCount, 1);
     assert.equal(emptyCompletedUndoState.messageIsInFeedbackCard, true);
     assert.equal(emptyCompletedUndoState.emptyStateVisible, true);
+    assert.equal(
+      emptyCompletedUndoState.staleBookingTextVisible,
+      false,
+      "Expected no stale completed booking details beside the empty state",
+    );
+    assert.doesNotMatch(
+      emptyCompletedUndoState.feedbackCardText,
+      /COMPLETED EMPTY STATE TRAVELER|SQ891/,
+      "Expected empty-state undo feedback not to render stale completed booking details",
+    );
     assert.notEqual(
       emptyCompletedUndoState.globalStatusText,
       "Completion undone.",

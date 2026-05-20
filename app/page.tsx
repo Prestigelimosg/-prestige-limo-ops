@@ -1858,18 +1858,14 @@ export default function Home() {
       ),
     [bookings],
   );
+  const loadedBookingIds = new Set(bookings.map((bookingRecord) => String(bookingRecord.id)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => String(bookingRecord.id)));
   const completedTabCompletionMessages = Object.entries(bookingCompletionMessages).filter(
     ([bookingId, completionMessage]) =>
+      loadedBookingIds.has(bookingId) &&
       !completedBookingIds.has(bookingId) &&
       completionMessage.text === "Completion undone." &&
       isUndoCompletionMessage(completionMessage),
-  );
-  const completedTabMessageIds = new Set(completedTabCompletionMessages.map(([bookingId]) => bookingId));
-  const completedTabBookings = bookings.filter(
-    (bookingRecord) =>
-      completedBookingIds.has(String(bookingRecord.id)) ||
-      completedTabMessageIds.has(String(bookingRecord.id)),
   );
 
   const multiBookingPreviewItems = Array.isArray(multiBookingNotice?.extractedBookingsPreview)
@@ -4539,11 +4535,31 @@ export default function Home() {
   );
   const completedBookingsPanel = (
     <>
-      {completedTabBookings.length > 0 ? (
+      {completedTabCompletionMessages.length > 0 ? (
+        <div className="mt-4 space-y-2" data-completed-undo-feedback-list="true">
+          {completedTabCompletionMessages.map(([bookingId, completionMessage]) => (
+            <div
+              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+              data-completed-undo-feedback-card={bookingId}
+              key={`completed-message-${bookingId}`}
+            >
+              <p
+                className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+                  completionMessage.tone,
+                )}`}
+                data-booking-completion-message={bookingId}
+              >
+                {completionMessage.text}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {completedBookings.length > 0 ? (
         <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
           <h3 className="text-sm font-semibold text-slate-800">Completed Bookings</h3>
           <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
-            {completedTabBookings.map((savedBooking) => {
+            {completedBookings.map((savedBooking) => {
               const routePoints = getRoutePoints(savedBooking);
               const pickup = clean(savedBooking.pickup_address) || routePoints[0] || "Pickup";
               const dropoff =
@@ -4557,42 +4573,6 @@ export default function Home() {
               const bookingCompletionMessage = isUndoCompletionMessage(rawBookingCompletionMessage)
                 ? rawBookingCompletionMessage
                 : null;
-              const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
-
-              if (!isCompleted && bookingCompletionMessage?.text === "Completion undone.") {
-                return (
-                  <div
-                    className="rounded-md border border-stone-200 bg-white p-3 text-sm"
-                    data-completed-undo-feedback-card={bookingId}
-                    key={`completed-message-${bookingId}`}
-                  >
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-1 text-slate-700">
-                        <p className="font-semibold text-slate-950">
-                          {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                        </p>
-                        <p>
-                          {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
-                          Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
-                          {getBookingName(savedBooking) || "Unknown"}
-                        </p>
-                        <p>{routeText}</p>
-                        {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <p
-                          className={`rounded-md border px-3 py-2 text-xs ${statusClass(
-                            bookingCompletionMessage.tone,
-                          )}`}
-                          data-booking-completion-message={bookingId}
-                        >
-                          {bookingCompletionMessage.text}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
 
               return (
                 <article

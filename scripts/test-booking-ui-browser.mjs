@@ -189,6 +189,93 @@ const persistedSuccessTestCompletedFixture = {
     traveler_name: "SUCCESS TEST TRAVELER",
   },
 };
+const persistedRealLutherGrahamFixture = {
+  ...loadedSavedBookingFixture,
+  id: 906001,
+  company_id: null,
+  booker_id: 906102,
+  traveler_id: 906103,
+  pickup_time: "0800",
+  pickup_address: "756 Woodlands Ave 4",
+  dropoff_address: "Changi Airport T2",
+  flight_no: "TR288",
+  route: "756 Woodlands Ave 4 > Changi Airport T2",
+  job_card:
+    "E class DEP\n06 May 2026, 0800hrs\nFlight: TR288\n756 Woodlands Ave 4 > Changi Airport T2\nBooker: Luther Graham\nPassenger: Edien Joy\nPax: 2",
+  status: "confirmed",
+  driver_name: "REGULAR REAL DRIVER",
+  created_at: "2026-05-18T02:00:00.000Z",
+  updated_at: "2026-05-18T02:00:00.000Z",
+  companies: null,
+  bookers: {
+    booker_name: "Luther Graham",
+    email: "luthergrahambk@gmail.com",
+    phone: "+65 8091 2613",
+  },
+  travelers: {
+    traveler_name: "Edien Joy",
+  },
+};
+const persistedRealAlisonLimFixture = {
+  ...loadedSavedBookingFixture,
+  id: 906002,
+  company_id: 906201,
+  booker_id: 906202,
+  traveler_id: 906203,
+  pickup_time: "0740",
+  pickup_address: "Changi Airport",
+  dropoff_address: "2C Anamalai Ave",
+  flight_no: "SQ377",
+  route: "Changi Airport > 2C Anamalai Ave",
+  job_card:
+    "AVF MNG\n14 May 2026, 0740hrs\nFlight: SQ377\nChangi Airport > 2C Anamalai Ave\nBooker: Alison\nPassenger: Lim Yeow Beng\nPax: 1",
+  status: "confirmed",
+  driver_name: "REGULAR REAL DRIVER",
+  created_at: "2026-05-18T02:10:00.000Z",
+  updated_at: "2026-05-18T02:10:00.000Z",
+  companies: {
+    company_name: "UOB",
+    domain: "uobgroup.com",
+  },
+  bookers: {
+    booker_name: "Alison",
+    email: "alison@uobgroup.com",
+    phone: "+65 8777 0303",
+  },
+  travelers: {
+    traveler_name: "Lim Yeow Beng",
+  },
+};
+const persistedRealNicoleRohanHarmlessTestFixture = {
+  ...loadedSavedBookingFixture,
+  id: 906003,
+  company_id: 906301,
+  booker_id: 906302,
+  traveler_id: 906303,
+  pickup_time: "0715",
+  pickup_address: "Fullerton Hotel",
+  dropoff_address: "Changi Airport T3",
+  flight_no: "NH844",
+  route: "Fullerton Hotel > Changi Airport T3",
+  job_card:
+    "AVF DEP\n29 May 2026, 0715hrs\nFlight: NH844\nFullerton Hotel > Changi Airport T3\nBooker: Nicole Yap\nPassenger: Mr. Rohan Singh\nNote: hotel asked William to test the pickup contact before departure\nPax: 1",
+  status: "confirmed",
+  driver_name: "REGULAR REAL DRIVER",
+  created_at: "2026-05-18T02:20:00.000Z",
+  updated_at: "2026-05-18T02:20:00.000Z",
+  companies: {
+    company_name: "BNY",
+    domain: "bny.com",
+  },
+  bookers: {
+    booker_name: "Nicole Yap",
+    email: "nicole.yap@bny.com",
+    phone: "+65 8777 0404",
+  },
+  travelers: {
+    traveler_name: "Mr. Rohan Singh",
+  },
+};
 const dashboardDriverAssignmentFixture = {
   id: "ui-dashboard-driver-assignment-fixture",
   company_id: 701,
@@ -2169,6 +2256,9 @@ async function runChromeTest() {
         ${JSON.stringify(legacyMrLeeCompletedDuplicateFixture)},
         ${JSON.stringify(persistedTestSaveBookingFixture)},
         ${JSON.stringify(persistedSuccessTestCompletedFixture)},
+        ${JSON.stringify(persistedRealLutherGrahamFixture)},
+        ${JSON.stringify(persistedRealAlisonLimFixture)},
+        ${JSON.stringify(persistedRealNicoleRohanHarmlessTestFixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
@@ -2305,7 +2395,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeBookingsState.savedCount,
-      "12",
+      "15",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate the visible Saved count",
     );
     assert.equal(
@@ -2329,6 +2419,36 @@ async function runChromeTest() {
       ),
       false,
       "Expected persisted browser-test fixture records to be isolated from Recent Bookings",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeBookingsState.articles.some(
+        (articleText) =>
+          articleText.includes("Luther Graham") &&
+          articleText.includes("Edien Joy") &&
+          articleText.includes("TR288"),
+      ),
+      true,
+      "Expected real Luther Graham booking to remain visible in Recent Bookings",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeBookingsState.articles.some(
+        (articleText) =>
+          articleText.includes("Alison") &&
+          articleText.includes("Lim Yeow Beng") &&
+          articleText.includes("SQ377"),
+      ),
+      true,
+      "Expected real Alison / Lim Yeow Beng booking to remain visible in Recent Bookings",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeBookingsState.articles.some(
+        (articleText) =>
+          articleText.includes("Nicole Yap") &&
+          articleText.includes("Mr. Rohan Singh") &&
+          articleText.includes("NH844"),
+      ),
+      true,
+      "Expected real Nicole Yap / Mr. Rohan Singh booking with harmless test note to remain visible in Recent Bookings",
     );
 
     await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
@@ -2459,7 +2579,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeDashboardState.matchingCount,
-      "12",
+      "15",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate Dashboard matching count",
     );
     assert.equal(
@@ -2483,6 +2603,36 @@ async function runChromeTest() {
       ),
       false,
       "Expected persisted browser-test fixture records to be isolated from Dashboard cards",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeDashboardState.articles.some(
+        (articleText) =>
+          articleText.includes("Luther Graham") &&
+          articleText.includes("Edien Joy") &&
+          articleText.includes("TR288"),
+      ),
+      true,
+      "Expected real Luther Graham booking to remain visible on Dashboard",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeDashboardState.articles.some(
+        (articleText) =>
+          articleText.includes("Alison") &&
+          articleText.includes("Lim Yeow Beng") &&
+          articleText.includes("SQ377"),
+      ),
+      true,
+      "Expected real Alison / Lim Yeow Beng booking to remain visible on Dashboard",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeDashboardState.articles.some(
+        (articleText) =>
+          articleText.includes("Nicole Yap") &&
+          articleText.includes("Mr. Rohan Singh") &&
+          articleText.includes("NH844"),
+      ),
+      true,
+      "Expected real Nicole Yap / Mr. Rohan Singh booking with harmless test note to remain visible on Dashboard",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);

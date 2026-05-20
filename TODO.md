@@ -200,6 +200,53 @@ Phase 1 goal: stable internal limo operations dashboard.
 - Enter a manual driver payout override and confirm driver payout and profit update immediately.
 - Save a booking with customer and driver override reasons, reload bookings, and confirm the saved pricing summary, extra-stop count, and child seat details remain visible.
 
+## Secure Driver Job Link / Live Location - Future Architecture
+
+- Do not use the numeric booking id in a public driver URL.
+- Future public driver URLs should use a secure random token:
+  - `/driver-job/[secure-token]`
+- Store only a token hash in the database, not the raw token.
+- Future `driver_job_links` table:
+  - `id`
+  - `booking_id`
+  - `token_hash`
+  - `created_at`
+  - `expires_at`
+  - `revoked_at`
+  - `last_accessed_at`
+  - `access_count` if useful
+- Future `bookings` field:
+  - `driver_vehicle_model`
+  - This keeps driver-entered vehicle model separate from the booking vehicle class.
+- Driver-facing page should show only safe job details:
+  - date/time
+  - pickup/drop-off
+  - flight
+  - passenger first/short display if appropriate
+  - pax
+  - driver notes needed for the job
+- Driver-facing page must not show:
+  - pricing/profit
+  - CRM internals
+  - all bookings
+  - admin controls
+  - booker email/internal notes
+- Stage plan:
+  - Stage 3B-1: secure token + read-only job page/API
+  - Stage 3B-2: driver submits name/contact/plate/model
+  - Stage 3C: driver OTW / POB / Completed buttons write status
+  - Stage 4: live location with explicit permission and throttled location updates
+  - Stage 5: optional WhatsApp Business integration
+- Mobile compatibility:
+  - iPhone Safari
+  - Android Chrome
+  - Samsung Internet
+  - Huawei/Xiaomi/Oppo/Vivo/Honor browsers
+  - big buttons
+  - simple form
+  - no app install
+- This requires explicit William approval before any Supabase migration.
+
 ## Phase 2 Out Of Scope
 
 - Flight tracking.

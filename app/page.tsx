@@ -1706,6 +1706,7 @@ export default function Home() {
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
   const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | null>(null);
+  const [rateMessageTarget, setRateMessageTarget] = useState<"header" | "override">("header");
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
@@ -2949,6 +2950,9 @@ export default function Home() {
 
   async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
     if (!supabase) {
+      if (!options?.preserveAction) {
+        setRateMessageTarget("header");
+      }
       const errorMessage =
         "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.";
 
@@ -2962,6 +2966,7 @@ export default function Home() {
     setSavingRates(true);
     if (!options?.preserveAction) {
       setRateAction("load");
+      setRateMessageTarget("header");
     }
     setMessage({ tone: "info", text: "Loading rates..." });
 
@@ -3055,6 +3060,7 @@ export default function Home() {
 
   async function saveDefaultRates() {
     if (!supabase) {
+      setRateMessageTarget("header");
       setMessage({
         tone: "error",
         text: "Save failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
@@ -3064,6 +3070,7 @@ export default function Home() {
 
     setSavingRates(true);
     setRateAction("defaults");
+    setRateMessageTarget("header");
     setMessage({ tone: "info", text: "Saving default rates..." });
 
     try {
@@ -3116,6 +3123,8 @@ export default function Home() {
   }
 
   async function saveRateOverride() {
+    setRateMessageTarget("override");
+
     if (!supabase) {
       setMessage({
         tone: "error",
@@ -4628,6 +4637,14 @@ export default function Home() {
       {message.text}
     </div>
   );
+  const rateOverrideStatusPanel = (
+    <div
+      className={`rounded-md border px-4 py-3 text-sm ${statusClass(message.tone)}`}
+      data-rate-feedback="override"
+    >
+      {message.text}
+    </div>
+  );
 
   const recentBookingsPanel = operationalBookings.length > 0 ? (
     <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
@@ -5929,7 +5946,7 @@ export default function Home() {
               </button>
             </div>
           </div>
-          {statusPanel}
+          {rateMessageTarget === "override" ? null : statusPanel}
 
           <div className="grid gap-5 lg:grid-cols-2">
             <div>
@@ -6106,14 +6123,19 @@ export default function Home() {
                 />
                 Transzend privacy
               </label>
-              <button
-                className="h-10 self-end rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                disabled={savingRates}
-                onClick={saveRateOverride}
-                type="button"
-              >
-                {rateAction === "override" ? "Saving Override..." : "Save Override"}
-              </button>
+              <div className="self-end">
+                <button
+                  className="h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  disabled={savingRates}
+                  onClick={saveRateOverride}
+                  type="button"
+                >
+                  {rateAction === "override" ? "Saving Override..." : "Save Override"}
+                </button>
+                {rateMessageTarget === "override" ? (
+                  <div className="mt-2">{rateOverrideStatusPanel}</div>
+                ) : null}
+              </div>
             </div>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-4">

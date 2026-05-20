@@ -369,6 +369,59 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertRatesState(state);
+
+    const clickedSaveOverride = await evaluate(`(() => {
+      const saveOverrideButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Override",
+      );
+
+      if (!saveOverrideButton || saveOverrideButton.disabled) {
+        return false;
+      }
+
+      saveOverrideButton.scrollIntoView({ block: "center" });
+      saveOverrideButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedSaveOverride, true, "Expected Save Override button to be clickable");
+
+    const overrideFeedbackState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const saveOverrideButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Save Override",
+          );
+          const feedback = document.querySelector("[data-rate-feedback='override']");
+          const globalStatusPanels = [...document.querySelectorAll("[data-status-panel='global']")];
+
+          if (!saveOverrideButton || !feedback || !feedback.textContent.includes("Save rate override failed:")) {
+            return false;
+          }
+
+          const buttonRect = saveOverrideButton.getBoundingClientRect();
+          const feedbackRect = feedback.getBoundingClientRect();
+
+          return {
+            distance: Math.abs(feedbackRect.top - buttonRect.bottom),
+            feedbackText: feedback.textContent.trim(),
+            globalOverrideMessages: globalStatusPanels.filter((panel) =>
+              panel.textContent.includes("Save rate override failed:"),
+            ).length,
+          };
+        })()`),
+      10000,
+      "Save Override local feedback",
+    );
+    assert.ok(
+      overrideFeedbackState.distance <= 80,
+      `Expected Save Override feedback near the button, got ${overrideFeedbackState.distance}px`,
+    );
+    assert.equal(
+      overrideFeedbackState.globalOverrideMessages,
+      0,
+      "Expected Save Override feedback not to duplicate in the top Rates status panel",
+    );
+
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {
     let pageSnapshot = "";

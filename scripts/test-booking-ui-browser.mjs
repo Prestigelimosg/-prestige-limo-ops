@@ -129,6 +129,66 @@ const loadedSavedBookingFixture = {
     traveler_name: "LOADED SAVED TRAVELER",
   },
 };
+const persistedTestSaveBookingFixture = {
+  ...loadedSavedBookingFixture,
+  id: 905001,
+  company_id: 905101,
+  booker_id: 905102,
+  traveler_id: 905103,
+  pickup_time: "1315",
+  pickup_address: "TEST SAVE PICKUP",
+  dropoff_address: "TEST SAVE DROPOFF",
+  flight_no: "TS905",
+  route: "TEST SAVE PICKUP > TEST SAVE DROPOFF",
+  job_card:
+    "AVF DEP\n29 May 2026, 1315hrs\nFlight: TS905\nTEST SAVE PICKUP > TEST SAVE DROPOFF\nPassenger: TEST SAVE TRAVELER B\nPax: 1",
+  status: "confirmed",
+  driver_name: "TEST DRIVER CRM 20260516",
+  created_at: "2026-05-18T00:00:00.000Z",
+  updated_at: "2026-05-18T00:00:00.000Z",
+  companies: {
+    company_name: "TEST SAVE COMPANY B",
+    domain: "test-save.example.com",
+  },
+  bookers: {
+    booker_name: "TEST SAVE BOOKER B",
+    email: "test-save-booker@example.com",
+    phone: "+65 8777 0101",
+  },
+  travelers: {
+    traveler_name: "TEST SAVE TRAVELER B",
+  },
+};
+const persistedSuccessTestCompletedFixture = {
+  ...loadedSavedBookingFixture,
+  id: 905002,
+  company_id: 905201,
+  booker_id: 905202,
+  traveler_id: 905203,
+  pickup_time: "1645",
+  pickup_address: "SUCCESS TEST PICKUP",
+  dropoff_address: "SUCCESS TEST DROPOFF",
+  flight_no: "ST906",
+  route: "SUCCESS TEST PICKUP > SUCCESS TEST DROPOFF",
+  job_card:
+    "AVF MNG\n30 May 2026, 1645hrs\nFlight: ST906\nSUCCESS TEST PICKUP > SUCCESS TEST DROPOFF\nPassenger: SUCCESS TEST TRAVELER\nPax: 1",
+  status: "completed",
+  driver_name: "TEST DRIVER CRM 20260516",
+  created_at: "2026-05-18T01:00:00.000Z",
+  updated_at: "2026-05-18T01:00:00.000Z",
+  companies: {
+    company_name: "SUCCESS TEST COMPANY",
+    domain: "success-test.example.com",
+  },
+  bookers: {
+    booker_name: "SUCCESS TEST BOOKER",
+    email: "success-test-booker@example.com",
+    phone: "+65 8777 0202",
+  },
+  travelers: {
+    traveler_name: "SUCCESS TEST TRAVELER",
+  },
+};
 const dashboardDriverAssignmentFixture = {
   id: "ui-dashboard-driver-assignment-fixture",
   company_id: 701,
@@ -2107,6 +2167,8 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardOtwClearDriverFixture)},
         ${JSON.stringify(legacyMrLeeNoCompanySavedBookingFixture)},
         ${JSON.stringify(legacyMrLeeCompletedDuplicateFixture)},
+        ${JSON.stringify(persistedTestSaveBookingFixture)},
+        ${JSON.stringify(persistedSuccessTestCompletedFixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
@@ -2256,6 +2318,18 @@ async function runChromeTest() {
       false,
       "Expected stale legacy Mr Lee browser-test duplicates not to appear as visible Recent Bookings cards",
     );
+    assert.equal(
+      hiddenLegacyMrLeeBookingsState.articles.some(
+        (articleText) =>
+          articleText.includes("TEST SAVE TRAVELER B") ||
+          articleText.includes("TEST SAVE BOOKER B") ||
+          articleText.includes("SUCCESS TEST TRAVELER") ||
+          articleText.includes("SUCCESS TEST BOOKER") ||
+          articleText.includes("TEST DRIVER CRM 20260516"),
+      ),
+      false,
+      "Expected persisted browser-test fixture records to be isolated from Recent Bookings",
+    );
 
     await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
     await waitForCondition(
@@ -2397,6 +2471,18 @@ async function runChromeTest() {
       hiddenLegacyMrLeeDashboardState.articles.some((articleText) => articleText.includes("BROWSER UI TEST Mr Lee")),
       false,
       "Expected stale legacy Mr Lee browser-test duplicates not to appear as visible Dashboard cards",
+    );
+    assert.equal(
+      hiddenLegacyMrLeeDashboardState.articles.some(
+        (articleText) =>
+          articleText.includes("TEST SAVE TRAVELER B") ||
+          articleText.includes("TEST SAVE BOOKER B") ||
+          articleText.includes("SUCCESS TEST TRAVELER") ||
+          articleText.includes("SUCCESS TEST BOOKER") ||
+          articleText.includes("TEST DRIVER CRM 20260516"),
+      ),
+      false,
+      "Expected persisted browser-test fixture records to be isolated from Dashboard cards",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);
@@ -3087,6 +3173,20 @@ async function runChromeTest() {
     });
 
     await clickTab("Completed", "Completed Bookings");
+
+    const hiddenPersistedCompletedTestState = await evaluate(`(() => {
+      return [...document.querySelectorAll("article")].map((article) => article.innerText);
+    })()`);
+    assert.equal(
+      hiddenPersistedCompletedTestState.some(
+        (articleText) =>
+          articleText.includes("SUCCESS TEST TRAVELER") ||
+          articleText.includes("SUCCESS TEST BOOKER") ||
+          articleText.includes("TEST DRIVER CRM 20260516"),
+      ),
+      false,
+      "Expected persisted completed browser-test fixture records to be isolated from Completed Bookings",
+    );
 
     const completedStatusFlowTabState = await waitForCondition(
       () =>

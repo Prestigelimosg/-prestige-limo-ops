@@ -1396,6 +1396,14 @@ function getJobCardName(jobCard: string | null) {
 }
 
 const legacyBrowserTestBookingName = "BROWSER UI TEST Mr Lee";
+const persistedBrowserTestBookingMarkers = [
+  "BROWSER UI TEST",
+  "TEST SAVE TRAVELER",
+  "TEST SAVE BOOKER",
+  "SUCCESS TEST TRAVELER",
+  "SUCCESS TEST BOOKER",
+  "TEST DRIVER CRM 20260516",
+];
 
 function isLegacyMrLeeBrowserTestBooking(bookingRecord: BookingRecord) {
   const travelerName = clean(bookingRecord.travelers?.traveler_name) || getJobCardName(bookingRecord.job_card);
@@ -1408,6 +1416,33 @@ function isLegacyMrLeeBrowserTestBooking(bookingRecord: BookingRecord) {
     getBookingDateKey(bookingRecord) === "2026-05-20" &&
     formatPickupTime(bookingRecord.pickup_time) === "0700hrs"
   );
+}
+
+function isBrowserUiMockBooking(bookingRecord: BookingRecord) {
+  return /^ui-/i.test(clean(String(bookingRecord.id)));
+}
+
+function isPersistedBrowserTestBooking(bookingRecord: BookingRecord) {
+  if (isBrowserUiMockBooking(bookingRecord)) {
+    return false;
+  }
+
+  const searchableText = [
+    getBookingName(bookingRecord),
+    getBookerName(bookingRecord),
+    getBookingCompanyName(bookingRecord),
+    bookingRecord.driver_name,
+    bookingRecord.job_card,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase();
+
+  return persistedBrowserTestBookingMarkers.some((marker) => searchableText.includes(marker));
+}
+
+function isOperationalBooking(bookingRecord: BookingRecord) {
+  return !isLegacyMrLeeBrowserTestBooking(bookingRecord) && !isPersistedBrowserTestBooking(bookingRecord);
 }
 
 function getBookingName(bookingRecord: BookingRecord) {
@@ -1882,10 +1917,7 @@ export default function Home() {
       .join("\n\n");
   }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
 
-  const operationalBookings = useMemo(
-    () => bookings.filter((bookingRecord) => !isLegacyMrLeeBrowserTestBooking(bookingRecord)),
-    [bookings],
-  );
+  const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
   const dashboardBookings = useMemo(() => {
     const query = clean(searchTerm).toLowerCase();
 

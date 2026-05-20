@@ -458,6 +458,14 @@ function clean(value: string | null | undefined) {
   return (value ?? "").trim();
 }
 
+function isInactiveDriver(driver: DriverRecord | null | undefined) {
+  return clean(driver?.availability_status).toLowerCase() === "inactive";
+}
+
+function isAssignableDriver(driver: DriverRecord) {
+  return !isInactiveDriver(driver);
+}
+
 function getNeedsReviewWarnings(booking: BookingForm) {
   const warnings: string[] = [];
   const bookingType = normalizeBookingType(booking.bookingType);
@@ -1487,6 +1495,7 @@ export default function Home() {
     useState<DriverProfileDraft>(initialDriverProfileDraft);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
+  const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
   const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1641,6 +1650,7 @@ export default function Home() {
     () => rateTravelers.filter((travelerRecord) => hasRateOverrideValues(travelerRecord)),
     [rateTravelers],
   );
+  const assignableDrivers = useMemo(() => drivers.filter(isAssignableDriver), [drivers]);
 
   const assignedDriverId = clean(booking.driverId);
   const assignedDriverName = clean(booking.driverName).toLowerCase();
@@ -1650,7 +1660,10 @@ export default function Home() {
       (assignedDriverName && clean(driver.driver_name).toLowerCase() === assignedDriverName),
   );
   const assignedDriverSelectValue = assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : "");
-  const showSavedAssignedDriverOption = Boolean(assignedDriverId && !assignedDriverRecord);
+  const assignedDriverIsInactive = Boolean(assignedDriverRecord && isInactiveDriver(assignedDriverRecord));
+  const showSavedAssignedDriverOption = Boolean(
+    assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
+  );
   const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
 
   const draftDriverDispatchCard = useMemo(() => {
@@ -3168,6 +3181,63 @@ export default function Home() {
     }
   }
 
+  async function deactivateDriverProfile() {
+    if (!supabase) {
+      setMessage({
+        tone: "error",
+        text: "Deactivate driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      });
+      return;
+    }
+
+    const driverId = clean(driverProfileDraft.driverId);
+
+    if (!driverId) {
+      setMessage({ tone: "error", text: "Select an existing driver before deactivating." });
+      return;
+    }
+
+    setDeactivatingDriverProfile(true);
+    setMessage({ tone: "info", text: "Deactivating driver..." });
+
+    try {
+      const payload = {
+        availability_status: "inactive",
+        updated_at: new Date().toISOString(),
+      };
+      const result = await supabase.from("drivers").update(payload).eq("id", driverId);
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      setDrivers((current) =>
+        current.map((driver) =>
+          String(driver.id) === driverId
+            ? {
+                ...driver,
+                availability_status: "inactive",
+              }
+            : driver,
+        ),
+      );
+      setDriverProfileDraft((current) =>
+        current.driverId === driverId
+          ? {
+              ...current,
+              availabilityStatus: "inactive",
+            }
+          : current,
+      );
+      setMessage({ tone: "success", text: "Driver deactivated." });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown driver deactivate error.";
+      setMessage({ tone: "error", text: `Deactivate driver failed: ${errorMessage}` });
+    } finally {
+      setDeactivatingDriverProfile(false);
+    }
+  }
+
   async function saveBooking() {
     const currentNeedsReviewWarnings = [
       ...getNeedsReviewWarnings(booking),
@@ -3724,6 +3794,13 @@ export default function Home() {
           const hasDriver = Boolean(driverName);
           const hasSavedDriver = Boolean(clean(savedBooking.driver_name) || savedBooking.driver_id);
           const driverAssignmentMessage = driverAssignmentMessages[bookingId] ?? null;
+          const selectedDraftDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
+          const selectedDraftDriverIsInactive = Boolean(
+            selectedDraftDriver && isInactiveDriver(selectedDraftDriver),
+          );
+          const showSavedDashboardDriverOption = Boolean(
+            driverDraft.driverId && (!selectedDraftDriver || selectedDraftDriverIsInactive),
+          );
 
           return (
             <article
@@ -3799,7 +3876,16 @@ export default function Home() {
                       value={driverDraft.driverId}
                     >
                       <option value="">Manual / unselected</option>
-                      {drivers.map((driver) => (
+                      {showSavedDashboardDriverOption ? (
+                        <option disabled={selectedDraftDriverIsInactive} value={driverDraft.driverId}>
+                          Saved:{" "}
+                          {clean(driverDraft.driverName) ||
+                            clean(selectedDraftDriver?.driver_name) ||
+                            `Driver ${driverDraft.driverId}`}
+                          {selectedDraftDriverIsInactive ? " (inactive)" : ""}
+                        </option>
+                      ) : null}
+                      {assignableDrivers.map((driver) => (
                         <option key={driver.id} value={driver.id}>
                           {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
                         </option>
@@ -4641,11 +4727,12 @@ export default function Home() {
                   >
                     <option value="">Select driver</option>
                     {showSavedAssignedDriverOption ? (
-                      <option value={assignedDriverId}>
+                      <option disabled={assignedDriverIsInactive} value={assignedDriverId}>
                         Saved: {clean(booking.driverName) || `Driver ${assignedDriverId}`}
+                        {assignedDriverIsInactive ? " (inactive)" : ""}
                       </option>
                     ) : null}
-                    {drivers.map((driver) => (
+                    {assignableDrivers.map((driver) => (
                       <option key={driver.id} value={driver.id}>
                         {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
                       </option>
@@ -4965,16 +5052,27 @@ export default function Home() {
 	              >
 	                {loadingDrivers ? "Loading Driver Database..." : "Load Driver Database"}
 	              </button>
-	              <button
-	                className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-	                disabled={savingDriverProfile}
-	                onClick={saveDriverProfile}
-	                type="button"
-	              >
-	                {savingDriverProfile ? "Saving..." : "Save Driver Profile"}
-	              </button>
-	            </div>
-	          </div>
+		              <button
+		                className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+		                disabled={savingDriverProfile}
+		                onClick={saveDriverProfile}
+		                type="button"
+		              >
+		                {savingDriverProfile ? "Saving..." : "Save Driver Profile"}
+		              </button>
+                  {driverProfileDraft.driverId ? (
+                    <button
+                      className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-driver-deactivate-button="true"
+                      disabled={savingDriverProfile || deactivatingDriverProfile}
+                      onClick={deactivateDriverProfile}
+                      type="button"
+                    >
+                      {deactivatingDriverProfile ? "Deactivating..." : "Deactivate driver"}
+                    </button>
+                  ) : null}
+		            </div>
+		          </div>
             {statusPanel}
 
 	          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
@@ -5028,11 +5126,12 @@ export default function Home() {
 	                  }
 	                  value={driverProfileDraft.availabilityStatus}
 	                >
-	                  <option value="available">Available</option>
-	                  <option value="busy">Busy</option>
-	                  <option value="off">Off</option>
-	                </select>
-	              </label>
+		                  <option value="available">Available</option>
+		                  <option value="busy">Busy</option>
+		                  <option value="off">Off</option>
+		                  <option value="inactive">Inactive</option>
+		                </select>
+		              </label>
 	              <label>
 	                <span className="mb-1 block text-sm font-medium text-slate-700">Preferred areas</span>
 	                <input
@@ -5121,7 +5220,14 @@ export default function Home() {
 	                      }
 	                      type="button"
 	                    >
-	                      <p className="font-semibold">{driver.driver_name}</p>
+		                      <p className="flex flex-wrap items-center gap-2 font-semibold">
+                            <span>{driver.driver_name}</span>
+                            {isInactiveDriver(driver) ? (
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                                Inactive
+                              </span>
+                            ) : null}
+                          </p>
 	                      <p className="text-slate-600">
 	                        {[driver.vehicle_type, driver.availability_status]
 	                          .map(clean)

@@ -2620,20 +2620,197 @@ async function runChromeTest() {
     assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DSP?.amount, 55);
     assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DSP?.perHour, true);
 
+    const clickedRenamedDriverForDeactivate = await evaluate(`(() => {
+      const driverButton = [...document.querySelectorAll("button")].find(
+        (button) =>
+          button.innerText.includes("RENAMED REUSABLE PROFILE TEST DRIVER") &&
+          button.innerText.includes("SLR902R"),
+      );
+
+      if (!driverButton || driverButton.disabled) {
+        return false;
+      }
+
+      driverButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedRenamedDriverForDeactivate, true, "Expected renamed driver profile to be selectable for deactivation");
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedDeactivateDriver = await evaluate(`(() => {
+      const deactivateButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Deactivate driver",
+      );
+
+      if (!deactivateButton || deactivateButton.disabled) {
+        return false;
+      }
+
+      deactivateButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDeactivateDriver, true, "Expected Deactivate driver button to be clickable");
+
+    const deactivatedDriverProfileState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const labels = [...document.querySelectorAll("label")];
+          const fieldValue = (labelText) => {
+            const label = labels.find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            const control = label?.querySelector("input, select, textarea");
+
+            if (!control) {
+              return "";
+            }
+
+            if (control.tagName === "SELECT") {
+              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
+            }
+
+            return control.value || "";
+          };
+          const statusPanel = document.querySelector("[data-status-panel='global']");
+          const deactivateButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Deactivate driver",
+          );
+          const driverButton = [...document.querySelectorAll("button")].find(
+            (button) =>
+              button.innerText.includes("RENAMED REUSABLE PROFILE TEST DRIVER") &&
+              button.innerText.includes("SLR902R"),
+          );
+          const deactivateButtonRect = deactivateButton?.getBoundingClientRect();
+          const statusRect = statusPanel?.getBoundingClientRect();
+          const deactivateRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
+            (entry) => entry.method === "PATCH" && String(entry.url).includes("/rest/v1/drivers"),
+          );
+          const bookingRequests = (window.__prestigeDriverProfileRequestBodies || []).filter((entry) =>
+            String(entry.url).includes("/rest/v1/bookings"),
+          );
+
+          return {
+            driverButtonText: driverButton?.innerText || "",
+            fetchCalls: window.__prestigeFetchCalls || [],
+            bookingRequestCount: bookingRequests.length,
+            requestBodies: window.__prestigeDriverProfileRequestBodies || [],
+            statusText: statusPanel?.textContent.trim() || "",
+            statusDistanceFromDeactivateButton:
+              deactivateButtonRect && statusRect ? Math.abs(statusRect.top - deactivateButtonRect.bottom) : null,
+            deactivateRequest: deactivateRequest ? { url: deactivateRequest.url, body: deactivateRequest.body } : null,
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+            fields: {
+              driverName: fieldValue("Driver name"),
+              availability: fieldValue("Availability"),
+            },
+          };
+        })()`);
+
+        return candidateState?.statusText === "Driver deactivated." &&
+          candidateState?.driverButtonText?.includes("Inactive")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "driver profile deactivate success state",
+    );
+
+    assert.deepEqual(
+      deactivatedDriverProfileState.unhandledSupabaseCalls,
+      [],
+      `Expected driver deactivation Supabase calls to be mocked, got ${deactivatedDriverProfileState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.ok(
+      deactivatedDriverProfileState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
+      `Expected driver deactivation to call only drivers REST endpoints, got ${deactivatedDriverProfileState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(
+      deactivatedDriverProfileState.bookingRequestCount,
+      0,
+      "Expected driver deactivation not to update booking rows",
+    );
+    assert.match(
+      deactivatedDriverProfileState.deactivateRequest?.url || "",
+      /\/rest\/v1\/drivers.*id=eq\.901/,
+    );
+    assert.equal(deactivatedDriverProfileState.deactivateRequest?.body?.availability_status, "inactive");
+    assert.ok(
+      typeof deactivatedDriverProfileState.deactivateRequest?.body?.updated_at === "string" &&
+        deactivatedDriverProfileState.deactivateRequest.body.updated_at.length > 0,
+      "Expected driver deactivation to update updated_at timestamp",
+    );
+    assert.match(deactivatedDriverProfileState.driverButtonText, /RENAMED REUSABLE PROFILE TEST DRIVER/);
+    assert.match(deactivatedDriverProfileState.driverButtonText, /inactive/);
+    assert.match(deactivatedDriverProfileState.driverButtonText, /Inactive/);
+    assert.equal(deactivatedDriverProfileState.fields.driverName, "RENAMED REUSABLE PROFILE TEST DRIVER");
+    assert.equal(deactivatedDriverProfileState.fields.availability, "Inactive");
+    assert.ok(
+      deactivatedDriverProfileState.statusDistanceFromDeactivateButton !== null &&
+        deactivatedDriverProfileState.statusDistanceFromDeactivateButton <= 120,
+      `Expected Driver deactivated status near Deactivate driver button, got ${deactivatedDriverProfileState.statusDistanceFromDeactivateButton}px`,
+    );
+
+    await clickTab("Dispatch", "Create Job Card");
+    const dispatchInactiveDriverOptionsState = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const label = [...document.querySelectorAll("label")].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Driver",
+      );
+      const select = label?.querySelector("select");
+
+      return {
+        optionTexts: [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim()),
+      };
+    })()`);
+    assert.ok(
+      dispatchInactiveDriverOptionsState.optionTexts.every(
+        (optionText) => !optionText.includes("RENAMED REUSABLE PROFILE TEST DRIVER"),
+      ),
+      `Expected inactive driver to be hidden from Dispatch assignment, got ${dispatchInactiveDriverOptionsState.optionTexts.join(", ")}`,
+    );
+
     await clickTab("Dashboard", "Operations Dashboard");
     const dashboardAfterDriverProfileSaveState = await evaluate(`(() => {
-      const article = [...document.querySelectorAll("article")].find(
+      const assignmentArticle = [...document.querySelectorAll("article")].find(
         (candidate) =>
           candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
           candidate.innerText.includes("SQ777"),
       );
+      const oldAssignedArticle = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("LOADED SAVED TRAVELER") &&
+          candidate.innerText.includes("SQ999"),
+      );
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const driverLabel = [...(assignmentArticle?.querySelectorAll("label") || [])].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Driver",
+      );
+      const driverSelect = driverLabel?.querySelector("select");
 
       return {
-        articleText: article?.innerText || "",
+        articleText: assignmentArticle?.innerText || "",
+        oldAssignedArticleText: oldAssignedArticle?.innerText || "",
+        assignmentDriverOptionTexts: [...(driverSelect?.querySelectorAll("option") || [])].map((option) =>
+          option.textContent.trim(),
+        ),
       };
     })()`);
     assert.match(dashboardAfterDriverProfileSaveState.articleText, /Assign driver to this booking/);
     assert.match(dashboardAfterDriverProfileSaveState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
+    assert.ok(
+      dashboardAfterDriverProfileSaveState.assignmentDriverOptionTexts.every(
+        (optionText) => !optionText.includes("RENAMED REUSABLE PROFILE TEST DRIVER"),
+      ),
+      `Expected inactive driver to be hidden from Dashboard assignment, got ${dashboardAfterDriverProfileSaveState.assignmentDriverOptionTexts.join(", ")}`,
+    );
+    assert.match(dashboardAfterDriverProfileSaveState.oldAssignedArticleText, /Driver:\s*LOADED SAVED DRIVER/);
+    assert.match(dashboardAfterDriverProfileSaveState.oldAssignedArticleText, /Contact:\s*\+65 8888 0000/);
 
     await clickTab("Dispatch", "Create Job Card");
     const dispatchDraftAfterDashboardAssignment = await evaluate(extractStateScript);

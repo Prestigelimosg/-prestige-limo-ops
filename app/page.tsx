@@ -185,6 +185,8 @@ type BookingRecord = {
   } | null;
 };
 
+type BookingStatusValue = "assigned" | "confirmed" | "driver_otw" | "pob" | "completed";
+
 type Message = {
   tone: "info" | "success" | "error";
   text: string;
@@ -470,8 +472,46 @@ function hasBookingDriver(bookingRecord: Pick<BookingRecord, "driver_id" | "driv
   return Boolean(bookingRecord.driver_id || clean(bookingRecord.driver_name));
 }
 
-function undoCompletedStatus(bookingRecord: Pick<BookingRecord, "driver_id" | "driver_name">) {
+function undoCompletedStatus(
+  bookingRecord: Pick<BookingRecord, "driver_id" | "driver_name">,
+): BookingStatusValue {
   return hasBookingDriver(bookingRecord) ? "assigned" : "confirmed";
+}
+
+function revertOtwStatus(
+  bookingRecord: Pick<BookingRecord, "driver_id" | "driver_name">,
+): BookingStatusValue {
+  return hasBookingDriver(bookingRecord) ? "assigned" : "confirmed";
+}
+
+function bookingStatusLabel(status: string | null) {
+  const normalizedStatus = clean(status).toLowerCase();
+
+  if (normalizedStatus === "confirmed") {
+    return "Confirmed";
+  }
+
+  if (normalizedStatus === "assigned") {
+    return "Assigned";
+  }
+
+  if (normalizedStatus === "driver_otw") {
+    return "Driver OTW";
+  }
+
+  if (normalizedStatus === "pob") {
+    return "POB";
+  }
+
+  if (normalizedStatus === "completed") {
+    return "Completed";
+  }
+
+  if (normalizedStatus === "cancelled") {
+    return "Cancelled";
+  }
+
+  return clean(status) || "Pending";
 }
 
 function isMarkCompletionMessage(message: Message | null | undefined) {
@@ -489,6 +529,25 @@ function isUndoCompletionMessage(message: Message | null | undefined) {
       (message.text === "Undoing completion..." ||
         message.text === "Completion undone." ||
         message.text.startsWith("Undo completed failed")),
+  );
+}
+
+function isDashboardStatusMessage(message: Message | null | undefined) {
+  if (!message) {
+    return false;
+  }
+
+  return (
+    isMarkCompletionMessage(message) ||
+    message.text === "Marking driver OTW..." ||
+    message.text === "Driver marked OTW." ||
+    message.text.startsWith("Mark OTW failed") ||
+    message.text === "Marking passenger on board..." ||
+    message.text === "Passenger on board." ||
+    message.text.startsWith("Mark POB failed") ||
+    message.text === "Reverting status..." ||
+    message.text === "Status reverted." ||
+    message.text.startsWith("Revert status failed")
   );
 }
 
@@ -1092,6 +1151,14 @@ function bookingStatusClass(status: string | null) {
 
   if (normalizedStatus === "assigned") {
     return "bg-sky-50 text-sky-700 ring-sky-200";
+  }
+
+  if (normalizedStatus === "driver_otw") {
+    return "bg-amber-50 text-amber-800 ring-amber-200";
+  }
+
+  if (normalizedStatus === "pob") {
+    return "bg-indigo-50 text-indigo-700 ring-indigo-200";
   }
 
   if (normalizedStatus === "completed") {
@@ -3626,7 +3693,7 @@ export default function Home() {
 
   async function updateBookingStatusOnly(
     bookingRecord: BookingRecord,
-    nextStatus: "assigned" | "confirmed" | "completed",
+    nextStatus: BookingStatusValue,
     loadingText: string,
     successText: string,
     errorPrefix: string,
@@ -3690,6 +3757,39 @@ export default function Home() {
       "Marking booking completed...",
       "Booking marked completed.",
       "Mark completed failed",
+    );
+  }
+
+  async function markBookingOtw(bookingRecord: BookingRecord) {
+    await updateBookingStatusOnly(
+      bookingRecord,
+      "driver_otw",
+      "Marking driver OTW...",
+      "Driver marked OTW.",
+      "Mark OTW failed",
+    );
+  }
+
+  async function markBookingPob(bookingRecord: BookingRecord) {
+    await updateBookingStatusOnly(
+      bookingRecord,
+      "pob",
+      "Marking passenger on board...",
+      "Passenger on board.",
+      "Mark POB failed",
+    );
+  }
+
+  async function revertBookingStatus(bookingRecord: BookingRecord) {
+    const currentStatus = clean(bookingRecord.status).toLowerCase();
+    const nextStatus = currentStatus === "pob" ? "driver_otw" : revertOtwStatus(bookingRecord);
+
+    await updateBookingStatusOnly(
+      bookingRecord,
+      nextStatus,
+      "Reverting status...",
+      "Status reverted.",
+      "Revert status failed",
     );
   }
 
@@ -3918,8 +4018,13 @@ export default function Home() {
         {sectionBookings.map((savedBooking) => {
           const driverDraft = getDriverDraft(savedBooking);
           const bookingId = String(savedBooking.id);
-          const isAssigned = clean(savedBooking.status).toLowerCase() === "assigned";
-          const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
+          const normalizedBookingStatus = clean(savedBooking.status).toLowerCase();
+          const isAssigned = normalizedBookingStatus === "assigned";
+          const isCompleted = normalizedBookingStatus === "completed";
+          const isDriverOtw = normalizedBookingStatus === "driver_otw";
+          const isPob = normalizedBookingStatus === "pob";
+          const canMarkOtw = normalizedBookingStatus === "confirmed" || normalizedBookingStatus === "assigned";
+          const canMarkPob = isDriverOtw;
           const bookingType = clean(savedBooking.booking_type) || "Booking";
           const vehicle = clean(savedBooking.vehicle) || "Vehicle";
           const bookerName = getBookerName(savedBooking);
@@ -3929,9 +4034,12 @@ export default function Home() {
           const hasSavedDriver = Boolean(clean(savedBooking.driver_name) || savedBooking.driver_id);
           const driverAssignmentMessage = driverAssignmentMessages[bookingId] ?? null;
           const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
-          const bookingCompletionMessage = isMarkCompletionMessage(rawBookingCompletionMessage)
+          const bookingCompletionMessage = isDashboardStatusMessage(rawBookingCompletionMessage)
             ? rawBookingCompletionMessage
             : null;
+          const revertStatusLabel = isPob
+            ? "Revert to OTW"
+            : `Revert to ${hasSavedDriver ? "assigned" : "confirmed"}`;
           const selectedDraftDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
           const selectedDraftDriverIsInactive = Boolean(
             selectedDraftDriver && isInactiveDriver(selectedDraftDriver),
@@ -3959,7 +4067,7 @@ export default function Home() {
                     savedBooking.status,
                   )}`}
                 >
-                  {savedBooking.status || "pending"}
+                  {bookingStatusLabel(savedBooking.status)}
                 </span>
               </div>
 
@@ -3997,7 +4105,40 @@ export default function Home() {
               </button>
 
               {!isCompleted || bookingCompletionMessage ? (
-                <div className="mt-2">
+                <div className="mt-2 flex flex-col gap-2" data-dashboard-status-controls={bookingId}>
+                  {canMarkOtw ? (
+                    <button
+                      className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-dashboard-mark-otw={bookingId}
+                      disabled={completingBookingId === bookingId}
+                      onClick={() => markBookingOtw(savedBooking)}
+                      type="button"
+                    >
+                      {completingBookingId === bookingId ? "Marking..." : "Mark OTW"}
+                    </button>
+                  ) : null}
+                  {canMarkPob ? (
+                    <button
+                      className="h-10 w-full rounded-md border border-indigo-300 bg-white px-3 text-sm font-semibold text-indigo-800 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-dashboard-mark-pob={bookingId}
+                      disabled={completingBookingId === bookingId}
+                      onClick={() => markBookingPob(savedBooking)}
+                      type="button"
+                    >
+                      {completingBookingId === bookingId ? "Marking..." : "Mark POB"}
+                    </button>
+                  ) : null}
+                  {isDriverOtw ? (
+                    <button
+                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-dashboard-revert-status={bookingId}
+                      disabled={completingBookingId === bookingId}
+                      onClick={() => revertBookingStatus(savedBooking)}
+                      type="button"
+                    >
+                      {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
+                    </button>
+                  ) : null}
                   {!isCompleted ? (
                     <button
                       className="h-10 w-full rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
@@ -4009,9 +4150,20 @@ export default function Home() {
                       {completingBookingId === bookingId ? "Marking..." : "Mark completed"}
                     </button>
                   ) : null}
+                  {isPob ? (
+                    <button
+                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-dashboard-revert-status={bookingId}
+                      disabled={completingBookingId === bookingId}
+                      onClick={() => revertBookingStatus(savedBooking)}
+                      type="button"
+                    >
+                      {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
+                    </button>
+                  ) : null}
                   {bookingCompletionMessage ? (
                     <p
-                      className={`mt-2 rounded-md border px-3 py-2 text-xs ${statusClass(
+                      className={`rounded-md border px-3 py-2 text-xs ${statusClass(
                         bookingCompletionMessage.tone,
                       )}`}
                       data-booking-completion-message={bookingId}

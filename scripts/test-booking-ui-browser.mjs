@@ -407,6 +407,130 @@ const completedEmptyStateUndoFixture = {
     traveler_name: "COMPLETED EMPTY STATE TRAVELER",
   },
 };
+const dashboardStatusFlowFixture = {
+  id: "ui-dashboard-status-flow-fixture",
+  company_id: 851,
+  booker_id: 852,
+  traveler_id: 853,
+  booking_type: "MNG",
+  vehicle: "AVF",
+  pickup_time: "1015",
+  pickup_address: "Changi Airport T1",
+  dropoff_address: "Ritz Carlton Singapore",
+  flight_no: "SQ780",
+  route: "Changi Airport T1 > Ritz Carlton Singapore",
+  pax: 2,
+  job_card:
+    "AVF MNG\n31 May 2026, 1015hrs\nFlight: SQ780\nChangi Airport T1 > Ritz Carlton Singapore\nCompany: DASHBOARD STATUS FLOW COMPANY\nPassenger: DASHBOARD STATUS FLOW TRAVELER\nPax: 2",
+  status: "assigned",
+  driver_id: 901,
+  driver_name: "DASHBOARD STATUS FLOW DRIVER",
+  driver_contact: "+65 8111 7800",
+  driver_plate_number: "SLC780S",
+  customer_price_amount: 120,
+  driver_payout_amount: 78,
+  driver_payout_override: 82,
+  driver_payout_reason: "Status flow should preserve payout fields",
+  driver_notes: "Status flow should preserve driver notes",
+  driver_dispatch_include_payout: true,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:45:00.000Z",
+  updated_at: "2026-05-18T23:45:00.000Z",
+  companies: {
+    company_name: "DASHBOARD STATUS FLOW COMPANY",
+    domain: "dashboard-status-flow.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD STATUS FLOW BOOKER",
+    email: "booker@dashboard-status-flow.example.com",
+    phone: "+65 8333 7800",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD STATUS FLOW TRAVELER",
+  },
+};
+const dashboardOtwRevertAssignedFixture = {
+  ...dashboardStatusFlowFixture,
+  id: "ui-dashboard-otw-revert-assigned-fixture",
+  company_id: 861,
+  booker_id: 862,
+  traveler_id: 863,
+  flight_no: "SQ781",
+  job_card:
+    "AVF MNG\n31 May 2026, 1115hrs\nFlight: SQ781\nChangi Airport T1 > Ritz Carlton Singapore\nCompany: DASHBOARD OTW REVERT ASSIGNED COMPANY\nPassenger: DASHBOARD OTW REVERT ASSIGNED TRAVELER\nPax: 2",
+  status: "driver_otw",
+  created_at: "2026-05-18T23:44:00.000Z",
+  updated_at: "2026-05-18T23:44:00.000Z",
+  companies: {
+    company_name: "DASHBOARD OTW REVERT ASSIGNED COMPANY",
+    domain: "dashboard-otw-revert-assigned.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD OTW REVERT ASSIGNED BOOKER",
+    email: "booker@dashboard-otw-revert-assigned.example.com",
+    phone: "+65 8333 7810",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD OTW REVERT ASSIGNED TRAVELER",
+  },
+};
+const dashboardOtwRevertConfirmedFixture = {
+  ...dashboardStatusFlowFixture,
+  id: "ui-dashboard-otw-revert-confirmed-fixture",
+  company_id: 871,
+  booker_id: 872,
+  traveler_id: 873,
+  flight_no: "SQ782",
+  job_card:
+    "AVF MNG\n31 May 2026, 1215hrs\nFlight: SQ782\nChangi Airport T1 > Ritz Carlton Singapore\nCompany: DASHBOARD OTW REVERT CONFIRMED COMPANY\nPassenger: DASHBOARD OTW REVERT CONFIRMED TRAVELER\nPax: 2",
+  status: "driver_otw",
+  driver_id: null,
+  driver_name: null,
+  driver_contact: null,
+  driver_plate_number: null,
+  created_at: "2026-05-18T23:43:00.000Z",
+  updated_at: "2026-05-18T23:43:00.000Z",
+  companies: {
+    company_name: "DASHBOARD OTW REVERT CONFIRMED COMPANY",
+    domain: "dashboard-otw-revert-confirmed.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD OTW REVERT CONFIRMED BOOKER",
+    email: "booker@dashboard-otw-revert-confirmed.example.com",
+    phone: "+65 8333 7820",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD OTW REVERT CONFIRMED TRAVELER",
+  },
+};
+const dashboardPobRevertFixture = {
+  ...dashboardStatusFlowFixture,
+  id: "ui-dashboard-pob-revert-fixture",
+  company_id: 881,
+  booker_id: 882,
+  traveler_id: 883,
+  flight_no: "SQ783",
+  job_card:
+    "AVF MNG\n31 May 2026, 1315hrs\nFlight: SQ783\nChangi Airport T1 > Ritz Carlton Singapore\nCompany: DASHBOARD POB REVERT COMPANY\nPassenger: DASHBOARD POB REVERT TRAVELER\nPax: 2",
+  status: "pob",
+  created_at: "2026-05-18T23:42:00.000Z",
+  updated_at: "2026-05-18T23:42:00.000Z",
+  companies: {
+    company_name: "DASHBOARD POB REVERT COMPANY",
+    domain: "dashboard-pob-revert.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD POB REVERT BOOKER",
+    email: "booker@dashboard-pob-revert.example.com",
+    phone: "+65 8333 7830",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD POB REVERT TRAVELER",
+  },
+};
 const reusableDriverProfileFixture = {
   id: 901,
   driver_name: "REUSABLE PROFILE TEST DRIVER",
@@ -1864,6 +1988,10 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardCompletionActionFixture)},
         ${JSON.stringify(completedUndoAssignedFixture)},
         ${JSON.stringify(completedUndoConfirmedFixture)},
+        ${JSON.stringify(dashboardStatusFlowFixture)},
+        ${JSON.stringify(dashboardOtwRevertAssignedFixture)},
+        ${JSON.stringify(dashboardOtwRevertConfirmedFixture)},
+        ${JSON.stringify(dashboardPobRevertFixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
@@ -1903,7 +2031,11 @@ async function runChromeTest() {
           const isCompletionFixture =
             String(target).includes("id=eq.${dashboardCompletionActionFixture.id}") ||
             String(target).includes("id=eq.${completedUndoAssignedFixture.id}") ||
-            String(target).includes("id=eq.${completedUndoConfirmedFixture.id}");
+            String(target).includes("id=eq.${completedUndoConfirmedFixture.id}") ||
+            String(target).includes("id=eq.${dashboardStatusFlowFixture.id}") ||
+            String(target).includes("id=eq.${dashboardOtwRevertAssignedFixture.id}") ||
+            String(target).includes("id=eq.${dashboardOtwRevertConfirmedFixture.id}") ||
+            String(target).includes("id=eq.${dashboardPobRevertFixture.id}");
 
           if (isStatusOnlyPatch && isCompletionFixture) {
             window.__prestigeBookingCompletionRequests.push({
@@ -2141,7 +2273,7 @@ async function runChromeTest() {
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_notes, "Meet at arrival belt");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_dispatch_include_payout, true);
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.status, "assigned");
-    assert.match(dashboardAssignmentState.articleText, /assigned/);
+    assert.match(dashboardAssignmentState.articleText, /Assigned/i);
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
     assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
@@ -2167,7 +2299,7 @@ async function runChromeTest() {
         ),
       };
     })()`);
-    assert.match(assignedDriverClearInitialState.articleText, /assigned/);
+    assert.match(assignedDriverClearInitialState.articleText, /Assigned/i);
     assert.match(assignedDriverClearInitialState.articleText, /Driver:\s*OLD DASHBOARD TEST DRIVER/);
     assert.match(assignedDriverClearInitialState.articleText, /Contact:\s*\+65 8999 7777/);
     assert.match(assignedDriverClearInitialState.articleText, /Copy Driver Dispatch/);
@@ -2271,7 +2403,7 @@ async function runChromeTest() {
     assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_notes, null);
     assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_dispatch_include_payout, false);
     assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.status, "confirmed");
-    assert.match(clearedAssignedDriverState.articleText, /confirmed/);
+    assert.match(clearedAssignedDriverState.articleText, /Confirmed/i);
     assert.match(clearedAssignedDriverState.articleText, /Driver:\s*—/);
     assert.ok(!clearedAssignedDriverState.articleText.includes("Copy Driver Dispatch"));
     assert.equal(clearedAssignedDriverState.hasClearButton, false);
@@ -2280,6 +2412,227 @@ async function runChromeTest() {
         clearedAssignedDriverState.localMessageDistance <= 120,
       `Expected clear assigned driver status near assignment controls, got ${clearedAssignedDriverState.localMessageDistance}px`,
     );
+
+    const clickDashboardStatusAction = async (fixture, dataAttribute) => {
+      const travelerName = JSON.stringify(fixture.travelers.traveler_name);
+      const flightNo = JSON.stringify(fixture.flight_no);
+      const bookingId = JSON.stringify(fixture.id);
+
+      return evaluate(`(() => {
+        const article = [...document.querySelectorAll("article")].find(
+          (candidate) =>
+            candidate.innerText.includes(${travelerName}) &&
+            candidate.innerText.includes(${flightNo}),
+        );
+        const statusButton = article?.querySelector("[${dataAttribute}=" + ${bookingId} + "]");
+
+        if (!statusButton || statusButton.disabled) {
+          return false;
+        }
+
+        statusButton.click();
+        return true;
+      })()`);
+    };
+
+    const waitForDashboardStatusState = async (fixture, expectedMessage, expectedStatusLabel, description) => {
+      const travelerName = JSON.stringify(fixture.travelers.traveler_name);
+      const flightNo = JSON.stringify(fixture.flight_no);
+      const bookingId = JSON.stringify(fixture.id);
+      const expectedMessageText = JSON.stringify(expectedMessage);
+
+      return waitForCondition(
+        async () => {
+          const candidateState = await evaluate(`(() => {
+            const article = [...document.querySelectorAll("article")].find(
+              (candidate) =>
+                candidate.innerText.includes(${travelerName}) &&
+                candidate.innerText.includes(${flightNo}),
+            );
+            const statusControls = article?.querySelector("[data-dashboard-status-controls=" + ${bookingId} + "]");
+            const statusMessage = statusControls?.querySelector("[data-booking-completion-message=" + ${bookingId} + "]");
+            const matchingMessages = [...document.querySelectorAll("[data-booking-completion-message]")]
+              .filter((message) => message.textContent.trim() === ${expectedMessageText});
+
+            return {
+              articleText: article?.innerText || "",
+              completionRequests: window.__prestigeBookingCompletionRequests || [],
+              fetchCalls: window.__prestigeFetchCalls || [],
+              globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+              localMessageCount: matchingMessages.length,
+              localMessageText: statusMessage?.textContent.trim() || "",
+              messageIsInStatusControls: Boolean(statusControls?.contains(statusMessage)),
+              unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+            };
+          })()`);
+
+          return candidateState?.localMessageText === expectedMessage &&
+            candidateState?.articleText?.includes(expectedStatusLabel)
+            ? candidateState
+            : false;
+        },
+        10000,
+        description,
+      );
+    };
+
+    const exerciseDashboardStatusAction = async ({
+      dataAttribute,
+      description,
+      expectedMessage,
+      expectedStatus,
+      expectedStatusLabel,
+      fixture,
+    }) => {
+      await evaluate(`(() => {
+        window.__prestigeFetchCalls = [];
+        window.__prestigeBookingCompletionRequests = [];
+        window.__prestigeUnhandledSupabaseCalls = [];
+      })()`);
+
+      const clickedStatusButton = await clickDashboardStatusAction(fixture, dataAttribute);
+      assert.equal(clickedStatusButton, true, `Expected ${description} button to be clickable`);
+
+      const statusState = await waitForDashboardStatusState(
+        fixture,
+        expectedMessage,
+        expectedStatusLabel,
+        description,
+      );
+
+      assert.deepEqual(
+        statusState.unhandledSupabaseCalls,
+        [],
+        `Expected ${description} Supabase calls to be mocked, got ${statusState.unhandledSupabaseCalls.join(", ")}`,
+      );
+      assert.equal(
+        statusState.fetchCalls.length,
+        1,
+        `Expected ${description} to make one mocked booking PATCH, got ${statusState.fetchCalls.join(", ")}`,
+      );
+      assert.match(
+        statusState.fetchCalls[0],
+        new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${fixture.id}`),
+      );
+      assert.ok(
+        statusState.fetchCalls.every((call) => !call.includes("/rest/v1/drivers")),
+        `Expected ${description} not to modify driver profiles, got ${statusState.fetchCalls.join(", ")}`,
+      );
+      assert.equal(statusState.completionRequests.length, 1);
+      assert.match(
+        statusState.completionRequests[0]?.url || "",
+        new RegExp(`\\/rest\\/v1\\/bookings.*id=eq\\.${fixture.id}`),
+      );
+      assert.deepEqual(
+        Object.keys(statusState.completionRequests[0]?.body || {}).sort(),
+        ["status", "updated_at"],
+      );
+      assert.equal(statusState.completionRequests[0]?.body?.status, expectedStatus);
+      assert.match(statusState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
+      assert.equal(statusState.localMessageCount, 1);
+      assert.equal(
+        statusState.messageIsInStatusControls,
+        true,
+        `Expected ${description} feedback to appear inside the local Dashboard status controls`,
+      );
+      assert.notEqual(
+        statusState.globalStatusText,
+        expectedMessage,
+        `Expected ${description} feedback not to duplicate in the global status panel`,
+      );
+
+      return statusState;
+    };
+
+    const markedOtwState = await exerciseDashboardStatusAction({
+      dataAttribute: "data-dashboard-mark-otw",
+      description: "Dashboard Mark OTW",
+      expectedMessage: "Driver marked OTW.",
+      expectedStatus: "driver_otw",
+      expectedStatusLabel: "Driver OTW",
+      fixture: dashboardStatusFlowFixture,
+    });
+    assert.match(markedOtwState.articleText, /Driver:\s*DASHBOARD STATUS FLOW DRIVER/);
+    assert.match(markedOtwState.articleText, /Route:\s*Changi Airport T1\s+\S\s+Ritz Carlton Singapore/);
+    assert.match(markedOtwState.articleText, /Customer \$120 \/ Driver \$78/);
+
+    await exerciseDashboardStatusAction({
+      dataAttribute: "data-dashboard-mark-pob",
+      description: "Dashboard Mark POB",
+      expectedMessage: "Passenger on board.",
+      expectedStatus: "pob",
+      expectedStatusLabel: "POB",
+      fixture: dashboardStatusFlowFixture,
+    });
+
+    await exerciseDashboardStatusAction({
+      dataAttribute: "data-dashboard-mark-completed",
+      description: "Dashboard POB Mark completed",
+      expectedMessage: "Booking marked completed.",
+      expectedStatus: "completed",
+      expectedStatusLabel: "Completed",
+      fixture: dashboardStatusFlowFixture,
+    });
+
+    await clickTab("Completed", "Completed Bookings");
+
+    const completedStatusFlowTabState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const completedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD STATUS FLOW TRAVELER") &&
+              candidate.innerText.includes("SQ780"),
+          );
+
+          return completedArticle
+            ? {
+                articleText: completedArticle.innerText,
+                hasUndoButton: Boolean(
+                  completedArticle.querySelector("[data-completed-undo-booking='${dashboardStatusFlowFixture.id}']"),
+                ),
+              }
+            : false;
+        })()`),
+      10000,
+      "Dashboard status flow completed booking in Completed tab",
+    );
+    assert.match(completedStatusFlowTabState.articleText, /Completed/i);
+    assert.match(completedStatusFlowTabState.articleText, /DASHBOARD STATUS FLOW COMPANY/);
+    assert.equal(
+      completedStatusFlowTabState.hasUndoButton,
+      true,
+      "Expected Dashboard status completed booking to offer Undo completed in Completed tab",
+    );
+
+    await clickTab("Dashboard", "Operations Dashboard");
+
+    await exerciseDashboardStatusAction({
+      dataAttribute: "data-dashboard-revert-status",
+      description: "Dashboard Revert OTW with driver",
+      expectedMessage: "Status reverted.",
+      expectedStatus: "assigned",
+      expectedStatusLabel: "Assigned",
+      fixture: dashboardOtwRevertAssignedFixture,
+    });
+
+    await exerciseDashboardStatusAction({
+      dataAttribute: "data-dashboard-revert-status",
+      description: "Dashboard Revert OTW without driver",
+      expectedMessage: "Status reverted.",
+      expectedStatus: "confirmed",
+      expectedStatusLabel: "Confirmed",
+      fixture: dashboardOtwRevertConfirmedFixture,
+    });
+
+    await exerciseDashboardStatusAction({
+      dataAttribute: "data-dashboard-revert-status",
+      description: "Dashboard Revert POB",
+      expectedMessage: "Status reverted.",
+      expectedStatus: "driver_otw",
+      expectedStatusLabel: "Driver OTW",
+      fixture: dashboardPobRevertFixture,
+    });
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -2334,7 +2687,7 @@ async function runChromeTest() {
         })()`);
 
         return candidateState?.localMessageText === "Booking marked completed." &&
-          candidateState?.articleText?.includes("completed")
+          candidateState?.articleText?.toLowerCase().includes("completed")
           ? candidateState
           : false;
       },
@@ -2410,7 +2763,7 @@ async function runChromeTest() {
       "marked completed booking in Completed tab",
     );
 
-    assert.match(markedCompletedTabState.articleText, /completed/);
+    assert.match(markedCompletedTabState.articleText, /Completed/i);
     assert.match(markedCompletedTabState.articleText, /COMPLETION ACTION TEST COMPANY/);
     assert.equal(
       markedCompletedTabState.hasMarkCompletedSuccessMessage,
@@ -3539,7 +3892,7 @@ async function runChromeTest() {
       "Completed tab filtered booking list",
     );
 
-    assert.match(completedTabState.completedArticleText, /completed/);
+    assert.match(completedTabState.completedArticleText, /Completed/i);
     assert.match(completedTabState.completedArticleText, /COMPLETED TEST TRAVELER/);
     assert.equal(completedTabState.hasCompletedLoadButton, true);
     assert.equal(
@@ -5921,6 +6274,19 @@ async function runChromeTest() {
             });
           }
 
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (
+          method === "GET" &&
+          (
+            String(target).includes("/rest/v1/companies") ||
+            String(target).includes("/rest/v1/saved_addresses")
+          )
+        ) {
           return new Response(JSON.stringify([]), {
             status: 200,
             headers: { "content-type": "application/json" },

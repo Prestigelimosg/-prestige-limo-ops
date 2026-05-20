@@ -422,6 +422,99 @@ async function runChromeTest() {
       "Expected Save Override feedback not to duplicate in the top Rates status panel",
     );
 
+    await evaluate(`(() => {
+      window.__prestigeBlockedRateWrites = [];
+      window.__prestigeOriginalFetchForRateGuard = window.__prestigeOriginalFetchForRateGuard || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const isReadOnlyRequest = method === "GET" || method === "HEAD" || method === "OPTIONS";
+
+        if (String(target).includes("/rest/v1/") && !isReadOnlyRequest) {
+          window.__prestigeBlockedRateWrites.push(\`\${method} \${target}\`);
+          return new Response(JSON.stringify({ message: "Blocked rate write during invalid override test" }), {
+            status: 500,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        return window.__prestigeOriginalFetchForRateGuard(...args);
+      };
+    })()`);
+
+    const preparedNegativeOverride = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const setLabeledInput = (labelText, value) => {
+        const label = [...document.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        const input = label?.querySelector("input");
+
+        if (!input) {
+          return false;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return input.value === value;
+      };
+
+      return setLabeledInput("Company / Account", "NEGATIVE RATE SAFETY TEST") &&
+        setLabeledInput("MNG customer", "-5");
+    })()`);
+    assert.equal(preparedNegativeOverride, true, "Expected negative rate override test fields to be editable");
+
+    const clickedNegativeOverrideSave = await evaluate(`(() => {
+      const saveOverrideButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Override",
+      );
+
+      if (!saveOverrideButton || saveOverrideButton.disabled) {
+        return false;
+      }
+
+      saveOverrideButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedNegativeOverrideSave, true, "Expected Save Override button to remain clickable for invalid value test");
+
+    const invalidRateFeedbackState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const saveOverrideButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Save Override",
+          );
+          const feedback = document.querySelector("[data-rate-feedback='override']");
+
+          if (!saveOverrideButton || !feedback || !feedback.textContent.includes("Enter positive numbers")) {
+            return false;
+          }
+
+          const buttonRect = saveOverrideButton.getBoundingClientRect();
+          const feedbackRect = feedback.getBoundingClientRect();
+
+          return {
+            blockedWrites: window.__prestigeBlockedRateWrites || [],
+            distance: Math.abs(feedbackRect.top - buttonRect.bottom),
+            feedbackText: feedback.textContent.trim(),
+          };
+        })()`),
+      10000,
+      "negative rate override validation feedback",
+    );
+    assert.match(invalidRateFeedbackState.feedbackText, /MNG customer/);
+    assert.deepEqual(
+      invalidRateFeedbackState.blockedWrites,
+      [],
+      `Expected invalid negative rate override not to make Supabase writes, got ${invalidRateFeedbackState.blockedWrites.join(", ")}`,
+    );
+    assert.ok(
+      invalidRateFeedbackState.distance <= 80,
+      `Expected invalid rate feedback near Save Override, got ${invalidRateFeedbackState.distance}px`,
+    );
+
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {
     let pageSnapshot = "";

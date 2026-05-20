@@ -1108,6 +1108,55 @@ function normalizeDriverPayoutRules(rules: DriverPayoutRules | null | undefined)
   return normalizedRules;
 }
 
+function getNonPositiveRateOverrideLabels(
+  customerRates: RateRules | null | undefined,
+  driverPayoutRules: DriverPayoutRules | null | undefined,
+) {
+  const invalidLabels: string[] = [];
+  const customerSource = (customerRates ?? {}) as Record<string, unknown>;
+  const driverSource = (driverPayoutRules ?? {}) as Record<string, DriverPayoutRule | number | string | null | undefined>;
+
+  for (const bookingType of rateBookingTypes) {
+    if (Object.prototype.hasOwnProperty.call(customerSource, bookingType)) {
+      const numericValue = finiteNumber(customerSource[bookingType]);
+
+      if (numericValue === null || numericValue <= 0) {
+        invalidLabels.push(`${bookingType} customer`);
+      }
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(driverSource, bookingType)) {
+      continue;
+    }
+
+    const payoutRule = driverSource[bookingType];
+
+    if (payoutRule === null || payoutRule === undefined) {
+      continue;
+    }
+
+    if (typeof payoutRule !== "object") {
+      const amount = finiteNumber(payoutRule);
+
+      if (amount === null || amount <= 0) {
+        invalidLabels.push(`${bookingType} driver`);
+      }
+
+      continue;
+    }
+
+    const payoutValues = [payoutRule.amount, payoutRule.min, payoutRule.max]
+      .map((value) => finiteNumber(value))
+      .filter((value): value is number => value !== null);
+
+    if (payoutValues.length === 0 || payoutValues.some((value) => value <= 0)) {
+      invalidLabels.push(`${bookingType} driver`);
+    }
+  }
+
+  return invalidLabels;
+}
+
 function formatOverrideSummary(
   customerRates: RateRules | null | undefined,
   driverPayoutRules: DriverPayoutRules | null | undefined,
@@ -3135,6 +3184,10 @@ export default function Home() {
 
     const companyName = clean(rateOverrideDraft.companyName);
     const bossName = clean(rateOverrideDraft.bossName);
+    const invalidRateLabels = getNonPositiveRateOverrideLabels(
+      rateOverrideDraft.customerRates,
+      rateOverrideDraft.driverPayoutRules,
+    );
     const overrideCustomerRates = normalizeCustomerRateRules(rateOverrideDraft.customerRates);
     const overrideDriverPayoutRules = normalizeDriverPayoutRules(rateOverrideDraft.driverPayoutRules);
 
@@ -3142,6 +3195,14 @@ export default function Home() {
       setMessage({
         tone: "error",
         text: "Save rate override failed: Enter a company/account or boss/name before saving overrides.",
+      });
+      return;
+    }
+
+    if (invalidRateLabels.length > 0) {
+      setMessage({
+        tone: "error",
+        text: `Save rate override failed: Enter positive numbers for rate overrides. Check: ${invalidRateLabels.join(", ")}.`,
       });
       return;
     }

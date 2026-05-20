@@ -597,6 +597,239 @@ async function runChromeTest() {
       `Expected invalid rate feedback near Save Override, got ${invalidRateFeedbackState.distance}px`,
     );
 
+    await evaluate(`(() => {
+      const duplicateCompanyName = "DUPLICATE RATE SAFETY TEST";
+      window.__prestigeRateDuplicateStore = {
+        companies: [
+          {
+            id: 9001,
+            company_name: duplicateCompanyName,
+            domain: null,
+            customer_rates: { MNG: 85 },
+            driver_payout_rules: {},
+            transzend_excel_privacy: false,
+          },
+        ],
+        travelers: [],
+        updateCalls: [],
+        unexpectedCalls: [],
+      };
+      const originalFetch = window.__prestigeOriginalFetchForRateGuard || window.fetch.bind(window);
+      const jsonResponse = (payload, status = 200) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const url = String(target);
+        const method = args[1]?.method || args[0]?.method || "GET";
+
+        if (!url.includes("/rest/v1/")) {
+          return originalFetch(...args);
+        }
+
+        const store = window.__prestigeRateDuplicateStore;
+
+        if (url.includes("/rest/v1/rate_settings") && method === "GET") {
+          return jsonResponse({
+            customer_rates: { MNG: 85, DEP: 75, TRF: 55, DSP: 65 },
+            driver_payout_rules: {
+              MNG: { min: 65, max: 75 },
+              DEP: { min: 65, max: 65 },
+              TRF: { min: 70, max: 70 },
+              DSP: { amount: 50, perHour: true },
+            },
+            midnight_surcharge: 15,
+            extra_stop_surcharge: 15,
+            midnight_payout: 10,
+            extra_stop_payout: 10,
+            child_seat_customer_surcharge: 15,
+            child_seat_driver_payout: 10,
+          });
+        }
+
+        if (url.includes("/rest/v1/companies") && method === "GET") {
+          return jsonResponse(store.companies);
+        }
+
+        if (url.includes("/rest/v1/travelers") && method === "GET") {
+          return jsonResponse(store.travelers);
+        }
+
+        if (url.includes("/rest/v1/companies") && method === "PATCH") {
+          const payload = JSON.parse(args[1]?.body || "{}");
+          store.updateCalls.push({ method, url, payload });
+          store.companies = store.companies.map((company) =>
+            company.id === 9001 ? { ...company, ...payload } : company,
+          );
+          return jsonResponse(store.companies[0]);
+        }
+
+        store.unexpectedCalls.push(\`\${method} \${url}\`);
+        return jsonResponse({ message: "Unhandled rate duplicate mock" }, 500);
+      };
+    })()`);
+
+    const clickedMockLoadRates = await evaluate(`(() => {
+      const loadRatesButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Rates",
+      );
+
+      if (!loadRatesButton || loadRatesButton.disabled) {
+        return false;
+      }
+
+      loadRatesButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedMockLoadRates, true, "Expected mocked Load Rates button to be clickable");
+
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("DUPLICATE RATE SAFETY TEST")`),
+      10000,
+      "mock duplicate rate company loaded",
+    );
+
+    const saveDuplicateCompanyOverride = async (customerRate) => {
+      const preparedDuplicateOverride = await evaluate(`(() => {
+        const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+        const setLabeledInput = (labelText, value) => {
+          const label = [...document.querySelectorAll("label")].find(
+            (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+          );
+          const input = label?.querySelector("input");
+
+          if (!input) {
+            return false;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+          descriptor?.set?.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return input.value === value;
+        };
+
+        return setLabeledInput("Company / Account", "DUPLICATE RATE SAFETY TEST") &&
+          setLabeledInput("Boss / Name", "") &&
+          setLabeledInput("MNG customer", ${JSON.stringify(String(customerRate))}) &&
+          setLabeledInput("DEP customer", "") &&
+          setLabeledInput("TRF customer", "") &&
+          setLabeledInput("DSP customer", "") &&
+          setLabeledInput("MNG driver", "") &&
+          setLabeledInput("DEP driver", "") &&
+          setLabeledInput("TRF driver", "") &&
+          setLabeledInput("DSP driver", "");
+      })()`);
+      assert.equal(preparedDuplicateOverride, true, `Expected duplicate override ${customerRate} fields to be editable`);
+
+      const clickedDuplicateOverrideSave = await evaluate(`(() => {
+        const saveOverrideButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Save Override",
+        );
+
+        if (!saveOverrideButton || saveOverrideButton.disabled) {
+          return false;
+        }
+
+        saveOverrideButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedDuplicateOverrideSave, true, `Expected duplicate override ${customerRate} save to be clickable`);
+    };
+
+    await saveDuplicateCompanyOverride(90);
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const heading = [...document.querySelectorAll("h4")].find(
+            (element) => element.textContent.trim() === "Company Overrides",
+          );
+          const panel = heading?.parentElement;
+          const rows = [...(panel?.querySelectorAll("button") || [])].filter(
+            (button) => button.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
+          );
+
+          return rows.length === 1 && rows[0].innerText.includes("Customer: MNG 90.00");
+        })()`),
+      10000,
+      "first duplicate rate override save refresh",
+    );
+
+    await saveDuplicateCompanyOverride(95);
+
+    const duplicateSaveState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const saveOverrideButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Save Override",
+          );
+          const feedback = document.querySelector("[data-rate-feedback='override']");
+          const globalStatusPanels = [...document.querySelectorAll("[data-status-panel='global']")];
+          const heading = [...document.querySelectorAll("h4")].find(
+            (element) => element.textContent.trim() === "Company Overrides",
+          );
+          const panel = heading?.parentElement;
+          const rows = [...(panel?.querySelectorAll("button") || [])].filter(
+            (button) => button.querySelector("p")?.textContent.trim() === "DUPLICATE RATE SAFETY TEST",
+          );
+
+          if (
+            !saveOverrideButton ||
+            !feedback ||
+            !feedback.textContent.includes("Override saved.") ||
+            rows.length !== 1 ||
+            !rows[0].innerText.includes("Customer: MNG 95.00")
+          ) {
+            return false;
+          }
+
+          const buttonRect = saveOverrideButton.getBoundingClientRect();
+          const feedbackRect = feedback.getBoundingClientRect();
+
+          return {
+            distance: Math.abs(feedbackRect.top - buttonRect.bottom),
+            feedbackText: feedback.textContent.trim(),
+            globalOverrideMessages: globalStatusPanels.filter((panel) =>
+              panel.textContent.includes("Override saved."),
+            ).length,
+            rowCount: rows.length,
+            rowText: rows[0].innerText,
+            updateCalls: window.__prestigeRateDuplicateStore?.updateCalls || [],
+            unexpectedCalls: window.__prestigeRateDuplicateStore?.unexpectedCalls || [],
+          };
+        })()`),
+      10000,
+      "second duplicate rate override save refresh",
+    );
+    assert.equal(duplicateSaveState.rowCount, 1, "Expected same company override to appear once after repeated saves");
+    assert.match(duplicateSaveState.rowText, /Customer: MNG 95\.00/);
+    assert.equal(
+      duplicateSaveState.updateCalls.length,
+      2,
+      `Expected repeated same-company saves to update the existing row twice, got ${duplicateSaveState.updateCalls.length}`,
+    );
+    assert.deepEqual(
+      duplicateSaveState.unexpectedCalls,
+      [],
+      `Expected duplicate save mock to avoid inserts/unhandled calls, got ${duplicateSaveState.unexpectedCalls.join(", ")}`,
+    );
+    assert.ok(
+      duplicateSaveState.updateCalls.every((call) => call.method === "PATCH"),
+      `Expected duplicate saves to use PATCH updates, got ${duplicateSaveState.updateCalls.map((call) => call.method).join(", ")}`,
+    );
+    assert.ok(
+      duplicateSaveState.distance <= 80,
+      `Expected duplicate save feedback near Save Override, got ${duplicateSaveState.distance}px`,
+    );
+    assert.equal(
+      duplicateSaveState.globalOverrideMessages,
+      0,
+      "Expected duplicate save feedback not to duplicate in the top Rates status panel",
+    );
+
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {
     let pageSnapshot = "";

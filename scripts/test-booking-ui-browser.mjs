@@ -531,6 +531,35 @@ const dashboardPobRevertFixture = {
     traveler_name: "DASHBOARD POB REVERT TRAVELER",
   },
 };
+const dashboardOtwClearDriverFixture = {
+  ...dashboardStatusFlowFixture,
+  id: "ui-dashboard-otw-clear-driver-fixture",
+  company_id: 891,
+  booker_id: 892,
+  traveler_id: 893,
+  flight_no: "SQ784",
+  job_card:
+    "AVF MNG\n31 May 2026, 1415hrs\nFlight: SQ784\nChangi Airport T1 > Ritz Carlton Singapore\nCompany: DASHBOARD OTW CLEAR DRIVER COMPANY\nPassenger: DASHBOARD OTW CLEAR DRIVER TRAVELER\nPax: 2",
+  status: "driver_otw",
+  driver_id: 901,
+  driver_name: "DASHBOARD OTW CLEAR DRIVER",
+  driver_contact: "+65 8111 7840",
+  driver_plate_number: "SLC784D",
+  created_at: "2026-05-18T23:41:00.000Z",
+  updated_at: "2026-05-18T23:41:00.000Z",
+  companies: {
+    company_name: "DASHBOARD OTW CLEAR DRIVER COMPANY",
+    domain: "dashboard-otw-clear-driver.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD OTW CLEAR DRIVER BOOKER",
+    email: "booker@dashboard-otw-clear-driver.example.com",
+    phone: "+65 8333 7840",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD OTW CLEAR DRIVER TRAVELER",
+  },
+};
 const reusableDriverProfileFixture = {
   id: 901,
   driver_name: "REUSABLE PROFILE TEST DRIVER",
@@ -2010,6 +2039,7 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardOtwRevertAssignedFixture)},
         ${JSON.stringify(dashboardOtwRevertConfirmedFixture)},
         ${JSON.stringify(dashboardPobRevertFixture)},
+        ${JSON.stringify(dashboardOtwClearDriverFixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
@@ -2069,7 +2099,8 @@ async function runChromeTest() {
 
           if (
             String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}") ||
-            String(target).includes("id=eq.${dashboardAssignedDriverClearFixture.id}")
+            String(target).includes("id=eq.${dashboardAssignedDriverClearFixture.id}") ||
+            String(target).includes("id=eq.${dashboardOtwClearDriverFixture.id}")
           ) {
             window.__prestigeDashboardDriverAssignmentBodies.push(parsedBody);
 
@@ -2656,6 +2687,110 @@ async function runChromeTest() {
         clearedAssignedDriverState.localMessageDistance <= 120,
       `Expected clear assigned driver status near assignment controls, got ${clearedAssignedDriverState.localMessageDistance}px`,
     );
+
+    const otwClearInitialState = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD OTW CLEAR DRIVER TRAVELER") &&
+          candidate.innerText.includes("SQ784"),
+      );
+
+      return {
+        articleText: article?.innerText || "",
+        hasClearButton: Boolean(article?.querySelector("[data-dashboard-clear-driver='${dashboardOtwClearDriverFixture.id}']")),
+      };
+    })()`);
+    assert.match(otwClearInitialState.articleText, /Driver OTW/i);
+    assert.match(otwClearInitialState.articleText, /Driver:\s*DASHBOARD OTW CLEAR DRIVER/);
+    assert.equal(
+      otwClearInitialState.hasClearButton,
+      true,
+      "Expected OTW dashboard booking with driver to show Clear assigned driver button",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDashboardDriverAssignmentBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedClearOtwAssignedDriver = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD OTW CLEAR DRIVER TRAVELER") &&
+          candidate.innerText.includes("SQ784"),
+      );
+      const clearButton = article?.querySelector("[data-dashboard-clear-driver='${dashboardOtwClearDriverFixture.id}']");
+
+      if (!clearButton || clearButton.disabled) {
+        return false;
+      }
+
+      clearButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedClearOtwAssignedDriver,
+      true,
+      "Expected OTW Clear assigned driver button to be clickable",
+    );
+
+    const clearedOtwAssignedDriverState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD OTW CLEAR DRIVER TRAVELER") &&
+              candidate.innerText.includes("SQ784"),
+          );
+          const assignmentMessage = article?.querySelector("[data-driver-assignment-message='${dashboardOtwClearDriverFixture.id}']");
+
+          return {
+            articleText: article?.innerText || "",
+            assignmentBodies: window.__prestigeDashboardDriverAssignmentBodies || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+            hasClearButton: Boolean(article?.querySelector("[data-dashboard-clear-driver='${dashboardOtwClearDriverFixture.id}']")),
+            hasMarkPobButton: Boolean(article?.querySelector("[data-dashboard-mark-pob='${dashboardOtwClearDriverFixture.id}']")),
+            hasRevertStatusButton: Boolean(article?.querySelector("[data-dashboard-revert-status='${dashboardOtwClearDriverFixture.id}']")),
+            localMessageText: assignmentMessage?.textContent.trim() || "",
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.localMessageText === "Assigned driver cleared." &&
+          candidateState?.articleText?.includes("Confirmed") &&
+          candidateState?.articleText?.includes("Driver: —") &&
+          !candidateState?.articleText?.includes("Driver: DASHBOARD OTW CLEAR DRIVER")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "OTW clear assigned driver confirmed state",
+    );
+
+    assert.deepEqual(
+      clearedOtwAssignedDriverState.unhandledSupabaseCalls,
+      [],
+      `Expected OTW clear assigned driver Supabase calls to be mocked, got ${clearedOtwAssignedDriverState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      clearedOtwAssignedDriverState.fetchCalls.length,
+      1,
+      `Expected OTW clear assigned driver to make one mocked booking PATCH, got ${clearedOtwAssignedDriverState.fetchCalls.join(", ")}`,
+    );
+    assert.match(
+      clearedOtwAssignedDriverState.fetchCalls[0],
+      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardOtwClearDriverFixture.id}`),
+    );
+    assert.equal(clearedOtwAssignedDriverState.assignmentBodies.length, 1);
+    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_id, null);
+    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_name, null);
+    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_contact, null);
+    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_plate_number, null);
+    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.status, "confirmed");
+    assert.equal(clearedOtwAssignedDriverState.hasClearButton, false);
+    assert.equal(clearedOtwAssignedDriverState.hasMarkPobButton, false);
+    assert.equal(clearedOtwAssignedDriverState.hasRevertStatusButton, false);
 
     const clickDashboardStatusAction = async (fixture, dataAttribute) => {
       const travelerName = JSON.stringify(fixture.travelers.traveler_name);

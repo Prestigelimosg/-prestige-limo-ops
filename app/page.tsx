@@ -486,6 +486,10 @@ function revertOtwStatus(
   return hasBookingDriver(bookingRecord) ? "assigned" : "confirmed";
 }
 
+function statusAfterClearingAssignedDriver(status: string | null) {
+  return clean(status).toLowerCase() === "completed" ? "completed" : "confirmed";
+}
+
 function bookingStatusLabel(status: string | null) {
   const normalizedStatus = clean(status).toLowerCase();
 
@@ -3871,9 +3875,7 @@ export default function Home() {
 
   async function clearAssignedDriver(bookingRecord: BookingRecord) {
     const bookingId = String(bookingRecord.id);
-    const nextStatus = clean(bookingRecord.status).toLowerCase() === "assigned"
-      ? "confirmed"
-      : clean(bookingRecord.status) || "confirmed";
+    const nextStatus = statusAfterClearingAssignedDriver(bookingRecord.status);
 
     if (!supabase) {
       const errorMessage = {

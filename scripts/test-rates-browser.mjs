@@ -442,6 +442,88 @@ async function runChromeTest() {
       };
     })()`);
 
+    const preparedBlankOverride = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const setLabeledInput = (labelText, value) => {
+        const label = [...document.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        const input = label?.querySelector("input");
+
+        if (!input) {
+          return false;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return input.value === value;
+      };
+
+      return setLabeledInput("Company / Account", "BLANK RATE SAFETY TEST") &&
+        setLabeledInput("Boss / Name", "") &&
+        setLabeledInput("MNG customer", "") &&
+        setLabeledInput("DEP customer", "") &&
+        setLabeledInput("TRF customer", "") &&
+        setLabeledInput("DSP customer", "") &&
+        setLabeledInput("MNG driver", "") &&
+        setLabeledInput("DEP driver", "") &&
+        setLabeledInput("TRF driver", "") &&
+        setLabeledInput("DSP driver", "");
+    })()`);
+    assert.equal(preparedBlankOverride, true, "Expected blank rate override test fields to be editable");
+
+    const clickedBlankOverrideSave = await evaluate(`(() => {
+      const saveOverrideButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Override",
+      );
+
+      if (!saveOverrideButton || saveOverrideButton.disabled) {
+        return false;
+      }
+
+      saveOverrideButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedBlankOverrideSave, true, "Expected Save Override button to remain clickable for blank value test");
+
+    const blankRateFeedbackState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const saveOverrideButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Save Override",
+          );
+          const feedback = document.querySelector("[data-rate-feedback='override']");
+
+          if (!saveOverrideButton || !feedback || !feedback.textContent.includes("Enter at least one customer or driver rate override")) {
+            return false;
+          }
+
+          const buttonRect = saveOverrideButton.getBoundingClientRect();
+          const feedbackRect = feedback.getBoundingClientRect();
+
+          return {
+            blockedWrites: window.__prestigeBlockedRateWrites || [],
+            distance: Math.abs(feedbackRect.top - buttonRect.bottom),
+            feedbackText: feedback.textContent.trim(),
+          };
+        })()`),
+      10000,
+      "blank rate override validation feedback",
+    );
+    assert.deepEqual(
+      blankRateFeedbackState.blockedWrites,
+      [],
+      `Expected blank rate override not to make Supabase writes, got ${blankRateFeedbackState.blockedWrites.join(", ")}`,
+    );
+    assert.ok(
+      blankRateFeedbackState.distance <= 80,
+      `Expected blank rate feedback near Save Override, got ${blankRateFeedbackState.distance}px`,
+    );
+
+    await evaluate(`window.__prestigeBlockedRateWrites = []`);
+
     const preparedNegativeOverride = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
       const setLabeledInput = (labelText, value) => {

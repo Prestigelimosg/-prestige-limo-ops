@@ -3190,6 +3190,10 @@ export default function Home() {
     );
     const overrideCustomerRates = normalizeCustomerRateRules(rateOverrideDraft.customerRates);
     const overrideDriverPayoutRules = normalizeDriverPayoutRules(rateOverrideDraft.driverPayoutRules);
+    const hasOverrideValues = formatOverrideSummary(
+      overrideCustomerRates,
+      overrideDriverPayoutRules,
+    ).hasOverrides;
 
     if (!companyName && !bossName) {
       setMessage({
@@ -3203,6 +3207,14 @@ export default function Home() {
       setMessage({
         tone: "error",
         text: `Save rate override failed: Enter positive numbers for rate overrides. Check: ${invalidRateLabels.join(", ")}.`,
+      });
+      return;
+    }
+
+    if (!hasOverrideValues) {
+      setMessage({
+        tone: "error",
+        text: "Save rate override failed: Enter at least one customer or driver rate override before saving.",
       });
       return;
     }

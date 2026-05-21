@@ -312,10 +312,10 @@ const dashboardDriverAssignmentFixture = {
   pickup_address: "Changi Airport",
   dropoff_address: "The Fullerton Hotel Singapore",
   flight_no: "SQ777",
-  route: "Changi Airport > The Fullerton Hotel Singapore",
+  route: null,
   pax: 2,
   job_card:
-    "AVF MNG\n29 May 2026, 1115hrs\nFlight: SQ777\nChangi Airport > The Fullerton Hotel Singapore\nPassenger: DASHBOARD DRIVER TEST TRAVELER\nPax: 2",
+    "AVF MNG\n29 May 2026, 1115hrs\nFlight: SQ777\nChangi Airport > Marina Bay Sands > The Fullerton Hotel Singapore\nPassenger: DASHBOARD DRIVER TEST TRAVELER\nPax: 2",
   status: "confirmed",
   driver_id: null,
   driver_name: null,
@@ -323,7 +323,9 @@ const dashboardDriverAssignmentFixture = {
   driver_plate_number: null,
   customer_price_amount: 95,
   driver_payout_amount: 70,
-  extra_stop_count: 0,
+  extra_stop_count: 1,
+  extra_stop_surcharge: 15,
+  extra_stop_payout: 10,
   child_seat_required: false,
   child_seat_count: 0,
   child_seat_type: null,
@@ -3271,6 +3273,21 @@ async function runChromeTest() {
     assert.match(
       dashboardDriverDispatchCopyState.copiedTexts[0] || "",
       /DASHBOARD TEST DRIVER/,
+    );
+    assert.match(
+      dashboardDriverDispatchCopyState.copiedTexts[0] || "",
+      /29 May 2026, 1115hrs/,
+      "Expected Dashboard Driver Dispatch copy to include the saved pickup date and time",
+    );
+    assert.match(
+      dashboardDriverDispatchCopyState.copiedTexts[0] || "",
+      /Flight: SQ777/,
+      "Expected Dashboard Driver Dispatch copy to include the saved flight number",
+    );
+    assert.match(
+      dashboardDriverDispatchCopyState.copiedTexts[0] || "",
+      /Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
+      "Expected Dashboard Driver Dispatch copy to preserve the full job-card route when the saved route field is blank",
     );
     assert.match(
       dashboardDriverDispatchCopyState.copiedTexts[0] || "",

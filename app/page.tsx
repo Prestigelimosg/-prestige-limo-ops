@@ -1846,10 +1846,23 @@ function getBookingJobCard(bookingRecord: BookingRecord) {
     .join("\n");
 }
 
+function getJobCardRouteLine(jobCard: string | null | undefined) {
+  return clean(jobCard)
+    .split("\n")
+    .map((line) => clean(line))
+    .find((line) => line.includes(">")) || "";
+}
+
 function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: DriverDraft) {
   const driverName = clean(driverDraft.driverName) || clean(bookingRecord.driver_name) || "Driver TBC";
   const driverContact = clean(driverDraft.driverContact) || clean(bookingRecord.driver_contact);
   const driverPlate = clean(driverDraft.driverPlate) || clean(bookingRecord.driver_plate_number);
+  const routeText =
+    clean(bookingRecord.route) ||
+    getJobCardRouteLine(bookingRecord.job_card) ||
+    `${clean(bookingRecord.pickup_address) || "Pickup"} > ${
+      clean(bookingRecord.dropoff_address) || "Drop-off"
+    }`;
   const payoutAmount =
     numericRate(driverDraft.payoutOverride) ||
     numericRate(bookingRecord.driver_payout_override) ||
@@ -1871,8 +1884,7 @@ function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: Driver
     formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time),
     "",
     bookingRecord.flight_no ? `Flight: ${bookingRecord.flight_no}` : "",
-    bookingRecord.route ||
-      `${bookingRecord.pickup_address || "Pickup"} > ${bookingRecord.dropoff_address || "Drop-off"}`,
+    routeText,
     "",
     getBookingName(bookingRecord) ? `Passenger: ${getBookingName(bookingRecord)}` : "",
     `Pax: ${bookingRecord.pax || 1}`,

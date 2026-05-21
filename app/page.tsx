@@ -1733,7 +1733,7 @@ function formatCreatedAt(value: string | null | undefined) {
 }
 
 function getRoutePoints(bookingRecord: BookingRecord) {
-  const routePoints = clean(bookingRecord.route)
+  const routePoints = (clean(bookingRecord.route) || getJobCardRouteLine(bookingRecord.job_card))
     .split(/\s*>\s*/)
     .map((point) => clean(point))
     .filter(Boolean);

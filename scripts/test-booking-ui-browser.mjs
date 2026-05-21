@@ -3363,6 +3363,117 @@ async function runChromeTest() {
     );
     assert.match(manualPayoutLoadedPricingState.driverDispatch, /Payout: \$82/);
 
+    await evaluate(`window.__prestigeCopiedTexts = []`);
+
+    const clickedLoadedDispatchDriverCopy = await evaluate(`(() => {
+      const sectionForHeading = (headingText) => {
+        const heading = [...document.querySelectorAll("h2")].find(
+          (candidate) => candidate.textContent.trim() === headingText,
+        );
+        let node = heading;
+
+        while (node && node !== document.body) {
+          if (
+            node.querySelector?.("pre") &&
+            [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+          ) {
+            return node;
+          }
+
+          node = node.parentElement;
+        }
+
+        return null;
+      };
+      const section = sectionForHeading("Driver Dispatch");
+      const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Copy",
+      );
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedLoadedDispatchDriverCopy,
+      true,
+      "Expected loaded assigned booking Driver Dispatch Copy button to be clickable",
+    );
+
+    const loadedDispatchDriverCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const sectionForHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading;
+
+            while (node && node !== document.body) {
+              if (
+                node.querySelector?.("pre") &&
+                [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+              ) {
+                return node;
+              }
+
+              node = node.parentElement;
+            }
+
+            return null;
+          };
+          const section = sectionForHeading("Driver Dispatch");
+          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Copy",
+          );
+          const feedback = section?.querySelector("[data-copy-feedback='driver-dispatch']");
+          const buttonRect = copyButton?.getBoundingClientRect();
+          const feedbackRect = feedback?.getBoundingClientRect();
+
+          return feedback?.textContent.trim() === "Driver dispatch copied."
+            ? {
+                copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+                distanceFromButton:
+                  buttonRect && feedbackRect ? Math.abs(feedbackRect.top - buttonRect.bottom) : null,
+                feedbackText: feedback.textContent.trim(),
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "loaded assigned booking Driver Dispatch copy feedback",
+    );
+    assert.equal(loadedDispatchDriverCopyState.feedbackText, "Driver dispatch copied.");
+    assert.deepEqual(loadedDispatchDriverCopyState.globalCopyMessages, []);
+    assert.ok(
+      loadedDispatchDriverCopyState.distanceFromButton !== null &&
+        loadedDispatchDriverCopyState.distanceFromButton <= 80,
+      `Expected loaded Driver Dispatch copy feedback near its button, got ${loadedDispatchDriverCopyState.distanceFromButton}px`,
+    );
+    assert.match(loadedDispatchDriverCopyState.copiedText, /DASHBOARD TEST DRIVER/);
+    assert.match(loadedDispatchDriverCopyState.copiedText, /Contact: \+65 8555 7777/);
+    assert.match(loadedDispatchDriverCopyState.copiedText, /Plate: SLC777D/);
+    assert.match(loadedDispatchDriverCopyState.copiedText, /AVF MNG/);
+    assert.match(loadedDispatchDriverCopyState.copiedText, /29 May 2026, 1115hrs/);
+    assert.match(loadedDispatchDriverCopyState.copiedText, /Flight: SQ777/);
+    assert.match(
+      loadedDispatchDriverCopyState.copiedText,
+      /Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
+      "Expected loaded Driver Dispatch copy to keep the full route waypoint from the saved job card",
+    );
+    assert.match(loadedDispatchDriverCopyState.copiedText, /Passenger: DASHBOARD DRIVER TEST TRAVELER/);
+    assert.match(loadedDispatchDriverCopyState.copiedText, /Payout: \$82/);
+    assert.doesNotMatch(
+      loadedDispatchDriverCopyState.copiedText,
+      /Payout: \$70|Driver TBC|OLD DASHBOARD TEST DRIVER/,
+      "Expected loaded Driver Dispatch copy not to use stale or missing assigned driver details",
+    );
+
     await clickTab("Dashboard", "Operations Dashboard");
 
     const clickedDashboardCopyJobCard = await evaluate(`(() => {

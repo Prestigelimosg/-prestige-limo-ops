@@ -1826,6 +1826,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
+  const [driverSearchTerm, setDriverSearchTerm] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [rateSettings, setRateSettings] = useState<RateSettings>(initialRateSettings);
@@ -1996,6 +1997,25 @@ export default function Home() {
     [rateTravelers, rateOverrideListMessages.boss?.recordId],
   );
   const assignableDrivers = useMemo(() => drivers.filter(isAssignableDriver), [drivers]);
+  const filteredDrivers = useMemo(() => {
+    const query = clean(driverSearchTerm).toLowerCase();
+
+    if (!query) {
+      return drivers;
+    }
+
+    return drivers.filter((driver) =>
+      [
+        driver.driver_name,
+        driver.contact_number,
+        driver.plate_number,
+        driver.vehicle_type,
+        driver.availability_status,
+        driver.preferred_areas,
+        driver.notes,
+      ].some((value) => clean(value).toLowerCase().includes(query)),
+    );
+  }, [driverSearchTerm, drivers]);
 
   const assignedDriverId = clean(booking.driverId);
   const assignedDriverName = clean(booking.driverName).toLowerCase();
@@ -2317,6 +2337,22 @@ export default function Home() {
         includePayout: Boolean(bookingRecord.driver_dispatch_include_payout),
       }
     );
+  }
+
+  function loadDriverProfileDraft(driver: DriverRecord) {
+    setDriverProfileDraft({
+      driverId: String(driver.id),
+      driverName: clean(driver.driver_name),
+      contactNumber: clean(driver.contact_number),
+      vehicleType: clean(driver.vehicle_type),
+      plateNumber: clean(driver.plate_number),
+      payoutPreferences: clean(driver.payout_preferences),
+      availabilityStatus: clean(driver.availability_status) || "available",
+      notes: clean(driver.notes),
+      preferredAreas: clean(driver.preferred_areas),
+      airportPermitNotes: clean(driver.airport_permit_notes),
+      payoutRules: driver.driver_payout_rules ?? {},
+    });
   }
 
   function applyDriverToBooking(driverId: string) {
@@ -6207,65 +6243,82 @@ export default function Home() {
 	              })}
 	            </div>
 
-	            <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-	              <h3 className="text-base font-semibold">Driver Database</h3>
-	              <div className="mt-3 max-h-96 space-y-2 overflow-auto">
-	                {drivers.length === 0 ? (
-	                  <p className="text-sm text-slate-500">No drivers loaded.</p>
-	                ) : (
-	                  drivers.map((driver) => (
-	                    <button
-	                      className="w-full rounded-md border border-stone-200 bg-white p-3 text-left text-sm transition hover:bg-stone-50"
-	                      key={driver.id}
-	                      onClick={() =>
-	                        setDriverProfileDraft({
-	                          driverId: String(driver.id),
-	                          driverName: clean(driver.driver_name),
-	                          contactNumber: clean(driver.contact_number),
-	                          vehicleType: clean(driver.vehicle_type),
-	                          plateNumber: clean(driver.plate_number),
-	                          payoutPreferences: clean(driver.payout_preferences),
-	                          availabilityStatus: clean(driver.availability_status) || "available",
-	                          notes: clean(driver.notes),
-	                          preferredAreas: clean(driver.preferred_areas),
-	                          airportPermitNotes: clean(driver.airport_permit_notes),
-	                          payoutRules: driver.driver_payout_rules ?? {},
-	                        })
-	                      }
-	                      type="button"
-	                    >
-		                      <p className="flex flex-wrap items-center gap-2 font-semibold">
-                            <span>{driver.driver_name}</span>
-                            {isInactiveDriver(driver) ? (
-                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                                Inactive
-                              </span>
-                            ) : null}
-                          </p>
-	                      <p className="text-slate-600">
-	                        {[driver.vehicle_type, driver.availability_status]
-	                          .map(clean)
-	                          .filter(Boolean)
-	                          .join(" / ")}
-	                      </p>
-	                      <p className="text-xs text-slate-500">
-	                        Plate: {clean(driver.plate_number) || "—"}
-	                      </p>
-	                      <p className="text-xs text-slate-500">
-	                        Assigned jobs:{" "}
-	                        {
-	                          operationalBookings.filter(
-	                            (bookingRecord) =>
-	                              bookingRecord.driver_id === driver.id ||
-	                              clean(bookingRecord.driver_name).toLowerCase() === clean(driver.driver_name).toLowerCase(),
-	                          ).length
-	                        }
-	                      </p>
-	                    </button>
-	                  ))
-	                )}
-	              </div>
-	            </div>
+		            <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
+		              <div className="flex flex-col gap-3">
+		                <div>
+		                  <h3 className="text-base font-semibold">Driver Database</h3>
+		                  <p className="text-xs text-slate-500" data-driver-search-count="true">
+		                    Showing {filteredDrivers.length} of {drivers.length} drivers.
+		                  </p>
+		                </div>
+		                <label>
+		                  <span className="mb-1 block text-sm font-medium text-slate-700">
+		                    Search drivers
+		                  </span>
+		                  <input
+		                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+		                    data-driver-search-input="true"
+		                    onChange={(event) => setDriverSearchTerm(event.target.value)}
+		                    placeholder="Name, phone, plate, vehicle, status, area, notes"
+		                    value={driverSearchTerm}
+		                  />
+		                </label>
+		                {drivers.length > 0 && filteredDrivers.length === 0 ? (
+		                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-driver-search-empty="true">
+		                    No matching drivers found.
+		                  </p>
+		                ) : null}
+		              </div>
+		              <div
+		                className="mt-3 max-h-80 space-y-1.5 overflow-y-auto overscroll-contain rounded-md border border-stone-200 bg-white/70 p-1 pr-2"
+		                data-driver-list-scroll="true"
+		              >
+		                {drivers.length === 0 ? (
+		                  <p className="text-sm text-slate-500">No drivers loaded.</p>
+		                ) : (
+		                  filteredDrivers.map((driver) => {
+		                    const assignedJobCount = operationalBookings.filter(
+		                      (bookingRecord) =>
+		                        bookingRecord.driver_id === driver.id ||
+		                        clean(bookingRecord.driver_name).toLowerCase() === clean(driver.driver_name).toLowerCase(),
+		                    ).length;
+		                    const driverAvailability = clean(driver.availability_status) || "available";
+		                    const vehicleAvailability = [
+		                      clean(driver.vehicle_type) || "Vehicle —",
+		                      driverAvailability,
+		                    ].join(" / ");
+
+		                    return (
+		                      <button
+		                        className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-stone-50"
+		                        data-driver-profile-row={driver.id}
+		                        key={driver.id}
+		                        onClick={() => loadDriverProfileDraft(driver)}
+		                        type="button"
+		                      >
+		                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+		                          <div className="min-w-0">
+		                            <p className="flex min-w-0 flex-wrap items-center gap-2 font-semibold">
+		                              <span className="truncate">{driver.driver_name}</span>
+		                              {isInactiveDriver(driver) ? (
+		                                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+		                                  Inactive
+		                                </span>
+		                              ) : null}
+		                            </p>
+		                            <p className="text-xs text-slate-600">{vehicleAvailability}</p>
+		                          </div>
+		                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+		                            <span>Plate: {clean(driver.plate_number) || "—"}</span>
+		                            <span>Assigned jobs: {assignedJobCount}</span>
+		                          </div>
+		                        </div>
+		                      </button>
+		                    );
+		                  })
+		                )}
+		              </div>
+		            </div>
 	          </div>
 	        </section>
         ) : null}

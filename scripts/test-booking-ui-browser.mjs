@@ -4196,28 +4196,48 @@ async function runChromeTest() {
 
     await clickTab("Drivers", "Driver Database");
 
-    await evaluate(`(() => {
-      const savedDriver = ${JSON.stringify(reusableDriverProfileFixture)};
-      window.__prestigeSavedDriver = savedDriver;
-      const jsonResponse = (body, status = 200) =>
-        new Response(JSON.stringify(body), {
-          status,
-          headers: { "content-type": "application/json" },
-        });
-      const persistDriverBody = (bodyText) => {
-        if (!bodyText) {
-          return;
-        }
+	    await evaluate(`(() => {
+	      const savedDriver = ${JSON.stringify(reusableDriverProfileFixture)};
+	      const scrollDriverFixtures = Array.from({ length: 29 }, (_, index) => ({
+	        ...savedDriver,
+	        id: 9100 + index,
+	        driver_name: \`SCROLL LIST DRIVER \${String(index + 1).padStart(2, "0")}\`,
+	        contact_number: \`+65 7000 \${String(index + 1).padStart(4, "0")}\`,
+	        vehicle_type: index % 2 ? "Viano" : "Sedan",
+	        plate_number: \`SLD\${String(index + 1).padStart(3, "0")}T\`,
+	        availability_status: "available",
+	        preferred_areas: "Orchard, Marina",
+	        payout_preferences: "Scroll fixture payout note",
+	        notes: "Scroll fixture driver note",
+	      }));
+	      window.__prestigeSavedDriver = savedDriver;
+	      window.__prestigeDriverList = [savedDriver, ...scrollDriverFixtures];
+	      const jsonResponse = (body, status = 200) =>
+	        new Response(JSON.stringify(body), {
+	          status,
+	          headers: { "content-type": "application/json" },
+	        });
+	      const setSavedDriver = (nextDriver) => {
+	        window.__prestigeSavedDriver = nextDriver;
+	        window.__prestigeDriverList = [
+	          nextDriver,
+	          ...(window.__prestigeDriverList || []).filter((driver) => driver.id !== nextDriver.id),
+	        ];
+	      };
+	      const persistDriverBody = (bodyText) => {
+	        if (!bodyText) {
+	          return;
+	        }
 
         try {
           const parsed = JSON.parse(bodyText);
-          window.__prestigeSavedDriver = {
-            ...(window.__prestigeSavedDriver || savedDriver),
-            ...parsed,
-            id: (window.__prestigeSavedDriver || savedDriver).id,
-          };
-        } catch {}
-      };
+	          setSavedDriver({
+	            ...(window.__prestigeSavedDriver || savedDriver),
+	            ...parsed,
+	            id: (window.__prestigeSavedDriver || savedDriver).id,
+	          });
+	        } catch {}
+	      };
 
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
@@ -4249,11 +4269,11 @@ async function runChromeTest() {
         if (url.includes("/rest/v1/drivers")) {
           if (method === "GET" && url.includes("driver_name=ilike")) {
             return jsonResponse(null);
-          }
+	          }
 
-          if (method === "GET") {
-            return jsonResponse([window.__prestigeSavedDriver || savedDriver]);
-          }
+	          if (method === "GET") {
+	            return jsonResponse(window.__prestigeDriverList || [window.__prestigeSavedDriver || savedDriver]);
+	          }
 
           if (method === "POST") {
             persistDriverBody(bodyText);
@@ -4366,6 +4386,7 @@ async function runChromeTest() {
             (button) => button.textContent.trim() === "Save Driver Profile",
           );
           const statusPanel = document.querySelector("[data-status-panel='global']");
+          const driverSearchCount = document.querySelector("[data-driver-search-count='true']");
           const driverButton = [...document.querySelectorAll("button")].find(
             (button) =>
               button.innerText.includes("REUSABLE PROFILE TEST DRIVER") &&
@@ -4376,10 +4397,21 @@ async function runChromeTest() {
           const saveRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
             (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/drivers"),
           );
+          const driverList = document.querySelector("[data-driver-list-scroll='true']");
+          const driverListStyle = driverList ? getComputedStyle(driverList) : null;
 
           return {
             bodyText: document.body.innerText,
             driverButtonText: driverButton?.innerText || "",
+            driverList: driverList
+              ? {
+                  clientHeight: driverList.clientHeight,
+                  overflowY: driverListStyle?.overflowY || "",
+                  scrollHeight: driverList.scrollHeight,
+                }
+              : null,
+            driverRowTexts: [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText),
+            driverSearchCountText: driverSearchCount?.textContent.trim() || "",
             fetchCalls: window.__prestigeFetchCalls || [],
             requestBodies: window.__prestigeDriverProfileRequestBodies || [],
             saveRequest: saveRequest?.body || null,
@@ -4418,8 +4450,26 @@ async function runChromeTest() {
       driverProfileSaveState.fetchCalls.every((call) => !call.includes("/rest/v1/bookings")),
       `Expected driver profile save not to update bookings, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
     );
+    assert.equal(driverProfileSaveState.driverSearchCountText, "Showing 30 of 30 drivers.");
+    assert.equal(driverProfileSaveState.driverRowTexts.length, 30);
+    assert.ok(driverProfileSaveState.driverList, "Expected Driver Database rows to render in a scroll container");
+    assert.match(driverProfileSaveState.driverList.overflowY, /auto|scroll/);
+    assert.ok(
+      driverProfileSaveState.driverList.scrollHeight > driverProfileSaveState.driverList.clientHeight,
+      `Expected Driver Database list to scroll, got scrollHeight=${driverProfileSaveState.driverList.scrollHeight} clientHeight=${driverProfileSaveState.driverList.clientHeight}`,
+    );
+    assert.ok(
+      driverProfileSaveState.driverList.clientHeight <= 340,
+      `Expected Driver Database scroll container to stay bounded, got ${driverProfileSaveState.driverList.clientHeight}px`,
+    );
     assert.match(driverProfileSaveState.driverButtonText, /busy/);
     assert.match(driverProfileSaveState.driverButtonText, /Plate:\s*SLL901P/);
+    assert.match(driverProfileSaveState.driverButtonText, /Assigned jobs:\s*\d+/);
+    assert.doesNotMatch(
+      driverProfileSaveState.driverButtonText,
+      /Prefers airport and CBD jobs|Reusable profile save test note/,
+      "Expected Driver Database row to stay compact and omit long preferences/notes",
+    );
     assert.ok(
       driverProfileSaveState.statusDistanceFromSaveButton !== null &&
         driverProfileSaveState.statusDistanceFromSaveButton <= 120,
@@ -4446,6 +4496,86 @@ async function runChromeTest() {
     assert.equal(driverProfileSaveState.fields.contactNumber, "");
     assert.equal(driverProfileSaveState.fields.vehicleType, "");
     assert.equal(driverProfileSaveState.fields.plateNumber, "");
+
+    const driverSearchQueries = [
+      ["REUSABLE PROFILE", "driver name"],
+      ["+65 8111", "contact number"],
+      ["SLL901P", "plate number"],
+      ["Alphard", "vehicle type"],
+      ["busy", "availability"],
+      ["Changi", "preferred areas"],
+      ["Reusable profile save test note", "notes"],
+    ];
+
+    for (const [query, label] of driverSearchQueries) {
+      await setInputValue("[data-driver-search-input='true']", query, `Driver search by ${label}`);
+      const driverSearchMatchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rows = [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText);
+
+            return rows.length === 1 &&
+              rows[0].includes("REUSABLE PROFILE TEST DRIVER") &&
+              rows[0].includes("SLL901P")
+              ? {
+                  countText: document.querySelector("[data-driver-search-count='true']")?.textContent.trim() || "",
+                  noMatchText: document.querySelector("[data-driver-search-empty='true']")?.textContent.trim() || "",
+                  rows,
+                }
+              : false;
+          })()`),
+        10000,
+        `driver search by ${label}`,
+      );
+
+      assert.equal(driverSearchMatchState.countText, "Showing 1 of 30 drivers.");
+      assert.equal(driverSearchMatchState.noMatchText, "");
+    }
+
+    await setInputValue("[data-driver-search-input='true']", "NO LOCAL DRIVER MATCH", "Driver search no match");
+    const driverSearchNoMatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const searchInput = document.querySelector("[data-driver-search-input='true']");
+          const noMatch = document.querySelector("[data-driver-search-empty='true']");
+          const inputRect = searchInput?.getBoundingClientRect();
+          const noMatchRect = noMatch?.getBoundingClientRect();
+
+          return noMatch?.textContent.trim() === "No matching drivers found."
+            ? {
+                countText: document.querySelector("[data-driver-search-count='true']")?.textContent.trim() || "",
+                distanceFromSearch:
+                  inputRect && noMatchRect ? Math.abs(noMatchRect.top - inputRect.bottom) : null,
+                noMatchText: noMatch.textContent.trim(),
+                rows: [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText),
+              }
+            : false;
+        })()`),
+      10000,
+      "driver search no-match state",
+    );
+    assert.equal(driverSearchNoMatchState.countText, "Showing 0 of 30 drivers.");
+    assert.equal(driverSearchNoMatchState.noMatchText, "No matching drivers found.");
+    assert.deepEqual(driverSearchNoMatchState.rows, []);
+    assert.ok(
+      driverSearchNoMatchState.distanceFromSearch !== null &&
+        driverSearchNoMatchState.distanceFromSearch <= 80,
+      `Expected Driver search no-match message near search input, got ${driverSearchNoMatchState.distanceFromSearch}px`,
+    );
+
+    await setInputValue("[data-driver-search-input='true']", "", "Driver search clear");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const rows = [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText);
+
+          return rows.length === 30 &&
+            rows[0].includes("REUSABLE PROFILE TEST DRIVER") &&
+            !document.querySelector("[data-driver-search-empty='true']");
+        })()`),
+      10000,
+      "driver search cleared",
+    );
 
     const clickedSavedDriverProfile = await evaluate(`(() => {
       const driverButton = [...document.querySelectorAll("button")].find(

@@ -591,6 +591,16 @@ function isUndoCompletionMessage(message: Message | null | undefined) {
   );
 }
 
+function isDeleteCompletedJobMessage(message: Message | null | undefined) {
+  return Boolean(
+    message &&
+      (message.text === "Delete cancelled." ||
+        message.text === "Deleting completed job..." ||
+        message.text === "Completed job deleted." ||
+        message.text.startsWith("Delete completed job failed")),
+  );
+}
+
 function isDashboardStatusMessage(message: Message | null | undefined) {
   if (!message) {
     return false;
@@ -1979,6 +1989,7 @@ export default function Home() {
   const [rateOverrideListMessages, setRateOverrideListMessages] =
     useState<{ company?: RateOverrideListMessage; boss?: RateOverrideListMessage }>({});
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
+  const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
     useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
@@ -2440,6 +2451,12 @@ export default function Home() {
       !completedBookingIds.has(bookingId) &&
       completionMessage.text === "Completion undone." &&
       isUndoCompletionMessage(completionMessage),
+  );
+  const completedTabDeleteMessages = Object.entries(bookingCompletionMessages).filter(
+    ([bookingId, completionMessage]) =>
+      !loadedBookingIds.has(bookingId) &&
+      completionMessage.text === "Completed job deleted." &&
+      isDeleteCompletedJobMessage(completionMessage),
   );
 
   const multiBookingPreviewItems = Array.isArray(multiBookingNotice?.extractedBookingsPreview)
@@ -4805,6 +4822,57 @@ export default function Home() {
     );
   }
 
+  async function deleteCompletedBooking(bookingRecord: BookingRecord) {
+    const bookingId = String(bookingRecord.id);
+
+    if (clean(bookingRecord.status).toLowerCase() !== "completed") {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: "Delete completed job failed: only completed jobs can be deleted here.",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm("Delete this completed job from the app? This cannot be undone.");
+
+    if (!confirmed) {
+      setBookingCompletionMessage(bookingId, { tone: "info", text: "Delete cancelled." });
+      return;
+    }
+
+    if (!supabase) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: "Delete completed job failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      });
+      return;
+    }
+
+    setDeletingCompletedBookingId(bookingId);
+    setBookingCompletionMessage(bookingId, { tone: "info", text: "Deleting completed job..." });
+
+    try {
+      const { error } = await supabase.from("bookings").delete().eq("id", bookingRecord.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setBookings((current) =>
+        current.filter((currentBooking) => String(currentBooking.id) !== bookingId),
+      );
+      setBookingCompletionMessage(bookingId, { tone: "success", text: "Completed job deleted." });
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Unknown completed job delete error.";
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: `Delete completed job failed: ${errorText}`,
+      });
+    } finally {
+      setDeletingCompletedBookingId(null);
+    }
+  }
+
   async function clearAssignedDriver(bookingRecord: BookingRecord) {
     const bookingId = String(bookingRecord.id);
     const nextStatus = statusAfterClearingAssignedDriver(bookingRecord.status);
@@ -5751,6 +5819,26 @@ export default function Home() {
           ))}
         </div>
       ) : null}
+      {completedTabDeleteMessages.length > 0 ? (
+        <div className="mt-4 space-y-2" data-completed-delete-feedback-list="true">
+          {completedTabDeleteMessages.map(([bookingId, completionMessage]) => (
+            <div
+              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+              data-completed-delete-feedback-card={bookingId}
+              key={`completed-delete-message-${bookingId}`}
+            >
+              <p
+                className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+                  completionMessage.tone,
+                )}`}
+                data-booking-completion-message={bookingId}
+              >
+                {completionMessage.text}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {completedBookings.length > 0 ? (
         <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -5802,7 +5890,9 @@ export default function Home() {
               const createdAt = formatCreatedAt(savedBooking.created_at);
               const bookingId = String(savedBooking.id);
               const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
-              const bookingCompletionMessage = isUndoCompletionMessage(rawBookingCompletionMessage)
+              const bookingCompletionMessage =
+                isUndoCompletionMessage(rawBookingCompletionMessage) ||
+                isDeleteCompletedJobMessage(rawBookingCompletionMessage)
                 ? rawBookingCompletionMessage
                 : null;
               const priceLine = bookingCardPriceLine(savedBooking);
@@ -5853,11 +5943,20 @@ export default function Home() {
                       <button
                         className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         data-completed-undo-booking={bookingId}
-                        disabled={completingBookingId === bookingId}
+                        disabled={completingBookingId === bookingId || deletingCompletedBookingId === bookingId}
                         onClick={() => undoBookingCompleted(savedBooking)}
                         type="button"
                       >
                         {completingBookingId === bookingId ? "Undoing..." : "Undo completed"}
+                      </button>
+                      <button
+                        className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-completed-delete-booking={bookingId}
+                        disabled={deletingCompletedBookingId === bookingId || completingBookingId === bookingId}
+                        onClick={() => deleteCompletedBooking(savedBooking)}
+                        type="button"
+                      >
+                        {deletingCompletedBookingId === bookingId ? "Deleting..." : "Delete"}
                       </button>
                       {bookingCompletionMessage ? (
                         <p

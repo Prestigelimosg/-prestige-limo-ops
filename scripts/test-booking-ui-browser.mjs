@@ -2636,6 +2636,8 @@ async function runChromeTest() {
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
       window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeCompletedDeleteRequests = [];
+      window.__prestigeLoadedBookings = loadedBookings;
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -2650,7 +2652,7 @@ async function runChromeTest() {
           String(target).includes("/rest/v1/bookings") &&
           String(target).includes("select=")
         ) {
-          return new Response(JSON.stringify(loadedBookings), {
+          return new Response(JSON.stringify(window.__prestigeLoadedBookings || []), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
@@ -2682,6 +2684,17 @@ async function runChromeTest() {
               body: parsedBody,
               url: String(target),
             });
+            const idMatch = String(target).match(/id=eq\\.([^&]+)/);
+            const patchedId = idMatch ? decodeURIComponent(idMatch[1]) : "";
+            window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) =>
+              String(booking.id) === patchedId
+                ? {
+                    ...booking,
+                    status: parsedBody.status,
+                    updated_at: parsedBody.updated_at,
+                  }
+                : booking,
+            );
 
             return new Response(JSON.stringify([]), {
               status: 200,
@@ -2702,6 +2715,24 @@ async function runChromeTest() {
               headers: { "content-type": "application/json" },
             });
           }
+        }
+
+        if (method === "DELETE" && String(target).includes("/rest/v1/bookings")) {
+          const idMatch = String(target).match(/id=eq\\.([^&]+)/);
+          const deletedId = idMatch ? decodeURIComponent(idMatch[1]) : "";
+
+          window.__prestigeCompletedDeleteRequests.push({
+            id: deletedId,
+            url: String(target),
+          });
+          window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).filter(
+            (booking) => String(booking.id) !== deletedId,
+          );
+
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
         }
 
         if (
@@ -4635,6 +4666,9 @@ async function runChromeTest() {
                 hasUndoButton: Boolean(
                   completedArticle.querySelector("[data-completed-undo-booking='${dashboardCompletionActionFixture.id}']"),
                 ),
+                hasDeleteButton: Boolean(
+                  completedArticle.querySelector("[data-completed-delete-booking='${dashboardCompletionActionFixture.id}']"),
+                ),
               }
             : false;
         })()`),
@@ -4681,6 +4715,11 @@ async function runChromeTest() {
       markedCompletedTabState.hasUndoButton,
       true,
       "Expected marked completed booking to offer Undo completed in Completed tab",
+    );
+    assert.equal(
+      markedCompletedTabState.hasDeleteButton,
+      true,
+      "Expected marked completed booking to offer Delete in Completed tab",
     );
 
     const clickedMarkedCompletedLoadThisBooking = await evaluate(`(() => {
@@ -4752,7 +4791,249 @@ async function runChromeTest() {
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
+      window.__prestigeCompletedDeleteRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeConfirmMessages = [];
+      window.confirm = (message) => {
+        window.__prestigeConfirmMessages.push(String(message));
+        return false;
+      };
+    })()`);
+
+    const clickedCancelCompletedDelete = await evaluate(`(() => {
+      const completedArticle = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+          candidate.innerText.includes("SQ779"),
+      );
+      const deleteButton = completedArticle?.querySelector("[data-completed-delete-booking='${dashboardCompletionActionFixture.id}']");
+
+      if (!deleteButton || deleteButton.disabled) {
+        return false;
+      }
+
+      deleteButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedCancelCompletedDelete, true, "Expected completed Delete button to be clickable");
+
+    const cancelledCompletedDeleteState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const completedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+              candidate.innerText.includes("SQ779"),
+          );
+          const deleteButton = completedArticle?.querySelector("[data-completed-delete-booking='${dashboardCompletionActionFixture.id}']");
+          const completionMessage = completedArticle?.querySelector("[data-booking-completion-message='${dashboardCompletionActionFixture.id}']");
+          const buttonRect = deleteButton?.getBoundingClientRect();
+          const messageRect = completionMessage?.getBoundingClientRect();
+
+          return completionMessage?.textContent.trim() === "Delete cancelled."
+            ? {
+                articleText: completedArticle?.innerText || "",
+                confirmMessages: window.__prestigeConfirmMessages || [],
+                deleteRequests: window.__prestigeCompletedDeleteRequests || [],
+                distanceFromButton:
+                  buttonRect && messageRect ? Math.abs(messageRect.top - buttonRect.bottom) : null,
+                globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+                messageText: completionMessage.textContent.trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "cancelled completed delete feedback",
+    );
+    assert.deepEqual(cancelledCompletedDeleteState.confirmMessages, [
+      "Delete this completed job from the app? This cannot be undone.",
+    ]);
+    assert.deepEqual(
+      cancelledCompletedDeleteState.deleteRequests,
+      [],
+      "Expected cancelled completed delete not to call Supabase delete",
+    );
+    assert.match(cancelledCompletedDeleteState.articleText, /COMPLETION ACTION TEST TRAVELER/);
+    assert.notEqual(
+      cancelledCompletedDeleteState.globalStatusText,
+      "Delete cancelled.",
+      "Expected completed delete cancel feedback not to appear only in the global status panel",
+    );
+    assert.ok(
+      cancelledCompletedDeleteState.distanceFromButton !== null &&
+        cancelledCompletedDeleteState.distanceFromButton <= 120,
+      `Expected completed delete cancel message near Delete button, got ${cancelledCompletedDeleteState.distanceFromButton}px`,
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeCompletedDeleteRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeConfirmMessages = [];
+      window.confirm = (message) => {
+        window.__prestigeConfirmMessages.push(String(message));
+        return true;
+      };
+    })()`);
+
+    const clickedConfirmCompletedDelete = await evaluate(`(() => {
+      const completedArticle = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+          candidate.innerText.includes("SQ779"),
+      );
+      const deleteButton = completedArticle?.querySelector("[data-completed-delete-booking='${dashboardCompletionActionFixture.id}']");
+
+      if (!deleteButton || deleteButton.disabled) {
+        return false;
+      }
+
+      deleteButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedConfirmCompletedDelete,
+      true,
+      "Expected completed Delete button to be clickable after cancel",
+    );
+
+    const confirmedCompletedDeleteState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const deletedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+              candidate.innerText.includes("SQ779"),
+          );
+          const otherCompletedArticle = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("COMPLETED TEST TRAVELER") &&
+              candidate.innerText.includes("SQ888"),
+          );
+          const feedbackCard = document.querySelector("[data-completed-delete-feedback-card='${dashboardCompletionActionFixture.id}']");
+          const completionMessage = feedbackCard?.querySelector("[data-booking-completion-message='${dashboardCompletionActionFixture.id}']");
+
+          return !deletedArticle && completionMessage?.textContent.trim() === "Completed job deleted."
+            ? {
+                confirmMessages: window.__prestigeConfirmMessages || [],
+                deleteRequests: window.__prestigeCompletedDeleteRequests || [],
+                feedbackCardText: feedbackCard?.textContent.trim() || "",
+                fetchCalls: window.__prestigeFetchCalls || [],
+                globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+                otherCompletedArticleText: otherCompletedArticle?.innerText || "",
+                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+              }
+            : false;
+        })()`),
+      10000,
+      "confirmed completed delete feedback",
+    );
+    assert.deepEqual(confirmedCompletedDeleteState.confirmMessages, [
+      "Delete this completed job from the app? This cannot be undone.",
+    ]);
+    assert.deepEqual(
+      confirmedCompletedDeleteState.unhandledSupabaseCalls,
+      [],
+      `Expected completed delete Supabase calls to be mocked, got ${confirmedCompletedDeleteState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    const completedDeleteBookingCalls = confirmedCompletedDeleteState.fetchCalls.filter(
+      (call) => call.startsWith("DELETE ") && call.includes("/rest/v1/bookings"),
+    );
+    assert.equal(
+      confirmedCompletedDeleteState.deleteRequests.length,
+      1,
+      "Expected confirmed completed delete to make one booking DELETE request",
+    );
+    assert.equal(confirmedCompletedDeleteState.deleteRequests[0]?.id, dashboardCompletionActionFixture.id);
+    assert.match(
+      confirmedCompletedDeleteState.deleteRequests[0]?.url || "",
+      new RegExp(`\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardCompletionActionFixture.id}`),
+    );
+    assert.equal(
+      completedDeleteBookingCalls.length,
+      1,
+      `Expected one DELETE booking fetch call, got ${confirmedCompletedDeleteState.fetchCalls.join(", ")}`,
+    );
+    assert.match(confirmedCompletedDeleteState.feedbackCardText, /Completed job deleted\./);
+    assert.match(
+      confirmedCompletedDeleteState.otherCompletedArticleText,
+      /COMPLETED TEST TRAVELER/,
+      "Expected deleting one completed job not to remove other completed jobs",
+    );
+    assert.notEqual(
+      confirmedCompletedDeleteState.globalStatusText,
+      "Completed job deleted.",
+      "Expected completed delete success feedback not to appear only in the global status panel",
+    );
+
+    await clickTab("Bookings", "Load Bookings");
+
+    const clickedReloadAfterCompletedDelete = await evaluate(`(() => {
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Bookings",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedReloadAfterCompletedDelete,
+      true,
+      "Expected Load Bookings button to be clickable after completed delete",
+    );
+
+    await waitForCondition(
+      () =>
+        evaluate(`document.body.innerText.includes("Recent Bookings")`),
+      10000,
+      "bookings reloaded after completed delete",
+    );
+
+    await clickTab("Completed", "Completed Bookings");
+
+    const completedDeleteReloadState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+          const bodyText = document.body.innerText;
+
+          return bodyText.includes("Completed Bookings")
+            ? {
+                deletedBookingVisible: articles.some(
+                  (articleText) =>
+                    articleText.includes("COMPLETION ACTION TEST TRAVELER") &&
+                    articleText.includes("SQ779"),
+                ),
+                otherCompletedVisible: articles.some(
+                  (articleText) =>
+                    articleText.includes("COMPLETED TEST TRAVELER") &&
+                    articleText.includes("SQ888"),
+                ),
+              }
+            : false;
+        })()`),
+      10000,
+      "completed delete persistence after reload",
+    );
+    assert.equal(
+      completedDeleteReloadState.deletedBookingVisible,
+      false,
+      "Expected deleted completed job not to reappear after Load Bookings",
+    );
+    assert.equal(
+      completedDeleteReloadState.otherCompletedVisible,
+      true,
+      "Expected other completed jobs to remain after completed delete reload",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
       window.__prestigeBookingCompletionRequests = [];
+      window.__prestigeCompletedDeleteRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
     })()`);
 
@@ -7380,8 +7661,8 @@ async function runChromeTest() {
           const bodyText = document.body.innerText;
 
           return bodyText.includes("COMPLETED TEST TRAVELER") &&
-            bodyText.includes("DASHBOARD STATUS FLOW TRAVELER") &&
-            bodyText.includes("COMPLETION ACTION TEST TRAVELER") &&
+            bodyText.includes("PRICE DISPLAY CUSTOMER ONLY TRAVELER") &&
+            !bodyText.includes("COMPLETION ACTION TEST TRAVELER") &&
             !document.querySelector("[data-completed-search-empty='true']");
         })()`),
       10000,

@@ -3274,6 +3274,11 @@ async function runChromeTest() {
     );
     assert.match(
       dashboardDriverDispatchCopyState.copiedTexts[0] || "",
+      /Plate: SLC777D/,
+      "Expected Dashboard Driver Dispatch copy to include the current assigned car plate",
+    );
+    assert.match(
+      dashboardDriverDispatchCopyState.copiedTexts[0] || "",
       /Payout: \$82/,
       "Expected Driver Dispatch copy to use the manual dashboard payout override",
     );

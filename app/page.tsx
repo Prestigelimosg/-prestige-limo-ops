@@ -1849,6 +1849,7 @@ function getBookingJobCard(bookingRecord: BookingRecord) {
 function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: DriverDraft) {
   const driverName = clean(driverDraft.driverName) || clean(bookingRecord.driver_name) || "Driver TBC";
   const driverContact = clean(driverDraft.driverContact) || clean(bookingRecord.driver_contact);
+  const driverPlate = clean(driverDraft.driverPlate) || clean(bookingRecord.driver_plate_number);
   const payoutAmount =
     numericRate(driverDraft.payoutOverride) ||
     numericRate(bookingRecord.driver_payout_override) ||
@@ -1864,6 +1865,7 @@ function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: Driver
     "",
     `Driver: ${driverName}`,
     driverContact ? `Contact: ${driverContact}` : "",
+    driverPlate ? `Plate: ${driverPlate}` : "",
     "",
     `${bookingRecord.vehicle || "Vehicle"} ${bookingRecord.booking_type || "Booking"}`,
     formatPickupDateTime(getBookingDateKey(bookingRecord), bookingRecord.pickup_time),

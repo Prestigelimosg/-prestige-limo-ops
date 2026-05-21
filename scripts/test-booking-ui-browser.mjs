@@ -528,10 +528,10 @@ const dashboardCompletionActionFixture = {
   pickup_address: "Changi Airport T3",
   dropoff_address: "Capella Singapore",
   flight_no: "SQ779",
-  route: "Changi Airport T3 > Capella Singapore",
+  route: "Changi Airport T3 > Marina Bay Sands > Capella Singapore",
   pax: 2,
   job_card:
-    "AVF MNG\n30 May 2026, 1845hrs\nFlight: SQ779\nChangi Airport T3 > Capella Singapore\nCompany: COMPLETION ACTION TEST COMPANY\nPassenger: COMPLETION ACTION TEST TRAVELER\nPax: 2",
+    "AVF MNG\n30 May 2026, 1845hrs\nFlight: SQ779\nChangi Airport T3 > Marina Bay Sands > Capella Singapore\nCompany: COMPLETION ACTION TEST COMPANY\nPassenger: COMPLETION ACTION TEST TRAVELER\nPax: 2",
   status: "assigned",
   driver_id: 901,
   driver_name: "COMPLETION ACTION DRIVER",
@@ -543,7 +543,9 @@ const dashboardCompletionActionFixture = {
   driver_payout_reason: "Completion action should preserve driver payout",
   driver_notes: "Completion action should preserve notes",
   driver_dispatch_include_payout: true,
-  extra_stop_count: 0,
+  extra_stop_count: 1,
+  extra_stop_surcharge: 15,
+  extra_stop_payout: 10,
   child_seat_required: false,
   child_seat_count: 0,
   child_seat_type: null,
@@ -4642,6 +4644,34 @@ async function runChromeTest() {
 
     assert.match(markedCompletedTabState.articleText, /Completed/i);
     assert.match(markedCompletedTabState.articleText, /COMPLETION ACTION TEST COMPANY/);
+    assert.match(markedCompletedTabState.articleText, /COMPLETION ACTION TEST TRAVELER/);
+    assert.match(markedCompletedTabState.articleText, /30 May 2026, 1845hrs/);
+    assert.match(markedCompletedTabState.articleText, /Flight SQ779/);
+    assert.match(
+      markedCompletedTabState.articleText,
+      /Changi Airport T3\s*>\s*Marina Bay Sands\s*>\s*Capella Singapore/,
+      "Expected Completed tab to preserve the full route with extra stop after marking completed",
+    );
+    assert.match(
+      markedCompletedTabState.articleText,
+      /Driver:\s*COMPLETION ACTION DRIVER/,
+      "Expected Completed tab to preserve the assigned driver after marking completed",
+    );
+    assert.match(
+      markedCompletedTabState.articleText,
+      /Driver contact:\s*\+65 8111 7799/,
+      "Expected Completed tab to preserve the assigned driver contact after marking completed",
+    );
+    assert.match(
+      markedCompletedTabState.articleText,
+      /Car plate:\s*SLC779C/,
+      "Expected Completed tab to preserve the assigned car plate after marking completed",
+    );
+    assert.match(
+      markedCompletedTabState.articleText,
+      /Customer \$115 \/ Driver \$80/,
+      "Expected Completed tab to preserve the manual driver payout after marking completed",
+    );
     assert.equal(
       markedCompletedTabState.hasMarkCompletedSuccessMessage,
       false,
@@ -4652,6 +4682,73 @@ async function runChromeTest() {
       true,
       "Expected marked completed booking to offer Undo completed in Completed tab",
     );
+
+    const clickedMarkedCompletedLoadThisBooking = await evaluate(`(() => {
+      const completedArticle = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("COMPLETION ACTION TEST TRAVELER") &&
+          candidate.innerText.includes("SQ779"),
+      );
+      const loadButton = completedArticle?.querySelector("[data-completed-load-booking='true']");
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedMarkedCompletedLoadThisBooking,
+      true,
+      "Expected marked completed booking Load this booking button to be clickable",
+    );
+
+    const markedCompletedLoadedDispatchState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.flight === "SQ779" &&
+          candidateState?.fields?.name === "COMPLETION ACTION TEST TRAVELER"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "marked completed booking loaded into Dispatch",
+    );
+    assert.equal(markedCompletedLoadedDispatchState.fields.pickup, "Changi Airport T3");
+    assert.equal(markedCompletedLoadedDispatchState.fields.extraStopLocation, "Marina Bay Sands");
+    assert.equal(markedCompletedLoadedDispatchState.fields.dropoff, "Capella Singapore");
+    assert.equal(markedCompletedLoadedDispatchState.fields.driverName, "COMPLETION ACTION DRIVER");
+    assert.match(
+      markedCompletedLoadedDispatchState.jobCardPreview,
+      /Changi Airport T3\s*>\s*Marina Bay Sands\s*>\s*Capella Singapore/,
+      "Expected completed booking Job Card preview to preserve the full route after load",
+    );
+    assert.match(markedCompletedLoadedDispatchState.driverDispatch, /COMPLETION ACTION DRIVER/);
+    assert.match(markedCompletedLoadedDispatchState.driverDispatch, /Contact: \+65 8111 7799/);
+    assert.match(markedCompletedLoadedDispatchState.driverDispatch, /Plate: SLC779C/);
+    assert.match(markedCompletedLoadedDispatchState.driverDispatch, /Payout: \$80/);
+    assert.match(
+      markedCompletedLoadedDispatchState.driverDispatch,
+      /Changi Airport T3\s*>\s*Marina Bay Sands\s*>\s*Capella Singapore/,
+      "Expected completed booking Driver Dispatch copy to preserve the full route after load",
+    );
+    assert.match(markedCompletedLoadedDispatchState.customerCopy, /Driver: COMPLETION ACTION DRIVER/);
+    assert.match(markedCompletedLoadedDispatchState.customerCopy, /Driver contact: \+65 8111 7799/);
+    assert.match(markedCompletedLoadedDispatchState.customerCopy, /Car plate: SLC779C/);
+    assert.match(
+      markedCompletedLoadedDispatchState.customerCopy,
+      /Route: Changi Airport T3\s*>\s*Marina Bay Sands\s*>\s*Capella Singapore/,
+      "Expected completed booking Customer Copy to preserve the full route after load",
+    );
+    assert.doesNotMatch(
+      markedCompletedLoadedDispatchState.customerCopy,
+      /Payout|override reason|AVF MNG/i,
+      "Expected completed booking Customer Copy to keep customer-facing copy protections after load",
+    );
+
+    await clickTab("Completed", "Completed Bookings");
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];

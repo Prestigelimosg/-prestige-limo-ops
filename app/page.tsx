@@ -5806,6 +5806,9 @@ export default function Home() {
                 ? rawBookingCompletionMessage
                 : null;
               const priceLine = bookingCardPriceLine(savedBooking);
+              const completedDriverName = clean(savedBooking.driver_name);
+              const completedDriverContact = clean(savedBooking.driver_contact);
+              const completedDriverPlate = clean(savedBooking.driver_plate_number);
 
               return (
                 <article
@@ -5832,6 +5835,9 @@ export default function Home() {
                         {getBookingName(savedBooking) || "Unknown"}
                       </p>
                       <p>{routeText}</p>
+                      {completedDriverName ? <p>Driver: {completedDriverName}</p> : null}
+                      {completedDriverContact ? <p>Driver contact: {completedDriverContact}</p> : null}
+                      {completedDriverPlate ? <p>Car plate: {completedDriverPlate}</p> : null}
                       {priceLine ? <p>{priceLine}</p> : null}
                       {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                     </div>

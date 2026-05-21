@@ -2201,6 +2201,109 @@ async function runChromeTest() {
     );
     assert.match(jobCardCopyPlacementState.copiedTexts[0] || "", /Flight: SQ333/);
 
+    const editedJobCardCopyText = [
+      "EDITED JOB CARD COPY",
+      "Flight: SQ333",
+      "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
+      "Temporary WhatsApp edit only",
+    ].join("\n");
+    const clickedJobCardEdit = await evaluate(`(() => {
+      const editButton = document.querySelector("[data-copy-edit-button='jobCard']");
+
+      if (!editButton || editButton.disabled) {
+        return false;
+      }
+
+      editButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedJobCardEdit, true, "Expected Job Card Preview Edit button to be clickable");
+
+    const jobCardTextareaState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const textarea = document.querySelector("[data-copy-edit-textarea='jobCard']");
+
+          return textarea
+            ? {
+                hasCancel: Boolean(document.querySelector("[data-copy-cancel-edit='jobCard']")),
+                hasSave: Boolean(document.querySelector("[data-copy-save-edit='jobCard']")),
+                value: textarea.value,
+              }
+            : false;
+        })()`),
+      10000,
+      "Job Card editable textarea",
+    );
+    assert.equal(jobCardTextareaState.hasCancel, true);
+    assert.equal(jobCardTextareaState.hasSave, true);
+    assert.match(jobCardTextareaState.value, /Flight: SQ333/);
+
+    await setInputValue("[data-copy-edit-textarea='jobCard']", editedJobCardCopyText, "Job Card copy edit");
+
+    const clickedJobCardSaveEdit = await evaluate(`(() => {
+      const saveButton = document.querySelector("[data-copy-save-edit='jobCard']");
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedJobCardSaveEdit, true, "Expected Job Card Save Edit button to be clickable");
+
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const feedback = document.querySelector("[data-copy-feedback='job-card']");
+          const preview = document.querySelector("[data-copy-preview='jobCard']");
+
+          return feedback?.textContent.trim() === "Job card edit saved." &&
+            preview?.innerText.includes("EDITED JOB CARD COPY") &&
+            !document.querySelector("[data-copy-edit-textarea='jobCard']");
+        })()`),
+      10000,
+      "Job Card edit saved feedback",
+    );
+
+    await evaluate(`window.__prestigeCopiedTexts = []`);
+    const clickedEditedJobCardCopy = await evaluate(`(() => {
+      const copyButton = document.querySelector("[data-copy-copy-button='jobCard']");
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedEditedJobCardCopy, true, "Expected edited Job Card Copy button to be clickable");
+
+    const editedJobCardCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const feedback = document.querySelector("[data-copy-feedback='job-card']");
+
+          return feedback?.textContent.trim() === "Job card copied."
+            ? {
+                copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "edited Job Card copied text",
+    );
+    assert.deepEqual(editedJobCardCopyState.globalCopyMessages, []);
+    assert.equal(
+      editedJobCardCopyState.copiedText,
+      editedJobCardCopyText,
+      "Expected edited Job Card text to be copied instead of the generated preview",
+    );
+
     const clickedDriverDispatchCopy = await evaluate(`(() => {
       const sectionForHeading = (headingText) => {
         const heading = [...document.querySelectorAll("h2")].find(
@@ -2303,6 +2406,92 @@ async function runChromeTest() {
       ] || "",
       /DRIVER DISPATCH/,
     );
+
+    const generatedDriverDispatchCopy =
+      driverDispatchCopyPlacementState.copiedTexts[driverDispatchCopyPlacementState.copiedTexts.length - 1] || "";
+    const editedDriverDispatchCopyText = `${generatedDriverDispatchCopy}\n\nDriver edit note: Temporary dispatch copy edit.`;
+    const clickedDriverDispatchEdit = await evaluate(`(() => {
+      const editButton = document.querySelector("[data-copy-edit-button='driverDispatch']");
+
+      if (!editButton || editButton.disabled) {
+        return false;
+      }
+
+      editButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDriverDispatchEdit, true, "Expected Driver Dispatch Edit button to be clickable");
+
+    await waitForCondition(
+      () =>
+        evaluate(`Boolean(document.querySelector("[data-copy-edit-textarea='driverDispatch']"))`),
+      10000,
+      "Driver Dispatch editable textarea",
+    );
+    await setInputValue(
+      "[data-copy-edit-textarea='driverDispatch']",
+      editedDriverDispatchCopyText,
+      "Driver Dispatch copy edit",
+    );
+
+    const clickedDriverDispatchSaveEdit = await evaluate(`(() => {
+      const saveButton = document.querySelector("[data-copy-save-edit='driverDispatch']");
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDriverDispatchSaveEdit, true, "Expected Driver Dispatch Save Edit button to be clickable");
+    await waitForCondition(
+      () =>
+        evaluate(`document.querySelector("[data-copy-feedback='driver-dispatch']")?.textContent.trim() === "Driver dispatch edit saved."`),
+      10000,
+      "Driver Dispatch edit saved feedback",
+    );
+
+    await evaluate(`window.__prestigeCopiedTexts = []`);
+    const clickedEditedDriverDispatchCopy = await evaluate(`(() => {
+      const copyButton = document.querySelector("[data-copy-copy-button='driverDispatch']");
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedEditedDriverDispatchCopy,
+      true,
+      "Expected edited Driver Dispatch Copy button to be clickable",
+    );
+    const editedDriverDispatchCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const feedback = document.querySelector("[data-copy-feedback='driver-dispatch']");
+
+          return feedback?.textContent.trim() === "Driver dispatch copied."
+            ? {
+                copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "edited Driver Dispatch copied text",
+    );
+    assert.deepEqual(editedDriverDispatchCopyState.globalCopyMessages, []);
+    assert.equal(
+      editedDriverDispatchCopyState.copiedText,
+      editedDriverDispatchCopyText,
+      "Expected edited Driver Dispatch text to be copied instead of the generated preview",
+    );
+    assert.match(editedDriverDispatchCopyState.copiedText, /DRIVER DISPATCH/);
 
     const savedCountBeforeAiAssist = await evaluate(
       `document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || ""`,
@@ -3370,6 +3559,161 @@ async function runChromeTest() {
       "Expected Customer Copy to show Arrival without vehicle type or the MNG booking code",
     );
 
+    const clickedCustomerCopyCancelEdit = await evaluate(`(() => {
+      const editButton = document.querySelector("[data-copy-edit-button='customerCopy']");
+
+      if (!editButton || editButton.disabled) {
+        return false;
+      }
+
+      editButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedCustomerCopyCancelEdit, true, "Expected Customer Copy Edit button to be clickable");
+
+    const customerCopyTextareaState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const textarea = document.querySelector("[data-copy-edit-textarea='customerCopy']");
+
+          return textarea
+            ? {
+                hasCancel: Boolean(document.querySelector("[data-copy-cancel-edit='customerCopy']")),
+                hasSave: Boolean(document.querySelector("[data-copy-save-edit='customerCopy']")),
+                value: textarea.value,
+              }
+            : false;
+        })()`),
+      10000,
+      "Customer Copy editable textarea",
+    );
+    assert.equal(customerCopyTextareaState.hasCancel, true);
+    assert.equal(customerCopyTextareaState.hasSave, true);
+    assert.match(customerCopyTextareaState.value, /Thank you for choosing Prestige Limo SG\./);
+
+    await setInputValue(
+      "[data-copy-edit-textarea='customerCopy']",
+      "CANCELLED CUSTOMER COPY EDIT",
+      "Customer Copy cancelled edit",
+    );
+
+    const clickedCustomerCopyCancel = await evaluate(`(() => {
+      const cancelButton = document.querySelector("[data-copy-cancel-edit='customerCopy']");
+
+      if (!cancelButton || cancelButton.disabled) {
+        return false;
+      }
+
+      cancelButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedCustomerCopyCancel, true, "Expected Customer Copy Cancel Edit button to be clickable");
+
+    const cancelledCustomerCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const feedback = document.querySelector("[data-copy-feedback='customer-copy']");
+          const preview = document.querySelector("[data-copy-preview='customerCopy']");
+
+          return feedback?.textContent.trim() === "Customer copy edit cancelled. Generated text restored." &&
+            preview &&
+            !preview.innerText.includes("CANCELLED CUSTOMER COPY EDIT")
+            ? {
+                feedbackText: feedback.textContent.trim(),
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /edit|copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+                previewText: preview.innerText,
+              }
+            : false;
+        })()`),
+      10000,
+      "Customer Copy cancel restored generated text",
+    );
+    assert.deepEqual(cancelledCustomerCopyState.globalCopyMessages, []);
+    assert.match(cancelledCustomerCopyState.previewText, /Thank you for choosing Prestige Limo SG\./);
+
+    const customerCopyManualNote = "Customer note: Please meet driver at the arrival area.";
+    const editedLoadedCustomerCopyText = manualPayoutLoadedPricingState.customerCopy.replace(
+      "\n\nThank you for choosing Prestige Limo SG.",
+      `\n\n${customerCopyManualNote}\n\nThank you for choosing Prestige Limo SG.`,
+    );
+    const clickedCustomerCopyEditForSave = await evaluate(`(() => {
+      const editButton = document.querySelector("[data-copy-edit-button='customerCopy']");
+
+      if (!editButton || editButton.disabled) {
+        return false;
+      }
+
+      editButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedCustomerCopyEditForSave,
+      true,
+      "Expected Customer Copy Edit button to be clickable after cancel",
+    );
+
+    await waitForCondition(
+      () =>
+        evaluate(`Boolean(document.querySelector("[data-copy-edit-textarea='customerCopy']"))`),
+      10000,
+      "Customer Copy editable textarea after cancel",
+    );
+    await setInputValue(
+      "[data-copy-edit-textarea='customerCopy']",
+      editedLoadedCustomerCopyText,
+      "Customer Copy saved edit",
+    );
+
+    const clickedCustomerCopySaveEdit = await evaluate(`(() => {
+      const saveButton = document.querySelector("[data-copy-save-edit='customerCopy']");
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedCustomerCopySaveEdit, true, "Expected Customer Copy Save Edit button to be clickable");
+
+    const savedCustomerCopyEditState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const feedback = document.querySelector("[data-copy-feedback='customer-copy']");
+          const preview = document.querySelector("[data-copy-preview='customerCopy']");
+
+          return feedback?.textContent.trim() === "Customer copy edit saved." &&
+            preview?.innerText.includes(${JSON.stringify(customerCopyManualNote)})
+            ? {
+                feedbackText: feedback.textContent.trim(),
+                previewText: preview.innerText,
+              }
+            : false;
+        })()`),
+      10000,
+      "Customer Copy edit saved feedback",
+    );
+    assert.match(savedCustomerCopyEditState.previewText, /Customer note: Please meet driver at the arrival area\./);
+
+    const customerCopyEditUnaffectedFieldsState = await evaluate(extractStateScript);
+    assert.equal(
+      customerCopyEditUnaffectedFieldsState.fields.flight,
+      "SQ777",
+      "Expected Customer Copy editing not to change the booking flight field",
+    );
+    assert.equal(
+      customerCopyEditUnaffectedFieldsState.fields.name,
+      "DASHBOARD DRIVER TEST TRAVELER",
+      "Expected Customer Copy editing not to change the booking passenger field",
+    );
+    assert.equal(
+      customerCopyEditUnaffectedFieldsState.fields.vehicle,
+      "AVF",
+      "Expected Customer Copy editing not to change the saved booking vehicle field",
+    );
+
     await evaluate(`window.__prestigeCopiedTexts = []`);
 
     const clickedLoadedCustomerCopy = await evaluate(`(() => {
@@ -3476,6 +3820,7 @@ async function runChromeTest() {
     assert.match(loadedCustomerCopyState.copiedText, /Driver: DASHBOARD TEST DRIVER/);
     assert.match(loadedCustomerCopyState.copiedText, /Driver contact: \+65 8555 7777/);
     assert.match(loadedCustomerCopyState.copiedText, /Car plate: SLC777D/);
+    assert.match(loadedCustomerCopyState.copiedText, /Customer note: Please meet driver at the arrival area\./);
     assert.ok(
       loadedCustomerCopyState.copiedText.trim().endsWith("Thank you for choosing Prestige Limo SG."),
       "Expected Customer Copy to end with the Prestige Limo SG thank-you line",
@@ -6778,6 +7123,11 @@ async function runChromeTest() {
     assert.match(lutherLoadedPricingState.driverDispatch, /Payout: \$95/);
     assert.doesNotMatch(lutherLoadedPricingState.driverDispatch, /Payout: \$85/);
     assert.match(lutherLoadedPricingState.customerCopy, /Service: Departure/);
+    assert.doesNotMatch(
+      lutherLoadedPricingState.customerCopy,
+      /Customer note: Please meet driver at the arrival area\./,
+      "Expected edited Customer Copy text to reset when a different booking is loaded",
+    );
     assert.doesNotMatch(
       lutherLoadedPricingState.customerCopy,
       /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|DEP)\b/i,

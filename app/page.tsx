@@ -212,7 +212,17 @@ type RateOverrideListMessage = Message & {
 };
 
 type CopyFeedback = Message & {
-  target: "customerCopy" | "driverDispatch" | "jobCard";
+  target: DispatchCopyTarget;
+};
+
+type DispatchCopyTarget = "customerCopy" | "driverDispatch" | "jobCard";
+
+type CopyEditState = {
+  draftText: string;
+  editedText: string | null;
+  generatedText: string;
+  isEditing: boolean;
+  sourceKey: string;
 };
 
 type BookingCopyTarget = "driverDispatch" | "jobCard";
@@ -340,6 +350,20 @@ const customerBookingTypeLabels: Record<keyof Required<RateRules>, string> = {
   TRF: "City Transfer",
   DSP: "Hourly",
 };
+
+const dispatchCopyLabels: Record<DispatchCopyTarget, string> = {
+  customerCopy: "Customer copy",
+  driverDispatch: "Driver dispatch",
+  jobCard: "Job card",
+};
+
+function createInitialCopyEditStates(): Record<DispatchCopyTarget, CopyEditState> {
+  return {
+    customerCopy: { draftText: "", editedText: null, generatedText: "", isEditing: false, sourceKey: "" },
+    driverDispatch: { draftText: "", editedText: null, generatedText: "", isEditing: false, sourceKey: "" },
+    jobCard: { draftText: "", editedText: null, generatedText: "", isEditing: false, sourceKey: "" },
+  };
+}
 
 const childSeatTypeOptions = [
   "infant seat",
@@ -1955,6 +1979,8 @@ export default function Home() {
   const [rateOverrideListMessages, setRateOverrideListMessages] =
     useState<{ company?: RateOverrideListMessage; boss?: RateOverrideListMessage }>({});
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
+  const [copyEditStates, setCopyEditStates] =
+    useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [message, setMessage] = useState<Message>({
@@ -2327,6 +2353,25 @@ export default function Home() {
       .map((section) => section.join("\n").trim())
       .join("\n\n");
   }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
+
+  const generatedDispatchCopyMessages = useMemo(
+    () => ({
+      customerCopy: customerCopyCard,
+      driverDispatch: draftDriverDispatchCard,
+      jobCard: jobCardPreview,
+    }),
+    [customerCopyCard, draftDriverDispatchCard, jobCardPreview],
+  );
+  const dispatchCopyResetKey = useMemo(
+    () =>
+      [
+        loadedBookingId,
+        jobCardPreview,
+        customerCopyCard,
+        draftDriverDispatchCard,
+      ].join("\n--- copy reset ---\n"),
+    [customerCopyCard, draftDriverDispatchCard, jobCardPreview, loadedBookingId],
+  );
 
   const dashboardBookings = useMemo(() => {
     const query = clean(searchTerm).toLowerCase();
@@ -4475,34 +4520,117 @@ export default function Home() {
     });
   }
 
-  async function copyJobCard() {
+  function getDispatchCopyText(target: DispatchCopyTarget) {
+    const copyEditState = copyEditStates[target];
+    const generatedText = generatedDispatchCopyMessages[target];
+
+    return copyEditState.sourceKey === dispatchCopyResetKey &&
+      copyEditState.generatedText === generatedText &&
+      copyEditState.editedText !== null
+      ? copyEditState.editedText
+      : generatedText;
+  }
+
+  function getRenderableCopyEditState(target: DispatchCopyTarget) {
+    const copyEditState = copyEditStates[target];
+
+    return copyEditState.sourceKey === dispatchCopyResetKey &&
+      copyEditState.generatedText === generatedDispatchCopyMessages[target]
+      ? copyEditState
+      : {
+          ...copyEditState,
+          draftText: "",
+          editedText: null,
+          isEditing: false,
+        };
+  }
+
+  function updateCopyEditDraft(target: DispatchCopyTarget, value: string) {
+    setCopyEditStates((current) => ({
+      ...current,
+      [target]: {
+        ...current[target],
+        draftText: value,
+      },
+    }));
+  }
+
+  function startCopyEdit(target: DispatchCopyTarget) {
+    setCopyEditStates((current) => ({
+      ...current,
+      [target]: {
+        ...current[target],
+        draftText:
+          current[target].sourceKey === dispatchCopyResetKey &&
+          current[target].generatedText === generatedDispatchCopyMessages[target] &&
+          current[target].editedText !== null
+            ? current[target].editedText
+            : generatedDispatchCopyMessages[target],
+        generatedText: generatedDispatchCopyMessages[target],
+        isEditing: true,
+        sourceKey: dispatchCopyResetKey,
+      },
+    }));
+    setCopyFeedback({
+      target,
+      tone: "info",
+      text: `${dispatchCopyLabels[target]} ready to edit.`,
+    });
+  }
+
+  function saveCopyEdit(target: DispatchCopyTarget) {
+    setCopyEditStates((current) => ({
+      ...current,
+      [target]: {
+        ...current[target],
+        editedText: current[target].draftText,
+        isEditing: false,
+      },
+    }));
+    setCopyFeedback({
+      target,
+      tone: "success",
+      text: `${dispatchCopyLabels[target]} edit saved.`,
+    });
+  }
+
+  function cancelCopyEdit(target: DispatchCopyTarget) {
+    setCopyEditStates((current) => ({
+      ...current,
+      [target]: {
+        draftText: "",
+        editedText: null,
+        generatedText: generatedDispatchCopyMessages[target],
+        isEditing: false,
+        sourceKey: dispatchCopyResetKey,
+      },
+    }));
+    setCopyFeedback({
+      target,
+      tone: "info",
+      text: `${dispatchCopyLabels[target]} edit cancelled. Generated text restored.`,
+    });
+  }
+
+  async function copyDispatchCopy(target: DispatchCopyTarget) {
     try {
-      await navigator.clipboard.writeText(jobCardPreview);
-      setCopyFeedback({ target: "jobCard", tone: "success", text: "Job card copied." });
+      await navigator.clipboard.writeText(getDispatchCopyText(target));
+      setCopyFeedback({ target, tone: "success", text: `${dispatchCopyLabels[target]} copied.` });
     } catch {
       setCopyFeedback({
-        target: "jobCard",
+        target,
         tone: "error",
-        text: "Copy failed. Select the preview text manually.",
+        text: `Copy failed. Select the ${dispatchCopyLabels[target].toLowerCase()} text manually.`,
       });
     }
   }
 
+  async function copyJobCard() {
+    await copyDispatchCopy("jobCard");
+  }
+
   async function copyCustomerCopy() {
-    try {
-      await navigator.clipboard.writeText(customerCopyCard);
-      setCopyFeedback({
-        target: "customerCopy",
-        tone: "success",
-        text: "Customer copy copied.",
-      });
-    } catch {
-      setCopyFeedback({
-        target: "customerCopy",
-        tone: "error",
-        text: "Copy failed. Select the customer details manually.",
-      });
-    }
+    await copyDispatchCopy("customerCopy");
   }
 
   function assignDraftDriver() {
@@ -4518,20 +4646,7 @@ export default function Home() {
   }
 
   async function copyDraftDriverDispatch() {
-    try {
-      await navigator.clipboard.writeText(draftDriverDispatchCard);
-      setCopyFeedback({
-        target: "driverDispatch",
-        tone: "success",
-        text: "Driver dispatch copied.",
-      });
-    } catch {
-      setCopyFeedback({
-        target: "driverDispatch",
-        tone: "error",
-        text: "Copy failed. Select the dispatch preview manually.",
-      });
-    }
+    await copyDispatchCopy("driverDispatch");
   }
 
   async function copySavedJobCard(bookingRecord: BookingRecord) {
@@ -5761,6 +5876,13 @@ export default function Home() {
     </>
   );
 
+  const jobCardCopyEditState = getRenderableCopyEditState("jobCard");
+  const customerCopyEditState = getRenderableCopyEditState("customerCopy");
+  const driverDispatchCopyEditState = getRenderableCopyEditState("driverDispatch");
+  const jobCardCopyText = getDispatchCopyText("jobCard");
+  const customerCopyText = getDispatchCopyText("customerCopy");
+  const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
+
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -6457,8 +6579,38 @@ export default function Home() {
                         {showParserDebug ? "Hide parser debug" : "Show parser debug"}
                       </button>
                     ) : null}
+                    {jobCardCopyEditState.isEditing ? (
+                      <>
+                        <button
+                          className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                          data-copy-save-edit="jobCard"
+                          onClick={() => saveCopyEdit("jobCard")}
+                          type="button"
+                        >
+                          Save Edit
+                        </button>
+                        <button
+                          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          data-copy-cancel-edit="jobCard"
+                          onClick={() => cancelCopyEdit("jobCard")}
+                          type="button"
+                        >
+                          Cancel Edit
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        data-copy-edit-button="jobCard"
+                        onClick={() => startCopyEdit("jobCard")}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                    )}
                     <button
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      data-copy-copy-button="jobCard"
                       onClick={copyJobCard}
                       type="button"
                     >
@@ -6475,9 +6627,22 @@ export default function Home() {
                   ) : null}
                 </div>
               </div>
-              <pre className="whitespace-pre-wrap rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm">
-                {jobCardPreview}
-              </pre>
+              {jobCardCopyEditState.isEditing ? (
+                <textarea
+                  aria-label="Edit Job Card Copy"
+                  className="min-h-52 w-full rounded-lg border border-slate-300 bg-white p-4 text-sm leading-6 text-slate-900 shadow-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                  data-copy-edit-textarea="jobCard"
+                  onChange={(event) => updateCopyEditDraft("jobCard", event.target.value)}
+                  value={jobCardCopyEditState.draftText}
+                />
+              ) : (
+                <pre
+                  className="whitespace-pre-wrap rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  data-copy-preview="jobCard"
+                >
+                  {jobCardCopyText}
+                </pre>
+              )}
             </div>
 
             <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
@@ -6487,13 +6652,45 @@ export default function Home() {
                   <p className="text-sm text-slate-500">Customer-facing booking and driver details.</p>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <button
-                    className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
-                    onClick={copyCustomerCopy}
-                    type="button"
-                  >
-                    Copy
-                  </button>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    {customerCopyEditState.isEditing ? (
+                      <>
+                        <button
+                          className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                          data-copy-save-edit="customerCopy"
+                          onClick={() => saveCopyEdit("customerCopy")}
+                          type="button"
+                        >
+                          Save Edit
+                        </button>
+                        <button
+                          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          data-copy-cancel-edit="customerCopy"
+                          onClick={() => cancelCopyEdit("customerCopy")}
+                          type="button"
+                        >
+                          Cancel Edit
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        data-copy-edit-button="customerCopy"
+                        onClick={() => startCopyEdit("customerCopy")}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    <button
+                      className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                      data-copy-copy-button="customerCopy"
+                      onClick={copyCustomerCopy}
+                      type="button"
+                    >
+                      Copy
+                    </button>
+                  </div>
                   {copyFeedback?.target === "customerCopy" ? (
                     <div
                       className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
@@ -6504,9 +6701,22 @@ export default function Home() {
                   ) : null}
                 </div>
               </div>
-              <pre className="whitespace-pre-wrap rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-slate-900 shadow-sm">
-                {customerCopyCard}
-              </pre>
+              {customerCopyEditState.isEditing ? (
+                <textarea
+                  aria-label="Edit Customer Copy"
+                  className="min-h-52 w-full rounded-lg border border-emerald-300 bg-white p-4 text-sm leading-6 text-slate-900 shadow-sm outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+                  data-copy-edit-textarea="customerCopy"
+                  onChange={(event) => updateCopyEditDraft("customerCopy", event.target.value)}
+                  value={customerCopyEditState.draftText}
+                />
+              ) : (
+                <pre
+                  className="whitespace-pre-wrap rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  data-copy-preview="customerCopy"
+                >
+                  {customerCopyText}
+                </pre>
+              )}
             </div>
 
             <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
@@ -6516,13 +6726,45 @@ export default function Home() {
                   <p className="text-sm text-slate-500">Internal WhatsApp copy for assigned driver.</p>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <button
-                    className="rounded-md border border-sky-300 px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-50"
-                    onClick={copyDraftDriverDispatch}
-                    type="button"
-                  >
-                    Copy
-                  </button>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    {driverDispatchCopyEditState.isEditing ? (
+                      <>
+                        <button
+                          className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                          data-copy-save-edit="driverDispatch"
+                          onClick={() => saveCopyEdit("driverDispatch")}
+                          type="button"
+                        >
+                          Save Edit
+                        </button>
+                        <button
+                          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          data-copy-cancel-edit="driverDispatch"
+                          onClick={() => cancelCopyEdit("driverDispatch")}
+                          type="button"
+                        >
+                          Cancel Edit
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        data-copy-edit-button="driverDispatch"
+                        onClick={() => startCopyEdit("driverDispatch")}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    <button
+                      className="rounded-md border border-sky-300 px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-50"
+                      data-copy-copy-button="driverDispatch"
+                      onClick={copyDraftDriverDispatch}
+                      type="button"
+                    >
+                      Copy
+                    </button>
+                  </div>
                   {copyFeedback?.target === "driverDispatch" ? (
                     <div
                       className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
@@ -6533,9 +6775,22 @@ export default function Home() {
                   ) : null}
                 </div>
               </div>
-              <pre className="whitespace-pre-wrap rounded-lg bg-sky-50 p-4 text-sm leading-6 text-slate-900 shadow-sm">
-                {draftDriverDispatchCard}
-              </pre>
+              {driverDispatchCopyEditState.isEditing ? (
+                <textarea
+                  aria-label="Edit Driver Dispatch"
+                  className="min-h-52 w-full rounded-lg border border-sky-300 bg-white p-4 text-sm leading-6 text-slate-900 shadow-sm outline-none transition focus:border-sky-700 focus:ring-2 focus:ring-sky-700/10"
+                  data-copy-edit-textarea="driverDispatch"
+                  onChange={(event) => updateCopyEditDraft("driverDispatch", event.target.value)}
+                  value={driverDispatchCopyEditState.draftText}
+                />
+              ) : (
+                <pre
+                  className="whitespace-pre-wrap rounded-lg bg-sky-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  data-copy-preview="driverDispatch"
+                >
+                  {driverDispatchCopyText}
+                </pre>
+              )}
             </div>
 
             {statusPanel}

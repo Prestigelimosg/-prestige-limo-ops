@@ -4291,6 +4291,130 @@ async function runChromeTest() {
       };
     })()`);
 
+    const driverProfileValidationCases = [
+      {
+        expectedMessage: "Driver name is required.",
+        label: "blank driver profile",
+        values: {},
+      },
+      {
+        expectedMessage: "Contact number is required.",
+        label: "missing contact number",
+        values: {
+          driverName: "INCOMPLETE PROFILE TEST DRIVER",
+          plateNumber: "SLV100A",
+          vehicleType: "Alphard",
+        },
+      },
+      {
+        expectedMessage: "Vehicle type is required.",
+        label: "missing vehicle type",
+        values: {
+          contactNumber: "+65 8000 1000",
+          driverName: "INCOMPLETE PROFILE TEST DRIVER",
+          plateNumber: "SLV100A",
+        },
+      },
+      {
+        expectedMessage: "Plate number is required.",
+        label: "missing plate number",
+        values: {
+          contactNumber: "+65 8000 1000",
+          driverName: "INCOMPLETE PROFILE TEST DRIVER",
+          vehicleType: "Alphard",
+        },
+      },
+    ];
+
+    for (const validationCase of driverProfileValidationCases) {
+      const clickedIncompleteDriverProfileSave = await evaluate(`(() => {
+        const values = ${JSON.stringify(validationCase.values)};
+        const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+        const labels = [...document.querySelectorAll("label")];
+        const fieldForLabel = (labelText) => {
+          const label = labels.find(
+            (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+          );
+          return label?.querySelector("input, select, textarea") || null;
+        };
+        const setValue = (control, value) => {
+          if (!control) {
+            return;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+          descriptor?.set?.call(control, value);
+          control.dispatchEvent(new Event("input", { bubbles: true }));
+          control.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        const driverName = fieldForLabel("Driver name");
+        const contactNumber = fieldForLabel("Contact number");
+        const vehicleType = fieldForLabel("Vehicle type");
+        const plateNumber = fieldForLabel("Plate number");
+        const saveButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Save Driver Profile",
+        );
+
+        if (!driverName || !contactNumber || !vehicleType || !plateNumber || !saveButton || saveButton.disabled) {
+          return false;
+        }
+
+        window.__prestigeFetchCalls = [];
+        window.__prestigeDriverProfileRequestBodies = [];
+        window.__prestigeUnhandledSupabaseCalls = [];
+        setValue(driverName, values.driverName || "");
+        setValue(contactNumber, values.contactNumber || "");
+        setValue(vehicleType, values.vehicleType || "");
+        setValue(plateNumber, values.plateNumber || "");
+        saveButton.click();
+        return true;
+      })()`);
+      assert.equal(
+        clickedIncompleteDriverProfileSave,
+        true,
+        `Expected Save Driver Profile to be clickable for ${validationCase.label}`,
+      );
+
+      const incompleteDriverProfileSaveState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const saveButton = [...document.querySelectorAll("button")].find(
+              (button) => button.textContent.trim() === "Save Driver Profile",
+            );
+            const statusPanel = document.querySelector("[data-status-panel='global']");
+            const saveButtonRect = saveButton?.getBoundingClientRect();
+            const statusRect = statusPanel?.getBoundingClientRect();
+            const requestBodies = window.__prestigeDriverProfileRequestBodies || [];
+
+            return statusPanel?.textContent.trim() === ${JSON.stringify(validationCase.expectedMessage)}
+              ? {
+                  fetchCalls: window.__prestigeFetchCalls || [],
+                  requestCount: requestBodies.length,
+                  statusDistanceFromSaveButton:
+                    saveButtonRect && statusRect ? Math.abs(statusRect.top - saveButtonRect.bottom) : null,
+                  statusText: statusPanel.textContent.trim(),
+                  unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+                }
+              : false;
+          })()`),
+        10000,
+        `driver profile validation for ${validationCase.label}`,
+      );
+
+      assert.equal(incompleteDriverProfileSaveState.requestCount, 0);
+      assert.deepEqual(
+        incompleteDriverProfileSaveState.fetchCalls,
+        [],
+        `Expected ${validationCase.label} validation not to call Supabase`,
+      );
+      assert.deepEqual(incompleteDriverProfileSaveState.unhandledSupabaseCalls, []);
+      assert.ok(
+        incompleteDriverProfileSaveState.statusDistanceFromSaveButton !== null &&
+          incompleteDriverProfileSaveState.statusDistanceFromSaveButton <= 120,
+        `Expected ${validationCase.label} validation error near Save Driver Profile button, got ${incompleteDriverProfileSaveState.statusDistanceFromSaveButton}px`,
+      );
+    }
+
     const clickedSaveDriverProfile = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
       const labels = [...document.querySelectorAll("label")];

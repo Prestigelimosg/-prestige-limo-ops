@@ -3713,9 +3713,27 @@ export default function Home() {
     }
 
     const driverName = clean(driverProfileDraft.driverName);
+    const contactNumber = clean(driverProfileDraft.contactNumber);
+    const vehicleType = clean(driverProfileDraft.vehicleType);
+    const plateNumber = clean(driverProfileDraft.plateNumber);
 
     if (!driverName) {
       setMessage({ tone: "error", text: "Driver name is required." });
+      return;
+    }
+
+    if (!contactNumber) {
+      setMessage({ tone: "error", text: "Contact number is required." });
+      return;
+    }
+
+    if (!vehicleType) {
+      setMessage({ tone: "error", text: "Vehicle type is required." });
+      return;
+    }
+
+    if (!plateNumber) {
+      setMessage({ tone: "error", text: "Plate number is required." });
       return;
     }
 
@@ -3749,9 +3767,9 @@ export default function Home() {
 
       const payload = {
         driver_name: driverName,
-        contact_number: clean(driverProfileDraft.contactNumber) || null,
-        vehicle_type: clean(driverProfileDraft.vehicleType) || null,
-        plate_number: clean(driverProfileDraft.plateNumber) || null,
+        contact_number: contactNumber,
+        vehicle_type: vehicleType,
+        plate_number: plateNumber,
         payout_preferences: clean(driverProfileDraft.payoutPreferences) || null,
         driver_payout_rules: driverProfileDraft.payoutRules,
         availability_status: clean(driverProfileDraft.availabilityStatus) || "available",

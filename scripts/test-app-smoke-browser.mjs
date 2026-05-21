@@ -505,7 +505,20 @@ async function runChromeTest() {
         window.__driverDemoOriginalFetch = originalFetch;
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
-          window.__driverDemoFetchCalls.push(String(target));
+          const method = args[1]?.method || args[0]?.method || "GET";
+          const url = String(target);
+
+          window.__driverDemoFetchCalls.push(\`\${method} \${url}\`);
+
+          if (url.includes("/rest/v1/drivers")) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ message: "Driver demo must not access Driver Database from the browser" }), {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
           return originalFetch(...args);
         };
       })()`);
@@ -615,14 +628,14 @@ async function runChromeTest() {
       assert.deepEqual(smallTextareas, [], `${viewport.label}: expected comfortable paste textarea`);
       assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver buttons`);
       assert.deepEqual(
-        ["Parse Driver Details", "Save Driver Details", "OTW", "POB", "Job Completed"].filter(
+        ["Parse Driver Details", "Save", "OTW", "POB", "Job Completed"].filter(
           (label) => !initialState.buttonLabels.includes(label),
         ),
         [],
         `${viewport.label}: expected all driver action buttons`,
       );
       assert.deepEqual(
-        ["Parse Driver Details", "Save Driver Details"].filter((label) => {
+        ["Parse Driver Details", "Save"].filter((label) => {
           const button = initialState.buttons.find((candidate) => candidate.text === label);
           return !button?.className.includes("bg-slate-950") || !button.className.includes("text-white");
         }),
@@ -657,6 +670,8 @@ async function runChromeTest() {
               const messageRect = parseMessage?.getBoundingClientRect();
 
               const state = {
+                databaseCheckVisible: Boolean(document.querySelector("[data-driver-demo-database-check]")),
+                overwritePromptVisible: Boolean(document.querySelector("[data-driver-demo-overwrite-prompt]")),
                 helperText: paymentHelper?.textContent.trim() || "",
                 messageDistance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                 messageText: parseMessage?.textContent.trim() || "",
@@ -667,6 +682,8 @@ async function runChromeTest() {
               };
 
               return state.messageText === "Driver details parsed. Please review before saving." &&
+                state.databaseCheckVisible === false &&
+                state.overwritePromptVisible === false &&
                 state.helperText === "Payment details were detected but not saved in this demo."
                 ? state
                 : false;
@@ -739,7 +756,7 @@ async function runChromeTest() {
         `${viewport.label}: expected freeform parse feedback close to Parse Driver Details`,
       );
 
-      await clickDriverDemoButton("[data-driver-demo-save-details]", `${viewport.label} Save Driver Details`);
+      await clickDriverDemoButton("[data-driver-demo-save-details]", `${viewport.label} Save`);
       const savedDetailsState = await waitForCondition(
         () =>
           evaluate(`(() => {
@@ -748,17 +765,22 @@ async function runChromeTest() {
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
-            return message?.textContent.trim() === "Driver details saved."
+            const messageText = message?.textContent.trim() || "";
+
+            return messageText === "Driver link page details saved. Driver Database update requires a secure driver job link."
               ? {
                   distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
+                  messageText,
                 }
               : false;
           })()`),
         10000,
         `${viewport.label} driver details saved message`,
       );
-      assert.equal(savedDetailsState.messageText, "Driver details saved.");
+      assert.equal(
+        savedDetailsState.messageText,
+        "Driver link page details saved. Driver Database update requires a secure driver job link.",
+      );
       assert.equal(
         savedDetailsState.distance <= 16,
         true,
@@ -825,9 +847,9 @@ async function runChromeTest() {
       })()`);
 
       assert.deepEqual(
-        networkState.fetchCalls,
+        networkState.fetchCalls.filter((call) => call.includes("/rest/v1/drivers")),
         [],
-        `${viewport.label}: expected driver demo actions not to call fetch`,
+        `${viewport.label}: expected no public browser Driver Database fetches on driver demo route`,
       );
       assert.deepEqual(
         networkState.resourceCalls,

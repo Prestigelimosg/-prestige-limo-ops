@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
+const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
 const browserName = (process.env.BROWSER || "chrome").toLowerCase();
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -10350,6 +10351,393 @@ async function runChromeTest() {
       [],
       `Expected no browser test Supabase write calls to reach the network guard. Blocked unmocked writes:\n${blockedSupabaseMutationRequests.join("\n")}`,
     );
+
+    const driverDemoLoadEvent = client.once("Page.loadEventFired");
+    await client.send("Page.navigate", { url: driverDemoUrl });
+    await driverDemoLoadEvent;
+
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          return document.body.innerText.includes("Prestige Limo Driver Job") &&
+            ["OTW", "POB", "Job Completed"].every((label) =>
+              Boolean(document.querySelector(\`[data-driver-demo-status="\${label}"]\`)),
+            );
+        })()`),
+      10000,
+      "driver demo status controls",
+    );
+
+    const driverDemoInitialState = await evaluate(`(() => {
+      return {
+        buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
+        currentStatus: document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "",
+        jobSummaryText: document.querySelector("[aria-labelledby='driver-job-summary-heading']")?.innerText || "",
+        name: document.querySelector("[data-driver-demo-name]")?.value || "",
+        mobile: document.querySelector("[data-driver-demo-mobile]")?.value || "",
+        plate: document.querySelector("[data-driver-demo-plate]")?.value || "",
+        vehicleModel: document.querySelector("[data-driver-demo-vehicle-model]")?.value || "",
+      };
+    })()`);
+    assert.deepEqual(
+      ["OTW", "POB", "Job Completed"].filter((label) => !driverDemoInitialState.buttonLabels.includes(label)),
+      [],
+      "Expected driver demo to show OTW, POB, and Job Completed buttons",
+    );
+    assert.match(driverDemoInitialState.jobSummaryText, /Changi Airport T3 Arrival Pickup/);
+    assert.match(driverDemoInitialState.jobSummaryText, /Raffles Hotel Singapore/);
+    assert.match(driverDemoInitialState.jobSummaryText, /SQ333/);
+    assert.equal(driverDemoInitialState.currentStatus, "Assigned");
+
+    await evaluate(`(() => {
+      window.__prestigeDriverDemoDrivers = [
+        {
+          id: 990001,
+          driver_name: "Alison Toh",
+          contact_number: "+65 90990723",
+          vehicle_type: "Existing Mercedes V Class",
+          plate_number: "PD 9918 H",
+        },
+      ];
+      window.__prestigeDriverDemoRequests = [];
+      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const url = String(target);
+
+        if (url.includes("/rest/v1/drivers")) {
+          window.__prestigeDriverDemoRequests.push({ method, url });
+          return new Response(JSON.stringify({ message: "Driver demo must not access Driver Database from the browser" }), {
+            status: 500,
+            headers: {
+              "content-type": "application/json",
+            },
+          });
+        }
+
+        return window.__prestigeOriginalFetch(...args);
+      };
+    })()`);
+
+    const alisonDriverDetailsPaste = [
+      "Driver’s detail",
+      "Name: Alison Toh",
+      "Contact: +65 90990723",
+      "Brand: Mercedes V Class",
+      "Car plate: PD 9918 H",
+    ].join("\n");
+    const parsedAlisonDriverDetails = {
+      mobile: "+65 90990723",
+      name: "Alison Toh",
+      plate: "PD 9918 H",
+      vehicleModel: "Mercedes V Class",
+    };
+
+    await evaluate(`(() => {
+      const textarea = document.querySelector("[data-driver-demo-paste-details]");
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(textarea, ${JSON.stringify(alisonDriverDetailsPaste)});
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+
+    const clickedAlisonParse = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-demo-parse-details]");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedAlisonParse, true, "Expected Parse Driver Details to be clickable for Alison details");
+
+    const parsedAlisonState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const message = document.querySelector("[data-driver-demo-parse-message]");
+
+          return message?.textContent.trim() === "Driver details parsed. Please review before saving."
+            ? {
+                messageText: message.textContent.trim(),
+                mobile: document.querySelector("[data-driver-demo-mobile]")?.value || "",
+                name: document.querySelector("[data-driver-demo-name]")?.value || "",
+                plate: document.querySelector("[data-driver-demo-plate]")?.value || "",
+                vehicleModel: document.querySelector("[data-driver-demo-vehicle-model]")?.value || "",
+              }
+            : false;
+        })()`),
+      10000,
+      "parsed Alison driver details",
+    );
+    assert.equal(parsedAlisonState.name, parsedAlisonDriverDetails.name);
+    assert.equal(parsedAlisonState.mobile, parsedAlisonDriverDetails.mobile);
+    assert.equal(parsedAlisonState.plate, parsedAlisonDriverDetails.plate);
+    assert.equal(parsedAlisonState.vehicleModel, parsedAlisonDriverDetails.vehicleModel);
+
+    const safeDriverDemoInitialState = await evaluate(`(() => {
+      const saveButton = document.querySelector("[data-driver-demo-save-details]");
+
+      return {
+        databaseCheckVisible: Boolean(document.querySelector("[data-driver-demo-database-check]")),
+        overwritePromptVisible: Boolean(document.querySelector("[data-driver-demo-overwrite-prompt]")),
+        requestCount: (window.__prestigeDriverDemoRequests || []).length,
+        saveButtonText: saveButton?.textContent.trim() || "",
+      };
+    })()`);
+    assert.equal(safeDriverDemoInitialState.saveButtonText, "Save");
+    assert.equal(safeDriverDemoInitialState.databaseCheckVisible, false);
+    assert.equal(safeDriverDemoInitialState.overwritePromptVisible, false);
+    assert.equal(safeDriverDemoInitialState.requestCount, 0);
+
+    await evaluate(`window.__prestigeDriverDemoRequests = []`);
+    const clickedDriverDetailsSave = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-demo-save-details]");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedDriverDetailsSave, true, "Expected Save button to be clickable");
+
+    const driverDemoAddedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-driver-demo-save-details]");
+          const message = document.querySelector("[data-driver-demo-details-message]");
+          const buttonRect = button?.getBoundingClientRect();
+          const messageRect = message?.getBoundingClientRect();
+          const drivers = window.__prestigeDriverDemoDrivers || [];
+          const requests = window.__prestigeDriverDemoRequests || [];
+
+          return message?.textContent.trim() === "Driver link page details saved. Driver Database update requires a secure driver job link."
+            ? {
+                distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                driverCount: drivers.length,
+                existingDriver: drivers[0] || null,
+                getCount: requests.filter((request) => request.method === "GET").length,
+                messageText: message.textContent.trim(),
+                patchCount: requests.filter((request) => request.method === "PATCH").length,
+                postCount: requests.filter((request) => request.method === "POST").length,
+                putCount: requests.filter((request) => request.method === "PUT").length,
+              }
+            : false;
+        })()`),
+      10000,
+      "driver demo local save avoids public Driver Database writes",
+    );
+    assert.equal(
+      driverDemoAddedState.messageText,
+      "Driver link page details saved. Driver Database update requires a secure driver job link.",
+    );
+    assert.equal(driverDemoAddedState.driverCount, 1);
+    assert.equal(driverDemoAddedState.existingDriver?.driver_name, "Alison Toh");
+    assert.equal(driverDemoAddedState.existingDriver?.contact_number, "+65 90990723");
+    assert.equal(driverDemoAddedState.existingDriver?.vehicle_type, "Existing Mercedes V Class");
+    assert.equal(driverDemoAddedState.existingDriver?.plate_number, "PD 9918 H");
+    assert.equal(driverDemoAddedState.getCount, 0);
+    assert.equal(driverDemoAddedState.postCount, 0);
+    assert.equal(driverDemoAddedState.patchCount, 0);
+    assert.equal(driverDemoAddedState.putCount, 0);
+    assert.equal(
+      driverDemoAddedState.distance <= 16,
+      true,
+      "Expected secure-link-required feedback close to Save",
+    );
+
+    await evaluate(`window.__prestigeDriverDemoRequests = []`);
+    const clickedDriverDetailsSaveAgain = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-demo-save-details]");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedDriverDetailsSaveAgain, true, "Expected unchanged Save to be clickable");
+
+    const unchangedDriverDemoSaveState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const message = document.querySelector("[data-driver-demo-details-message]");
+          const drivers = window.__prestigeDriverDemoDrivers || [];
+          const requests = window.__prestigeDriverDemoRequests || [];
+
+          return message?.textContent.trim() === "Driver link page details saved. Driver Database update requires a secure driver job link."
+            ? {
+                driverCount: drivers.length,
+                existingDriver: drivers[0] || null,
+                getCount: requests.filter((request) => request.method === "GET").length,
+                messageText: message.textContent.trim(),
+                patchCount: requests.filter((request) => request.method === "PATCH").length,
+                postCount: requests.filter((request) => request.method === "POST").length,
+                putCount: requests.filter((request) => request.method === "PUT").length,
+              }
+            : false;
+        })()`),
+      10000,
+      "unchanged driver demo save avoids duplicates",
+    );
+    assert.equal(unchangedDriverDemoSaveState.driverCount, 1);
+    assert.equal(unchangedDriverDemoSaveState.existingDriver?.vehicle_type, "Existing Mercedes V Class");
+    assert.equal(unchangedDriverDemoSaveState.getCount, 0);
+    assert.equal(unchangedDriverDemoSaveState.postCount, 0);
+    assert.equal(unchangedDriverDemoSaveState.patchCount, 0);
+    assert.equal(unchangedDriverDemoSaveState.putCount, 0);
+
+    await evaluate(`(() => {
+      const input = document.querySelector("[data-driver-demo-vehicle-model]");
+      const setter = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value")?.set;
+      setter?.call(input, "");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      window.__prestigeDriverDemoRequests = [];
+    })()`);
+
+    const clickedBlankOptionalSave = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-demo-save-details]");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedBlankOptionalSave, true, "Expected Save with blank optional field to be clickable");
+
+    const blankOptionalState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const message = document.querySelector("[data-driver-demo-details-message]");
+          const requests = window.__prestigeDriverDemoRequests || [];
+          const drivers = window.__prestigeDriverDemoDrivers || [];
+
+          return message?.textContent.trim() === "Driver link page details saved. Driver Database update requires a secure driver job link."
+            ? {
+                driver: drivers[0] || null,
+                driverCount: drivers.length,
+                getCount: requests.filter((request) => request.method === "GET").length,
+                messageText: message.textContent.trim(),
+                patchCount: requests.filter((request) => request.method === "PATCH").length,
+                postCount: requests.filter((request) => request.method === "POST").length,
+                putCount: requests.filter((request) => request.method === "PUT").length,
+                vehicleModel: document.querySelector("[data-driver-demo-vehicle-model]")?.value || "",
+              }
+            : false;
+        })()`),
+      10000,
+      "driver demo blank optional save does not erase Driver Database fields",
+    );
+    assert.equal(blankOptionalState.driverCount, 1);
+    assert.equal(blankOptionalState.driver?.vehicle_type, "Existing Mercedes V Class");
+    assert.equal(blankOptionalState.driver?.plate_number, "PD 9918 H");
+    assert.equal(blankOptionalState.getCount, 0);
+    assert.equal(blankOptionalState.postCount, 0);
+    assert.equal(blankOptionalState.patchCount, 0);
+    assert.equal(blankOptionalState.putCount, 0);
+    assert.equal(blankOptionalState.vehicleModel, "");
+
+    const finalDriverDemoDetails = parsedAlisonDriverDetails;
+    await evaluate(`(() => {
+      const input = document.querySelector("[data-driver-demo-vehicle-model]");
+      const setter = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value")?.set;
+      setter?.call(input, ${JSON.stringify(finalDriverDemoDetails.vehicleModel)});
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+
+    const driverDemoStatusChecks = [
+      {
+        currentStatus: "OTW",
+        expectedMessage: "Status updated: OTW",
+        label: "OTW",
+        reportPattern: /OTW|On the Way/i,
+      },
+      {
+        currentStatus: "POB",
+        expectedMessage: "Status updated: POB",
+        label: "POB",
+        reportPattern: /POB|Passenger On Board/i,
+      },
+      {
+        currentStatus: "Job Completed",
+        expectedMessage: "Status updated: Completed",
+        label: "Job Completed",
+        reportPattern: /JC|JD|Job Completed|Job Done|Completed/i,
+      },
+    ];
+
+    for (const statusCheck of driverDemoStatusChecks) {
+      const clickedStatus = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-driver-demo-status="${statusCheck.label}"]`)});
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clickedStatus, true, `Expected ${statusCheck.label} status button to be clickable`);
+
+      const driverStatusState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector(${JSON.stringify(`[data-driver-demo-status="${statusCheck.label}"]`)});
+            const message = document.querySelector(${JSON.stringify(
+              `[data-driver-demo-status-message="${statusCheck.label}"]`,
+            )});
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === ${JSON.stringify(statusCheck.expectedMessage)}
+              ? {
+                  currentStatus: document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "",
+                  driverDetailsText: document.querySelector("[aria-labelledby='driver-details-heading']")?.innerText || "",
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  jobSummaryText: document.querySelector("[aria-labelledby='driver-job-summary-heading']")?.innerText || "",
+                  messageCount: document.querySelectorAll("[data-driver-demo-status-message]").length,
+                  messageText: message.textContent.trim(),
+                  mobile: document.querySelector("[data-driver-demo-mobile]")?.value || "",
+                  name: document.querySelector("[data-driver-demo-name]")?.value || "",
+                  plate: document.querySelector("[data-driver-demo-plate]")?.value || "",
+                  vehicleModel: document.querySelector("[data-driver-demo-vehicle-model]")?.value || "",
+                }
+              : false;
+          })()`),
+        10000,
+        `driver demo ${statusCheck.label} status feedback`,
+      );
+
+      assert.equal(driverStatusState.currentStatus, statusCheck.currentStatus);
+      assert.equal(driverStatusState.messageText, statusCheck.expectedMessage);
+      assert.match(
+        `${driverStatusState.currentStatus}\n${driverStatusState.messageText}`,
+        statusCheck.reportPattern,
+        `Expected ${statusCheck.label} status text to include its WhatsApp-style status`,
+      );
+      assert.equal(driverStatusState.messageCount, 1);
+      assert.equal(
+        driverStatusState.distance <= 16,
+        true,
+        `Expected ${statusCheck.label} feedback close to its button`,
+      );
+      assert.equal(driverStatusState.name, finalDriverDemoDetails.name);
+      assert.equal(driverStatusState.mobile, finalDriverDemoDetails.mobile);
+      assert.equal(driverStatusState.plate, finalDriverDemoDetails.plate);
+      assert.equal(driverStatusState.vehicleModel, finalDriverDemoDetails.vehicleModel);
+      assert.match(driverStatusState.jobSummaryText, /Changi Airport T3 Arrival Pickup/);
+      assert.match(driverStatusState.jobSummaryText, /Raffles Hotel Singapore/);
+      assert.match(driverStatusState.jobSummaryText, /SQ333/);
+    }
 
     console.log(JSON.stringify(state, null, 2));
   } catch (error) {

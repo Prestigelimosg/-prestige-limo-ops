@@ -10,7 +10,7 @@ type DriverDetails = {
 };
 
 type ParseFeedback = {
-  tone: "success" | "warning";
+  tone: "error" | "success" | "warning";
   text: string;
 };
 
@@ -46,6 +46,27 @@ function escapeRegExp(value: string) {
 
 function cleanParsedValue(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function cleanDriverDetails(details: DriverDetails): DriverDetails {
+  return {
+    mobile: cleanParsedValue(details.mobile),
+    name: cleanParsedValue(details.name),
+    plate: cleanParsedValue(details.plate),
+    vehicleModel: cleanParsedValue(details.vehicleModel),
+  };
+}
+
+function feedbackClassName(tone: ParseFeedback["tone"]) {
+  if (tone === "success") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  }
+
+  if (tone === "error") {
+    return "border-rose-200 bg-rose-50 text-rose-800";
+  }
+
+  return "border-amber-200 bg-amber-50 text-amber-900";
 }
 
 function lineValue(text: string, labels: string[]) {
@@ -133,7 +154,7 @@ function parseDriverDetailsText(text: string): ParsedDriverDetails {
   const labelledMobile = lineValue(text, ["contact", "mobile", "phone", "tel", "telephone", "hp", "handphone"]);
   const labelledName = lineValue(text, ["driver name", "name", "driver"]);
   const labelledPlate = lineValue(text, ["car plate", "plate number", "plate", "vehicle no", "car no"]);
-  const labelledVehicleModel = lineValue(text, ["vehicle model", "vehicle", "model"]);
+  const labelledVehicleModel = lineValue(text, ["brand", "vehicle", "vehicle model", "car model", "model"]);
 
   return {
     mobile: labelledMobile || freeformLineValue(lines, isPhoneLikeLine),
@@ -154,12 +175,13 @@ export default function DriverJobDemoPage() {
   const [pastedDriverDetails, setPastedDriverDetails] = useState("");
   const [parseFeedback, setParseFeedback] = useState<ParseFeedback | null>(null);
   const [paymentHelperVisible, setPaymentHelperVisible] = useState(false);
-  const [detailsMessage, setDetailsMessage] = useState("");
+  const [detailsFeedback, setDetailsFeedback] = useState<ParseFeedback | null>(null);
   const [status, setStatus] = useState("Assigned");
   const [statusMessage, setStatusMessage] = useState("");
   const [statusMessageTarget, setStatusMessageTarget] = useState("");
 
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
+    setDetailsFeedback(null);
     setDriverDetails((currentDetails) => ({
       ...currentDetails,
       [field]: value,
@@ -192,6 +214,7 @@ export default function DriverJobDemoPage() {
     }
 
     setDriverDetails(nextDetails);
+    setDetailsFeedback(null);
     setParseFeedback({
       tone: "success",
       text: "Driver details parsed. Please review before saving.",
@@ -199,7 +222,30 @@ export default function DriverJobDemoPage() {
   }
 
   function saveDriverDetails() {
-    setDetailsMessage("Driver details saved.");
+    const nextDetails = cleanDriverDetails(driverDetails);
+
+    setDriverDetails(nextDetails);
+
+    if (!nextDetails.name && !nextDetails.mobile && !nextDetails.plate) {
+      setDetailsFeedback({
+        tone: "error",
+        text: "Enter driver name, mobile number, or car plate before saving.",
+      });
+      return;
+    }
+
+    if (!nextDetails.name) {
+      setDetailsFeedback({
+        tone: "error",
+        text: "Driver name is required before saving.",
+      });
+      return;
+    }
+
+    setDetailsFeedback({
+      tone: "warning",
+      text: "Driver link page details saved. Driver Database update requires a secure driver job link.",
+    });
   }
 
   function updateStatus(nextStatus: string, message: string) {
@@ -271,11 +317,7 @@ export default function DriverJobDemoPage() {
               </button>
               {parseFeedback ? (
                 <p
-                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${
-                    parseFeedback.tone === "success"
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-amber-200 bg-amber-50 text-amber-900"
-                  }`}
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(parseFeedback.tone)}`}
                   data-driver-demo-parse-message="true"
                 >
                   {parseFeedback.text}
@@ -339,14 +381,14 @@ export default function DriverJobDemoPage() {
                 onClick={saveDriverDetails}
                 type="button"
               >
-                Save Driver Details
+                Save
               </button>
-              {detailsMessage ? (
+              {detailsFeedback ? (
                 <p
-                  className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800"
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(detailsFeedback.tone)}`}
                   data-driver-demo-details-message="true"
                 >
-                  {detailsMessage}
+                  {detailsFeedback.text}
                 </p>
               ) : null}
             </div>

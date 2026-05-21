@@ -206,13 +206,13 @@ const persistedRealLutherGrahamFixture = {
   job_card:
     "AVF DEP\n30 Apr 2026, 0420hrs\nFlight: SQ265\n160 Watten Estate Rd, Singapore 287610 > 405 Sin Ming Ave, Singapore 570405 > Bedok South Avenue 2, Block 10B HDB Bedok South, Singapore 10B Bedok S Ave 2, Block 10B, Singapore 461010 > Changi Airport\nBooker: Luther Graham\nPassenger: Luther Graham\nPax: 3",
   status: "confirmed",
-  driver_name: "REGULAR REAL DRIVER",
+  driver_name: "TEST DRIVER CRM 20260516",
   customer_rate: 75,
   customer_price_amount: 160,
   customer_rate_override: 160,
   customer_price_override_reason: "Parsed from message: $160.00",
-  driver_payout_min: 55,
-  driver_payout_max: 65,
+  driver_payout_min: 65,
+  driver_payout_max: 75,
   driver_payout_amount: 95,
   driver_payout_override: null,
   extra_stop_count: 2,
@@ -225,6 +225,7 @@ const persistedRealLutherGrahamFixture = {
   child_seat_type: null,
   child_seat_customer_surcharge: 0,
   child_seat_driver_payout: 0,
+  driver_dispatch_include_payout: true,
   created_at: "2026-05-18T02:00:00.000Z",
   updated_at: "2026-05-18T02:00:00.000Z",
   companies: null,
@@ -381,6 +382,53 @@ const dashboardAssignedDriverClearFixture = {
   },
   travelers: {
     traveler_name: "DASHBOARD CLEAR DRIVER TEST TRAVELER",
+  },
+};
+const dashboardProfilePayoutAssignmentFixture = {
+  id: "ui-dashboard-profile-payout-assignment-fixture",
+  company_id: 721,
+  booker_id: 722,
+  traveler_id: 723,
+  booking_type: "DEP",
+  vehicle: "AVF",
+  pickup_time: "1410",
+  pickup_address: "Mandarin Oriental Singapore",
+  dropoff_address: "Changi Airport T2",
+  flight_no: "SQ776",
+  route: "Mandarin Oriental Singapore > Changi Airport T2",
+  pax: 1,
+  job_card:
+    "AVF DEP\n29 May 2026, 1410hrs\nFlight: SQ776\nMandarin Oriental Singapore > Changi Airport T2\nPassenger: DASHBOARD PROFILE PAYOUT TRAVELER\nPax: 1",
+  status: "confirmed",
+  driver_id: null,
+  driver_name: null,
+  driver_contact: null,
+  driver_plate_number: null,
+  customer_price_amount: 95,
+  driver_payout_min: 55,
+  driver_payout_max: 65,
+  driver_payout_amount: 55,
+  driver_payout_override: null,
+  driver_payout_reason: null,
+  driver_payout_unit: "job",
+  driver_dispatch_include_payout: false,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:53:30.000Z",
+  updated_at: "2026-05-18T23:53:30.000Z",
+  companies: {
+    company_name: "DASHBOARD PROFILE PAYOUT COMPANY",
+    domain: "dashboard-profile-payout.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD PROFILE PAYOUT BOOKER",
+    email: "booker@dashboard-profile-payout.example.com",
+    phone: "+65 8666 2222",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD PROFILE PAYOUT TRAVELER",
   },
 };
 const completedSavedBookingFixture = {
@@ -2304,6 +2352,7 @@ async function runChromeTest() {
         ${JSON.stringify(loadedSavedBookingFixture)},
         ${JSON.stringify(dashboardDriverAssignmentFixture)},
         ${JSON.stringify(dashboardAssignedDriverClearFixture)},
+        ${JSON.stringify(dashboardProfilePayoutAssignmentFixture)},
         ${JSON.stringify(completedSavedBookingFixture)},
         ${JSON.stringify(completedCustomerOnlyPriceFixture)},
         ${JSON.stringify(dashboardCompletionActionFixture)},
@@ -2381,6 +2430,7 @@ async function runChromeTest() {
           if (
             String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}") ||
             String(target).includes("id=eq.${dashboardAssignedDriverClearFixture.id}") ||
+            String(target).includes("id=eq.${dashboardProfilePayoutAssignmentFixture.id}") ||
             String(target).includes("id=eq.${dashboardOtwClearDriverFixture.id}")
           ) {
             window.__prestigeDashboardDriverAssignmentBodies.push(parsedBody);
@@ -2457,7 +2507,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeBookingsState.savedCount,
-      "16",
+      "17",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate the visible Saved count",
     );
     assert.equal(
@@ -2476,8 +2526,7 @@ async function runChromeTest() {
           articleText.includes("TEST SAVE TRAVELER B") ||
           articleText.includes("TEST SAVE BOOKER B") ||
           articleText.includes("SUCCESS TEST TRAVELER") ||
-          articleText.includes("SUCCESS TEST BOOKER") ||
-          articleText.includes("TEST DRIVER CRM 20260516"),
+          articleText.includes("SUCCESS TEST BOOKER"),
       ),
       false,
       "Expected persisted browser-test fixture records to be isolated from Recent Bookings",
@@ -2490,7 +2539,7 @@ async function runChromeTest() {
           articleText.includes("30 Apr 2026"),
       ),
       true,
-      "Expected real Luther Graham booking to remain visible in Recent Bookings",
+      "Expected real Luther Graham booking assigned to the test driver to remain visible in Recent Bookings",
     );
     assert.equal(
       hiddenLegacyMrLeeBookingsState.articles.some(
@@ -2538,13 +2587,29 @@ async function runChromeTest() {
     );
     assert.match(
       recentLutherPriceArticle || "",
-      /Customer \$160 \/ Driver \$85/,
-      "Expected Bookings card to use the saved lower driver payout plus extras when no final driver amount is stored",
+      /Customer \$160 \/ Driver \$95/,
+      "Expected Bookings card to use the saved assigned driver payout",
     );
     assert.doesNotMatch(
       recentLutherPriceArticle || "",
-      /Driver \$95/,
-      "Expected Bookings card not to display the saved driver payout range maximum as the actual payout",
+      /Driver \$105/,
+      "Expected Bookings card not to display the saved driver payout range maximum plus extras as the actual payout",
+    );
+
+    await setInputValue("[data-bookings-search-input='true']", "luther", "Bookings search");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
+
+          return articles.length === 1 &&
+            articles[0].includes("Luther Graham") &&
+            articles[0].includes("SQ265") &&
+            articles[0].includes("30 Apr 2026") &&
+            !document.body.innerText.includes("No matching bookings found.");
+        })()`),
+      10000,
+      "Bookings search keeps real Luther booking with test driver assignment",
     );
 
     await setInputValue("[data-bookings-search-input='true']", "LOADED SAVED TRAVELER", "Bookings search");
@@ -2675,7 +2740,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeDashboardState.matchingCount,
-      "16",
+      "17",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate Dashboard matching count",
     );
     assert.equal(
@@ -2694,8 +2759,7 @@ async function runChromeTest() {
           articleText.includes("TEST SAVE TRAVELER B") ||
           articleText.includes("TEST SAVE BOOKER B") ||
           articleText.includes("SUCCESS TEST TRAVELER") ||
-          articleText.includes("SUCCESS TEST BOOKER") ||
-          articleText.includes("TEST DRIVER CRM 20260516"),
+          articleText.includes("SUCCESS TEST BOOKER"),
       ),
       false,
       "Expected persisted browser-test fixture records to be isolated from Dashboard cards",
@@ -2705,10 +2769,11 @@ async function runChromeTest() {
         (articleText) =>
           articleText.includes("Luther Graham") &&
           articleText.includes("SQ265") &&
-          articleText.includes("30 Apr 2026"),
+          articleText.includes("30 Apr 2026") &&
+          articleText.includes("TEST DRIVER CRM 20260516"),
       ),
       true,
-      "Expected real Luther Graham booking to remain visible on Dashboard",
+      "Expected real Luther Graham booking assigned to the test driver to remain visible on Dashboard",
     );
     assert.equal(
       hiddenLegacyMrLeeDashboardState.articles.some(
@@ -2756,13 +2821,13 @@ async function runChromeTest() {
     );
     assert.match(
       dashboardLutherPriceArticle || "",
-      /Customer \$160 \/ Driver \$85/,
-      "Expected Dashboard card to use the saved lower driver payout plus extras when no final driver amount is stored",
+      /Customer \$160 \/ Driver \$95/,
+      "Expected Dashboard card to use the saved assigned driver payout",
     );
     assert.doesNotMatch(
       dashboardLutherPriceArticle || "",
-      /Driver \$95/,
-      "Expected Dashboard card not to display the saved driver payout range maximum as the actual payout",
+      /Driver \$105/,
+      "Expected Dashboard card not to display the saved driver payout range maximum plus extras as the actual payout",
     );
     const dashboardLutherPayoutInputState = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
@@ -2784,8 +2849,8 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       dashboardLutherPayoutInputState.placeholder,
-      "85",
-      "Expected Dashboard assignment Override Payout placeholder to show the actual lower payout plus extras",
+      "95",
+      "Expected Dashboard assignment Override Payout placeholder to show the saved assigned driver payout",
     );
     assert.equal(
       dashboardLutherPayoutInputState.value,
@@ -2794,8 +2859,8 @@ async function runChromeTest() {
     );
     assert.notEqual(
       dashboardLutherPayoutInputState.placeholder,
-      "95",
-      "Expected Dashboard assignment Override Payout not to use the saved max/range payout",
+      "105",
+      "Expected Dashboard assignment Override Payout not to use the saved max/range payout plus extras",
     );
 
     await evaluate(`window.__prestigeFetchCalls = []`);
@@ -3494,8 +3559,7 @@ async function runChromeTest() {
       hiddenPersistedCompletedTestState.some(
         (articleText) =>
           articleText.includes("SUCCESS TEST TRAVELER") ||
-          articleText.includes("SUCCESS TEST BOOKER") ||
-          articleText.includes("TEST DRIVER CRM 20260516"),
+          articleText.includes("SUCCESS TEST BOOKER"),
       ),
       false,
       "Expected persisted completed browser-test fixture records to be isolated from Completed Bookings",
@@ -4277,6 +4341,335 @@ async function runChromeTest() {
     assert.equal(selectedDriverProfileState.fields.trfPayout, "58");
     assert.equal(selectedDriverProfileState.fields.dspPayout, "52");
 
+    await clickTab("Dashboard", "Operations Dashboard");
+    await evaluate(`(() => {
+      window.__prestigeProfilePayoutPreviousFetch = window.fetch;
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDashboardProfilePayoutAssignmentBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeCopiedTexts = [];
+      const jsonResponse = (body, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const url = String(target);
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+
+        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
+
+        if (
+          method === "PATCH" &&
+          url.includes("/rest/v1/bookings") &&
+          url.includes("id=eq.${dashboardProfilePayoutAssignmentFixture.id}")
+        ) {
+          let parsedBody = bodyText;
+
+          try {
+            parsedBody = JSON.parse(bodyText);
+          } catch {}
+
+          window.__prestigeDashboardProfilePayoutAssignmentBodies.push(parsedBody);
+
+          return jsonResponse([]);
+        }
+
+        if (url.includes("/rest/v1/")) {
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
+        }
+
+        return window.__prestigeProfilePayoutPreviousFetch(...args);
+      };
+    })()`);
+
+    const clickedProfilePayoutAssignment = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+          candidate.innerText.includes("SQ776"),
+      );
+
+      if (!article) {
+        return false;
+      }
+
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const fieldForLabel = (labelText) => {
+        const label = [...article.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        return label?.querySelector("input, select, textarea") || null;
+      };
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, value);
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      const driverSelect = fieldForLabel("Driver");
+      const payoutOverride = fieldForLabel("Override Payout");
+      const includePayout = [...article.querySelectorAll("label")].find((candidate) =>
+        candidate.innerText.includes("Include payout")
+      )?.querySelector("input[type='checkbox']");
+      const assignButton = article.querySelector("[data-dashboard-assign-driver='${dashboardProfilePayoutAssignmentFixture.id}']");
+
+      if (!driverSelect || !payoutOverride || !includePayout || !assignButton || assignButton.disabled) {
+        return false;
+      }
+
+      setValue(driverSelect, String(${reusableDriverProfileFixture.id}));
+      setValue(payoutOverride, "");
+
+      if (!includePayout.checked) {
+        includePayout.click();
+      }
+
+      assignButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedProfilePayoutAssignment,
+      true,
+      "Expected dashboard profile payout assignment button to be clickable",
+    );
+
+    const profilePayoutAssignmentState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const assignmentMessage = article?.querySelector("[data-driver-assignment-message='${dashboardProfilePayoutAssignmentFixture.id}']");
+
+          return {
+            articleText: article?.innerText || "",
+            assignmentBodies: window.__prestigeDashboardProfilePayoutAssignmentBodies || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+            localMessageText: assignmentMessage?.textContent.trim() || "",
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.localMessageText === "Assigned driver updated." &&
+          candidateState?.articleText?.includes("Driver: REUSABLE PROFILE TEST DRIVER") &&
+          candidateState?.articleText?.includes("Customer $95 / Driver $66")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "dashboard profile payout assignment success state",
+    );
+
+    assert.deepEqual(
+      profilePayoutAssignmentState.unhandledSupabaseCalls,
+      [],
+      `Expected profile payout assignment Supabase calls to be mocked, got ${profilePayoutAssignmentState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    const profilePayoutAssignmentBookingPatches = bookingPatchCalls(profilePayoutAssignmentState.fetchCalls);
+    assert.equal(
+      profilePayoutAssignmentBookingPatches.length,
+      1,
+      `Expected profile payout assignment to make one mocked booking PATCH, got ${profilePayoutAssignmentState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(profilePayoutAssignmentState.assignmentBodies.length, 1);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_id, reusableDriverProfileFixture.id);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_name, "REUSABLE PROFILE TEST DRIVER");
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_contact, "+65 8111 2222");
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_plate_number, "SLL901P");
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_amount, 66);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_min, 66);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_max, 66);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_unit, "job");
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_override, null);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_dispatch_include_payout, true);
+    assert.match(profilePayoutAssignmentState.articleText, /Customer \$95 \/ Driver \$66/);
+    assert.doesNotMatch(
+      profilePayoutAssignmentState.articleText,
+      /Driver \$55/,
+      "Expected Dashboard card not to keep stale old driver payout after profile assignment",
+    );
+
+    const clickedProfilePayoutDriverDispatchCopy = await evaluate(`(() => {
+      window.__prestigeCopiedTexts = [];
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+          candidate.innerText.includes("SQ776"),
+      );
+      const copyButton = article?.querySelector("[data-dashboard-copy-driver-dispatch='${dashboardProfilePayoutAssignmentFixture.id}']");
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedProfilePayoutDriverDispatchCopy,
+      true,
+      "Expected profile payout Driver Dispatch copy button to be clickable",
+    );
+
+    const profilePayoutDriverDispatchCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const feedback = article?.querySelector("[data-dashboard-copy-feedback='${dashboardProfilePayoutAssignmentFixture.id}:driverDispatch']");
+
+          return feedback?.textContent.trim() === "Driver dispatch copied."
+            ? {
+                copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+                feedbackText: feedback.textContent.trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "profile payout Driver Dispatch copy",
+    );
+    assert.equal(profilePayoutDriverDispatchCopyState.feedbackText, "Driver dispatch copied.");
+    assert.match(profilePayoutDriverDispatchCopyState.copiedText, /Payout: \$66/);
+    assert.doesNotMatch(
+      profilePayoutDriverDispatchCopyState.copiedText,
+      /Payout: \$55/,
+      "Expected Driver Dispatch copy not to keep stale old driver payout after profile assignment",
+    );
+
+    await clickTab("Bookings", "Recent Bookings");
+    const profilePayoutBookingsCardState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+
+          return article?.innerText.includes("Customer $95 / Driver $66")
+            ? { articleText: article.innerText }
+            : false;
+        })()`),
+      10000,
+      "profile payout Bookings card",
+    );
+    assert.match(profilePayoutBookingsCardState.articleText, /Customer \$95 \/ Driver \$66/);
+    assert.doesNotMatch(
+      profilePayoutBookingsCardState.articleText,
+      /Driver \$55/,
+      "Expected Bookings card not to keep stale old driver payout after profile assignment",
+    );
+
+    const clickedProfilePayoutLoadBooking = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+          candidate.innerText.includes("SQ776"),
+      );
+      const loadButton = [...(article?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Load this booking",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedProfilePayoutLoadBooking,
+      true,
+      "Expected profile payout booking Load this booking button to be clickable",
+    );
+
+    const profilePayoutLoadedPricingState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.flight === "SQ776" &&
+          candidateState?.pricingPanel?.includes("$66.00")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "profile payout loaded Dispatch pricing",
+    );
+    assert.match(
+      profilePayoutLoadedPricingState.pricingPanel,
+      /Driver\s+\$66\.00/,
+      "Expected loaded Dispatch Pricing to match assigned driver profile payout",
+    );
+    assert.doesNotMatch(
+      profilePayoutLoadedPricingState.pricingPanel,
+      /Driver\s+\$55\.00/,
+      "Expected loaded Dispatch Pricing not to keep stale old driver payout after profile assignment",
+    );
+    assert.match(profilePayoutLoadedPricingState.driverDispatch, /Payout: \$66/);
+    assert.doesNotMatch(profilePayoutLoadedPricingState.driverDispatch, /Payout: \$55/);
+
+    const clickedRestoreDispatchClear = await evaluate(`(() => {
+      const clearButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Clear",
+      );
+
+      if (!clearButton || clearButton.disabled) {
+        return false;
+      }
+
+      clearButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedRestoreDispatchClear, true, "Expected Clear button to restore Dispatch draft after profile payout check");
+
+    await setInputValue("textarea", bookingSample, "restored Dispatch booking message");
+
+    const clickedRestoreDispatchParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedRestoreDispatchParse, true, "Expected Create Job Card button to restore Dispatch draft");
+
+    await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
+          candidateState?.fields?.flight === "SQ333" &&
+          candidateState?.fields?.driverName === "TEST DRIVER CRM 20260516"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "restored Dispatch draft after profile payout check",
+    );
+
+    await evaluate(`(() => {
+      if (window.__prestigeProfilePayoutPreviousFetch) {
+        window.fetch = window.__prestigeProfilePayoutPreviousFetch;
+      }
+    })()`);
+    await clickTab("Drivers", "Driver Database");
+
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
@@ -4863,7 +5256,8 @@ async function runChromeTest() {
         return candidateState?.fields?.flight === "SQ265" &&
           candidateState?.fields?.name === "Luther Graham" &&
           candidateState?.pricingPanel?.includes("$160.00") &&
-          candidateState?.pricingPanel?.includes("$85.00")
+          candidateState?.pricingPanel?.includes("$95.00") &&
+          candidateState?.pricingPanel?.includes("$65.00")
           ? candidateState
           : false;
       },
@@ -4877,14 +5271,21 @@ async function runChromeTest() {
     );
     assert.match(
       lutherLoadedPricingState.pricingPanel,
-      /Driver\s+\$85\.00/,
-      "Expected Dispatch loaded pricing to match the saved driver card price",
+      /Driver\s+\$95\.00/,
+      "Expected Dispatch loaded pricing to match the saved assigned driver payout",
+    );
+    assert.match(
+      lutherLoadedPricingState.pricingPanel,
+      /Profit\s+\$65\.00/,
+      "Expected Dispatch loaded profit to use the saved assigned driver payout",
     );
     assert.doesNotMatch(
       lutherLoadedPricingState.pricingPanel,
-      /Driver\s+\$95\.00/,
-      "Expected Dispatch loaded pricing not to use the saved driver payout range maximum",
+      /Driver\s+\$85\.00/,
+      "Expected Dispatch loaded pricing not to recalculate the stale default driver payout",
     );
+    assert.match(lutherLoadedPricingState.driverDispatch, /Payout: \$95/);
+    assert.doesNotMatch(lutherLoadedPricingState.driverDispatch, /Payout: \$85/);
 
     const seededCompletedLoadStaleMessage = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
@@ -7567,6 +7968,7 @@ async function runChromeTest() {
           method === "GET" &&
           (
             String(target).includes("/rest/v1/companies") ||
+            String(target).includes("/rest/v1/travelers") ||
             String(target).includes("/rest/v1/saved_addresses")
           )
         ) {

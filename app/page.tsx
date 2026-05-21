@@ -55,6 +55,7 @@ type BookingForm = {
   customerPriceOverride: string;
   customerPriceOverrideReason: string;
   driverPayoutOverride: string;
+  savedDriverPayoutAmount: string;
   driverPayoutReason: string;
   driverNotes: string;
   driverIncludePayout: string;
@@ -409,6 +410,7 @@ function createInitialBooking(): BookingForm {
     customerPriceOverride: "",
     customerPriceOverrideReason: "",
     driverPayoutOverride: "",
+    savedDriverPayoutAmount: "",
     driverPayoutReason: "",
     driverNotes: "",
     driverIncludePayout: "",
@@ -441,6 +443,7 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   customerPriceOverride: "Customer price override",
   customerPriceOverrideReason: "Customer override reason",
   driverPayoutOverride: "Driver payout override",
+  savedDriverPayoutAmount: "Saved driver payout amount",
   driverPayoutReason: "Override reason",
   driverNotes: "Driver notes",
   driverIncludePayout: "Include payout in dispatch",
@@ -1394,12 +1397,36 @@ function calculateSavedDriverPayout(
         extraStopDriverAmount -
         childSeatDriverAmount,
     );
-  const selectedDriverBasePayout = selectedDriver?.driver_payout_rules?.[bookingType]
-    ? payoutAmountFromRule(selectedDriver.driver_payout_rules[bookingType]!)
-    : 0;
-  const basePayout = selectedDriverBasePayout || storedBasePayout;
+  const selectedDriverPayoutSnapshot = driverPayoutSnapshotFromRule(
+    bookingType,
+    selectedDriver?.driver_payout_rules?.[bookingType],
+  );
+  const basePayout = selectedDriverPayoutSnapshot
+    ? selectedDriverPayoutSnapshot.basePayout
+    : storedBasePayout;
 
   return basePayout + midnightPayout + extraStopDriverAmount + childSeatDriverAmount;
+}
+
+function driverPayoutSnapshotFromRule(
+  bookingType: ReturnType<typeof normalizeBookingType>,
+  payoutRule: DriverPayoutRule | null | undefined,
+) {
+  if (!payoutRule) {
+    return null;
+  }
+
+  const amount = finiteNumber(payoutRule.amount);
+  const min = finiteNumber(payoutRule.min);
+  const max = finiteNumber(payoutRule.max);
+  const basePayout = amount ?? min ?? 0;
+
+  return {
+    basePayout,
+    driverPayoutMin: min ?? basePayout,
+    driverPayoutMax: max ?? basePayout,
+    driverPayoutUnit: bookingType === "DSP" || payoutRule.perHour ? "hour" : "job",
+  };
 }
 
 function formatChildSeatNote(countValue: string | number | null | undefined, typeValue: string | null | undefined) {
@@ -1502,7 +1529,6 @@ const persistedBrowserTestBookingMarkers = [
   "TEST SAVE BOOKER",
   "SUCCESS TEST TRAVELER",
   "SUCCESS TEST BOOKER",
-  "TEST DRIVER CRM 20260516",
 ];
 
 function isLegacyMrLeeBrowserTestBooking(bookingRecord: BookingRecord) {
@@ -1531,7 +1557,6 @@ function isPersistedBrowserTestBooking(bookingRecord: BookingRecord) {
     getBookingName(bookingRecord),
     getBookerName(bookingRecord),
     getBookingCompanyName(bookingRecord),
-    bookingRecord.driver_name,
     bookingRecord.job_card,
   ]
     .filter(Boolean)
@@ -1641,6 +1666,9 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
   const extraStopLocations = routePoints.slice(1, -1);
   const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count) || extraStopLocations.length;
   const childSeatRequired = Boolean(bookingRecord.child_seat_required);
+  const savedDriverPayout = bookingCardPriceAmounts(bookingRecord).driverPrice;
+  const hasManualDriverPayoutOverride =
+    bookingRecord.driver_payout_override !== null && bookingRecord.driver_payout_override !== undefined;
 
   return {
     ...createInitialBooking(),
@@ -1672,9 +1700,11 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
         : String(bookingRecord.customer_rate_override),
     customerPriceOverrideReason: clean(bookingRecord.customer_price_override_reason),
     driverPayoutOverride:
-      bookingRecord.driver_payout_override === null || bookingRecord.driver_payout_override === undefined
+      !hasManualDriverPayoutOverride
         ? ""
         : String(bookingRecord.driver_payout_override),
+    savedDriverPayoutAmount:
+      hasManualDriverPayoutOverride || savedDriverPayout === null ? "" : String(savedDriverPayout),
     driverPayoutReason: clean(bookingRecord.driver_payout_reason),
     driverNotes: clean(bookingRecord.driver_notes),
     driverIncludePayout: bookingRecord.driver_dispatch_include_payout ? "yes" : "",
@@ -1911,7 +1941,11 @@ export default function Home() {
 
     return {
       ...pricing,
-      ...calculateProfit(pricing, booking.customerPriceOverride, booking.driverPayoutOverride),
+      ...calculateProfit(
+        pricing,
+        booking.customerPriceOverride,
+        clean(booking.driverPayoutOverride) || booking.savedDriverPayoutAmount,
+      ),
     };
   }, [booking, drivers, rateCompanies, rateSettings, rateTravelers]);
 
@@ -3853,7 +3887,7 @@ export default function Home() {
       const pricingSnapshot = calculateProfit(
         pricing,
         booking.customerPriceOverride,
-        booking.driverPayoutOverride,
+        clean(booking.driverPayoutOverride) || booking.savedDriverPayoutAmount,
       );
 
       const bookingPayload = {
@@ -4315,6 +4349,7 @@ export default function Home() {
           driverContact: "",
           driverPlate: "",
           driverPayoutOverride: "",
+          savedDriverPayoutAmount: "",
           driverPayoutReason: "",
           driverNotes: "",
           driverIncludePayout: "",
@@ -4342,6 +4377,18 @@ export default function Home() {
     const driverDraft = getDriverDraft(bookingRecord);
     const selectedDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
     const driverName = clean(driverDraft.driverName) || clean(selectedDriver?.driver_name);
+    const bookingType = normalizeBookingType(bookingRecord.booking_type);
+    const selectedDriverPayoutSnapshot = driverPayoutSnapshotFromRule(
+      bookingType,
+      selectedDriver?.driver_payout_rules?.[bookingType],
+    );
+    const selectedDriverPayoutFields = selectedDriverPayoutSnapshot
+      ? {
+          driver_payout_min: selectedDriverPayoutSnapshot.driverPayoutMin,
+          driver_payout_max: selectedDriverPayoutSnapshot.driverPayoutMax,
+          driver_payout_unit: selectedDriverPayoutSnapshot.driverPayoutUnit,
+        }
+      : {};
     const calculatedPayout = calculateSavedDriverPayout(
       bookingRecord,
       selectedDriver,
@@ -4383,6 +4430,7 @@ export default function Home() {
           driver_contact: clean(driverDraft.driverContact) || clean(selectedDriver?.contact_number) || null,
           driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number) || null,
           driver_payout_amount: calculatedPayout || null,
+          ...selectedDriverPayoutFields,
           driver_payout_override: clean(driverDraft.payoutOverride)
             ? numericRate(driverDraft.payoutOverride)
             : null,
@@ -4407,6 +4455,7 @@ export default function Home() {
                 driver_contact: clean(driverDraft.driverContact) || clean(selectedDriver?.contact_number),
                 driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number),
                 driver_payout_amount: calculatedPayout,
+                ...selectedDriverPayoutFields,
                 driver_payout_override: clean(driverDraft.payoutOverride)
                   ? numericRate(driverDraft.payoutOverride)
                   : null,

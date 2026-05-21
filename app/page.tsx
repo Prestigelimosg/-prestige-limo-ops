@@ -3716,6 +3716,8 @@ export default function Home() {
     const contactNumber = clean(driverProfileDraft.contactNumber);
     const vehicleType = clean(driverProfileDraft.vehicleType);
     const plateNumber = clean(driverProfileDraft.plateNumber);
+    const normalizedContactNumber = normalizePhone(contactNumber);
+    const normalizedPlateNumber = plateNumber.toLowerCase().replace(/\s+/g, "");
 
     if (!driverName) {
       setMessage({ tone: "error", text: "Driver name is required." });
@@ -3747,6 +3749,35 @@ export default function Home() {
         : drivers.find(
             (driver) => clean(driver.driver_name).toLowerCase() === driverName.toLowerCase(),
           ) ?? null;
+      existingDriverId = existingDriverId || clean(existingDriver?.id ? String(existingDriver.id) : "");
+
+      const duplicateContactDriver = drivers.find(
+        (driver) =>
+          String(driver.id) !== existingDriverId &&
+          normalizePhone(clean(driver.contact_number)) === normalizedContactNumber,
+      );
+
+      if (duplicateContactDriver) {
+        setMessage({
+          tone: "error",
+          text: `Contact number already belongs to ${clean(duplicateContactDriver.driver_name) || "another driver"}.`,
+        });
+        return;
+      }
+
+      const duplicatePlateDriver = drivers.find(
+        (driver) =>
+          String(driver.id) !== existingDriverId &&
+          clean(driver.plate_number).toLowerCase().replace(/\s+/g, "") === normalizedPlateNumber,
+      );
+
+      if (duplicatePlateDriver) {
+        setMessage({
+          tone: "error",
+          text: `Plate number already belongs to ${clean(duplicatePlateDriver.driver_name) || "another driver"}.`,
+        });
+        return;
+      }
 
       if (!existingDriverId && !existingDriver) {
         const existingResult = await supabase

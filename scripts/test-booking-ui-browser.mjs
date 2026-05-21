@@ -4205,7 +4205,7 @@ async function runChromeTest() {
 	        contact_number: \`+65 7000 \${String(index + 1).padStart(4, "0")}\`,
 	        vehicle_type: index % 2 ? "Viano" : "Sedan",
 	        plate_number: \`SLD\${String(index + 1).padStart(3, "0")}T\`,
-	        availability_status: "available",
+	        availability_status: index === 0 ? "inactive" : "available",
 	        preferred_areas: "Orchard, Marina",
 	        payout_preferences: "Scroll fixture payout note",
 	        notes: "Scroll fixture driver note",
@@ -4620,6 +4620,118 @@ async function runChromeTest() {
     assert.equal(driverProfileSaveState.fields.contactNumber, "");
     assert.equal(driverProfileSaveState.fields.vehicleType, "");
     assert.equal(driverProfileSaveState.fields.plateNumber, "");
+
+    const driverProfileDuplicateCases = [
+      {
+        expectedMessage: "Contact number already belongs to SCROLL LIST DRIVER 01.",
+        label: "duplicate inactive driver contact number",
+        values: {
+          contactNumber: "+65 7000 0001",
+          driverName: "DUPLICATE CONTACT TEST DRIVER",
+          plateNumber: "SLD900Z",
+          vehicleType: "Alphard",
+        },
+      },
+      {
+        expectedMessage: "Plate number already belongs to REUSABLE PROFILE TEST DRIVER.",
+        label: "duplicate plate number",
+        values: {
+          contactNumber: "+65 8000 2000",
+          driverName: "DUPLICATE PLATE TEST DRIVER",
+          plateNumber: "SLL901P",
+          vehicleType: "Viano",
+        },
+      },
+    ];
+
+    for (const duplicateCase of driverProfileDuplicateCases) {
+      const clickedDuplicateDriverProfileSave = await evaluate(`(() => {
+        const values = ${JSON.stringify(duplicateCase.values)};
+        const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+        const labels = [...document.querySelectorAll("label")];
+        const fieldForLabel = (labelText) => {
+          const label = labels.find(
+            (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+          );
+          return label?.querySelector("input, select, textarea") || null;
+        };
+        const setValue = (control, value) => {
+          if (!control) {
+            return;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+          descriptor?.set?.call(control, value);
+          control.dispatchEvent(new Event("input", { bubbles: true }));
+          control.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        const driverName = fieldForLabel("Driver name");
+        const contactNumber = fieldForLabel("Contact number");
+        const vehicleType = fieldForLabel("Vehicle type");
+        const plateNumber = fieldForLabel("Plate number");
+        const saveButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Save Driver Profile",
+        );
+
+        if (!driverName || !contactNumber || !vehicleType || !plateNumber || !saveButton || saveButton.disabled) {
+          return false;
+        }
+
+        window.__prestigeFetchCalls = [];
+        window.__prestigeDriverProfileRequestBodies = [];
+        window.__prestigeUnhandledSupabaseCalls = [];
+        setValue(driverName, values.driverName);
+        setValue(contactNumber, values.contactNumber);
+        setValue(vehicleType, values.vehicleType);
+        setValue(plateNumber, values.plateNumber);
+        saveButton.click();
+        return true;
+      })()`);
+      assert.equal(
+        clickedDuplicateDriverProfileSave,
+        true,
+        `Expected Save Driver Profile to be clickable for ${duplicateCase.label}`,
+      );
+
+      const duplicateDriverProfileSaveState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const saveButton = [...document.querySelectorAll("button")].find(
+              (button) => button.textContent.trim() === "Save Driver Profile",
+            );
+            const statusPanel = document.querySelector("[data-status-panel='global']");
+            const saveButtonRect = saveButton?.getBoundingClientRect();
+            const statusRect = statusPanel?.getBoundingClientRect();
+            const requestBodies = window.__prestigeDriverProfileRequestBodies || [];
+
+            return statusPanel?.textContent.trim() === ${JSON.stringify(duplicateCase.expectedMessage)}
+              ? {
+                  fetchCalls: window.__prestigeFetchCalls || [],
+                  requestCount: requestBodies.length,
+                  statusDistanceFromSaveButton:
+                    saveButtonRect && statusRect ? Math.abs(statusRect.top - saveButtonRect.bottom) : null,
+                  statusText: statusPanel.textContent.trim(),
+                  unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+                }
+              : false;
+          })()`),
+        10000,
+        `driver profile duplicate prevention for ${duplicateCase.label}`,
+      );
+
+      assert.equal(duplicateDriverProfileSaveState.requestCount, 0);
+      assert.deepEqual(
+        duplicateDriverProfileSaveState.fetchCalls,
+        [],
+        `Expected ${duplicateCase.label} prevention not to call Supabase`,
+      );
+      assert.deepEqual(duplicateDriverProfileSaveState.unhandledSupabaseCalls, []);
+      assert.ok(
+        duplicateDriverProfileSaveState.statusDistanceFromSaveButton !== null &&
+          duplicateDriverProfileSaveState.statusDistanceFromSaveButton <= 120,
+        `Expected ${duplicateCase.label} error near Save Driver Profile button, got ${duplicateDriverProfileSaveState.statusDistanceFromSaveButton}px`,
+      );
+    }
 
     const driverSearchQueries = [
       ["REUSABLE PROFILE", "driver name"],

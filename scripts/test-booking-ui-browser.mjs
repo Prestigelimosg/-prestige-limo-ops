@@ -206,7 +206,10 @@ const persistedRealLutherGrahamFixture = {
   job_card:
     "AVF DEP\n30 Apr 2026, 0420hrs\nFlight: SQ265\n160 Watten Estate Rd, Singapore 287610 > 405 Sin Ming Ave, Singapore 570405 > Bedok South Avenue 2, Block 10B HDB Bedok South, Singapore 10B Bedok S Ave 2, Block 10B, Singapore 461010 > Changi Airport\nBooker: Luther Graham\nPassenger: Luther Graham\nPax: 3",
   status: "confirmed",
+  driver_id: 9901,
   driver_name: "TEST DRIVER CRM 20260516",
+  driver_contact: "+65 8999 0099",
+  driver_plate_number: "TEST99",
   customer_rate: 75,
   customer_price_amount: 160,
   customer_rate_override: 160,
@@ -833,6 +836,70 @@ const reusableDriverProfileFixture = {
   notes: "Reusable profile save test note",
   preferred_areas: "Changi, Marina Bay",
   airport_permit_notes: "Has Changi permit",
+};
+const dashboardPlateSearchDriverFixture = {
+  ...reusableDriverProfileFixture,
+  id: 9901,
+  driver_name: "TEST DRIVER CRM 20260516",
+  contact_number: "+65 8999 0099",
+  vehicle_type: "Alphard",
+  plate_number: "TEST99",
+  availability_status: "available",
+  notes: "Dashboard plate search fixture",
+};
+const dashboardT1234SearchDriverFixture = {
+  ...reusableDriverProfileFixture,
+  id: 9902,
+  driver_name: "TEST1",
+  contact_number: "+65 8111 1234",
+  vehicle_type: "Vellfire",
+  plate_number: "T1234",
+  availability_status: "available",
+  notes: "Dashboard stale selection fixture",
+};
+const dashboardSameTimeAssignedT1234Fixture = {
+  id: "ui-dashboard-same-time-assigned-t1234-fixture",
+  company_id: 9911,
+  booker_id: 9912,
+  traveler_id: 9913,
+  booking_type: "DEP",
+  vehicle: "AVF",
+  pickup_time: "1410",
+  pickup_address: "Mandarin Oriental Singapore",
+  dropoff_address: "Changi Airport T2",
+  flight_no: "SQ176",
+  route: "Mandarin Oriental Singapore > Changi Airport T2",
+  pax: 1,
+  job_card:
+    "AVF DEP\n29 May 2026, 1410hrs\nFlight: SQ176\nMandarin Oriental Singapore > Changi Airport T2\nPassenger: DASHBOARD SAME TIME ASSIGNED DRIVER TRAVELER\nPax: 1",
+  status: "assigned",
+  driver_id: dashboardT1234SearchDriverFixture.id,
+  driver_name: dashboardT1234SearchDriverFixture.driver_name,
+  driver_contact: dashboardT1234SearchDriverFixture.contact_number,
+  driver_plate_number: dashboardT1234SearchDriverFixture.plate_number,
+  customer_price_amount: 95,
+  driver_payout_amount: 66,
+  driver_payout_override: null,
+  driver_payout_reason: null,
+  driver_dispatch_include_payout: false,
+  extra_stop_count: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  created_at: "2026-05-18T23:53:20.000Z",
+  updated_at: "2026-05-18T23:53:20.000Z",
+  companies: {
+    company_name: "DASHBOARD SAME TIME ASSIGNED DRIVER COMPANY",
+    domain: "dashboard-same-time-assigned-driver.example.com",
+  },
+  bookers: {
+    booker_name: "DASHBOARD SAME TIME ASSIGNED DRIVER BOOKER",
+    email: "booker@dashboard-same-time-assigned-driver.example.com",
+    phone: "+65 8666 3333",
+  },
+  travelers: {
+    traveler_name: "DASHBOARD SAME TIME ASSIGNED DRIVER TRAVELER",
+  },
 };
 const mrLeeSaveTravelerName = "BROWSER UI TEST Mr Lee";
 const mrLeeExpectedPickupDate = "2026-05-20";
@@ -2370,6 +2437,7 @@ async function runChromeTest() {
         ${JSON.stringify(persistedRealLutherGrahamFixture)},
         ${JSON.stringify(persistedRealAlisonLimFixture)},
         ${JSON.stringify(persistedRealNicoleRohanHarmlessTestFixture)},
+        ${JSON.stringify(dashboardSameTimeAssignedT1234Fixture)},
       ];
       window.__prestigeFetchCalls = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
@@ -2507,7 +2575,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeBookingsState.savedCount,
-      "17",
+      "18",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate the visible Saved count",
     );
     assert.equal(
@@ -2740,7 +2808,7 @@ async function runChromeTest() {
     })()`);
     assert.equal(
       hiddenLegacyMrLeeDashboardState.matchingCount,
-      "17",
+      "18",
       "Expected hidden legacy Mr Lee browser-test duplicates not to inflate Dashboard matching count",
     );
     assert.equal(
@@ -4931,6 +4999,41 @@ async function runChromeTest() {
     assert.equal(selectedDriverProfileState.fields.trfPayout, "58");
     assert.equal(selectedDriverProfileState.fields.dspPayout, "52");
 
+    await evaluate(`(() => {
+      window.__prestigeDriverList = [
+        ${JSON.stringify(dashboardPlateSearchDriverFixture)},
+        ${JSON.stringify(dashboardT1234SearchDriverFixture)},
+        ...(window.__prestigeDriverList || []),
+      ];
+    })()`);
+    const clickedReloadDashboardSearchDrivers = await evaluate(`(() => {
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Driver Database",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedReloadDashboardSearchDrivers,
+      true,
+      "Expected Driver Database reload to include Dashboard plate-search fixtures",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const count = document.querySelector("[data-driver-search-count='true']")?.textContent.trim() || "";
+
+          return count === "Showing 1 of 32 drivers.";
+        })()`),
+      10000,
+      "Dashboard plate-search driver fixtures loaded",
+    );
+
     await clickTab("Dashboard", "Operations Dashboard");
     await evaluate(`(() => {
       window.__prestigeProfilePayoutPreviousFetch = window.fetch;
@@ -5081,6 +5184,432 @@ async function runChromeTest() {
       dashboardProfileDriverMatchState.optionTexts,
       ["Manual / unselected", "REUSABLE PROFILE TEST DRIVER (busy)"],
       "Expected Dashboard assignment to show only matching drivers after search",
+    );
+
+    const selectedProfileBeforeManualClear = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+          candidate.innerText.includes("SQ776"),
+      );
+
+      if (!article) {
+        return false;
+      }
+
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const fieldForLabel = (labelText) => {
+        const label = [...article.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        return label?.querySelector("input, select, textarea") || null;
+      };
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, value);
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      const driverSelect = fieldForLabel("Driver");
+
+      if (!driverSelect) {
+        return false;
+      }
+
+      setValue(driverSelect, String(${reusableDriverProfileFixture.id}));
+      return true;
+    })()`);
+    assert.equal(
+      selectedProfileBeforeManualClear,
+      true,
+      "Expected Dashboard profile driver to be selectable before manual clear test",
+    );
+
+    const dashboardSelectedProfileState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldForLabel = (labelText) => {
+            const label = [...(article?.querySelectorAll("label") || [])].find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            return label?.querySelector("input, select, textarea") || null;
+          };
+          const driverSelect = fieldForLabel("Driver");
+
+          const state = {
+            contact: fieldForLabel("Driver Contact")?.value || "",
+            name: fieldForLabel("Driver Name")?.value || "",
+            payoutPlaceholder: fieldForLabel("Override Payout")?.getAttribute("placeholder") || "",
+            payoutOverride: fieldForLabel("Override Payout")?.value || "",
+            payoutReason: fieldForLabel("Override Reason")?.value || "",
+            plate: fieldForLabel("Driver Car Plate")?.value || "",
+            selectedDriverText: driverSelect?.options[driverSelect?.selectedIndex]?.textContent.trim() || "",
+          };
+
+          return state.name === "REUSABLE PROFILE TEST DRIVER" &&
+            state.contact === "+65 8111 2222" &&
+            state.plate === "SLL901P"
+            ? state
+            : false;
+        })()`),
+      10000,
+      "Dashboard selected driver profile fills assignment details",
+    );
+    assert.equal(dashboardSelectedProfileState.name, "REUSABLE PROFILE TEST DRIVER");
+    assert.equal(dashboardSelectedProfileState.contact, "+65 8111 2222");
+    assert.equal(dashboardSelectedProfileState.plate, "SLL901P");
+    assert.equal(
+      dashboardSelectedProfileState.payoutOverride,
+      "",
+      "Expected selecting a driver profile not to keep a stale manual payout override",
+    );
+    assert.equal(
+      dashboardSelectedProfileState.payoutPlaceholder,
+      "66",
+      "Expected selecting a driver profile to show the selected driver payout as the override placeholder",
+    );
+    assert.equal(
+      dashboardSelectedProfileState.payoutReason,
+      "",
+      "Expected selecting a driver profile not to keep a stale payout reason",
+    );
+    assert.equal(dashboardSelectedProfileState.selectedDriverText, "REUSABLE PROFILE TEST DRIVER (busy)");
+
+    await setInputValue(
+      `[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']`,
+      "test99",
+      "Dashboard driver search by lowercase plate",
+    );
+    const dashboardPlateSearchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldForLabel = (labelText) => {
+            const label = [...(article?.querySelectorAll("label") || [])].find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            return label?.querySelector("input, select, textarea") || null;
+          };
+          const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const optionTexts = [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim());
+
+          const state = {
+            contact: fieldForLabel("Driver Contact")?.value || "",
+            countText: article?.querySelector("[data-dashboard-driver-search-count='${dashboardProfilePayoutAssignmentFixture.id}']")?.textContent.trim() || "",
+            name: fieldForLabel("Driver Name")?.value || "",
+            noMatchText: article?.querySelector("[data-dashboard-driver-search-empty='${dashboardProfilePayoutAssignmentFixture.id}']")?.textContent.trim() || "",
+            optionTexts,
+            payoutOverride: fieldForLabel("Override Payout")?.value || "",
+            payoutReason: fieldForLabel("Override Reason")?.value || "",
+            plate: fieldForLabel("Driver Car Plate")?.value || "",
+            searchValue: article?.querySelector("[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']")?.value || "",
+            selectedDriverText: select?.options[select?.selectedIndex]?.textContent.trim() || "",
+          };
+
+          return state.countText === "Showing 1 matching driver." &&
+            state.optionTexts.includes("TEST DRIVER CRM 20260516 (available)") &&
+            state.name === "" &&
+            state.contact === "" &&
+            state.plate === "" &&
+            state.payoutOverride === "" &&
+            state.payoutReason === ""
+            ? state
+            : false;
+        })()`),
+      10000,
+      "Dashboard driver search lowercase plate match clears stale selected profile",
+    );
+    assert.equal(dashboardPlateSearchState.searchValue, "test99");
+    assert.equal(dashboardPlateSearchState.noMatchText, "");
+    assert.deepEqual(
+      dashboardPlateSearchState.optionTexts,
+      ["Manual / unselected", "TEST DRIVER CRM 20260516 (available)"],
+      "Expected lowercase plate search to show only the matching driver and no stale saved option",
+    );
+    assert.equal(dashboardPlateSearchState.selectedDriverText, "Manual / unselected");
+
+    const selectedDashboardPlateDriver = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+          candidate.innerText.includes("SQ776"),
+      );
+      const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+
+      if (!select) {
+        return false;
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(select.constructor.prototype, "value");
+      descriptor?.set?.call(select, String(${dashboardPlateSearchDriverFixture.id}));
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(selectedDashboardPlateDriver, true, "Expected lowercase plate match to be selectable");
+
+    const selectedDashboardPlateDriverState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldForLabel = (labelText) => {
+            const label = [...(article?.querySelectorAll("label") || [])].find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            return label?.querySelector("input, select, textarea") || null;
+          };
+
+          const state = {
+            contact: fieldForLabel("Driver Contact")?.value || "",
+            name: fieldForLabel("Driver Name")?.value || "",
+            plate: fieldForLabel("Driver Car Plate")?.value || "",
+          };
+
+          return state.name === "TEST DRIVER CRM 20260516" &&
+            state.contact === "+65 8999 0099" &&
+            state.plate === "TEST99"
+            ? state
+            : false;
+        })()`),
+      10000,
+      "Dashboard lowercase plate driver fills assignment details",
+    );
+    assert.equal(selectedDashboardPlateDriverState.name, "TEST DRIVER CRM 20260516");
+    assert.equal(selectedDashboardPlateDriverState.contact, "+65 8999 0099");
+    assert.equal(selectedDashboardPlateDriverState.plate, "TEST99");
+
+    await setInputValue(
+      `[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']`,
+      "T1234",
+      "Dashboard driver search by uppercase plate",
+    );
+    const dashboardUppercasePlateSearchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldForLabel = (labelText) => {
+            const label = [...(article?.querySelectorAll("label") || [])].find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            return label?.querySelector("input, select, textarea") || null;
+          };
+          const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const optionTexts = [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim());
+
+          const state = {
+            contact: fieldForLabel("Driver Contact")?.value || "",
+            countText: article?.querySelector("[data-dashboard-driver-search-count='${dashboardProfilePayoutAssignmentFixture.id}']")?.textContent.trim() || "",
+            name: fieldForLabel("Driver Name")?.value || "",
+            noMatchText: article?.querySelector("[data-dashboard-driver-search-empty='${dashboardProfilePayoutAssignmentFixture.id}']")?.textContent.trim() || "",
+            optionTexts,
+            plate: fieldForLabel("Driver Car Plate")?.value || "",
+            selectedDriverText: select?.options[select?.selectedIndex]?.textContent.trim() || "",
+          };
+
+          return state.countText === "Showing 1 matching driver." &&
+            state.optionTexts.includes("TEST1 (available)") &&
+            state.name === "" &&
+            state.contact === "" &&
+            state.plate === ""
+            ? state
+            : false;
+        })()`),
+      10000,
+      "Dashboard driver search uppercase plate match clears previous selection",
+    );
+    assert.equal(dashboardUppercasePlateSearchState.noMatchText, "");
+    assert.deepEqual(
+      dashboardUppercasePlateSearchState.optionTexts,
+      ["Manual / unselected", "TEST1 (available)"],
+      "Expected uppercase plate search to show TEST1 and clear the previous selected driver",
+    );
+    assert.equal(dashboardUppercasePlateSearchState.selectedDriverText, "Manual / unselected");
+
+    await setInputValue(
+      `[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']`,
+      "REUSABLE PROFILE",
+      "Dashboard driver search profile match after plate checks",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const optionTexts = [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim());
+
+          return optionTexts.includes("REUSABLE PROFILE TEST DRIVER (busy)") &&
+            !optionTexts.some((optionText) => optionText.includes("TEST DRIVER CRM 20260516")) &&
+            !optionTexts.some((optionText) => optionText.includes("TEST1"));
+        })()`),
+      10000,
+      "Dashboard driver search profile rematch after plate checks",
+    );
+
+    const clearedDashboardProfileSelection = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+          candidate.innerText.includes("SQ776"),
+      );
+
+      if (!article) {
+        return false;
+      }
+
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const fieldForLabel = (labelText) => {
+        const label = [...article.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        return label?.querySelector("input, select, textarea") || null;
+      };
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, value);
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      const driverSelect = fieldForLabel("Driver");
+      const payoutOverride = fieldForLabel("Override Payout");
+      const payoutReason = fieldForLabel("Override Reason");
+      const driverNotes = fieldForLabel("Driver Notes");
+      const includePayout = [...article.querySelectorAll("label")].find((candidate) =>
+        candidate.innerText.includes("Include payout")
+      )?.querySelector("input[type='checkbox']");
+
+      if (!driverSelect || !payoutOverride || !payoutReason || !driverNotes || !includePayout) {
+        return false;
+      }
+
+      setValue(payoutOverride, "144");
+      setValue(payoutReason, "Stale payout reason should clear");
+      setValue(driverNotes, "Stale driver note should clear");
+
+      if (!includePayout.checked) {
+        includePayout.click();
+      }
+
+      setValue(driverSelect, "");
+      return true;
+    })()`);
+    assert.equal(
+      clearedDashboardProfileSelection,
+      true,
+      "Expected Manual / unselected to be selectable after choosing a driver profile",
+    );
+
+    const dashboardManualSelectionClearedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const fieldForLabel = (labelText) => {
+            const label = [...(article?.querySelectorAll("label") || [])].find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            return label?.querySelector("input, select, textarea") || null;
+          };
+          const select = fieldForLabel("Driver");
+          const includePayout = [...(article?.querySelectorAll("label") || [])].find((candidate) =>
+            candidate.innerText.includes("Include payout")
+          )?.querySelector("input[type='checkbox']");
+
+          const state = {
+            contact: fieldForLabel("Driver Contact")?.value || "",
+            helperText: article?.querySelector("[data-dashboard-driver-search-helper='${dashboardProfilePayoutAssignmentFixture.id}']")?.textContent.trim() || "",
+            includePayoutChecked: Boolean(includePayout?.checked),
+            name: fieldForLabel("Driver Name")?.value || "",
+            notes: fieldForLabel("Driver Notes")?.value || "",
+            optionTexts: [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim()),
+            payoutOverride: fieldForLabel("Override Payout")?.value || "",
+            payoutReason: fieldForLabel("Override Reason")?.value || "",
+            plate: fieldForLabel("Driver Car Plate")?.value || "",
+            searchValue: article?.querySelector("[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']")?.value || "",
+            selectedDriverText: select?.options[select?.selectedIndex]?.textContent.trim() || "",
+          };
+
+          return state.searchValue === "" &&
+            state.name === "" &&
+            state.contact === "" &&
+            state.plate === "" &&
+            state.payoutOverride === "" &&
+            state.payoutReason === "" &&
+            state.notes === "" &&
+            state.includePayoutChecked === false &&
+            state.optionTexts.length === 1 &&
+            state.optionTexts[0] === "Manual / unselected"
+            ? state
+            : false;
+        })()`),
+      10000,
+      "Dashboard Manual / unselected clears stale driver details",
+    );
+    assert.equal(dashboardManualSelectionClearedState.searchValue, "");
+    assert.equal(
+      dashboardManualSelectionClearedState.helperText,
+      "Search driver name, phone, plate, or vehicle to show drivers.",
+    );
+    assert.deepEqual(dashboardManualSelectionClearedState.optionTexts, ["Manual / unselected"]);
+    assert.equal(dashboardManualSelectionClearedState.selectedDriverText, "Manual / unselected");
+    assert.equal(dashboardManualSelectionClearedState.name, "");
+    assert.equal(dashboardManualSelectionClearedState.contact, "");
+    assert.equal(dashboardManualSelectionClearedState.plate, "");
+    assert.equal(dashboardManualSelectionClearedState.payoutOverride, "");
+    assert.equal(dashboardManualSelectionClearedState.payoutReason, "");
+    assert.equal(dashboardManualSelectionClearedState.notes, "");
+    assert.equal(dashboardManualSelectionClearedState.includePayoutChecked, false);
+
+    await setInputValue(
+      `[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']`,
+      "REUSABLE PROFILE",
+      "Dashboard driver search profile rematch after manual clear",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const optionTexts = [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim());
+
+          return optionTexts.includes("REUSABLE PROFILE TEST DRIVER (busy)");
+        })()`),
+      10000,
+      "Dashboard driver search rematch after manual clear",
     );
 
     const clickedProfilePayoutAssignment = await evaluate(`(() => {

@@ -119,6 +119,20 @@ type DriverRecord = {
   airport_permit_notes: string | null;
 };
 
+type DashboardDriverCandidate = {
+  optionValue: string;
+  driverId: number | null;
+  driverName: string;
+  contactNumber: string;
+  vehicleType: string;
+  plateNumber: string;
+  availabilityStatus: string;
+  notes: string;
+  preferredAreas: string;
+  sourceDriver: DriverRecord | null;
+  searchValues: Array<string | null | undefined>;
+};
+
 type NameMemory = {
   company?: string;
   companyId?: number;
@@ -869,20 +883,35 @@ function normalizePhone(value: string) {
   return clean(value).replace(/[^\d+]/g, "");
 }
 
-function normalizePlateSearch(value: string | null | undefined) {
-  return clean(value).toLowerCase().replace(/\s+/g, "");
+function normalizeCompactSearch(value: string | null | undefined) {
+  return clean(value).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function driverMatchesSearch(driver: DriverRecord, query: string) {
+function driverSearchValuesMatch(
+  values: Array<string | null | undefined>,
+  query: string,
+) {
   const search = clean(query).toLowerCase();
-  const compactSearch = search.replace(/\s+/g, "");
-  const phoneSearch = normalizePhone(search);
+  const compactSearch = normalizeCompactSearch(search);
+  const phoneSearch = /[a-z]/i.test(search) ? "" : normalizePhone(search);
 
   if (!search) {
     return false;
   }
 
-  return (
+  return values.some((value) => {
+    const searchableValue = clean(value).toLowerCase();
+
+    return (
+      searchableValue.includes(search) ||
+      Boolean(phoneSearch && normalizePhone(searchableValue).includes(phoneSearch)) ||
+      Boolean(compactSearch && normalizeCompactSearch(searchableValue).includes(compactSearch))
+    );
+  });
+}
+
+function driverMatchesSearch(driver: DriverRecord, query: string) {
+  return driverSearchValuesMatch(
     [
       driver.driver_name,
       driver.contact_number,
@@ -891,10 +920,41 @@ function driverMatchesSearch(driver: DriverRecord, query: string) {
       driver.availability_status,
       driver.preferred_areas,
       driver.notes,
-    ].some((value) => clean(value).toLowerCase().includes(search)) ||
-    Boolean(phoneSearch && normalizePhone(clean(driver.contact_number)).includes(phoneSearch)) ||
-    Boolean(compactSearch && normalizePlateSearch(driver.plate_number).includes(compactSearch))
+    ],
+    query,
   );
+}
+
+function driverDraftMatchesSearch(driverDraft: DriverDraft, query: string) {
+  return driverSearchValuesMatch(
+    [
+      driverDraft.driverName,
+      driverDraft.driverContact,
+      driverDraft.driverPlate,
+      driverDraft.notes,
+    ],
+    query,
+  );
+}
+
+function dashboardDriverCandidateMatchesSearch(
+  candidate: DashboardDriverCandidate,
+  query: string,
+) {
+  return driverSearchValuesMatch(candidate.searchValues, query);
+}
+
+function isInactiveDashboardDriverCandidate(candidate: DashboardDriverCandidate | null | undefined) {
+  return clean(candidate?.availabilityStatus).toLowerCase() === "inactive";
+}
+
+function dashboardDriverCandidateLabel(candidate: DashboardDriverCandidate) {
+  const driverName =
+    clean(candidate.driverName) ||
+    (candidate.driverId !== null ? `Driver ${candidate.driverId}` : "Saved driver");
+  const availability = clean(candidate.availabilityStatus);
+
+  return availability ? `${driverName} (${availability})` : driverName;
 }
 
 function isRatesSetupErrorMessage(value: string) {
@@ -2036,6 +2096,92 @@ export default function Home() {
     return drivers.filter((driver) => driverMatchesSearch(driver, query));
   }, [driverSearchTerm, drivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
+  const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
+  const dashboardDriverCandidates = useMemo(() => {
+    const candidateMap = new Map<string, DashboardDriverCandidate>();
+    const driversById = new Map(drivers.map((driver) => [driver.id, driver]));
+
+    for (const driver of assignableDrivers) {
+      candidateMap.set(`driver:${driver.id}`, {
+        optionValue: String(driver.id),
+        driverId: driver.id,
+        driverName: clean(driver.driver_name),
+        contactNumber: clean(driver.contact_number),
+        vehicleType: clean(driver.vehicle_type),
+        plateNumber: clean(driver.plate_number),
+        availabilityStatus: clean(driver.availability_status),
+        notes: clean(driver.notes),
+        preferredAreas: clean(driver.preferred_areas),
+        sourceDriver: driver,
+        searchValues: [
+          driver.driver_name,
+          driver.contact_number,
+          driver.plate_number,
+          driver.vehicle_type,
+          driver.availability_status,
+          driver.preferred_areas,
+          driver.notes,
+        ],
+      });
+    }
+
+    for (const bookingRecord of operationalBookings) {
+      const bookingDriverId = bookingRecord.driver_id ?? null;
+      const bookingDriverName = clean(bookingRecord.driver_name);
+      const bookingDriverContact = clean(bookingRecord.driver_contact);
+      const bookingDriverPlate = clean(bookingRecord.driver_plate_number);
+
+      if (!bookingDriverId && !bookingDriverName && !bookingDriverContact && !bookingDriverPlate) {
+        continue;
+      }
+
+      const linkedDriver = bookingDriverId !== null ? driversById.get(bookingDriverId) : null;
+
+      if (linkedDriver && isInactiveDriver(linkedDriver)) {
+        continue;
+      }
+
+      const candidateKey = bookingDriverId !== null
+        ? `driver:${bookingDriverId}`
+        : `booking:${bookingRecord.id}:${normalizeCompactSearch(
+            [bookingDriverName, bookingDriverContact, bookingDriverPlate].join(" "),
+          )}`;
+      const existingCandidate = candidateMap.get(candidateKey);
+      const bookingSearchValues = [
+        bookingDriverName,
+        bookingDriverContact,
+        bookingDriverPlate,
+        bookingRecord.vehicle,
+        bookingRecord.driver_notes,
+      ];
+
+      if (existingCandidate) {
+        existingCandidate.searchValues.push(...bookingSearchValues);
+        existingCandidate.driverName ||= bookingDriverName;
+        existingCandidate.contactNumber ||= bookingDriverContact;
+        existingCandidate.plateNumber ||= bookingDriverPlate;
+        existingCandidate.vehicleType ||= clean(bookingRecord.vehicle);
+        existingCandidate.notes ||= clean(bookingRecord.driver_notes);
+        continue;
+      }
+
+      candidateMap.set(candidateKey, {
+        optionValue: bookingDriverId !== null ? String(bookingDriverId) : `booking:${bookingRecord.id}`,
+        driverId: bookingDriverId,
+        driverName: bookingDriverName,
+        contactNumber: bookingDriverContact,
+        vehicleType: clean(bookingRecord.vehicle),
+        plateNumber: bookingDriverPlate,
+        availabilityStatus: "",
+        notes: clean(bookingRecord.driver_notes),
+        preferredAreas: "",
+        sourceDriver: linkedDriver ?? null,
+        searchValues: bookingSearchValues,
+      });
+    }
+
+    return [...candidateMap.values()];
+  }, [assignableDrivers, drivers, operationalBookings]);
 
   const assignedDriverId = clean(booking.driverId);
   const assignedDriverName = clean(booking.driverName).toLowerCase();
@@ -2104,7 +2250,6 @@ export default function Home() {
       .join("\n\n");
   }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
 
-  const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
   const dashboardBookings = useMemo(() => {
     const query = clean(searchTerm).toLowerCase();
 
@@ -2344,19 +2489,37 @@ export default function Home() {
     }));
   }
 
+  function bookingRecordToDriverDraft(bookingRecord: BookingRecord): DriverDraft {
+    return {
+      driverId: clean(bookingRecord.driver_id ? String(bookingRecord.driver_id) : ""),
+      driverSearch: "",
+      driverName: clean(bookingRecord.driver_name),
+      driverContact: clean(bookingRecord.driver_contact),
+      driverPlate: clean(bookingRecord.driver_plate_number),
+      payoutOverride: clean(bookingRecord.driver_payout_override ? String(bookingRecord.driver_payout_override) : ""),
+      payoutReason: clean(bookingRecord.driver_payout_reason),
+      notes: clean(bookingRecord.driver_notes),
+      includePayout: Boolean(bookingRecord.driver_dispatch_include_payout),
+    };
+  }
+
   function getDriverDraft(bookingRecord: BookingRecord) {
+    return driverDrafts[String(bookingRecord.id)] ?? bookingRecordToDriverDraft(bookingRecord);
+  }
+
+  function findDashboardDriverCandidate(value: string | boolean) {
+    const selectedValue = typeof value === "string" ? clean(value) : "";
+
+    if (!selectedValue) {
+      return null;
+    }
+
     return (
-      driverDrafts[String(bookingRecord.id)] ?? {
-        driverId: clean(bookingRecord.driver_id ? String(bookingRecord.driver_id) : ""),
-        driverSearch: "",
-        driverName: clean(bookingRecord.driver_name),
-        driverContact: clean(bookingRecord.driver_contact),
-        driverPlate: clean(bookingRecord.driver_plate_number),
-        payoutOverride: clean(bookingRecord.driver_payout_override ? String(bookingRecord.driver_payout_override) : ""),
-        payoutReason: clean(bookingRecord.driver_payout_reason),
-        notes: clean(bookingRecord.driver_notes),
-        includePayout: Boolean(bookingRecord.driver_dispatch_include_payout),
-      }
+      dashboardDriverCandidates.find(
+        (candidate) =>
+          candidate.optionValue === selectedValue ||
+          (candidate.driverId !== null && String(candidate.driverId) === selectedValue),
+      ) ?? null
     );
   }
 
@@ -2428,25 +2591,72 @@ export default function Home() {
     value: string | boolean,
   ) {
     const bookingId = String(bookingRecord.id);
-    const selectedDriver =
-      field === "driverId" ? drivers.find((driver) => String(driver.id) === value) : null;
+    const selectedDashboardDriver =
+      field === "driverId" ? findDashboardDriverCandidate(value) : null;
+    const clearedDriverSelection =
+      field === "driverId" && typeof value === "string" && !clean(value)
+        ? {
+            driverSearch: "",
+            driverName: "",
+            driverContact: "",
+            driverPlate: "",
+            payoutOverride: "",
+            payoutReason: "",
+            notes: "",
+            includePayout: false,
+          }
+        : {};
 
-    setDriverDrafts((current) => ({
-      ...current,
-      [bookingId]: {
-        ...getDriverDraft(bookingRecord),
-        [field]: value,
-        ...(selectedDriver
-          ? {
-              driverName: clean(selectedDriver.driver_name),
-              driverSearch: clean(selectedDriver.driver_name),
-              driverContact: clean(selectedDriver.contact_number),
-              driverPlate: clean(selectedDriver.plate_number),
-              notes: clean(selectedDriver.notes),
-            }
-          : {}),
-      },
-    }));
+    setDriverDrafts((current) => {
+      const currentDriverDraft = current[bookingId] ?? bookingRecordToDriverDraft(bookingRecord);
+      const selectedDriverForSearch = currentDriverDraft.driverId
+        ? findDashboardDriverCandidate(currentDriverDraft.driverId)
+        : null;
+      const selectedDriverMatchesNewSearch = selectedDriverForSearch
+        ? dashboardDriverCandidateMatchesSearch(selectedDriverForSearch, value.toString())
+        : false;
+      const currentDraftMatchesNewSearch = driverDraftMatchesSearch(currentDriverDraft, value.toString());
+      const searchChangedAwayFromSelectedDriver =
+        field === "driverSearch" &&
+        typeof value === "string" &&
+        Boolean(clean(value)) &&
+        Boolean(currentDriverDraft.driverId) &&
+        !selectedDriverMatchesNewSearch &&
+        !currentDraftMatchesNewSearch;
+      const clearedStaleDriverSelection = searchChangedAwayFromSelectedDriver
+        ? {
+            driverId: "",
+            driverName: "",
+            driverContact: "",
+            driverPlate: "",
+            payoutOverride: "",
+            payoutReason: "",
+            notes: "",
+            includePayout: false,
+          }
+        : {};
+
+      return {
+        ...current,
+        [bookingId]: {
+          ...currentDriverDraft,
+          [field]: value,
+          ...clearedDriverSelection,
+          ...clearedStaleDriverSelection,
+          ...(selectedDashboardDriver
+            ? {
+                driverName: clean(selectedDashboardDriver.driverName),
+                driverSearch: clean(selectedDashboardDriver.driverName),
+                driverContact: clean(selectedDashboardDriver.contactNumber),
+                driverPlate: clean(selectedDashboardDriver.plateNumber),
+                payoutOverride: "",
+                payoutReason: "",
+                notes: clean(selectedDashboardDriver.notes),
+              }
+            : {}),
+        },
+      };
+    });
   }
 
   function validateBooking() {
@@ -4482,8 +4692,15 @@ export default function Home() {
   async function assignDriver(bookingRecord: BookingRecord) {
     const bookingId = String(bookingRecord.id);
     const driverDraft = getDriverDraft(bookingRecord);
-    const selectedDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
-    const driverName = clean(driverDraft.driverName) || clean(selectedDriver?.driver_name);
+    const selectedDashboardDriver = findDashboardDriverCandidate(driverDraft.driverId);
+    const selectedDriver =
+      selectedDashboardDriver?.sourceDriver ??
+      drivers.find((driver) => String(driver.id) === driverDraft.driverId);
+    const selectedDriverId = selectedDriver?.id ?? selectedDashboardDriver?.driverId ?? null;
+    const driverName =
+      clean(driverDraft.driverName) ||
+      clean(selectedDashboardDriver?.driverName) ||
+      clean(selectedDriver?.driver_name);
     const manualPayoutText = clean(driverDraft.payoutOverride);
     const manualPayout = manualPayoutText ? finiteNumber(manualPayoutText) : null;
     const bookingType = normalizeBookingType(bookingRecord.booking_type);
@@ -4544,10 +4761,18 @@ export default function Home() {
       const { error } = await supabase
         .from("bookings")
         .update({
-          driver_id: selectedDriver?.id ?? null,
+          driver_id: selectedDriverId,
           driver_name: driverName,
-          driver_contact: clean(driverDraft.driverContact) || clean(selectedDriver?.contact_number) || null,
-          driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number) || null,
+          driver_contact:
+            clean(driverDraft.driverContact) ||
+            clean(selectedDashboardDriver?.contactNumber) ||
+            clean(selectedDriver?.contact_number) ||
+            null,
+          driver_plate_number:
+            clean(driverDraft.driverPlate) ||
+            clean(selectedDashboardDriver?.plateNumber) ||
+            clean(selectedDriver?.plate_number) ||
+            null,
           driver_payout_amount: calculatedPayout || null,
           ...selectedDriverPayoutFields,
           driver_payout_override: manualPayout,
@@ -4567,10 +4792,16 @@ export default function Home() {
           currentBooking.id === bookingRecord.id
             ? {
                 ...currentBooking,
-                driver_id: selectedDriver?.id ?? null,
+                driver_id: selectedDriverId,
                 driver_name: driverName,
-                driver_contact: clean(driverDraft.driverContact) || clean(selectedDriver?.contact_number),
-                driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number),
+                driver_contact:
+                  clean(driverDraft.driverContact) ||
+                  clean(selectedDashboardDriver?.contactNumber) ||
+                  clean(selectedDriver?.contact_number),
+                driver_plate_number:
+                  clean(driverDraft.driverPlate) ||
+                  clean(selectedDashboardDriver?.plateNumber) ||
+                  clean(selectedDriver?.plate_number),
                 driver_payout_amount: calculatedPayout,
                 ...selectedDriverPayoutFields,
                 driver_payout_override: manualPayout,
@@ -4657,20 +4888,36 @@ export default function Home() {
           const revertStatusLabel = isPob
             ? "Revert to OTW"
             : `Revert to ${hasSavedDriver ? "assigned" : "confirmed"}`;
-          const selectedDraftDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
+          const selectedDashboardDriver = findDashboardDriverCandidate(driverDraft.driverId);
+          const selectedDraftDriver =
+            selectedDashboardDriver?.sourceDriver ??
+            drivers.find((driver) => String(driver.id) === driverDraft.driverId);
+          const selectedDraftDriverPayout = selectedDraftDriver
+            ? calculateSavedDriverPayout(savedBooking, selectedDraftDriver, rateSettings)
+            : null;
+          const assignmentPayoutPlaceholder =
+            selectedDraftDriverPayout && selectedDraftDriverPayout > 0
+              ? selectedDraftDriverPayout
+              : priceAmounts.driverPrice;
           const selectedDraftDriverIsInactive = Boolean(
-            selectedDraftDriver && isInactiveDriver(selectedDraftDriver),
+            selectedDashboardDriver
+              ? isInactiveDashboardDriverCandidate(selectedDashboardDriver)
+              : selectedDraftDriver && isInactiveDriver(selectedDraftDriver),
           );
           const dashboardDriverSearchQuery = clean(driverDraft.driverSearch);
           const matchingDashboardDrivers = dashboardDriverSearchQuery
-            ? assignableDrivers.filter((driver) => driverMatchesSearch(driver, dashboardDriverSearchQuery))
+            ? dashboardDriverCandidates.filter((candidate) =>
+                dashboardDriverCandidateMatchesSearch(candidate, dashboardDriverSearchQuery),
+              )
             : [];
           const selectedDriverInDashboardMatches = matchingDashboardDrivers.some(
-            (driver) => String(driver.id) === driverDraft.driverId,
+            (candidate) =>
+              candidate.optionValue === driverDraft.driverId ||
+              (candidate.driverId !== null && String(candidate.driverId) === driverDraft.driverId),
           );
           const showSavedDashboardDriverOption = Boolean(
             driverDraft.driverId &&
-              (!selectedDraftDriver || selectedDraftDriverIsInactive || !selectedDriverInDashboardMatches),
+              (!selectedDashboardDriver || selectedDraftDriverIsInactive || !selectedDriverInDashboardMatches),
           );
           const dashboardDriverSearchCount = matchingDashboardDrivers.length;
 
@@ -4857,14 +5104,15 @@ export default function Home() {
                           <option disabled={selectedDraftDriverIsInactive} value={driverDraft.driverId}>
                             Saved:{" "}
                             {clean(driverDraft.driverName) ||
+                              clean(selectedDashboardDriver?.driverName) ||
                               clean(selectedDraftDriver?.driver_name) ||
                               `Driver ${driverDraft.driverId}`}
                             {selectedDraftDriverIsInactive ? " (inactive)" : ""}
                           </option>
                         ) : null}
-                        {matchingDashboardDrivers.map((driver) => (
-                          <option key={driver.id} value={driver.id}>
-                            {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
+                        {matchingDashboardDrivers.map((candidate) => (
+                          <option key={candidate.optionValue} value={candidate.optionValue}>
+                            {dashboardDriverCandidateLabel(candidate)}
                           </option>
                         ))}
                       </select>
@@ -4918,7 +5166,7 @@ export default function Home() {
                         onChange={(event) =>
                           updateDriverDraft(savedBooking, "payoutOverride", event.target.value)
                         }
-                        placeholder={`${priceAmounts.driverPrice ?? ""}`}
+                        placeholder={`${assignmentPayoutPlaceholder ?? ""}`}
                         type="number"
                         value={driverDraft.payoutOverride}
                       />

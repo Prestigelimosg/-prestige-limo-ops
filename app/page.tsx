@@ -212,7 +212,7 @@ type RateOverrideListMessage = Message & {
 };
 
 type CopyFeedback = Message & {
-  target: "jobCard" | "driverDispatch";
+  target: "customerCopy" | "driverDispatch" | "jobCard";
 };
 
 type BookingCopyTarget = "driverDispatch" | "jobCard";
@@ -332,6 +332,13 @@ const rateLabels: Record<keyof Required<RateRules>, string> = {
   DEP: "DEP / Departure",
   TRF: "TRF / Transfer",
   DSP: "DSP / Hourly",
+};
+
+const customerBookingTypeLabels: Record<keyof Required<RateRules>, string> = {
+  MNG: "Arrival",
+  DEP: "Departure",
+  TRF: "City Transfer",
+  DSP: "Hourly",
 };
 
 const childSeatTypeOptions = [
@@ -1846,6 +1853,10 @@ function getBookingJobCard(bookingRecord: BookingRecord) {
     .join("\n");
 }
 
+function customerBookingTypeLabel(value: string | null | undefined) {
+  return customerBookingTypeLabels[normalizeBookingType(value)];
+}
+
 function getJobCardRouteLine(jobCard: string | null | undefined) {
   return clean(jobCard)
     .split("\n")
@@ -2210,6 +2221,59 @@ export default function Home() {
     assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
   );
   const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
+
+  const customerCopyCard = useMemo(() => {
+    const serviceType = customerBookingTypeLabel(booking.bookingType);
+    const childSeatLine =
+      clean(booking.childSeatRequired) === "yes"
+        ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
+        : "";
+    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
+    const pickupLocation = clean(booking.pickup);
+    const dropoffLocation = clean(booking.dropoff);
+    const pickupLine = pickupLocation ? `Pickup: ${pickupLocation}` : "";
+    const dropoffLine = dropoffLocation ? `Drop-off: ${dropoffLocation}` : "";
+    const routeLines = isDspItinerary
+      ? [
+          flightLine,
+          pickupLine,
+          dropoffLine,
+          "",
+          "Itinerary:",
+          ...itineraryDisplayStops.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
+        ]
+      : [
+          flightLine,
+          pickupLine,
+          dropoffLine,
+          `Route: ${route}`,
+        ];
+    const driverLines = [
+      clean(booking.driverName) ? `Driver: ${clean(booking.driverName)}` : "",
+      clean(booking.driverContact) ? `Driver contact: ${clean(booking.driverContact)}` : "",
+      assignedDriverPlate ? `Car plate: ${assignedDriverPlate}` : "",
+    ];
+    const sections = [
+      ["CUSTOMER BOOKING DETAILS"],
+      [
+        clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "",
+        serviceType ? `Service: ${serviceType}` : "",
+        formatPickupDateTime(booking.date, booking.time),
+      ],
+      routeLines,
+      driverLines,
+      [
+        `Pax: ${Number(clean(booking.pax)) || 1}`,
+        childSeatLine,
+      ],
+      ["Thank you for choosing Prestige Limo SG."],
+    ];
+
+    return sections
+      .filter((section) => section.some((line) => clean(line)))
+      .map((section) => section.join("\n").trim())
+      .join("\n\n");
+  }, [assignedDriverPlate, booking, isDspItinerary, itineraryDisplayStops, route]);
 
   const draftDriverDispatchCard = useMemo(() => {
     const bookingDriverId = clean(booking.driverId);
@@ -4424,6 +4488,23 @@ export default function Home() {
     }
   }
 
+  async function copyCustomerCopy() {
+    try {
+      await navigator.clipboard.writeText(customerCopyCard);
+      setCopyFeedback({
+        target: "customerCopy",
+        tone: "success",
+        text: "Customer copy copied.",
+      });
+    } catch {
+      setCopyFeedback({
+        target: "customerCopy",
+        tone: "error",
+        text: "Copy failed. Select the customer details manually.",
+      });
+    }
+  }
+
   function assignDraftDriver() {
     if (!clean(booking.driverName)) {
       setMessage({ tone: "error", text: "Enter a driver name before assigning this draft." });
@@ -6396,6 +6477,35 @@ export default function Home() {
               </div>
               <pre className="whitespace-pre-wrap rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm">
                 {jobCardPreview}
+              </pre>
+            </div>
+
+            <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">Customer Copy</h2>
+                  <p className="text-sm text-slate-500">Customer-facing booking and driver details.</p>
+                </div>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <button
+                    className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                    onClick={copyCustomerCopy}
+                    type="button"
+                  >
+                    Copy
+                  </button>
+                  {copyFeedback?.target === "customerCopy" ? (
+                    <div
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(copyFeedback.tone)}`}
+                      data-copy-feedback="customer-copy"
+                    >
+                      {copyFeedback.text}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <pre className="whitespace-pre-wrap rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-slate-900 shadow-sm">
+                {customerCopyCard}
               </pre>
             </div>
 

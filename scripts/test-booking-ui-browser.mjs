@@ -2059,6 +2059,7 @@ async function runChromeTest() {
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
         consoleErrors: window.__prestigeConsoleErrors || [],
+        customerCopy: preTextByHeading("Customer Copy"),
         driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
         errors: window.__prestigeErrors || [],
         fields,
@@ -3362,6 +3363,128 @@ async function runChromeTest() {
       "Expected loaded Dispatch Pricing not to keep the old driver payout after manual override",
     );
     assert.match(manualPayoutLoadedPricingState.driverDispatch, /Payout: \$82/);
+    assert.match(manualPayoutLoadedPricingState.customerCopy, /Service: Arrival/);
+    assert.doesNotMatch(
+      manualPayoutLoadedPricingState.customerCopy,
+      /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|MNG)\b/i,
+      "Expected Customer Copy to show Arrival without vehicle type or the MNG booking code",
+    );
+
+    await evaluate(`window.__prestigeCopiedTexts = []`);
+
+    const clickedLoadedCustomerCopy = await evaluate(`(() => {
+      const sectionForHeading = (headingText) => {
+        const heading = [...document.querySelectorAll("h2")].find(
+          (candidate) => candidate.textContent.trim() === headingText,
+        );
+        let node = heading;
+
+        while (node && node !== document.body) {
+          if (
+            node.querySelector?.("pre") &&
+            [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+          ) {
+            return node;
+          }
+
+          node = node.parentElement;
+        }
+
+        return null;
+      };
+      const section = sectionForHeading("Customer Copy");
+      const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Copy",
+      );
+
+      if (!copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedLoadedCustomerCopy,
+      true,
+      "Expected loaded assigned booking Customer Copy button to be clickable",
+    );
+
+    const loadedCustomerCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const sectionForHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading;
+
+            while (node && node !== document.body) {
+              if (
+                node.querySelector?.("pre") &&
+                [...node.querySelectorAll("button")].some((button) => button.textContent.trim() === "Copy")
+              ) {
+                return node;
+              }
+
+              node = node.parentElement;
+            }
+
+            return null;
+          };
+          const section = sectionForHeading("Customer Copy");
+          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Copy",
+          );
+          const feedback = section?.querySelector("[data-copy-feedback='customer-copy']");
+          const buttonRect = copyButton?.getBoundingClientRect();
+          const feedbackRect = feedback?.getBoundingClientRect();
+
+          return feedback?.textContent.trim() === "Customer copy copied."
+            ? {
+                copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+                distanceFromButton:
+                  buttonRect && feedbackRect ? Math.abs(feedbackRect.top - buttonRect.bottom) : null,
+                feedbackText: feedback.textContent.trim(),
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "loaded assigned booking Customer Copy feedback",
+    );
+    assert.equal(loadedCustomerCopyState.feedbackText, "Customer copy copied.");
+    assert.deepEqual(loadedCustomerCopyState.globalCopyMessages, []);
+    assert.ok(
+      loadedCustomerCopyState.distanceFromButton !== null &&
+        loadedCustomerCopyState.distanceFromButton <= 80,
+      `Expected Customer Copy feedback near its button, got ${loadedCustomerCopyState.distanceFromButton}px`,
+    );
+    assert.match(loadedCustomerCopyState.copiedText, /Passenger: DASHBOARD DRIVER TEST TRAVELER/);
+    assert.match(loadedCustomerCopyState.copiedText, /Service: Arrival/);
+    assert.match(loadedCustomerCopyState.copiedText, /29 May 2026, 1115hrs/);
+    assert.match(loadedCustomerCopyState.copiedText, /Flight: SQ777/);
+    assert.match(loadedCustomerCopyState.copiedText, /Pickup: Changi Airport/);
+    assert.match(loadedCustomerCopyState.copiedText, /Drop-off: The Fullerton Hotel Singapore/);
+    assert.match(
+      loadedCustomerCopyState.copiedText,
+      /Route: Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
+      "Expected Customer Copy to include the full route with extra stop",
+    );
+    assert.match(loadedCustomerCopyState.copiedText, /Driver: DASHBOARD TEST DRIVER/);
+    assert.match(loadedCustomerCopyState.copiedText, /Driver contact: \+65 8555 7777/);
+    assert.match(loadedCustomerCopyState.copiedText, /Car plate: SLC777D/);
+    assert.ok(
+      loadedCustomerCopyState.copiedText.trim().endsWith("Thank you for choosing Prestige Limo SG."),
+      "Expected Customer Copy to end with the Prestige Limo SG thank-you line",
+    );
+    assert.doesNotMatch(
+      loadedCustomerCopyState.copiedText,
+      /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|MNG)\b|Payout|driver payout|internal payout|override reason|Dashboard assignment test|Meet at arrival belt|\$82/i,
+      "Expected Customer Copy not to include vehicle type, payout, override reason, admin notes, or booking type code",
+    );
 
     await evaluate(`window.__prestigeCopiedTexts = []`);
 
@@ -6654,6 +6777,12 @@ async function runChromeTest() {
     );
     assert.match(lutherLoadedPricingState.driverDispatch, /Payout: \$95/);
     assert.doesNotMatch(lutherLoadedPricingState.driverDispatch, /Payout: \$85/);
+    assert.match(lutherLoadedPricingState.customerCopy, /Service: Departure/);
+    assert.doesNotMatch(
+      lutherLoadedPricingState.customerCopy,
+      /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|DEP)\b/i,
+      "Expected Customer Copy to show Departure without vehicle type or the DEP booking code",
+    );
 
     const seededCompletedLoadStaleMessage = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
@@ -9000,6 +9129,12 @@ async function runChromeTest() {
       freeformTransferState.driverDispatch,
       /Shenton Way > MAS Building > Asia Sq > Capital Tower/,
     );
+    assert.match(freeformTransferState.customerCopy, /Service: City Transfer/);
+    assert.doesNotMatch(
+      freeformTransferState.customerCopy,
+      /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|TRF)\b/i,
+      "Expected Customer Copy to show City Transfer without vehicle type or the TRF booking code",
+    );
     assert.match(freeformTransferState.pricingPanel, /Customer\s+\$85\.00/);
     assert.match(freeformTransferState.pricingPanel, /Driver\s+\$65\.00/);
     assert.match(freeformTransferState.pricingPanel, /Profit\s+\$20\.00/);
@@ -9083,6 +9218,15 @@ async function runChromeTest() {
       (dspState.driverDispatch.match(/1800hrs - Ritz-Carlton/g) || []).length,
       1,
       "Expected final Ritz-Carlton to appear once in the driver itinerary",
+    );
+    assert.match(dspState.customerCopy, /Service: Hourly/);
+    assert.match(dspState.customerCopy, /Pickup: Grand Hyatt/);
+    assert.match(dspState.customerCopy, /Itinerary:/);
+    assert.match(dspState.customerCopy, /1330hrs - Temasek Office, The Atrium@Orchard/);
+    assert.doesNotMatch(
+      dspState.customerCopy,
+      /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|DSP)\b/i,
+      "Expected Customer Copy to show Hourly without vehicle type or the DSP booking code",
     );
 
     const focusedNumberedEventDspTextarea = await evaluate(`(() => {

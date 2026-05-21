@@ -211,6 +211,10 @@ type RateOverrideListMessage = Message & {
   recordId?: number;
 };
 
+type DriverDeleteMessage = Message & {
+  driverId: string;
+};
+
 type CopyFeedback = Message & {
   target: DispatchCopyTarget;
 };
@@ -1969,6 +1973,8 @@ export default function Home() {
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
   const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
+  const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
+  const [driverDeleteMessage, setDriverDeleteMessage] = useState<DriverDeleteMessage | null>(null);
   const [assigningBookingId, setAssigningBookingId] = useState<string | null>(null);
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -4253,6 +4259,122 @@ export default function Home() {
       setMessage({ tone: "error", text: `Deactivate driver failed: ${errorMessage}` });
     } finally {
       setDeactivatingDriverProfile(false);
+    }
+  }
+
+  function clearDeletedDriverIdFromBookingState(driverId: string) {
+    const matchesDeletedDriver = (value: string | number | null | undefined) =>
+      clean(value === null || value === undefined ? "" : String(value)) === driverId;
+
+    setBooking((current) =>
+      matchesDeletedDriver(current.driverId)
+        ? {
+            ...current,
+            driverId: "",
+          }
+        : current,
+    );
+    setBookings((current) =>
+      current.map((currentBooking) =>
+        matchesDeletedDriver(currentBooking.driver_id)
+          ? {
+              ...currentBooking,
+              driver_id: null,
+            }
+          : currentBooking,
+      ),
+    );
+    setDriverDrafts((current) => {
+      let changed = false;
+      const nextDrafts = Object.fromEntries(
+        Object.entries(current).map(([bookingId, driverDraft]) => {
+          if (!matchesDeletedDriver(driverDraft.driverId)) {
+            return [bookingId, driverDraft];
+          }
+
+          changed = true;
+          return [
+            bookingId,
+            {
+              ...driverDraft,
+              driverId: "",
+            },
+          ];
+        }),
+      );
+
+      return changed ? nextDrafts : current;
+    });
+  }
+
+  async function deleteDriverProfile(driver: DriverRecord, assignedJobCount: number) {
+    const driverId = clean(String(driver.id));
+
+    if (!driverId) {
+      setDriverDeleteMessage({
+        driverId: "",
+        tone: "error",
+        text: "Delete driver failed: missing driver id.",
+      });
+      return;
+    }
+
+    if (!supabase) {
+      setDriverDeleteMessage({
+        driverId,
+        tone: "error",
+        text: "Delete driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      });
+      return;
+    }
+
+    const confirmationText =
+      assignedJobCount > 0
+        ? `This driver has ${assignedJobCount} assigned job${assignedJobCount === 1 ? "" : "s"}. Delete this driver from the Driver Database? Existing bookings will keep their saved driver details. This cannot be undone.`
+        : "Delete this driver from the Driver Database? This cannot be undone.";
+
+    if (!window.confirm(confirmationText)) {
+      setDriverDeleteMessage({
+        driverId,
+        tone: "info",
+        text: "Driver delete cancelled.",
+      });
+      return;
+    }
+
+    setDeletingDriverId(driverId);
+    setDriverDeleteMessage({
+      driverId,
+      tone: "info",
+      text: "Deleting driver...",
+    });
+
+    try {
+      const result = await supabase.from("drivers").delete().eq("id", driverId);
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      setDrivers((current) => current.filter((candidate) => String(candidate.id) !== driverId));
+      clearDeletedDriverIdFromBookingState(driverId);
+      setDriverProfileDraft((current) =>
+        current.driverId === driverId ? initialDriverProfileDraft : current,
+      );
+      setDriverDeleteMessage({
+        driverId,
+        tone: "success",
+        text: "Driver deleted.",
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown driver delete error.";
+      setDriverDeleteMessage({
+        driverId,
+        tone: "error",
+        text: `Delete driver failed: ${errorMessage}`,
+      });
+    } finally {
+      setDeletingDriverId(null);
     }
   }
 
@@ -7129,6 +7251,15 @@ export default function Home() {
 		                className="mt-3 max-h-80 space-y-1.5 overflow-y-auto overscroll-contain rounded-md border border-stone-200 bg-white/70 p-1 pr-2"
 		                data-driver-list-scroll="true"
 		              >
+		                {driverDeleteMessage &&
+		                !drivers.some((driver) => String(driver.id) === driverDeleteMessage.driverId) ? (
+		                  <p
+		                    className={`rounded-md border px-3 py-2 text-xs ${statusClass(driverDeleteMessage.tone)}`}
+		                    data-driver-delete-feedback-card={driverDeleteMessage.driverId}
+		                  >
+		                    {driverDeleteMessage.text}
+		                  </p>
+		                ) : null}
 		                {drivers.length === 0 ? (
 		                  <p className="text-sm text-slate-500">No drivers loaded.</p>
 		                ) : !driverDatabaseSearchQuery ? (
@@ -7140,6 +7271,12 @@ export default function Home() {
 		                        bookingRecord.driver_id === driver.id ||
 		                        clean(bookingRecord.driver_name).toLowerCase() === clean(driver.driver_name).toLowerCase(),
 		                    ).length;
+		                    const driverId = String(driver.id);
+		                    const rowDeleteMessage =
+		                      driverDeleteMessage?.driverId === driverId &&
+		                      drivers.some((candidate) => String(candidate.id) === driverId)
+		                        ? driverDeleteMessage
+		                        : null;
 		                    const driverAvailability = clean(driver.availability_status) || "available";
 		                    const vehicleAvailability = [
 		                      clean(driver.vehicle_type) || "Vehicle —",
@@ -7147,31 +7284,55 @@ export default function Home() {
 		                    ].join(" / ");
 
 		                    return (
-		                      <button
-		                        className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-stone-50"
+		                      <div
+		                        className="overflow-hidden rounded-md border border-stone-200 bg-white text-sm"
 		                        data-driver-profile-row={driver.id}
 		                        key={driver.id}
-		                        onClick={() => loadDriverProfileDraft(driver)}
-		                        type="button"
 		                      >
-		                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-		                          <div className="min-w-0">
-		                            <p className="flex min-w-0 flex-wrap items-center gap-2 font-semibold">
-		                              <span className="truncate">{driver.driver_name}</span>
-		                              {isInactiveDriver(driver) ? (
-		                                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
-		                                  Inactive
-		                                </span>
-		                              ) : null}
-		                            </p>
-		                            <p className="text-xs text-slate-600">{vehicleAvailability}</p>
+		                        <button
+		                          className="w-full px-3 py-2 text-left transition hover:bg-stone-50"
+		                          data-driver-profile-select={driver.id}
+		                          onClick={() => loadDriverProfileDraft(driver)}
+		                          type="button"
+		                        >
+		                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+		                            <div className="min-w-0">
+		                              <p className="flex min-w-0 flex-wrap items-center gap-2 font-semibold">
+		                                <span className="truncate">{driver.driver_name}</span>
+		                                {isInactiveDriver(driver) ? (
+		                                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+		                                    Inactive
+		                                  </span>
+		                                ) : null}
+		                              </p>
+		                              <p className="text-xs text-slate-600">{vehicleAvailability}</p>
+		                            </div>
+		                            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+		                              <span>Plate: {clean(driver.plate_number) || "—"}</span>
+		                              <span>Assigned jobs: {assignedJobCount}</span>
+		                            </div>
 		                          </div>
-		                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-		                            <span>Plate: {clean(driver.plate_number) || "—"}</span>
-		                            <span>Assigned jobs: {assignedJobCount}</span>
-		                          </div>
+		                        </button>
+		                        <div className="flex justify-end border-t border-stone-100 px-3 py-2">
+		                          <button
+		                            className="h-9 rounded-md border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+		                            data-driver-delete-button={driver.id}
+		                            disabled={deletingDriverId === driverId}
+		                            onClick={() => deleteDriverProfile(driver, assignedJobCount)}
+		                            type="button"
+		                          >
+		                            {deletingDriverId === driverId ? "Deleting..." : "Delete"}
+		                          </button>
 		                        </div>
-		                      </button>
+		                        {rowDeleteMessage ? (
+		                          <p
+		                            className={`border-t px-3 py-2 text-xs ${statusClass(rowDeleteMessage.tone)}`}
+		                            data-driver-delete-message={driver.id}
+		                          >
+		                            {rowDeleteMessage.text}
+		                          </p>
+		                        ) : null}
+		                      </div>
 		                    );
 		                  })
 		                )}

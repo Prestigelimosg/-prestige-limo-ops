@@ -242,6 +242,48 @@ const persistedRealLutherGrahamFixture = {
     traveler_name: "Luther Graham",
   },
 };
+const driverDeleteAssignedBookingFixture = {
+  ...persistedRealLutherGrahamFixture,
+  id: 990509,
+  booking_type: "DEP",
+  pickup_time: "0945",
+  pickup_address: "Driver Delete Pickup",
+  dropoff_address: "Driver Delete Drop-off",
+  flight_no: "DL9905",
+  route: "Driver Delete Pickup > Driver Delete Waypoint > Driver Delete Drop-off",
+  job_card:
+    "AVF DEP\n30 Apr 2026, 0945hrs\nFlight: DL9905\nDriver Delete Pickup > Driver Delete Waypoint > Driver Delete Drop-off\nBooker: Driver Delete Booker\nPassenger: DRIVER DELETE STATE TEST TRAVELER\nPax: 1",
+  status: "assigned",
+  driver_id: 9905,
+  driver_name: "Alson Toh",
+  driver_contact: "+65 9000 0000",
+  driver_plate_number: "PD 0000",
+  driver_payout_amount: 88,
+  driver_payout_min: 88,
+  driver_payout_max: 88,
+  driver_payout_override: null,
+  driver_payout_reason: null,
+  driver_notes: "Saved booking snapshot should remain after profile delete",
+  driver_dispatch_include_payout: true,
+  extra_stop_count: 1,
+  midnight_payout: 0,
+  midnight_surcharge: 0,
+  extra_stop_payout: 0,
+  extra_stop_surcharge: 0,
+  child_seat_required: false,
+  child_seat_count: 0,
+  child_seat_type: null,
+  child_seat_customer_surcharge: 0,
+  child_seat_driver_payout: 0,
+  bookers: {
+    booker_name: "Driver Delete Booker",
+    email: null,
+    phone: "+65 9000 0000",
+  },
+  travelers: {
+    traveler_name: "DRIVER DELETE STATE TEST TRAVELER",
+  },
+};
 const persistedRealAlisonLimFixture = {
   ...loadedSavedBookingFixture,
   id: 906002,
@@ -5289,6 +5331,7 @@ async function runChromeTest() {
 
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeDriverDeleteRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -5331,6 +5374,69 @@ async function runChromeTest() {
           if (method === "PATCH") {
             persistDriverBody(bodyText);
             return jsonResponse([]);
+          }
+
+          if (method === "DELETE") {
+            const idMatch = decodeURIComponent(url).match(/[?&]id=eq\.([^&]+)/);
+            const deletedId = idMatch?.[1] || "";
+            window.__prestigeDriverDeleteRequests = [
+              ...(window.__prestigeDriverDeleteRequests || []),
+              { id: deletedId, url },
+            ];
+            window.__prestigeDriverList = (window.__prestigeDriverList || []).filter(
+              (driver) => String(driver.id) !== String(deletedId),
+            );
+
+            if (String(window.__prestigeSavedDriver?.id) === String(deletedId)) {
+              window.__prestigeSavedDriver = null;
+            }
+
+            return jsonResponse([]);
+          }
+        }
+
+        if (url.includes("/rest/v1/bookings")) {
+          if (method === "GET") {
+            const idMatch = decodeURIComponent(url).match(/[?&]id=eq\.([^&]+)/);
+
+            if (idMatch) {
+              const bookingId = idMatch[1];
+              const savedBooking =
+                String(window.__prestigeDriverDeleteSavedBooking?.id) === String(bookingId)
+                  ? window.__prestigeDriverDeleteSavedBooking
+                  : (window.__prestigeLoadedBookings || []).find(
+                      (booking) => String(booking.id) === String(bookingId),
+                    ) || null;
+
+              return jsonResponse(savedBooking);
+            }
+
+            return jsonResponse(window.__prestigeLoadedBookings || []);
+          }
+
+          if (method === "POST") {
+            const parsed = bodyText ? JSON.parse(bodyText) : {};
+            const nextId = 990510;
+            window.__prestigeDriverDeleteSavedBooking = {
+              ...(window.__prestigeDriverDeleteAssignedBooking || {}),
+              ...parsed,
+              id: nextId,
+              companies: null,
+              bookers: window.__prestigeDriverDeleteAssignedBooking?.bookers || null,
+              travelers: window.__prestigeDriverDeleteAssignedBooking?.travelers || null,
+            };
+
+            return jsonResponse({ id: nextId }, 201);
+          }
+        }
+
+        if (
+          url.includes("/rest/v1/bookers") ||
+          url.includes("/rest/v1/companies") ||
+          url.includes("/rest/v1/travelers")
+        ) {
+          if (method === "GET") {
+            return jsonResponse(null);
           }
         }
 
@@ -7204,6 +7310,606 @@ async function runChromeTest() {
       deactivatedDriverProfileState.statusDistanceFromDeactivateButton !== null &&
         deactivatedDriverProfileState.statusDistanceFromDeactivateButton <= 120,
       `Expected Driver deactivated status near Deactivate driver button, got ${deactivatedDriverProfileState.statusDistanceFromDeactivateButton}px`,
+    );
+
+    await evaluate(`(() => {
+      const alsonDuplicate = {
+        ${Object.entries({
+          id: 9905,
+          driver_name: "Alson Toh",
+          contact_number: "+65 9000 0000",
+          vehicle_type: "Mercedes SSSS",
+          plate_number: "PD 0000",
+          payout_preferences: null,
+          driver_payout_rules: null,
+          availability_status: "available",
+          notes: "Wrong duplicate driver cleanup fixture",
+          preferred_areas: null,
+          airport_permit_notes: null,
+        })
+          .map(([key, value]) => `${JSON.stringify(key)}: ${JSON.stringify(value)}`)
+          .join(",\n        ")}
+      };
+      const alisonCorrect = {
+        ${Object.entries({
+          id: 9906,
+          driver_name: "Alison Toh",
+          contact_number: "+65 90990723",
+          vehicle_type: "Mercedes V Class",
+          plate_number: "PD 9918 H",
+          payout_preferences: null,
+          driver_payout_rules: null,
+          availability_status: "available",
+          notes: "Correct driver cleanup fixture",
+          preferred_areas: null,
+          airport_permit_notes: null,
+        })
+          .map(([key, value]) => `${JSON.stringify(key)}: ${JSON.stringify(value)}`)
+          .join(",\n        ")}
+      };
+      const assignedDeleteBooking = ${JSON.stringify(driverDeleteAssignedBookingFixture)};
+      window.__prestigeDriverDeleteAssignedBooking = assignedDeleteBooking;
+      window.__prestigeLoadedBookings = [
+        assignedDeleteBooking,
+        ...(window.__prestigeLoadedBookings || []).filter(
+          (booking) => String(booking.id) !== String(assignedDeleteBooking.id),
+        ),
+      ];
+      window.__prestigeDriverList = [
+        alsonDuplicate,
+        alisonCorrect,
+        ...(window.__prestigeDriverList || []).filter(
+          (driver) => ![9905, 9906].includes(Number(driver.id)),
+        ),
+      ];
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeDriverDeleteRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeDriverDeleteConfirmMessages = [];
+    })()`);
+
+    await clickTab("Bookings", "Load saved bookings");
+    const clickedLoadBookingsForDriverDelete = await evaluate(`(() => {
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Bookings",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedLoadBookingsForDriverDelete,
+      true,
+      "Expected bookings reload before driver delete cleanup test",
+    );
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("Bookings loaded.")`),
+      10000,
+      "bookings reload before driver delete cleanup",
+    );
+    await clickTab("Drivers", "Driver Database");
+
+    const clickedReloadDriversForDelete = await evaluate(`(() => {
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Driver Database",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedReloadDriversForDelete, true, "Expected Driver Database reload before delete test");
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("Driver database loaded.")`),
+      10000,
+      "driver database reload before delete",
+    );
+
+    await setInputValue("[data-driver-search-input='true']", "TEST99", "Driver delete assigned-job search");
+    const assignedDriverDeleteCancelState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const row = document.querySelector("[data-driver-profile-row='9901']");
+          const deleteButton = document.querySelector("[data-driver-delete-button='9901']");
+
+          if (!row || !deleteButton) {
+            return false;
+          }
+
+          window.__prestigeDriverDeleteConfirmMessages = [];
+          window.confirm = (message) => {
+            window.__prestigeDriverDeleteConfirmMessages.push(String(message));
+            return false;
+          };
+          deleteButton.click();
+
+          return {
+            confirmMessages: window.__prestigeDriverDeleteConfirmMessages || [],
+            deleteRequests: window.__prestigeDriverDeleteRequests || [],
+            messageText: document.querySelector("[data-driver-delete-message='9901']")?.textContent.trim() || "",
+            rowText: row.innerText || "",
+          };
+        })()`);
+
+        return candidateState?.messageText === "Driver delete cancelled." ? candidateState : false;
+      },
+      10000,
+      "assigned driver delete cancel state",
+    );
+
+    assert.match(assignedDriverDeleteCancelState.rowText, /TEST DRIVER CRM 20260516/);
+    assert.match(assignedDriverDeleteCancelState.rowText, /Assigned jobs:\s*[1-9]/);
+    assert.deepEqual(
+      assignedDriverDeleteCancelState.deleteRequests,
+      [],
+      "Expected cancelled assigned-driver delete not to call DELETE",
+    );
+    assert.match(
+      assignedDriverDeleteCancelState.confirmMessages[0] || "",
+      /This driver has \d+ assigned job/,
+    );
+    assert.match(
+      assignedDriverDeleteCancelState.confirmMessages[0] || "",
+      /Existing bookings will keep their saved driver details/,
+    );
+
+    await setInputValue("[data-driver-search-input='true']", "Alson", "Driver duplicate delete search");
+    const alsonDeleteCancelState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const row = document.querySelector("[data-driver-profile-row='9905']");
+          const deleteButton = document.querySelector("[data-driver-delete-button='9905']");
+
+          if (!row || !deleteButton) {
+            return false;
+          }
+
+          window.__prestigeDriverDeleteConfirmMessages = [];
+          window.confirm = (message) => {
+            window.__prestigeDriverDeleteConfirmMessages.push(String(message));
+            return false;
+          };
+          deleteButton.click();
+
+          return {
+            confirmMessages: window.__prestigeDriverDeleteConfirmMessages || [],
+            deleteRequests: window.__prestigeDriverDeleteRequests || [],
+            messageText: document.querySelector("[data-driver-delete-message='9905']")?.textContent.trim() || "",
+            rowText: row.innerText || "",
+          };
+        })()`);
+
+        return candidateState?.messageText === "Driver delete cancelled." ? candidateState : false;
+      },
+      10000,
+      "duplicate driver delete cancel state",
+    );
+
+    assert.match(alsonDeleteCancelState.rowText, /Alson Toh/);
+    assert.match(alsonDeleteCancelState.rowText, /Assigned jobs:\s*1/);
+    assert.match(
+      alsonDeleteCancelState.confirmMessages[0] || "",
+      /This driver has 1 assigned job\. Delete this driver from the Driver Database\? Existing bookings will keep their saved driver details\. This cannot be undone\./,
+    );
+    assert.deepEqual(
+      alsonDeleteCancelState.deleteRequests,
+      [],
+      "Expected cancelled duplicate delete not to call DELETE",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeDriverDeleteRequests = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeDriverDeleteConfirmMessages = [];
+      window.confirm = (message) => {
+        window.__prestigeDriverDeleteConfirmMessages.push(String(message));
+        return true;
+      };
+    })()`);
+
+    const clickedConfirmDeleteAlson = await evaluate(`(() => {
+      const deleteButton = document.querySelector("[data-driver-delete-button='9905']");
+
+      if (!deleteButton || deleteButton.disabled) {
+        return false;
+      }
+
+      deleteButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedConfirmDeleteAlson, true, "Expected duplicate driver Delete button to be clickable");
+
+    const deletedDriverState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const deletedRow = document.querySelector("[data-driver-profile-row='9905']");
+          const feedback = document.querySelector("[data-driver-delete-feedback-card='9905']");
+          const scrollList = document.querySelector("[data-driver-list-scroll='true']");
+          const feedbackRect = feedback?.getBoundingClientRect();
+          const scrollRect = scrollList?.getBoundingClientRect();
+          const lutherBooking = (window.__prestigeLoadedBookings || []).find(
+            (booking) => String(booking.id) === "906001",
+          );
+          const bookingRequests = (window.__prestigeDriverProfileRequestBodies || []).filter((entry) =>
+            String(entry.url).includes("/rest/v1/bookings"),
+          );
+          const remainingCleanupDrivers = (window.__prestigeDriverList || []).filter((driver) =>
+            ["Alson Toh", "Alison Toh"].includes(driver.driver_name),
+          );
+
+          if (deletedRow || feedback?.textContent.trim() !== "Driver deleted.") {
+            return false;
+          }
+
+          return {
+            bookingRequestCount: bookingRequests.length,
+            confirmMessages: window.__prestigeDriverDeleteConfirmMessages || [],
+            deleteRequests: window.__prestigeDriverDeleteRequests || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+            feedbackText: feedback?.textContent.trim() || "",
+            feedbackInsideScrollList: Boolean(feedback && scrollList?.contains(feedback)),
+            feedbackDistanceFromScrollTop:
+              feedbackRect && scrollRect ? Math.abs(feedbackRect.top - scrollRect.top) : null,
+            lutherDriver: {
+              name: lutherBooking?.driver_name || "",
+              contact: lutherBooking?.driver_contact || "",
+              plate: lutherBooking?.driver_plate_number || "",
+            },
+            remainingCleanupDrivers,
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState || false;
+      },
+      10000,
+      "confirmed duplicate driver delete state",
+    );
+
+    assert.deepEqual(
+      deletedDriverState.unhandledSupabaseCalls,
+      [],
+      `Expected driver delete Supabase calls to be mocked, got ${deletedDriverState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(deletedDriverState.deleteRequests.length, 1, "Expected exactly one driver DELETE request");
+    assert.equal(deletedDriverState.deleteRequests[0]?.id, "9905");
+    assert.match(deletedDriverState.deleteRequests[0]?.url || "", /\/rest\/v1\/drivers.*id=eq\.9905/);
+    assert.ok(
+      deletedDriverState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
+      `Expected driver delete to call only drivers REST endpoints, got ${deletedDriverState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(deletedDriverState.bookingRequestCount, 0, "Expected driver delete not to update booking rows");
+    assert.equal(deletedDriverState.feedbackText, "Driver deleted.");
+    assert.equal(
+      deletedDriverState.feedbackInsideScrollList,
+      true,
+      "Expected driver delete success feedback inside the Driver Database list area",
+    );
+    assert.ok(
+      deletedDriverState.feedbackDistanceFromScrollTop !== null &&
+        deletedDriverState.feedbackDistanceFromScrollTop <= 80,
+      `Expected driver delete success feedback near the deleted card, got ${deletedDriverState.feedbackDistanceFromScrollTop}px`,
+    );
+    assert.equal(deletedDriverState.lutherDriver.name, "TEST DRIVER CRM 20260516");
+    assert.equal(deletedDriverState.lutherDriver.contact, "+65 8999 0099");
+    assert.equal(deletedDriverState.lutherDriver.plate, "TEST99");
+    assert.deepEqual(
+      deletedDriverState.remainingCleanupDrivers.map((driver) => driver.driver_name),
+      ["Alison Toh"],
+      "Expected deleting Alson duplicate to keep the correct Alison record only",
+    );
+
+    const clickedReloadAfterDelete = await evaluate(`(() => {
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Driver Database",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedReloadAfterDelete, true, "Expected Driver Database reload after delete");
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("Driver database loaded.")`),
+      10000,
+      "driver database reload after delete",
+    );
+
+    await setInputValue("[data-driver-search-input='true']", "Alson", "Driver deleted duplicate search");
+    const deletedDriverReloadState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => ({
+          noMatchText: document.querySelector("[data-driver-search-empty='true']")?.textContent.trim() || "",
+          rowTexts: [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText),
+        }))()`);
+
+        return candidateState?.noMatchText === "No matching drivers found." ? candidateState : false;
+      },
+      10000,
+      "deleted driver stays deleted after reload",
+    );
+    assert.ok(
+      deletedDriverReloadState.rowTexts.every((rowText) => !rowText.includes("Alson Toh")),
+      "Expected deleted Alson duplicate not to reappear after Driver Database reload",
+    );
+
+    await setInputValue("[data-driver-search-input='true']", "Alison", "Driver remaining duplicate search");
+    const remainingAlisonState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const rows = [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText);
+          return {
+            rows,
+            correctRowCount: rows.filter((rowText) => rowText.includes("Alison Toh")).length,
+            wrongRowCount: rows.filter((rowText) => rowText.includes("Alson Toh")).length,
+          };
+        })()`);
+
+        return candidateState?.correctRowCount === 1 ? candidateState : false;
+      },
+      10000,
+      "remaining Alison duplicate row after delete",
+    );
+    assert.equal(remainingAlisonState.wrongRowCount, 0);
+    assert.match(remainingAlisonState.rows.join("\\n"), /Mercedes V Class/);
+    assert.match(remainingAlisonState.rows.join("\\n"), /PD 9918 H/);
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    await setInputValue(
+      "input[placeholder='Search name, company, or flight']",
+      "",
+      "Dashboard search before driver delete cleanup check",
+    );
+    const deletedDriverBookingCardState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find((candidate) =>
+            candidate.innerText.includes("DRIVER DELETE STATE TEST TRAVELER"),
+          );
+
+          if (!article) {
+            return false;
+          }
+
+          return {
+            articleText: article.innerText || "",
+            driverSelectValue:
+              article.querySelector("[data-dashboard-driver-select='${driverDeleteAssignedBookingFixture.id}']")?.value ||
+              "",
+            driverNameValue:
+              [...article.querySelectorAll("label")].find((label) =>
+                label.textContent.includes("Driver Name"),
+              )?.querySelector("input")?.value || "",
+            driverContactValue:
+              [...article.querySelectorAll("label")].find((label) =>
+                label.textContent.includes("Driver Contact"),
+              )?.querySelector("input")?.value || "",
+            driverPlateValue:
+              [...article.querySelectorAll("label")].find((label) =>
+                label.textContent.includes("Driver Car Plate"),
+              )?.querySelector("input")?.value || "",
+          };
+        })()`);
+
+        return candidateState?.articleText?.includes("Alson Toh") ? candidateState : false;
+      },
+      10000,
+      "deleted driver id cleared from dashboard booking card",
+    );
+
+    assert.equal(
+      deletedDriverBookingCardState.driverSelectValue,
+      "",
+      "Expected dashboard booking card to clear deleted driver id from local driver selection",
+    );
+    assert.match(deletedDriverBookingCardState.articleText, /Driver:\s*Alson Toh/);
+    assert.equal(deletedDriverBookingCardState.driverNameValue, "Alson Toh");
+    assert.equal(deletedDriverBookingCardState.driverContactValue, "+65 9000 0000");
+    assert.equal(deletedDriverBookingCardState.driverPlateValue, "PD 0000");
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeDriverDeleteSavedBooking = null;
+    })()`);
+
+    const clickedLoadDeletedDriverBooking = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find((candidate) =>
+        candidate.innerText.includes("DRIVER DELETE STATE TEST TRAVELER"),
+      );
+      const loadButton = article?.querySelector("[data-dashboard-load-booking='true']");
+
+      if (!loadButton) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedLoadDeletedDriverBooking,
+      true,
+      "Expected booking with deleted driver id to load into Dispatch",
+    );
+
+    const dispatchDeletedDriverState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const labels = [...document.querySelectorAll("label")];
+          const fieldValue = (labelText) => {
+            const label = labels.find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            const control = label?.querySelector("input, select, textarea");
+
+            return control?.value || "";
+          };
+
+          return {
+            statusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
+            driverId: fieldValue("Driver"),
+            driverName: fieldValue("Driver Name"),
+            driverContact: fieldValue("Driver Contact"),
+            driverPlate: fieldValue("Driver Car Plate"),
+          };
+        })()`);
+
+        return candidateState?.driverName === "Alson Toh" &&
+          candidateState?.driverContact === "+65 9000 0000" &&
+          candidateState?.driverPlate === "PD 0000"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "deleted driver booking loaded into Dispatch",
+    );
+
+    assert.equal(dispatchDeletedDriverState.driverId, "");
+    assert.equal(dispatchDeletedDriverState.driverName, "Alson Toh");
+    assert.equal(dispatchDeletedDriverState.driverContact, "+65 9000 0000");
+    assert.equal(dispatchDeletedDriverState.driverPlate, "PD 0000");
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+    })()`);
+
+    const clickedSaveAfterDriverDelete = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Booking + CRM",
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedSaveAfterDriverDelete,
+      true,
+      "Expected booking save after driver profile delete to be clickable",
+    );
+
+    const saveAfterDriverDeleteState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bookingInsert = (window.__prestigeDriverProfileRequestBodies || []).find(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+          );
+          const bookingDeleteOrPatchRequests = (window.__prestigeDriverProfileRequestBodies || []).filter(
+            (entry) =>
+              ["DELETE", "PATCH"].includes(entry.method) && String(entry.url).includes("/rest/v1/bookings"),
+          );
+
+          return {
+            bookingInsert: bookingInsert?.body || null,
+            bookingDeleteOrPatchCount: bookingDeleteOrPatchRequests.length,
+            fetchCalls: window.__prestigeFetchCalls || [],
+            statusText: document.body.innerText || "",
+            unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+          };
+        })()`);
+
+        return candidateState?.statusText?.includes("Booking saved successfully: 990510")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "booking save after driver profile delete",
+    );
+
+    assert.deepEqual(
+      saveAfterDriverDeleteState.unhandledSupabaseCalls,
+      [],
+      `Expected booking save after driver delete calls to be mocked, got ${saveAfterDriverDeleteState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      saveAfterDriverDeleteState.bookingInsert?.driver_id,
+      null,
+      "Expected booking save after driver profile delete not to send deleted driver id",
+    );
+    assert.equal(saveAfterDriverDeleteState.bookingInsert?.driver_name, "Alson Toh");
+    assert.equal(saveAfterDriverDeleteState.bookingInsert?.driver_contact, "+65 9000 0000");
+    assert.equal(saveAfterDriverDeleteState.bookingInsert?.driver_plate_number, "PD 0000");
+    assert.equal(
+      saveAfterDriverDeleteState.bookingInsert?.driver_payout_amount,
+      88,
+      "Expected saved driver payout snapshot to remain after profile delete",
+    );
+    assert.equal(
+      saveAfterDriverDeleteState.bookingDeleteOrPatchCount,
+      0,
+      "Expected booking save after driver profile delete not to patch/delete existing bookings",
+    );
+
+    const clickedRestoreAfterDriverDeleteClear = await evaluate(`(() => {
+      const clearButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Clear",
+      );
+
+      if (!clearButton || clearButton.disabled) {
+        return false;
+      }
+
+      clearButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedRestoreAfterDriverDeleteClear,
+      true,
+      "Expected Clear button to restore Dispatch draft after driver delete cleanup check",
+    );
+
+    await setInputValue("textarea", bookingSample, "restored Dispatch booking message after driver delete");
+
+    const clickedRestoreAfterDriverDeleteParse = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedRestoreAfterDriverDeleteParse,
+      true,
+      "Expected Create Job Card button to restore Dispatch draft after driver delete cleanup check",
+    );
+
+    await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
+          candidateState?.fields?.flight === "SQ333" &&
+          candidateState?.fields?.driverName === "TEST DRIVER CRM 20260516"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "restored Dispatch draft after driver delete cleanup check",
     );
 
     await clickTab("Dispatch", "Create Job Card");

@@ -257,6 +257,7 @@ type ParsedDebugBooking = BookingForm & {
 
 type DriverDraft = {
   driverId: string;
+  driverSearch: string;
   driverName: string;
   driverContact: string;
   driverPlate: string;
@@ -866,6 +867,34 @@ function isValidEmail(value: string) {
 
 function normalizePhone(value: string) {
   return clean(value).replace(/[^\d+]/g, "");
+}
+
+function normalizePlateSearch(value: string | null | undefined) {
+  return clean(value).toLowerCase().replace(/\s+/g, "");
+}
+
+function driverMatchesSearch(driver: DriverRecord, query: string) {
+  const search = clean(query).toLowerCase();
+  const compactSearch = search.replace(/\s+/g, "");
+  const phoneSearch = normalizePhone(search);
+
+  if (!search) {
+    return false;
+  }
+
+  return (
+    [
+      driver.driver_name,
+      driver.contact_number,
+      driver.plate_number,
+      driver.vehicle_type,
+      driver.availability_status,
+      driver.preferred_areas,
+      driver.notes,
+    ].some((value) => clean(value).toLowerCase().includes(search)) ||
+    Boolean(phoneSearch && normalizePhone(clean(driver.contact_number)).includes(phoneSearch)) ||
+    Boolean(compactSearch && normalizePlateSearch(driver.plate_number).includes(compactSearch))
+  );
 }
 
 function isRatesSetupErrorMessage(value: string) {
@@ -1998,24 +2027,15 @@ export default function Home() {
   );
   const assignableDrivers = useMemo(() => drivers.filter(isAssignableDriver), [drivers]);
   const filteredDrivers = useMemo(() => {
-    const query = clean(driverSearchTerm).toLowerCase();
+    const query = clean(driverSearchTerm);
 
     if (!query) {
-      return drivers;
+      return [];
     }
 
-    return drivers.filter((driver) =>
-      [
-        driver.driver_name,
-        driver.contact_number,
-        driver.plate_number,
-        driver.vehicle_type,
-        driver.availability_status,
-        driver.preferred_areas,
-        driver.notes,
-      ].some((value) => clean(value).toLowerCase().includes(query)),
-    );
+    return drivers.filter((driver) => driverMatchesSearch(driver, query));
   }, [driverSearchTerm, drivers]);
+  const driverDatabaseSearchQuery = clean(driverSearchTerm);
 
   const assignedDriverId = clean(booking.driverId);
   const assignedDriverName = clean(booking.driverName).toLowerCase();
@@ -2328,6 +2348,7 @@ export default function Home() {
     return (
       driverDrafts[String(bookingRecord.id)] ?? {
         driverId: clean(bookingRecord.driver_id ? String(bookingRecord.driver_id) : ""),
+        driverSearch: "",
         driverName: clean(bookingRecord.driver_name),
         driverContact: clean(bookingRecord.driver_contact),
         driverPlate: clean(bookingRecord.driver_plate_number),
@@ -2418,6 +2439,7 @@ export default function Home() {
         ...(selectedDriver
           ? {
               driverName: clean(selectedDriver.driver_name),
+              driverSearch: clean(selectedDriver.driver_name),
               driverContact: clean(selectedDriver.contact_number),
               driverPlate: clean(selectedDriver.plate_number),
               notes: clean(selectedDriver.notes),
@@ -4639,9 +4661,18 @@ export default function Home() {
           const selectedDraftDriverIsInactive = Boolean(
             selectedDraftDriver && isInactiveDriver(selectedDraftDriver),
           );
-          const showSavedDashboardDriverOption = Boolean(
-            driverDraft.driverId && (!selectedDraftDriver || selectedDraftDriverIsInactive),
+          const dashboardDriverSearchQuery = clean(driverDraft.driverSearch);
+          const matchingDashboardDrivers = dashboardDriverSearchQuery
+            ? assignableDrivers.filter((driver) => driverMatchesSearch(driver, dashboardDriverSearchQuery))
+            : [];
+          const selectedDriverInDashboardMatches = matchingDashboardDrivers.some(
+            (driver) => String(driver.id) === driverDraft.driverId,
           );
+          const showSavedDashboardDriverOption = Boolean(
+            driverDraft.driverId &&
+              (!selectedDraftDriver || selectedDraftDriverIsInactive || !selectedDriverInDashboardMatches),
+          );
+          const dashboardDriverSearchCount = matchingDashboardDrivers.length;
 
           return (
             <article
@@ -4773,10 +4804,49 @@ export default function Home() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="sm:col-span-2">
                       <span className="mb-1 block text-xs font-medium text-slate-600">
+                        Search drivers
+                      </span>
+                      <input
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        data-dashboard-driver-search-input={bookingId}
+                        onChange={(event) =>
+                          updateDriverDraft(savedBooking, "driverSearch", event.target.value)
+                        }
+                        placeholder="Name, phone, plate, vehicle, status"
+                        value={driverDraft.driverSearch}
+                      />
+                      {dashboardDriverSearchQuery ? (
+                        <p
+                          className="mt-1 text-xs text-slate-500"
+                          data-dashboard-driver-search-count={bookingId}
+                        >
+                          Showing {dashboardDriverSearchCount} matching{" "}
+                          {dashboardDriverSearchCount === 1 ? "driver" : "drivers"}.
+                        </p>
+                      ) : (
+                        <p
+                          className="mt-1 text-xs text-slate-500"
+                          data-dashboard-driver-search-helper={bookingId}
+                        >
+                          Search driver name, phone, plate, or vehicle to show drivers.
+                        </p>
+                      )}
+                      {dashboardDriverSearchQuery && dashboardDriverSearchCount === 0 ? (
+                        <p
+                          className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                          data-dashboard-driver-search-empty={bookingId}
+                        >
+                          No matching drivers found.
+                        </p>
+                      ) : null}
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">
                         Driver
                       </span>
                       <select
                         className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        data-dashboard-driver-select={bookingId}
                         onChange={(event) =>
                           updateDriverDraft(savedBooking, "driverId", event.target.value)
                         }
@@ -4792,7 +4862,7 @@ export default function Home() {
                             {selectedDraftDriverIsInactive ? " (inactive)" : ""}
                           </option>
                         ) : null}
-                        {assignableDrivers.map((driver) => (
+                        {matchingDashboardDrivers.map((driver) => (
                           <option key={driver.id} value={driver.id}>
                             {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
                           </option>
@@ -6312,7 +6382,12 @@ export default function Home() {
 		                    value={driverSearchTerm}
 		                  />
 		                </label>
-		                {drivers.length > 0 && filteredDrivers.length === 0 ? (
+		                {drivers.length > 0 && !driverDatabaseSearchQuery ? (
+		                  <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900" data-driver-search-helper="true">
+		                    Search driver name, phone, plate, or vehicle to show drivers.
+		                  </p>
+		                ) : null}
+		                {drivers.length > 0 && driverDatabaseSearchQuery && filteredDrivers.length === 0 ? (
 		                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-driver-search-empty="true">
 		                    No matching drivers found.
 		                  </p>
@@ -6324,6 +6399,8 @@ export default function Home() {
 		              >
 		                {drivers.length === 0 ? (
 		                  <p className="text-sm text-slate-500">No drivers loaded.</p>
+		                ) : !driverDatabaseSearchQuery ? (
+		                  <p className="text-sm text-slate-500">Search to show drivers.</p>
 		                ) : (
 		                  filteredDrivers.map((driver) => {
 		                    const assignedJobCount = operationalBookings.filter(

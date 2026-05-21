@@ -4511,31 +4511,18 @@ async function runChromeTest() {
           );
           const statusPanel = document.querySelector("[data-status-panel='global']");
           const driverSearchCount = document.querySelector("[data-driver-search-count='true']");
-          const driverButton = [...document.querySelectorAll("button")].find(
-            (button) =>
-              button.innerText.includes("REUSABLE PROFILE TEST DRIVER") &&
-              button.innerText.includes("SLL901P"),
-          );
+          const driverSearchHelper = document.querySelector("[data-driver-search-helper='true']");
           const saveButtonRect = saveButton?.getBoundingClientRect();
           const statusRect = statusPanel?.getBoundingClientRect();
           const saveRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
             (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/drivers"),
           );
-          const driverList = document.querySelector("[data-driver-list-scroll='true']");
-          const driverListStyle = driverList ? getComputedStyle(driverList) : null;
 
           return {
             bodyText: document.body.innerText,
-            driverButtonText: driverButton?.innerText || "",
-            driverList: driverList
-              ? {
-                  clientHeight: driverList.clientHeight,
-                  overflowY: driverListStyle?.overflowY || "",
-                  scrollHeight: driverList.scrollHeight,
-                }
-              : null,
             driverRowTexts: [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText),
             driverSearchCountText: driverSearchCount?.textContent.trim() || "",
+            driverSearchHelperText: driverSearchHelper?.textContent.trim() || "",
             fetchCalls: window.__prestigeFetchCalls || [],
             requestBodies: window.__prestigeDriverProfileRequestBodies || [],
             saveRequest: saveRequest?.body || null,
@@ -4552,8 +4539,7 @@ async function runChromeTest() {
           };
         })()`);
 
-        return candidateState?.statusText === "Driver profile saved." &&
-          candidateState?.driverButtonText?.includes("REUSABLE PROFILE TEST DRIVER")
+        return candidateState?.statusText === "Driver profile saved."
           ? candidateState
           : false;
       },
@@ -4574,26 +4560,9 @@ async function runChromeTest() {
       driverProfileSaveState.fetchCalls.every((call) => !call.includes("/rest/v1/bookings")),
       `Expected driver profile save not to update bookings, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
     );
-    assert.equal(driverProfileSaveState.driverSearchCountText, "Showing 30 of 30 drivers.");
-    assert.equal(driverProfileSaveState.driverRowTexts.length, 30);
-    assert.ok(driverProfileSaveState.driverList, "Expected Driver Database rows to render in a scroll container");
-    assert.match(driverProfileSaveState.driverList.overflowY, /auto|scroll/);
-    assert.ok(
-      driverProfileSaveState.driverList.scrollHeight > driverProfileSaveState.driverList.clientHeight,
-      `Expected Driver Database list to scroll, got scrollHeight=${driverProfileSaveState.driverList.scrollHeight} clientHeight=${driverProfileSaveState.driverList.clientHeight}`,
-    );
-    assert.ok(
-      driverProfileSaveState.driverList.clientHeight <= 340,
-      `Expected Driver Database scroll container to stay bounded, got ${driverProfileSaveState.driverList.clientHeight}px`,
-    );
-    assert.match(driverProfileSaveState.driverButtonText, /busy/);
-    assert.match(driverProfileSaveState.driverButtonText, /Plate:\s*SLL901P/);
-    assert.match(driverProfileSaveState.driverButtonText, /Assigned jobs:\s*\d+/);
-    assert.doesNotMatch(
-      driverProfileSaveState.driverButtonText,
-      /Prefers airport and CBD jobs|Reusable profile save test note/,
-      "Expected Driver Database row to stay compact and omit long preferences/notes",
-    );
+    assert.equal(driverProfileSaveState.driverSearchCountText, "Showing 0 of 30 drivers.");
+    assert.equal(driverProfileSaveState.driverSearchHelperText, "Search driver name, phone, plate, or vehicle to show drivers.");
+    assert.equal(driverProfileSaveState.driverRowTexts.length, 0);
     assert.ok(
       driverProfileSaveState.statusDistanceFromSaveButton !== null &&
         driverProfileSaveState.statusDistanceFromSaveButton <= 120,
@@ -4733,6 +4702,45 @@ async function runChromeTest() {
       );
     }
 
+    await setInputValue("[data-driver-search-input='true']", "SCROLL LIST DRIVER", "Driver search broad match");
+    const driverSearchScrollableState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const driverList = document.querySelector("[data-driver-list-scroll='true']");
+          const driverListStyle = driverList ? getComputedStyle(driverList) : null;
+          const rows = [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText);
+
+          return rows.length === 29
+            ? {
+                countText: document.querySelector("[data-driver-search-count='true']")?.textContent.trim() || "",
+                driverList: driverList
+                  ? {
+                      clientHeight: driverList.clientHeight,
+                      overflowY: driverListStyle?.overflowY || "",
+                      scrollHeight: driverList.scrollHeight,
+                    }
+                  : null,
+                noMatchText: document.querySelector("[data-driver-search-empty='true']")?.textContent.trim() || "",
+                rows,
+              }
+            : false;
+        })()`),
+      10000,
+      "driver search broad scrollable match",
+    );
+    assert.equal(driverSearchScrollableState.countText, "Showing 29 of 30 drivers.");
+    assert.equal(driverSearchScrollableState.noMatchText, "");
+    assert.ok(driverSearchScrollableState.driverList, "Expected Driver Database rows to render in a scroll container");
+    assert.match(driverSearchScrollableState.driverList.overflowY, /auto|scroll/);
+    assert.ok(
+      driverSearchScrollableState.driverList.scrollHeight > driverSearchScrollableState.driverList.clientHeight,
+      `Expected Driver Database list to scroll, got scrollHeight=${driverSearchScrollableState.driverList.scrollHeight} clientHeight=${driverSearchScrollableState.driverList.clientHeight}`,
+    );
+    assert.ok(
+      driverSearchScrollableState.driverList.clientHeight <= 340,
+      `Expected Driver Database scroll container to stay bounded, got ${driverSearchScrollableState.driverList.clientHeight}px`,
+    );
+
     const driverSearchQueries = [
       ["REUSABLE PROFILE", "driver name"],
       ["+65 8111", "contact number"],
@@ -4766,6 +4774,17 @@ async function runChromeTest() {
 
       assert.equal(driverSearchMatchState.countText, "Showing 1 of 30 drivers.");
       assert.equal(driverSearchMatchState.noMatchText, "");
+
+      if (label === "driver name") {
+        assert.match(driverSearchMatchState.rows[0], /busy/);
+        assert.match(driverSearchMatchState.rows[0], /Plate:\s*SLL901P/);
+        assert.match(driverSearchMatchState.rows[0], /Assigned jobs:\s*\d+/);
+        assert.doesNotMatch(
+          driverSearchMatchState.rows[0],
+          /Prefers airport and CBD jobs|Reusable profile save test note/,
+          "Expected Driver Database row to stay compact and omit long preferences/notes",
+        );
+      }
     }
 
     await setInputValue("[data-driver-search-input='true']", "NO LOCAL DRIVER MATCH", "Driver search no match");
@@ -4800,17 +4819,38 @@ async function runChromeTest() {
     );
 
     await setInputValue("[data-driver-search-input='true']", "", "Driver search clear");
+    const driverSearchClearedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const rows = [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText);
+
+          return rows.length === 0 &&
+            !document.querySelector("[data-driver-search-empty='true']")
+            ? {
+                countText: document.querySelector("[data-driver-search-count='true']")?.textContent.trim() || "",
+                helperText: document.querySelector("[data-driver-search-helper='true']")?.textContent.trim() || "",
+                rows,
+              }
+            : false;
+        })()`),
+      10000,
+      "driver search cleared",
+    );
+    assert.equal(driverSearchClearedState.countText, "Showing 0 of 30 drivers.");
+    assert.equal(driverSearchClearedState.helperText, "Search driver name, phone, plate, or vehicle to show drivers.");
+
+    await setInputValue("[data-driver-search-input='true']", "REUSABLE PROFILE", "Driver search before row click");
     await waitForCondition(
       () =>
         evaluate(`(() => {
           const rows = [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText);
 
-          return rows.length === 30 &&
+          return rows.length === 1 &&
             rows[0].includes("REUSABLE PROFILE TEST DRIVER") &&
-            !document.querySelector("[data-driver-search-empty='true']");
+            rows[0].includes("SLL901P");
         })()`),
       10000,
-      "driver search cleared",
+      "driver search before saved row click",
     );
 
     const clickedSavedDriverProfile = await evaluate(`(() => {
@@ -4936,6 +4976,112 @@ async function runChromeTest() {
         return window.__prestigeProfilePayoutPreviousFetch(...args);
       };
     })()`);
+
+    const dashboardProfileDriverDefaultSearchState = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+          candidate.innerText.includes("SQ776"),
+      );
+      const searchInput = article?.querySelector("[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']");
+      const helper = article?.querySelector("[data-dashboard-driver-search-helper='${dashboardProfilePayoutAssignmentFixture.id}']");
+      const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+
+      return {
+        helperText: helper?.textContent.trim() || "",
+        optionTexts: [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim()),
+        searchValue: searchInput?.value || "",
+      };
+    })()`);
+    assert.equal(dashboardProfileDriverDefaultSearchState.searchValue, "");
+    assert.equal(
+      dashboardProfileDriverDefaultSearchState.helperText,
+      "Search driver name, phone, plate, or vehicle to show drivers.",
+    );
+    assert.deepEqual(
+      dashboardProfileDriverDefaultSearchState.optionTexts,
+      ["Manual / unselected"],
+      "Expected Dashboard assignment not to show the full driver list before searching",
+    );
+
+    await setInputValue(
+      `[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']`,
+      "NO DASHBOARD DRIVER MATCH",
+      "Dashboard driver search no match",
+    );
+    const dashboardProfileDriverNoMatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const searchInput = article?.querySelector("[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const noMatch = article?.querySelector("[data-dashboard-driver-search-empty='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const count = article?.querySelector("[data-dashboard-driver-search-count='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const inputRect = searchInput?.getBoundingClientRect();
+          const noMatchRect = noMatch?.getBoundingClientRect();
+
+          return noMatch?.textContent.trim() === "No matching drivers found."
+            ? {
+                countText: count?.textContent.trim() || "",
+                distanceFromSearch:
+                  inputRect && noMatchRect ? Math.abs(noMatchRect.top - inputRect.bottom) : null,
+                noMatchText: noMatch.textContent.trim(),
+                optionTexts: [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "Dashboard driver search no-match state",
+    );
+    assert.equal(dashboardProfileDriverNoMatchState.countText, "Showing 0 matching drivers.");
+    assert.equal(dashboardProfileDriverNoMatchState.noMatchText, "No matching drivers found.");
+    assert.deepEqual(dashboardProfileDriverNoMatchState.optionTexts, ["Manual / unselected"]);
+    assert.ok(
+      dashboardProfileDriverNoMatchState.distanceFromSearch !== null &&
+        dashboardProfileDriverNoMatchState.distanceFromSearch <= 80,
+      `Expected Dashboard driver search no-match message near search input, got ${dashboardProfileDriverNoMatchState.distanceFromSearch}px`,
+    );
+
+    await setInputValue(
+      `[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']`,
+      "REUSABLE PROFILE",
+      "Dashboard driver search profile match",
+    );
+    const dashboardProfileDriverMatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
+              candidate.innerText.includes("SQ776"),
+          );
+          const count = article?.querySelector("[data-dashboard-driver-search-count='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const noMatch = article?.querySelector("[data-dashboard-driver-search-empty='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const select = article?.querySelector("[data-dashboard-driver-select='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const optionTexts = [...(select?.querySelectorAll("option") || [])].map((option) => option.textContent.trim());
+
+          return optionTexts.some((optionText) => optionText.includes("REUSABLE PROFILE TEST DRIVER"))
+            ? {
+                countText: count?.textContent.trim() || "",
+                noMatchText: noMatch?.textContent.trim() || "",
+                optionTexts,
+              }
+            : false;
+        })()`),
+      10000,
+      "Dashboard driver search matching state",
+    );
+    assert.equal(dashboardProfileDriverMatchState.countText, "Showing 1 matching driver.");
+    assert.equal(dashboardProfileDriverMatchState.noMatchText, "");
+    assert.deepEqual(
+      dashboardProfileDriverMatchState.optionTexts,
+      ["Manual / unselected", "REUSABLE PROFILE TEST DRIVER (busy)"],
+      "Expected Dashboard assignment to show only matching drivers after search",
+    );
 
     const clickedProfilePayoutAssignment = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(

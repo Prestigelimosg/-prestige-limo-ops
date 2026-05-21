@@ -4377,6 +4377,8 @@ export default function Home() {
     const driverDraft = getDriverDraft(bookingRecord);
     const selectedDriver = drivers.find((driver) => String(driver.id) === driverDraft.driverId);
     const driverName = clean(driverDraft.driverName) || clean(selectedDriver?.driver_name);
+    const manualPayoutText = clean(driverDraft.payoutOverride);
+    const manualPayout = manualPayoutText ? finiteNumber(manualPayoutText) : null;
     const bookingType = normalizeBookingType(bookingRecord.booking_type);
     const selectedDriverPayoutSnapshot = driverPayoutSnapshotFromRule(
       bookingType,
@@ -4400,6 +4402,16 @@ export default function Home() {
       const errorMessage = {
         tone: "error",
         text: "Driver name is required before assignment.",
+      } satisfies Message;
+      setMessage(errorMessage);
+      setDriverAssignmentMessage(bookingId, errorMessage);
+      return;
+    }
+
+    if (manualPayoutText && (manualPayout === null || manualPayout <= 0)) {
+      const errorMessage = {
+        tone: "error",
+        text: "Override payout must be greater than $0.",
       } satisfies Message;
       setMessage(errorMessage);
       setDriverAssignmentMessage(bookingId, errorMessage);
@@ -4431,9 +4443,7 @@ export default function Home() {
           driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number) || null,
           driver_payout_amount: calculatedPayout || null,
           ...selectedDriverPayoutFields,
-          driver_payout_override: clean(driverDraft.payoutOverride)
-            ? numericRate(driverDraft.payoutOverride)
-            : null,
+          driver_payout_override: manualPayout,
           driver_payout_reason: clean(driverDraft.payoutReason) || null,
           driver_notes: clean(driverDraft.notes) || null,
           driver_dispatch_include_payout: driverDraft.includePayout,
@@ -4456,9 +4466,7 @@ export default function Home() {
                 driver_plate_number: clean(driverDraft.driverPlate) || clean(selectedDriver?.plate_number),
                 driver_payout_amount: calculatedPayout,
                 ...selectedDriverPayoutFields,
-                driver_payout_override: clean(driverDraft.payoutOverride)
-                  ? numericRate(driverDraft.payoutOverride)
-                  : null,
+                driver_payout_override: manualPayout,
                 driver_payout_reason: clean(driverDraft.payoutReason),
                 driver_notes: clean(driverDraft.notes),
                 driver_dispatch_include_payout: driverDraft.includePayout,
@@ -4769,7 +4777,6 @@ export default function Home() {
                         onChange={(event) =>
                           updateDriverDraft(savedBooking, "payoutReason", event.target.value)
                         }
-                        placeholder="Tuas / VIP / midnight"
                         value={driverDraft.payoutReason}
                       />
                     </label>
@@ -5791,7 +5798,6 @@ export default function Home() {
                   <input
                     className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     onChange={(event) => update("driverPayoutReason", event.target.value)}
-                    placeholder="Tuas / VIP / midnight"
                     value={booking.driverPayoutReason}
                   />
                 </label>

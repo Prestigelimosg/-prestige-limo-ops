@@ -2863,7 +2863,118 @@ async function runChromeTest() {
       "Expected Dashboard assignment Override Payout not to use the saved max/range payout plus extras",
     );
 
-    await evaluate(`window.__prestigeFetchCalls = []`);
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDashboardDriverAssignmentBodies = [];
+    })()`);
+
+    const clickedInvalidDashboardAssignPayout = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ777") &&
+          [...candidate.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign to this booking"),
+      );
+
+      if (!article) {
+        return { clicked: false };
+      }
+
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const fieldForLabel = (labelText) => {
+        const label = [...article.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        return label?.querySelector("input, select, textarea") || null;
+      };
+      const setValue = (control, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, value);
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      const driverName = fieldForLabel("Driver Name");
+      const driverContact = fieldForLabel("Driver Contact");
+      const driverPlate = fieldForLabel("Driver Car Plate");
+      const payoutOverride = fieldForLabel("Override Payout");
+      const payoutReason = fieldForLabel("Override Reason");
+      const assignButton = article.querySelector("[data-dashboard-assign-driver='${dashboardDriverAssignmentFixture.id}']");
+
+      if (!driverName || !driverContact || !driverPlate || !payoutOverride || !payoutReason || !assignButton || assignButton.disabled) {
+        return { clicked: false };
+      }
+
+      setValue(driverName, "DASHBOARD TEST DRIVER");
+      setValue(driverContact, "+65 8555 7777");
+      setValue(driverPlate, "SLC777D");
+      setValue(payoutOverride, "0");
+      setValue(payoutReason, "");
+      assignButton.click();
+
+      return {
+        clicked: true,
+        reasonPlaceholder: payoutReason.getAttribute("placeholder") || "",
+        reasonValue: payoutReason.value || "",
+      };
+    })()`);
+    assert.equal(
+      clickedInvalidDashboardAssignPayout.clicked,
+      true,
+      "Expected invalid dashboard payout assignment attempt to be clickable",
+    );
+    assert.equal(
+      clickedInvalidDashboardAssignPayout.reasonValue,
+      "",
+      "Expected dashboard driver payout Override Reason to be blank by default",
+    );
+    assert.equal(
+      clickedInvalidDashboardAssignPayout.reasonPlaceholder,
+      "",
+      "Expected dashboard driver payout Override Reason not to suggest generated reasons",
+    );
+
+    const invalidDashboardAssignPayoutState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+              candidate.innerText.includes("SQ777"),
+          );
+          const assignmentMessage = article?.querySelector("[data-driver-assignment-message='${dashboardDriverAssignmentFixture.id}']");
+          const assignButton = article?.querySelector("[data-dashboard-assign-driver='${dashboardDriverAssignmentFixture.id}']");
+          const messageRect = assignmentMessage?.getBoundingClientRect();
+          const assignButtonRect = assignButton?.getBoundingClientRect();
+
+          return assignmentMessage?.textContent.trim() === "Override payout must be greater than $0."
+            ? {
+                assignmentBodies: window.__prestigeDashboardDriverAssignmentBodies || [],
+                fetchCalls: window.__prestigeFetchCalls || [],
+                localMessageDistance:
+                  assignButtonRect && messageRect ? Math.abs(messageRect.top - assignButtonRect.bottom) : null,
+                localMessageText: assignmentMessage.textContent.trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "dashboard invalid manual payout feedback",
+    );
+    assert.deepEqual(
+      bookingPatchCalls(invalidDashboardAssignPayoutState.fetchCalls),
+      [],
+      "Expected invalid manual payout to be rejected before booking PATCH",
+    );
+    assert.deepEqual(
+      invalidDashboardAssignPayoutState.assignmentBodies,
+      [],
+      "Expected invalid manual payout not to save an assignment body",
+    );
+    assert.ok(
+      invalidDashboardAssignPayoutState.localMessageDistance !== null &&
+        invalidDashboardAssignPayoutState.localMessageDistance <= 120,
+      `Expected invalid payout feedback near Assign to this booking button, got ${invalidDashboardAssignPayoutState.localMessageDistance}px`,
+    );
 
     const clickedDashboardAssignDriver = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
@@ -2982,7 +3093,8 @@ async function runChromeTest() {
         })()`);
 
         return candidateState?.localMessageText === "Assigned driver updated." &&
-          candidateState?.articleText?.includes("Driver: DASHBOARD TEST DRIVER")
+          candidateState?.articleText?.includes("Driver: DASHBOARD TEST DRIVER") &&
+          candidateState?.articleText?.includes("Customer $95 / Driver $82")
           ? candidateState
           : false;
       },
@@ -3013,6 +3125,7 @@ async function runChromeTest() {
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_name, "DASHBOARD TEST DRIVER");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_contact, "+65 8555 7777");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_plate_number, "SLC777D");
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_payout_amount, 82);
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_payout_override, 82);
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_payout_reason, "Dashboard assignment test");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_notes, "Meet at arrival belt");
@@ -3021,6 +3134,7 @@ async function runChromeTest() {
     assert.match(dashboardAssignmentState.articleText, /Assigned/i);
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
+    assert.match(dashboardAssignmentState.articleText, /Customer \$95 \/ Driver \$82/);
     assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
     assert.ok(
       dashboardAssignmentState.localMessageDistance !== null &&
@@ -3090,6 +3204,76 @@ async function runChromeTest() {
       dashboardDriverDispatchCopyState.copiedTexts[0] || "",
       /DASHBOARD TEST DRIVER/,
     );
+    assert.match(
+      dashboardDriverDispatchCopyState.copiedTexts[0] || "",
+      /Payout: \$82/,
+      "Expected Driver Dispatch copy to use the manual dashboard payout override",
+    );
+
+    await clickTab("Bookings", "Recent Bookings");
+    const manualPayoutBookingsCardState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("article")].find(
+            (candidate) =>
+              candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+              candidate.innerText.includes("SQ777"),
+          );
+
+          return article?.innerText.includes("Customer $95 / Driver $82")
+            ? { articleText: article.innerText }
+            : false;
+        })()`),
+      10000,
+      "manual payout Bookings card",
+    );
+    assert.match(manualPayoutBookingsCardState.articleText, /Customer \$95 \/ Driver \$82/);
+
+    const clickedManualPayoutLoadBooking = await evaluate(`(() => {
+      const article = [...document.querySelectorAll("article")].find(
+        (candidate) =>
+          candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER") &&
+          candidate.innerText.includes("SQ777"),
+      );
+      const loadButton = [...(article?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Load this booking",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedManualPayoutLoadBooking,
+      true,
+      "Expected manual payout booking Load this booking button to be clickable",
+    );
+
+    const manualPayoutLoadedPricingState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.flight === "SQ777" &&
+          candidateState?.fields?.name === "DASHBOARD DRIVER TEST TRAVELER" &&
+          candidateState?.pricingPanel?.includes("$82.00")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "manual payout loaded Dispatch pricing",
+    );
+    assert.match(manualPayoutLoadedPricingState.pricingPanel, /Driver\s+\$82\.00/);
+    assert.doesNotMatch(
+      manualPayoutLoadedPricingState.pricingPanel,
+      /Driver\s+\$70\.00/,
+      "Expected loaded Dispatch Pricing not to keep the old driver payout after manual override",
+    );
+    assert.match(manualPayoutLoadedPricingState.driverDispatch, /Payout: \$82/);
+
+    await clickTab("Dashboard", "Operations Dashboard");
 
     const clickedDashboardCopyJobCard = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
@@ -4448,12 +4632,19 @@ async function runChromeTest() {
               candidate.innerText.includes("SQ776"),
           );
           const assignmentMessage = article?.querySelector("[data-driver-assignment-message='${dashboardProfilePayoutAssignmentFixture.id}']");
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const reasonLabel = [...(article?.querySelectorAll("label") || [])].find(
+            (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Override Reason",
+          );
+          const reasonInput = reasonLabel?.querySelector("input");
 
           return {
             articleText: article?.innerText || "",
             assignmentBodies: window.__prestigeDashboardProfilePayoutAssignmentBodies || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             localMessageText: assignmentMessage?.textContent.trim() || "",
+            reasonPlaceholder: reasonInput?.getAttribute("placeholder") || "",
+            reasonValue: reasonInput?.value || "",
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
           };
         })()`);
@@ -4489,7 +4680,10 @@ async function runChromeTest() {
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_max, 66);
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_unit, "job");
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_override, null);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_payout_reason, null);
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_dispatch_include_payout, true);
+    assert.equal(profilePayoutAssignmentState.reasonValue, "");
+    assert.equal(profilePayoutAssignmentState.reasonPlaceholder, "");
     assert.match(profilePayoutAssignmentState.articleText, /Customer \$95 \/ Driver \$66/);
     assert.doesNotMatch(
       profilePayoutAssignmentState.articleText,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   mergeParsedBookingState,
   parseBookingMessage,
@@ -360,6 +360,21 @@ const dispatchCopyLabels: Record<DispatchCopyTarget, string> = {
   driverDispatch: "Driver dispatch",
   jobCard: "Job card",
 };
+
+const driverJobDemoPath = "/driver-job-demo";
+const fallbackDriverJobDemoUrl = `http://localhost:3000${driverJobDemoPath}`;
+
+function getDriverJobDemoUrl() {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return fallbackDriverJobDemoUrl;
+  }
+
+  return new URL(driverJobDemoPath, window.location.origin).toString();
+}
+
+function subscribeToDriverJobDemoUrlChange() {
+  return () => {};
+}
 
 function createInitialCopyEditStates(): Record<DispatchCopyTarget, CopyEditState> {
   return {
@@ -1999,11 +2014,17 @@ export default function Home() {
   const [copyEditStates, setCopyEditStates] =
     useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
+  const [driverJobLinkCopyMessage, setDriverJobLinkCopyMessage] = useState<Message | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [message, setMessage] = useState<Message>({
     tone: "info",
     text: "Ready for dispatch.",
   });
+  const driverJobLinkUrl = useSyncExternalStore(
+    subscribeToDriverJobDemoUrlChange,
+    getDriverJobDemoUrl,
+    () => fallbackDriverJobDemoUrl,
+  );
 
   const route = useMemo(() => {
     const pickup = clean(booking.pickup);
@@ -2370,6 +2391,56 @@ export default function Home() {
       .map((section) => section.join("\n").trim())
       .join("\n\n");
   }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
+
+  const driverJobLinkMessage = useMemo(() => {
+    const driverName = clean(booking.driverName) || "Driver";
+    const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
+    const routeText = isDspItinerary
+      ? [
+          clean(booking.pickup) ? `Pickup: ${clean(booking.pickup)}` : "",
+          clean(booking.dropoff) ? `Drop-off: ${clean(booking.dropoff)}` : "",
+          "Itinerary:",
+          ...itineraryDisplayStops.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : route;
+    const sections = [
+      [
+        "Driver Job Link",
+        `Hi ${driverName},`,
+        "Please open this driver job link and update your status:",
+        driverJobLinkUrl,
+      ],
+      [
+        "Job:",
+        loadedBookingId ? `Reference: ${loadedBookingId}` : "",
+        formatPickupDateTime(booking.date, booking.time),
+        flightLine,
+      ],
+      [
+        "Pickup:",
+        clean(booking.pickup) || "Pickup",
+      ],
+      [
+        "Drop-off:",
+        clean(booking.dropoff) || "Drop-off",
+      ],
+      [
+        "Route:",
+        routeText,
+      ],
+      [
+        "Status to update:",
+        "OTW / POB / Job Completed",
+      ],
+    ];
+
+    return sections
+      .filter((section) => section.some((line) => clean(line)))
+      .map((section) => section.join("\n").trim())
+      .join("\n\n");
+  }, [booking, driverJobLinkUrl, isDspItinerary, itineraryDisplayStops, loadedBookingId, route]);
 
   const generatedDispatchCopyMessages = useMemo(
     () => ({
@@ -4772,6 +4843,18 @@ export default function Home() {
     await copyDispatchCopy("customerCopy");
   }
 
+  async function copyDriverJobLink() {
+    try {
+      await navigator.clipboard.writeText(driverJobLinkMessage);
+      setDriverJobLinkCopyMessage({ tone: "success", text: "Driver job link copied." });
+    } catch {
+      setDriverJobLinkCopyMessage({
+        tone: "error",
+        text: "Copy failed. Select the driver job link text manually.",
+      });
+    }
+  }
+
   function assignDraftDriver() {
     if (!clean(booking.driverName)) {
       setMessage({ tone: "error", text: "Enter a driver name before assigning this draft." });
@@ -6109,6 +6192,7 @@ export default function Home() {
   const jobCardCopyText = getDispatchCopyText("jobCard");
   const customerCopyText = getDispatchCopyText("customerCopy");
   const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
+  const showDriverJobLinkCopy = Boolean(clean(loadedBookingId));
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -7019,6 +7103,43 @@ export default function Home() {
                 </pre>
               )}
             </div>
+
+            {showDriverJobLinkCopy ? (
+              <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-semibold">Driver Job Link</h2>
+                    <p className="text-sm text-slate-500">Temporary driver link message for status updates.</p>
+                  </div>
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <button
+                      className="rounded-md border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-900 transition hover:bg-indigo-50"
+                      data-copy-driver-job-link-button="true"
+                      onClick={copyDriverJobLink}
+                      type="button"
+                    >
+                      Copy Driver Job Link
+                    </button>
+                    {driverJobLinkCopyMessage ? (
+                      <div
+                        className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
+                          driverJobLinkCopyMessage.tone,
+                        )}`}
+                        data-copy-feedback="driver-job-link"
+                      >
+                        {driverJobLinkCopyMessage.text}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <pre
+                  className="whitespace-pre-wrap rounded-lg bg-indigo-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  data-copy-preview="driverJobLink"
+                >
+                  {driverJobLinkMessage}
+                </pre>
+              </div>
+            ) : null}
 
             {statusPanel}
           </aside>

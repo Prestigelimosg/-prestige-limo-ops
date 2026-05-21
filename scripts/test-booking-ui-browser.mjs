@@ -4017,6 +4017,141 @@ async function runChromeTest() {
       /Payout: \$70|Driver TBC|OLD DASHBOARD TEST DRIVER/,
       "Expected loaded Driver Dispatch copy not to use stale or missing assigned driver details",
     );
+    assert.doesNotMatch(
+      loadedDispatchDriverCopyState.copiedText,
+      /Driver Job Link|\/driver-job-demo/,
+      "Expected existing Driver Dispatch copy output not to include Driver Job Link text",
+    );
+
+    await evaluate(`window.__prestigeCopiedTexts = []`);
+
+    const clickedDriverJobLinkCopy = await evaluate(`(() => {
+      const sectionForHeading = (headingText) => {
+        const heading = [...document.querySelectorAll("h2")].find(
+          (candidate) => candidate.textContent.trim() === headingText,
+        );
+        let node = heading;
+
+        while (node && node !== document.body) {
+          if (
+            node.querySelector?.("pre") &&
+            [...node.querySelectorAll("button")].some(
+              (button) => button.textContent.trim() === "Copy Driver Job Link",
+            )
+          ) {
+            return node;
+          }
+
+          node = node.parentElement;
+        }
+
+        return null;
+      };
+      const section = sectionForHeading("Driver Job Link");
+      const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Copy Driver Job Link",
+      );
+
+      if (!section || !copyButton || copyButton.disabled) {
+        return false;
+      }
+
+      copyButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedDriverJobLinkCopy, true, "Expected Driver Job Link copy button to be clickable");
+
+    const driverJobLinkCopyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const sectionForHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading;
+
+            while (node && node !== document.body) {
+              if (
+                node.querySelector?.("pre") &&
+                [...node.querySelectorAll("button")].some(
+                  (button) => button.textContent.trim() === "Copy Driver Job Link",
+                )
+              ) {
+                return node;
+              }
+
+              node = node.parentElement;
+            }
+
+            return null;
+          };
+          const section = sectionForHeading("Driver Job Link");
+          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Copy Driver Job Link",
+          );
+          const feedback = section?.querySelector("[data-copy-feedback='driver-job-link']");
+          const preview = section?.querySelector("[data-copy-preview='driverJobLink']");
+          const buttonRect = copyButton?.getBoundingClientRect();
+          const feedbackRect = feedback?.getBoundingClientRect();
+
+          return feedback?.textContent.trim() === "Driver job link copied."
+            ? {
+                copiedText: (window.__prestigeCopiedTexts || []).slice(-1)[0] || "",
+                distanceFromButton:
+                  buttonRect && feedbackRect ? Math.abs(feedbackRect.top - buttonRect.bottom) : null,
+                feedbackText: feedback.textContent.trim(),
+                globalCopyMessages: [...document.querySelectorAll("[data-status-panel='global']")]
+                  .filter((element) => /copied/i.test(element.innerText))
+                  .map((element) => element.innerText.trim()),
+                previewText: preview?.innerText || "",
+              }
+            : false;
+        })()`),
+      10000,
+      "loaded assigned booking Driver Job Link copy feedback",
+    );
+    assert.equal(driverJobLinkCopyState.feedbackText, "Driver job link copied.");
+    assert.deepEqual(driverJobLinkCopyState.globalCopyMessages, []);
+    assert.ok(
+      driverJobLinkCopyState.distanceFromButton !== null &&
+        driverJobLinkCopyState.distanceFromButton <= 80,
+      `Expected Driver Job Link copy feedback near its button, got ${driverJobLinkCopyState.distanceFromButton}px`,
+    );
+    assert.match(driverJobLinkCopyState.previewText, /Driver Job Link/);
+    assert.match(driverJobLinkCopyState.previewText, /Copy Driver Job Link|Driver Job Link/);
+    assert.match(driverJobLinkCopyState.copiedText, /^Driver Job Link/);
+    assert.match(driverJobLinkCopyState.copiedText, /Hi DASHBOARD TEST DRIVER,/);
+    assert.match(driverJobLinkCopyState.copiedText, /https?:\/\/\S+\/driver-job-demo/);
+    assert.ok(
+      driverJobLinkCopyState.copiedText.includes(driverDemoUrl),
+      `Expected Driver Job Link copy to include absolute demo URL ${driverDemoUrl}`,
+    );
+    assert.doesNotMatch(
+      driverJobLinkCopyState.copiedText,
+      /^\/driver-job-demo$/m,
+      "Expected Driver Job Link copy not to use a relative-only demo path",
+    );
+    assert.match(driverJobLinkCopyState.copiedText, /Reference: ui-dashboard-driver-assignment-fixture/);
+    assert.match(driverJobLinkCopyState.copiedText, /29 May 2026, 1115hrs/);
+    assert.match(driverJobLinkCopyState.copiedText, /Flight: SQ777/);
+    assert.match(driverJobLinkCopyState.copiedText, /Pickup:\s*Changi Airport/);
+    assert.match(driverJobLinkCopyState.copiedText, /Drop-off:\s*The Fullerton Hotel Singapore/);
+    assert.match(
+      driverJobLinkCopyState.copiedText,
+      /Route:\s*Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
+      "Expected Driver Job Link copy to include full route and waypoint",
+    );
+    assert.match(driverJobLinkCopyState.copiedText, /Status to update:\s*OTW \/ POB \/ Job Completed/);
+    assert.doesNotMatch(
+      driverJobLinkCopyState.copiedText,
+      /Thank you for choosing Prestige Limo SG\.|Customer note:|driver payout|internal payout|override reason/i,
+      "Expected Driver Job Link copy not to include customer-only or internal payout text",
+    );
+    assert.doesNotMatch(
+      loadedCustomerCopyState.copiedText,
+      /Driver Job Link|\/driver-job-demo/,
+      "Expected existing Customer Copy output not to include Driver Job Link text",
+    );
 
     await clickTab("Dashboard", "Operations Dashboard");
 

@@ -1233,6 +1233,21 @@ function normalizeConsoleMessages(values) {
   return values.map(String).join(" ");
 }
 
+function pickupDateTimeOffset(offsetMinutes) {
+  const pickupDate = new Date(Date.now() + offsetMinutes * 60 * 1000);
+  const year = pickupDate.getFullYear();
+  const month = String(pickupDate.getMonth() + 1).padStart(2, "0");
+  const day = String(pickupDate.getDate()).padStart(2, "0");
+  const hours = String(pickupDate.getHours()).padStart(2, "0");
+  const minutes = String(pickupDate.getMinutes()).padStart(2, "0");
+
+  return {
+    date: `${year}-${month}-${day}`,
+    displayTime: `${hours}${minutes}hrs`,
+    time: `${hours}${minutes}`,
+  };
+}
+
 function bookingPatchCalls(fetchCalls) {
   return fetchCalls.filter(
     (call) => call.startsWith("PATCH ") && call.includes("/rest/v1/bookings"),
@@ -1594,6 +1609,29 @@ async function runChromeTest() {
       })()`);
 
       assert.equal(didSetValue, true, `Expected ${description} input to be editable`);
+    };
+
+    const setFieldValueByLabel = async (labelText, value, description) => {
+      const didSetValue = await evaluate(`(() => {
+        const normalizeLabel = (candidate) =>
+          (candidate || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+        const label = [...document.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === ${JSON.stringify(labelText)},
+        );
+        const control = label?.querySelector("input, select, textarea");
+
+        if (!control) {
+          return false;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, ${JSON.stringify(value)});
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+        return control.value === ${JSON.stringify(value)};
+      })()`);
+
+      assert.equal(didSetValue, true, `Expected ${description} field to be editable`);
     };
 
     await waitForCondition(
@@ -11192,6 +11230,160 @@ async function runChromeTest() {
       [],
       `Expected no browser test Supabase write calls to reach the network guard. Blocked unmocked writes:\n${blockedSupabaseMutationRequests.join("\n")}`,
     );
+
+    const liveLocationAppLoadEvent = client.once("Page.loadEventFired");
+    await client.send("Page.navigate", { url: appUrl });
+    await liveLocationAppLoadEvent;
+
+    await waitForCondition(
+      () =>
+        evaluate(`document.body.innerText.includes("Customer Copy") &&
+          [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Create Job Card")`),
+      10000,
+      "Dispatch customer copy controls for live location eligibility",
+    );
+
+    const readCustomerLiveLocationState = async () =>
+      evaluate(`(() => {
+        const preview = document.querySelector("[data-copy-preview='customerCopy']");
+        const helper = document.querySelector("[data-customer-live-location-helper='true']");
+
+        return {
+          customerCopy: preview?.innerText || "",
+          helperText: helper?.textContent.trim() || "",
+        };
+      })()`);
+
+    const setLiveLocationScenarioBooking = async ({ bookingType, offsetMinutes, passengerSuffix }) => {
+      const pickup = pickupDateTimeOffset(offsetMinutes);
+      const friendlyNames = {
+        DEP: "Departure",
+        DSP: "Hourly",
+        MNG: "Arrival",
+        TRF: "Transfer",
+      };
+      const suffix = `${friendlyNames[bookingType]} ${passengerSuffix}`;
+
+      await setFieldValueByLabel("Booking type", bookingType, `${bookingType} live location booking type`);
+      await setFieldValueByLabel("Vehicle", "AVF", `${bookingType} live location vehicle`);
+      await setFieldValueByLabel("Pickup date", pickup.date, `${bookingType} live location pickup date`);
+      await setFieldValueByLabel("Pickup time", pickup.time, `${bookingType} live location pickup time`);
+      await setFieldValueByLabel("Flight number", "", `${bookingType} live location flight`);
+      await setFieldValueByLabel("Pickup", `Live Pickup ${suffix}`, `${bookingType} live location pickup`);
+      await setFieldValueByLabel("Extra stop location", `Live Waypoint ${suffix}`, `${bookingType} live location waypoint`);
+      await setFieldValueByLabel("Extra Stops", "1", `${bookingType} live location extra stop count`);
+      await setFieldValueByLabel("Drop-off", `Live Dropoff ${suffix}`, `${bookingType} live location drop-off`);
+      await setFieldValueByLabel("Passenger name", `Live Passenger ${suffix}`, `${bookingType} live location passenger`);
+      await setFieldValueByLabel("Pax", "1", `${bookingType} live location pax`);
+
+      return waitForCondition(
+        async () => {
+          const candidateState = await evaluate(extractStateScript);
+          const liveState = await readCustomerLiveLocationState();
+          const expectedRoute = `Route: Live Pickup ${suffix} > Live Waypoint ${suffix} > Live Dropoff ${suffix}`;
+
+          return candidateState?.fields?.bookingType === bookingType &&
+            candidateState?.fields?.pickupDate === pickup.date &&
+            liveState.customerCopy.includes(`Passenger: Live Passenger ${suffix}`) &&
+            liveState.customerCopy.includes(expectedRoute)
+            ? {
+                ...liveState,
+                pickup,
+                routeText: expectedRoute,
+                serviceLabel: candidateState.customerCopy.match(/Service: ([^\n]+)/)?.[1] || "",
+              }
+            : false;
+        },
+        10000,
+        `${bookingType} customer live location scenario`,
+      );
+    };
+
+    const liveLocationNoLinkPattern = /live location|tracking|track your ride|https?:\/\/\S+/i;
+    const customerCopyInternalPattern =
+      /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|MNG|DEP|TRF|DSP)\b|Payout|driver payout|internal payout|override reason/i;
+
+    const mngLiveLocationState = await setLiveLocationScenarioBooking({
+      bookingType: "MNG",
+      offsetMinutes: 20,
+      passengerSuffix: "inside",
+    });
+    assert.equal(
+      mngLiveLocationState.helperText,
+      "Customer live location link is not available for Arrival bookings.",
+    );
+    assert.match(mngLiveLocationState.customerCopy, /Service: Arrival/);
+    assert.doesNotMatch(
+      mngLiveLocationState.customerCopy,
+      liveLocationNoLinkPattern,
+      "Expected MNG / Arrival Customer Copy never to include a live location link",
+    );
+    assert.match(mngLiveLocationState.customerCopy, /Live Waypoint Arrival inside/);
+    assert.ok(
+      mngLiveLocationState.customerCopy.trim().endsWith("Thank you for choosing Prestige Limo SG."),
+      "Expected Arrival Customer Copy to keep the thank-you line",
+    );
+
+    for (const bookingType of ["DEP", "TRF", "DSP"]) {
+      const beforeWindowState = await setLiveLocationScenarioBooking({
+        bookingType,
+        offsetMinutes: 90,
+        passengerSuffix: "before",
+      });
+
+      assert.equal(
+        beforeWindowState.helperText,
+        "Customer live location link becomes available 30 minutes before pickup.",
+        `Expected ${bookingType} before-window helper`,
+      );
+      assert.doesNotMatch(
+        beforeWindowState.customerCopy,
+        liveLocationNoLinkPattern,
+        `Expected ${bookingType} before-window Customer Copy not to include a live location link`,
+      );
+      assert.match(
+        beforeWindowState.customerCopy,
+        new RegExp(beforeWindowState.routeText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `Expected ${bookingType} before-window Customer Copy to keep full route and waypoint`,
+      );
+      assert.ok(
+        beforeWindowState.customerCopy.trim().endsWith("Thank you for choosing Prestige Limo SG."),
+        `Expected ${bookingType} before-window Customer Copy to keep the thank-you line`,
+      );
+    }
+
+    for (const bookingType of ["DEP", "TRF", "DSP"]) {
+      const insideWindowState = await setLiveLocationScenarioBooking({
+        bookingType,
+        offsetMinutes: 20,
+        passengerSuffix: "inside",
+      });
+
+      assert.equal(
+        insideWindowState.helperText,
+        "Customer live location link requires secure driver live location setup.",
+        `Expected ${bookingType} inside-window helper when no secure live link exists`,
+      );
+      assert.doesNotMatch(
+        insideWindowState.customerCopy,
+        liveLocationNoLinkPattern,
+        `Expected ${bookingType} inside-window Customer Copy not to copy a fake live location link`,
+      );
+      assert.match(
+        insideWindowState.customerCopy,
+        new RegExp(insideWindowState.routeText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `Expected ${bookingType} inside-window Customer Copy to keep full route and waypoint`,
+      );
+      assert.doesNotMatch(
+        insideWindowState.customerCopy,
+        customerCopyInternalPattern,
+        `Expected ${bookingType} inside-window Customer Copy to exclude vehicle, payout, and internal text`,
+      );
+      assert.ok(
+        insideWindowState.customerCopy.trim().endsWith("Thank you for choosing Prestige Limo SG."),
+        `Expected ${bookingType} inside-window Customer Copy to keep the thank-you line`,
+      );
+    }
 
     const driverDemoLoadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: driverDemoUrl });

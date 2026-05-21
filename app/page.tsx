@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   mergeParsedBookingState,
   parseBookingMessage,
@@ -354,6 +354,14 @@ const customerBookingTypeLabels: Record<keyof Required<RateRules>, string> = {
   TRF: "City Transfer",
   DSP: "Hourly",
 };
+
+const customerLiveLocationEligibleTypes = new Set<ReturnType<typeof normalizeBookingType>>([
+  "DEP",
+  "TRF",
+  "DSP",
+]);
+
+const customerLiveLocationWindowMs = 30 * 60 * 1000;
 
 const dispatchCopyLabels: Record<DispatchCopyTarget, string> = {
   customerCopy: "Customer copy",
@@ -1910,6 +1918,82 @@ function customerBookingTypeLabel(value: string | null | undefined) {
   return customerBookingTypeLabels[normalizeBookingType(value)];
 }
 
+function parsePickupDateTimeMs(dateValue: string, timeValue: string | null | undefined) {
+  const date = clean(dateValue);
+  const time = normalizePickupTimeForStorage(timeValue);
+
+  if (!date || time.length < 4) {
+    return null;
+  }
+
+  const hours = Number(time.slice(0, 2));
+  const minutes = Number(time.slice(2, 4));
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  const pickupDateTime = new Date(
+    `${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`,
+  );
+  const pickupTimeMs = pickupDateTime.getTime();
+
+  return Number.isFinite(pickupTimeMs) ? pickupTimeMs : null;
+}
+
+function customerLiveLocationState(
+  booking: BookingForm,
+  currentTimeMs: number,
+  secureLiveLocationLink = "",
+) {
+  const bookingType = normalizeBookingType(booking.bookingType);
+  const secureLink = clean(secureLiveLocationLink);
+
+  if (!customerLiveLocationEligibleTypes.has(bookingType)) {
+    return {
+      copyLine: "",
+      helperText: "Customer live location link is not available for Arrival bookings.",
+    };
+  }
+
+  const pickupTimeMs = parsePickupDateTimeMs(booking.date, booking.time);
+
+  if (pickupTimeMs === null) {
+    return {
+      copyLine: "",
+      helperText: "Customer live location link requires pickup date and time.",
+    };
+  }
+
+  const windowStartMs = pickupTimeMs - customerLiveLocationWindowMs;
+
+  if (currentTimeMs < windowStartMs) {
+    return {
+      copyLine: "",
+      helperText: "Customer live location link becomes available 30 minutes before pickup.",
+    };
+  }
+
+  if (currentTimeMs > pickupTimeMs) {
+    return {
+      copyLine: "",
+      helperText: "Customer live location link is only available within 30 minutes before pickup.",
+    };
+  }
+
+  if (!secureLink) {
+    return {
+      copyLine: "",
+      helperText: "Customer live location link requires secure driver live location setup.",
+    };
+  }
+
+  return {
+    copyLine: `Live location: ${secureLink}`,
+    helperText: "Customer live location link is available.",
+  };
+}
+
 function getJobCardRouteLine(jobCard: string | null | undefined) {
   return clean(jobCard)
     .split("\n")
@@ -2016,6 +2100,7 @@ export default function Home() {
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [driverJobLinkCopyMessage, setDriverJobLinkCopyMessage] = useState<Message | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
     tone: "info",
     text: "Ready for dispatch.",
@@ -2025,6 +2110,14 @@ export default function Home() {
     getDriverJobDemoUrl,
     () => fallbackDriverJobDemoUrl,
   );
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 30 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const route = useMemo(() => {
     const pickup = clean(booking.pickup);
@@ -2285,6 +2378,10 @@ export default function Home() {
     assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
   );
   const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
+  const customerLiveLocation = useMemo(
+    () => customerLiveLocationState(booking, currentTimeMs),
+    [booking, currentTimeMs],
+  );
 
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
@@ -2326,6 +2423,7 @@ export default function Home() {
       ],
       routeLines,
       driverLines,
+      [customerLiveLocation.copyLine],
       [
         `Pax: ${Number(clean(booking.pax)) || 1}`,
         childSeatLine,
@@ -2337,7 +2435,7 @@ export default function Home() {
       .filter((section) => section.some((line) => clean(line)))
       .map((section) => section.join("\n").trim())
       .join("\n\n");
-  }, [assignedDriverPlate, booking, isDspItinerary, itineraryDisplayStops, route]);
+  }, [assignedDriverPlate, booking, customerLiveLocation.copyLine, isDspItinerary, itineraryDisplayStops, route]);
 
   const draftDriverDispatchCard = useMemo(() => {
     const bookingDriverId = clean(booking.driverId);
@@ -7011,6 +7109,12 @@ export default function Home() {
                     </div>
                   ) : null}
                 </div>
+              </div>
+              <div
+                className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                data-customer-live-location-helper="true"
+              >
+                {customerLiveLocation.helperText}
               </div>
               {customerCopyEditState.isEditing ? (
                 <textarea

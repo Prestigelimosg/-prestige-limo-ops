@@ -1,8 +1,7 @@
 import { applyDriverJobStatusUpdateContract } from "../../../../../lib/driver-job-link-contract.ts";
+import { applyProductionDriverJobStatusUpdate } from "../../../../../lib/driver-job-link-production.ts";
 import {
   isProductionDriverJobLinkMode,
-  productionDriverJobLinksConfigured,
-  productionDriverJobLinksDisabledResult,
 } from "../../../../../lib/driver-job-link-mode.ts";
 import {
   mockDriverJobBookingsById,
@@ -38,12 +37,15 @@ async function readJsonBody(request: Request) {
 }
 
 export async function PATCH(request: Request, context: DriverJobStatusRouteContext) {
-  if (isProductionDriverJobLinkMode() && !productionDriverJobLinksConfigured()) {
-    return Response.json(productionDriverJobLinksDisabledResult(), { status: blockedStatusByReason.not_configured });
-  }
-
   const [{ token }, body] = await Promise.all([context.params, readJsonBody(request)]);
   const status = typeof body.status === "string" ? body.status : "";
+
+  if (isProductionDriverJobLinkMode()) {
+    const result = await applyProductionDriverJobStatusUpdate({ token, status });
+
+    return Response.json(result, { status: blockedStatusByReason[result.reason] });
+  }
+
   const result = applyDriverJobStatusUpdateContract({
     token,
     status,

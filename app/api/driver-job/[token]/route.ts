@@ -1,8 +1,7 @@
 import { getDriverJobPayloadForTokenContract } from "../../../../lib/driver-job-link-contract.ts";
+import { getProductionDriverJobPayloadForToken } from "../../../../lib/driver-job-link-production.ts";
 import {
   isProductionDriverJobLinkMode,
-  productionDriverJobLinksConfigured,
-  productionDriverJobLinksDisabledResult,
 } from "../../../../lib/driver-job-link-mode.ts";
 import {
   mockDriverJobBookingsById,
@@ -23,11 +22,14 @@ const blockedStatusByReason = {
 } as const;
 
 export async function GET(_request: Request, context: DriverJobRouteContext) {
-  if (isProductionDriverJobLinkMode() && !productionDriverJobLinksConfigured()) {
-    return Response.json(productionDriverJobLinksDisabledResult(), { status: blockedStatusByReason.not_configured });
+  const { token } = await context.params;
+
+  if (isProductionDriverJobLinkMode()) {
+    const result = await getProductionDriverJobPayloadForToken(token);
+
+    return Response.json(result, { status: blockedStatusByReason[result.reason] });
   }
 
-  const { token } = await context.params;
   const result = getDriverJobPayloadForTokenContract({
     token,
     links: mockDriverJobLinks,

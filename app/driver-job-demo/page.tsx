@@ -177,6 +177,8 @@ export default function DriverJobDemoPage() {
   const [parseFeedback, setParseFeedback] = useState<ParseFeedback | null>(null);
   const [paymentHelperVisible, setPaymentHelperVisible] = useState(false);
   const [detailsFeedback, setDetailsFeedback] = useState<ParseFeedback | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ParseFeedback | null>(null);
   const [status, setStatus] = useState("Assigned");
   const [statusMessage, setStatusMessage] = useState("");
   const [statusMessageTarget, setStatusMessageTarget] = useState("");
@@ -244,8 +246,16 @@ export default function DriverJobDemoPage() {
     }
 
     setDetailsFeedback({
-      tone: "warning",
-      text: "Driver link page details saved. Driver Database update requires a secure driver job link.",
+      tone: "success",
+      text: "Driver details saved locally for this mock driver page.",
+    });
+  }
+
+  function acknowledgeJob() {
+    setAcknowledged(true);
+    setAcknowledgementFeedback({
+      tone: "success",
+      text: "Job acknowledged locally for this mock driver page.",
     });
   }
 
@@ -290,6 +300,38 @@ export default function DriverJobDemoPage() {
                 <dd className="min-w-0 break-words text-slate-950">{detail.value}</dd>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="space-y-3" aria-labelledby="driver-acknowledgement-heading">
+          <h2 id="driver-acknowledgement-heading" className="text-base font-semibold text-slate-900">
+            Job Acknowledgement
+          </h2>
+          <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+            <p
+              className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+              data-driver-demo-acknowledged-state="true"
+            >
+              {acknowledged ? "Acknowledged" : "Waiting for driver acknowledgement"}
+            </p>
+            <div className="space-y-2">
+              <button
+                className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
+                data-driver-demo-acknowledge="true"
+                onClick={acknowledgeJob}
+                type="button"
+              >
+                Acknowledge Job
+              </button>
+              {acknowledgementFeedback ? (
+                <p
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(acknowledgementFeedback.tone)}`}
+                  data-driver-demo-acknowledge-message="true"
+                >
+                  {acknowledgementFeedback.text}
+                </p>
+              ) : null}
+            </div>
           </div>
         </section>
 
@@ -344,7 +386,7 @@ export default function DriverJobDemoPage() {
               />
             </label>
             <label className="block space-y-1 text-sm font-semibold text-slate-700">
-              <span>Mobile number</span>
+              <span>Contact / Mobile number</span>
               <input
                 className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                 data-driver-demo-mobile="true"

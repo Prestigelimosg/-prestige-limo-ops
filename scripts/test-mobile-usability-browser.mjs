@@ -646,6 +646,7 @@ async function runChromeTest() {
     for (const viewport of viewports) {
       await checkMainAppViewport(viewport);
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
+        "Acknowledge Job",
         "Save",
         "OTW",
         "OTS",
@@ -653,6 +654,8 @@ async function runChromeTest() {
         "Job Completed",
       ], "driver job demo");
       await checkDriverRouteViewport(viewport, publicDriverJobUrl, "Mock Pickup A", [
+        "Acknowledge Job",
+        "Save",
         "OTW",
         "OTS",
         "POB",

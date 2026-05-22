@@ -334,6 +334,124 @@ async function runChromeTest() {
       return state;
     };
 
+    const clickAcknowledge = async () => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-acknowledge]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected Acknowledge Job button to be clickable.");
+
+      const acknowledgementState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-acknowledge]");
+            const message = document.querySelector("[data-driver-job-acknowledge-message]");
+            const state = document.querySelector("[data-driver-job-acknowledged-state]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return state?.textContent.trim() === "Acknowledged" &&
+              message?.textContent.trim() === "Job acknowledged locally for this mock driver page."
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "driver job acknowledgement",
+      );
+
+      assert.equal(acknowledgementState.distance <= 16, true, "Expected acknowledgement feedback near button.");
+      const state = await pageState();
+
+      assertNoSensitiveText(state);
+      return state;
+    };
+
+    const saveDriverDetails = async () => {
+      const beforeSaveState = await pageState();
+      const filled = await evaluate(`(() => {
+        const values = [
+          ["[data-driver-job-detail-name]", "Mock Local Driver A"],
+          ["[data-driver-job-detail-contact]", "+65 9123 4567"],
+          ["[data-driver-job-detail-plate]", "SLM1234A"],
+          ["[data-driver-job-detail-vehicle-model]", "Toyota Alphard"],
+        ];
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+        for (const [selector, value] of values) {
+          const input = document.querySelector(selector);
+
+          if (!input) {
+            return false;
+          }
+
+          setter?.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        return true;
+      })()`);
+      assert.equal(filled, true, "Expected public driver details fields to be editable.");
+
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-save-details]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, "Expected public driver details Save button to be clickable.");
+
+      const savedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-save-details]");
+            const message = document.querySelector("[data-driver-job-details-message]");
+            const savedDetails = document.querySelector("[data-driver-job-saved-details]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === "Driver details saved locally for this mock driver page." &&
+              savedDetails?.innerText.includes("Mock Local Driver A") &&
+              savedDetails?.innerText.includes("+65 9123 4567") &&
+              savedDetails?.innerText.includes("SLM1234A") &&
+              savedDetails?.innerText.includes("Toyota Alphard")
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  savedText: savedDetails.innerText,
+                }
+              : false;
+          })()`),
+        10000,
+        "public driver details local save",
+      );
+
+      const afterSaveState = await pageState();
+      assert.equal(savedState.distance <= 16, true, "Expected driver details feedback near Save button.");
+      assert.equal(
+        afterSaveState.fetchCalls.length,
+        beforeSaveState.fetchCalls.length,
+        "Public driver details local Save should not make network requests.",
+      );
+      assertNoSensitiveText(afterSaveState);
+      return afterSaveState;
+    };
+
     const clickStatus = async (label, expectedStatus) => {
       const clicked = await evaluate(`(() => {
         const button = [...document.querySelectorAll("[data-driver-job-status]")].find(
@@ -376,15 +494,23 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("SQ333"));
     assert.ok(validState.visibleText.includes("Mock Passenger A"));
     assert.ok(validState.visibleText.includes("Mock Assigned Driver A"));
+    assert.ok(validState.visibleText.includes("Acknowledge Job"));
+    assert.ok(validState.visibleText.includes("Driver Details"));
+    assert.ok(validState.visibleText.includes("Driver name"));
+    assert.ok(validState.visibleText.includes("Contact"));
+    assert.ok(validState.visibleText.includes("Car plate"));
+    assert.ok(validState.visibleText.includes("Vehicle model"));
     assert.deepEqual(
       validState.buttonLabels.filter((buttonLabel) =>
-        ["OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+        ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
       ),
-      ["OTW", "OTS", "POB", "Job Completed"],
-      "Expected public driver job page to show status buttons in workflow order.",
+      ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"],
+      "Expected public driver job page to show acknowledgement, details, and status controls in order.",
     );
     assertNoSensitiveText(validState);
 
+    await clickAcknowledge();
+    await saveDriverDetails();
     await clickStatus("OTW", "OTW");
     await clickStatus("OTS", "OTS");
     await clickStatus("POB", "POB");
@@ -399,10 +525,10 @@ async function runChromeTest() {
 
       assert.equal(
         blockedState.buttonLabels.some((buttonLabel) =>
-          ["OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+          ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
         ),
         false,
-        `${label} token should not show status buttons.`,
+        `${label} token should not show acknowledgement, details, or status buttons.`,
       );
       assert.equal(blockedState.visibleText.includes("Mock Pickup A"), false);
       assert.equal(blockedState.visibleText.includes("Mock Dropoff A"), false);

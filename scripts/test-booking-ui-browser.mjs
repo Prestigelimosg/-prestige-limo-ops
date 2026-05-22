@@ -11435,11 +11435,11 @@ async function runChromeTest() {
       };
     })()`);
     assert.deepEqual(
-      ["OTW", "OTS", "POB", "Job Completed"].filter(
+      ["Acknowledge Job", "OTW", "OTS", "POB", "Job Completed"].filter(
         (label) => !driverDemoInitialState.buttonLabels.includes(label),
       ),
       [],
-      "Expected driver demo to show OTW, OTS, POB, and Job Completed buttons",
+      "Expected driver demo to show acknowledgement and OTW, OTS, POB, and Job Completed buttons",
     );
     assert.match(driverDemoInitialState.jobSummaryText, /Changi Airport T3 Arrival Pickup/);
     assert.match(driverDemoInitialState.jobSummaryText, /Raffles Hotel Singapore/);
@@ -11476,6 +11476,49 @@ async function runChromeTest() {
         return window.__prestigeOriginalFetch(...args);
       };
     })()`);
+
+    const clickedAcknowledgement = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-demo-acknowledge]");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedAcknowledgement, true, "Expected Acknowledge Job to be clickable");
+
+    const acknowledgedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-driver-demo-acknowledge]");
+          const message = document.querySelector("[data-driver-demo-acknowledge-message]");
+          const acknowledged = document.querySelector("[data-driver-demo-acknowledged-state]");
+          const buttonRect = button?.getBoundingClientRect();
+          const messageRect = message?.getBoundingClientRect();
+          const requests = window.__prestigeDriverDemoRequests || [];
+
+          return message?.textContent.trim() === "Job acknowledged locally for this mock driver page." &&
+            acknowledged?.textContent.trim() === "Acknowledged"
+            ? {
+                distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                messageText: message.textContent.trim(),
+                requestCount: requests.length,
+                stateText: acknowledged.textContent.trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "driver demo acknowledgement stays local",
+    );
+    assert.equal(acknowledgedState.stateText, "Acknowledged");
+    assert.equal(acknowledgedState.requestCount, 0);
+    assert.equal(
+      acknowledgedState.distance <= 16,
+      true,
+      "Expected acknowledgement feedback close to Acknowledge Job",
+    );
 
     const alisonDriverDetailsPaste = [
       "Driver’s detail",
@@ -11572,7 +11615,7 @@ async function runChromeTest() {
           const drivers = window.__prestigeDriverDemoDrivers || [];
           const requests = window.__prestigeDriverDemoRequests || [];
 
-          return message?.textContent.trim() === "Driver link page details saved. Driver Database update requires a secure driver job link."
+          return message?.textContent.trim() === "Driver details saved locally for this mock driver page."
             ? {
                 distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                 driverCount: drivers.length,
@@ -11590,7 +11633,7 @@ async function runChromeTest() {
     );
     assert.equal(
       driverDemoAddedState.messageText,
-      "Driver link page details saved. Driver Database update requires a secure driver job link.",
+      "Driver details saved locally for this mock driver page.",
     );
     assert.equal(driverDemoAddedState.driverCount, 1);
     assert.equal(driverDemoAddedState.existingDriver?.driver_name, "Alison Toh");
@@ -11627,7 +11670,7 @@ async function runChromeTest() {
           const drivers = window.__prestigeDriverDemoDrivers || [];
           const requests = window.__prestigeDriverDemoRequests || [];
 
-          return message?.textContent.trim() === "Driver link page details saved. Driver Database update requires a secure driver job link."
+          return message?.textContent.trim() === "Driver details saved locally for this mock driver page."
             ? {
                 driverCount: drivers.length,
                 existingDriver: drivers[0] || null,
@@ -11677,7 +11720,7 @@ async function runChromeTest() {
           const requests = window.__prestigeDriverDemoRequests || [];
           const drivers = window.__prestigeDriverDemoDrivers || [];
 
-          return message?.textContent.trim() === "Driver link page details saved. Driver Database update requires a secure driver job link."
+          return message?.textContent.trim() === "Driver details saved locally for this mock driver page."
             ? {
                 driver: drivers[0] || null,
                 driverCount: drivers.length,

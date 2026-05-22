@@ -579,6 +579,7 @@ async function runChromeTest() {
             "internal notes",
             "dispatch",
             "dashboard",
+            "driver database",
             "rates",
           ].filter((value) => lowerText.includes(value)),
           inputs,
@@ -628,14 +629,14 @@ async function runChromeTest() {
       assert.deepEqual(smallTextareas, [], `${viewport.label}: expected comfortable paste textarea`);
       assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver buttons`);
       assert.deepEqual(
-        ["Parse Driver Details", "Save", "OTW", "OTS", "POB", "Job Completed"].filter(
+        ["Acknowledge Job", "Parse Driver Details", "Save", "OTW", "OTS", "POB", "Job Completed"].filter(
           (label) => !initialState.buttonLabels.includes(label),
         ),
         [],
         `${viewport.label}: expected all driver action buttons`,
       );
       assert.deepEqual(
-        ["Parse Driver Details", "Save"].filter((label) => {
+        ["Acknowledge Job", "Parse Driver Details", "Save"].filter((label) => {
           const button = initialState.buttons.find((candidate) => candidate.text === label);
           return !button?.className.includes("bg-slate-950") || !button.className.includes("text-white");
         }),
@@ -646,6 +647,35 @@ async function runChromeTest() {
         initialState.text.includes("Demo only — not connected to live bookings yet."),
         true,
         `${viewport.label}: expected exact demo-only warning`,
+      );
+
+      await clickDriverDemoButton("[data-driver-demo-acknowledge]", `${viewport.label} Acknowledge Job`);
+      const acknowledgedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-acknowledge]");
+            const message = document.querySelector("[data-driver-demo-acknowledge-message]");
+            const acknowledged = document.querySelector("[data-driver-demo-acknowledged-state]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === "Job acknowledged locally for this mock driver page." &&
+              acknowledged?.textContent.trim() === "Acknowledged"
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  stateText: acknowledged.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} acknowledgement message`,
+      );
+      assert.equal(acknowledgedState.stateText, "Acknowledged");
+      assert.equal(
+        acknowledgedState.distance <= 16,
+        true,
+        `${viewport.label}: expected acknowledgement feedback close to Acknowledge Job`,
       );
 
       const parseDriverDetailsSample = async (sample, description) => {
@@ -767,7 +797,7 @@ async function runChromeTest() {
 
             const messageText = message?.textContent.trim() || "";
 
-            return messageText === "Driver link page details saved. Driver Database update requires a secure driver job link."
+            return messageText === "Driver details saved locally for this mock driver page."
               ? {
                   distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                   messageText,
@@ -779,7 +809,7 @@ async function runChromeTest() {
       );
       assert.equal(
         savedDetailsState.messageText,
-        "Driver link page details saved. Driver Database update requires a secure driver job link.",
+        "Driver details saved locally for this mock driver page.",
       );
       assert.equal(
         savedDetailsState.distance <= 16,

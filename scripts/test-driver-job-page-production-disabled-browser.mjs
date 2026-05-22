@@ -479,10 +479,10 @@ async function runChromeTest() {
     assert.ok(state.visibleText.includes("This driver job link is unavailable right now."));
     assert.equal(
       state.buttonLabels.some((buttonLabel) =>
-        ["OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+        ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
       ),
       false,
-      "Production-disabled page should not show driver status buttons.",
+      "Production-disabled page should not show acknowledgement, details, or status buttons.",
     );
 
     const driverJobFetches = state.fetchCalls.filter((call) => call.url.includes("/api/driver-job/"));

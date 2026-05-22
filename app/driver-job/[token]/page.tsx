@@ -38,12 +38,31 @@ type StatusFeedback = {
   text: string;
 };
 
+type ControlFeedback = {
+  tone: "success" | "error";
+  text: string;
+};
+
+type DriverDetails = {
+  contact: string;
+  name: string;
+  plate: string;
+  vehicleModel: string;
+};
+
 const statusActions = [
   { label: "OTW", value: "OTW" },
   { label: "OTS", value: "OTS" },
   { label: "POB", value: "POB" },
   { label: "Job Completed", value: "Job Completed" },
 ] as const;
+
+const emptyDriverDetails: DriverDetails = {
+  contact: "",
+  name: "",
+  plate: "",
+  vehicleModel: "",
+};
 
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
@@ -63,11 +82,20 @@ function displayValue(value: string) {
   return value || "Not provided";
 }
 
+function cleanDriverDetails(details: DriverDetails): DriverDetails {
+  return {
+    contact: details.contact.trim().replace(/\s+/g, " "),
+    name: details.name.trim().replace(/\s+/g, " "),
+    plate: details.plate.trim().replace(/\s+/g, " "),
+    vehicleModel: details.vehicleModel.trim().replace(/\s+/g, " "),
+  };
+}
+
 function statusDisplay(job: SafeDriverJobPayload) {
   return job.statusLabel || job.status || "Pending";
 }
 
-function feedbackClassName(tone: StatusFeedback["tone"]) {
+function feedbackClassName(tone: StatusFeedback["tone"] | ControlFeedback["tone"]) {
   return tone === "success"
     ? "border-emerald-200 bg-emerald-50 text-emerald-800"
     : "border-rose-200 bg-rose-50 text-rose-800";
@@ -94,6 +122,11 @@ export default function DriverJobPage() {
     return Array.isArray(rawToken) ? rawToken[0] || "" : rawToken || "";
   }, [params]);
   const [pageState, setPageState] = useState<PageState>({ kind: "loading" });
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ControlFeedback | null>(null);
+  const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
+  const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
+  const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState("");
 
@@ -113,6 +146,11 @@ export default function DriverJobPage() {
       }
 
       setPageState({ kind: "loading" });
+      setAcknowledged(false);
+      setAcknowledgementFeedback(null);
+      setDetailsFeedback(null);
+      setDriverDetails(emptyDriverDetails);
+      setSavedDriverDetails(null);
       setStatusFeedback(null);
 
       try {
@@ -136,6 +174,12 @@ export default function DriverJobPage() {
           return;
         }
 
+        setDriverDetails({
+          contact: result.payload.assignedDriver.contact,
+          name: result.payload.assignedDriver.name,
+          plate: result.payload.assignedDriver.plate,
+          vehicleModel: result.payload.assignedDriver.vehicleModel,
+        });
         setPageState({ kind: "ready", job: result.payload });
       } catch {
         if (active) {
@@ -150,6 +194,53 @@ export default function DriverJobPage() {
       active = false;
     };
   }, [token]);
+
+  function acknowledgeJob() {
+    setAcknowledged(true);
+    setAcknowledgementFeedback({
+      tone: "success",
+      text: "Job acknowledged locally for this mock driver page.",
+    });
+  }
+
+  function updateDriverDetail(field: keyof DriverDetails, value: string) {
+    setDetailsFeedback(null);
+    setSavedDriverDetails(null);
+    setDriverDetails((currentDetails) => ({
+      ...currentDetails,
+      [field]: value,
+    }));
+  }
+
+  function saveDriverDetails() {
+    const nextDetails = cleanDriverDetails(driverDetails);
+
+    setDriverDetails(nextDetails);
+
+    if (!nextDetails.name && !nextDetails.contact && !nextDetails.plate) {
+      setDetailsFeedback({
+        tone: "error",
+        text: "Enter driver name, contact, or car plate before saving.",
+      });
+      setSavedDriverDetails(null);
+      return;
+    }
+
+    if (!nextDetails.name) {
+      setDetailsFeedback({
+        tone: "error",
+        text: "Driver name is required before saving.",
+      });
+      setSavedDriverDetails(null);
+      return;
+    }
+
+    setSavedDriverDetails(nextDetails);
+    setDetailsFeedback({
+      tone: "success",
+      text: "Driver details saved locally for this mock driver page.",
+    });
+  }
 
   async function updateStatus(nextStatus: string, label: string) {
     if (!token || pageState.kind !== "ready") {
@@ -287,6 +378,134 @@ export default function DriverJobPage() {
                   </dd>
                 </div>
               </dl>
+            </section>
+
+            <section className="space-y-3" aria-labelledby="driver-acknowledgement-heading">
+              <h2 id="driver-acknowledgement-heading" className="text-base font-semibold text-slate-900">
+                Job Acknowledgement
+              </h2>
+              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+                <p
+                  className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                  data-driver-job-acknowledged-state="true"
+                >
+                  {acknowledged ? "Acknowledged" : "Waiting for driver acknowledgement"}
+                </p>
+                <div className="space-y-2">
+                  <button
+                    className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
+                    data-driver-job-acknowledge="true"
+                    onClick={acknowledgeJob}
+                    type="button"
+                  >
+                    Acknowledge Job
+                  </button>
+                  {acknowledgementFeedback ? (
+                    <p
+                      aria-live="polite"
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(acknowledgementFeedback.tone)}`}
+                      data-driver-job-acknowledge-message="true"
+                    >
+                      {acknowledgementFeedback.text}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-3" aria-labelledby="driver-details-heading">
+              <h2 id="driver-details-heading" className="text-base font-semibold text-slate-900">
+                Driver Details
+              </h2>
+              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Driver name</span>
+                  <input
+                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-detail-name="true"
+                    onChange={(event) => updateDriverDetail("name", event.target.value)}
+                    type="text"
+                    value={driverDetails.name}
+                  />
+                </label>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Contact</span>
+                  <input
+                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-detail-contact="true"
+                    inputMode="tel"
+                    onChange={(event) => updateDriverDetail("contact", event.target.value)}
+                    type="tel"
+                    value={driverDetails.contact}
+                  />
+                </label>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Car plate</span>
+                  <input
+                    autoCapitalize="characters"
+                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-detail-plate="true"
+                    onChange={(event) => updateDriverDetail("plate", event.target.value)}
+                    type="text"
+                    value={driverDetails.plate}
+                  />
+                </label>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Vehicle model</span>
+                  <input
+                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-detail-vehicle-model="true"
+                    onChange={(event) => updateDriverDetail("vehicleModel", event.target.value)}
+                    type="text"
+                    value={driverDetails.vehicleModel}
+                  />
+                </label>
+                <div className="space-y-2">
+                  <button
+                    className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
+                    data-driver-job-save-details="true"
+                    onClick={saveDriverDetails}
+                    type="button"
+                  >
+                    Save
+                  </button>
+                  {detailsFeedback ? (
+                    <p
+                      aria-live="polite"
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(detailsFeedback.tone)}`}
+                      data-driver-job-details-message="true"
+                    >
+                      {detailsFeedback.text}
+                    </p>
+                  ) : null}
+                </div>
+                {savedDriverDetails ? (
+                  <div
+                    className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900"
+                    data-driver-job-saved-details="true"
+                  >
+                    <p className="font-semibold">Saved driver details</p>
+                    <dl className="grid gap-1">
+                      <div className="grid grid-cols-[6.5rem_1fr] gap-2">
+                        <dt className="font-semibold">Name</dt>
+                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.name)}</dd>
+                      </div>
+                      <div className="grid grid-cols-[6.5rem_1fr] gap-2">
+                        <dt className="font-semibold">Contact</dt>
+                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.contact)}</dd>
+                      </div>
+                      <div className="grid grid-cols-[6.5rem_1fr] gap-2">
+                        <dt className="font-semibold">Plate</dt>
+                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.plate)}</dd>
+                      </div>
+                      <div className="grid grid-cols-[6.5rem_1fr] gap-2">
+                        <dt className="font-semibold">Vehicle</dt>
+                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.vehicleModel)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ) : null}
+              </div>
             </section>
 
             <section className="space-y-3 pb-6" aria-labelledby="driver-status-heading">

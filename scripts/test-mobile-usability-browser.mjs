@@ -647,6 +647,7 @@ async function runChromeTest() {
       await checkMainAppViewport(viewport);
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
         "Acknowledge Job",
+        "Activate Mock Live Location",
         "Save",
         "OTW",
         "OTS",
@@ -655,6 +656,7 @@ async function runChromeTest() {
       ], "driver job demo");
       await checkDriverRouteViewport(viewport, publicDriverJobUrl, "Mock Pickup A", [
         "Acknowledge Job",
+        "Activate Mock Live Location",
         "Save",
         "OTW",
         "OTS",

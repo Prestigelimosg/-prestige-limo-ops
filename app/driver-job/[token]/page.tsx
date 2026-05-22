@@ -138,6 +138,8 @@ export default function DriverJobPage() {
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
+  const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
+  const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ControlFeedback | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
@@ -162,6 +164,8 @@ export default function DriverJobPage() {
       setAcknowledgementFeedback(null);
       setDetailsFeedback(null);
       setDriverDetails(emptyDriverDetails);
+      setMockLiveLocationActive(false);
+      setMockLiveLocationFeedback(null);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -193,6 +197,7 @@ export default function DriverJobPage() {
           plate: result.payload.assignedDriver.plate,
           vehicleModel: result.payload.assignedDriver.vehicleModel,
         });
+        setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
       } catch {
         if (active) {
@@ -214,6 +219,31 @@ export default function DriverJobPage() {
     setAcknowledgementFeedback({
       tone: "success",
       text: "Job acknowledged locally for this mock driver page.",
+    });
+  }
+
+  function activateMockLiveLocation() {
+    if (!acknowledged) {
+      setMockLiveLocationFeedback({
+        tone: "error",
+        text: "Acknowledge this job before activating mock live location.",
+      });
+      return;
+    }
+
+    if (workflowStatus === "pob" || workflowStatus === "completed") {
+      setMockLiveLocationActive(false);
+      setMockLiveLocationFeedback({
+        tone: "error",
+        text: "Mock live location has ended for this job.",
+      });
+      return;
+    }
+
+    setMockLiveLocationActive(true);
+    setMockLiveLocationFeedback({
+      tone: "success",
+      text: "Mock live location active locally for this mock driver page. No phone location is captured or sent.",
     });
   }
 
@@ -307,12 +337,31 @@ export default function DriverJobPage() {
         return;
       }
 
+      const nextStatusText = statusDisplay(result.payload.status, result.payload.statusLabel);
+
+      if (transitionGuard.status === "pob") {
+        setMockLiveLocationActive(false);
+        if (mockLiveLocationActive) {
+          setMockLiveLocationFeedback({
+            tone: "success",
+            text: "Mock live location ended locally after POB.",
+          });
+        }
+      }
+
+      if (transitionGuard.status === "completed") {
+        setMockLiveLocationActive(false);
+      }
+
       setWorkflowStatus(result.payload.status);
       setPageState({ kind: "ready", job: result.payload });
       setStatusFeedback({
         target: label,
         tone: "success",
-        text: `Status updated to ${statusDisplay(result.payload.status, result.payload.statusLabel)}.`,
+        text:
+          transitionGuard.status === "pob" && mockLiveLocationActive
+            ? `Status updated to ${nextStatusText}. Mock live location ended locally.`
+            : `Status updated to ${nextStatusText}.`,
       });
     } catch {
       setStatusFeedback({
@@ -437,6 +486,42 @@ export default function DriverJobPage() {
                       data-driver-job-acknowledge-message="true"
                     >
                       {acknowledgementFeedback.text}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-3" aria-labelledby="driver-live-location-heading">
+              <h2 id="driver-live-location-heading" className="text-base font-semibold text-slate-900">
+                Mock Live Location
+              </h2>
+              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+                <p
+                  className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                  data-driver-job-live-location-state="true"
+                >
+                  {mockLiveLocationActive ? "Mock live location active" : "Mock live location inactive"}
+                </p>
+                <p className="text-sm font-medium text-slate-600">
+                  Mock/local only. No phone location is captured or sent.
+                </p>
+                <div className="space-y-2">
+                  <button
+                    className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
+                    data-driver-job-live-location="true"
+                    onClick={activateMockLiveLocation}
+                    type="button"
+                  >
+                    Activate Mock Live Location
+                  </button>
+                  {mockLiveLocationFeedback ? (
+                    <p
+                      aria-live="polite"
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockLiveLocationFeedback.tone)}`}
+                      data-driver-job-live-location-message="true"
+                    >
+                      {mockLiveLocationFeedback.text}
                     </p>
                   ) : null}
                 </div>

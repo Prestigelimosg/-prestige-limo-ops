@@ -6,6 +6,7 @@ import {
 import {
   mockDriverJobBookingsById,
   mockDriverJobLinks,
+  resetMockDriverJobLinkDataForTests,
 } from "../../../../lib/driver-job-link-mock-store.ts";
 
 type DriverJobRouteContext = {
@@ -21,13 +22,18 @@ const blockedStatusByReason = {
   unauthorized: 401,
 } as const;
 
-export async function GET(_request: Request, context: DriverJobRouteContext) {
+export async function GET(request: Request, context: DriverJobRouteContext) {
   const { token } = await context.params;
 
   if (isProductionDriverJobLinkMode()) {
     const result = await getProductionDriverJobPayloadForToken(token);
 
     return Response.json(result, { status: blockedStatusByReason[result.reason] });
+  }
+
+  if (request.headers.get("x-prestige-driver-job-mock-reset") === "1") {
+    // Test-only reset for mock-backed browser guards. Production mode returns before this branch.
+    resetMockDriverJobLinkDataForTests();
   }
 
   const result = getDriverJobPayloadForTokenContract({

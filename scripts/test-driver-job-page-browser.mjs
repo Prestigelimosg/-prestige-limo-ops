@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { mockDriverJobTokens } from "../lib/driver-job-link-mock-store.ts";
@@ -191,6 +191,10 @@ function driverJobUrl(token) {
   return new URL(`/driver-job/${token}`, appUrl).toString();
 }
 
+function driverJobApiUrl(token) {
+  return new URL(`/api/driver-job/${token}`, appUrl).toString();
+}
+
 function assertNoSensitiveText(state) {
   const text = `${state.visibleText}\n${state.fetchCalls.join("\n")}\n${state.resourceCalls.join("\n")}`;
 
@@ -222,7 +226,22 @@ function assertNoSensitiveText(state) {
   );
 }
 
+async function assertNoRealLocationImplementation() {
+  const guardedSources = await Promise.all([
+    readFile(new URL("../app/driver-job/[token]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/driver-job-demo/page.tsx", import.meta.url), "utf8"),
+  ]);
+  const source = guardedSources.join("\n");
+
+  assert.doesNotMatch(source, /navigator\.geolocation/i, "Driver pages must not call navigator.geolocation.");
+  assert.doesNotMatch(source, /\/api\/(?:driver-)?live-location/i, "Driver pages must not add live location endpoints.");
+  assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
+  assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
+}
+
 async function runChromeTest() {
+  await assertNoRealLocationImplementation();
+
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "prestige-limo-driver-job-page-chrome-"));
   const chrome = spawn(
     chromeBinary,
@@ -340,6 +359,23 @@ async function runChromeTest() {
       );
 
       return state;
+    };
+
+    const resetMockDriverJobData = async () => {
+      const response = await fetch(driverJobApiUrl(mockDriverJobTokens.workflowOrder), {
+        headers: {
+          "x-prestige-driver-job-mock-reset": "1",
+        },
+      });
+      const body = await response.json();
+
+      assert.equal(response.ok, true, "Expected mock driver job data reset request to succeed.");
+      assert.equal(body.ok, true, "Expected mock driver job data reset request to return a safe payload.");
+      assertNoSensitiveText({
+        fetchCalls: [],
+        resourceCalls: [],
+        visibleText: JSON.stringify(body),
+      });
     };
 
     const clickAcknowledge = async () => {
@@ -460,7 +496,112 @@ async function runChromeTest() {
       return afterSaveState;
     };
 
-    const clickStatus = async (label, expectedStatus) => {
+    const clickBlockedLiveLocation = async (
+      expectedMessage = "Acknowledge this job before activating mock live location.",
+    ) => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-live-location]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected Activate Mock Live Location button to be clickable.");
+
+      const blockedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-live-location]");
+            const message = document.querySelector("[data-driver-job-live-location-message]");
+            const state = document.querySelector("[data-driver-job-live-location-state]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === ${JSON.stringify(expectedMessage)} &&
+              state?.textContent.trim() === "Mock live location inactive"
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "blocked mock live location activation",
+      );
+
+      assert.equal(blockedState.distance <= 16, true, "Expected blocked live location feedback near button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Blocked mock live location activation should not make a network request.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
+    const clickActivateLiveLocation = async () => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-live-location]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected Activate Mock Live Location button to be clickable after acknowledgement.");
+
+      const activeState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-live-location]");
+            const message = document.querySelector("[data-driver-job-live-location-message]");
+            const state = document.querySelector("[data-driver-job-live-location-state]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() ===
+              "Mock live location active locally for this mock driver page. No phone location is captured or sent." &&
+              state?.textContent.trim() === "Mock live location active"
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "mock live location activation",
+      );
+
+      assert.equal(activeState.distance <= 16, true, "Expected mock live location feedback near button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Mock live location activation should stay local and avoid network requests.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
+    const clickStatus = async (
+      label,
+      expectedStatus,
+      expectedMessage = `Status updated to ${expectedStatus}.`,
+    ) => {
       const clicked = await evaluate(`(() => {
         const button = [...document.querySelectorAll("[data-driver-job-status]")].find(
           (candidate) => candidate.getAttribute("data-driver-job-status") === ${JSON.stringify(label)},
@@ -483,7 +624,7 @@ async function runChromeTest() {
             const messageText = document.querySelector(${JSON.stringify(`[data-driver-job-status-message="${label}"]`)})?.textContent || "";
 
             return statusText.includes(${JSON.stringify(expectedStatus)}) &&
-              messageText.includes(${JSON.stringify(`Status updated to ${expectedStatus}.`)});
+              messageText.includes(${JSON.stringify(expectedMessage)});
           })()`),
         10000,
         `${label} status update`,
@@ -546,6 +687,7 @@ async function runChromeTest() {
       return afterState;
     };
 
+    await resetMockDriverJobData();
     const validState = await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");
     assert.ok(validState.visibleText.includes("Mock Workflow Dropoff"));
     assert.ok(validState.visibleText.includes("Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff"));
@@ -555,6 +697,9 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Workflow Driver"));
     const startingStatusText = validState.statusText || "Assigned";
     assert.ok(validState.visibleText.includes("Acknowledge Job"));
+    assert.ok(validState.visibleText.includes("Mock Live Location"));
+    assert.ok(validState.visibleText.includes("Mock/local only. No phone location is captured or sent."));
+    assert.ok(validState.visibleText.includes("Activate Mock Live Location"));
     assert.ok(validState.visibleText.includes("Driver Details"));
     assert.ok(validState.visibleText.includes("Driver name"));
     assert.ok(validState.visibleText.includes("Contact"));
@@ -567,10 +712,21 @@ async function runChromeTest() {
       ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"],
       "Expected public driver job page to show acknowledgement, details, and status controls in order.",
     );
+    assert.deepEqual(
+      validState.buttonLabels.filter((buttonLabel) =>
+        ["Acknowledge Job", "Activate Mock Live Location", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(
+          buttonLabel,
+        ),
+      ),
+      ["Acknowledge Job", "Activate Mock Live Location", "Save", "OTW", "OTS", "POB", "Job Completed"],
+      "Expected public driver job page to show mock live location control before details/status controls.",
+    );
     assertNoSensitiveText(validState);
 
+    await clickBlockedLiveLocation();
     await clickBlockedStatus("OTW", "Acknowledge this job before updating status.", startingStatusText);
     await clickAcknowledge();
+    await clickActivateLiveLocation();
     await saveDriverDetails();
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
@@ -579,8 +735,21 @@ async function runChromeTest() {
     await clickBlockedStatus("POB", "Update OTS before POB.", "OTW");
     await clickStatus("OTS", "OTS");
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
-    await clickStatus("POB", "POB");
+    await clickStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
+    const endedLiveLocationState = await pageState();
+    assert.ok(
+      endedLiveLocationState.visibleText.includes("Mock live location inactive"),
+      "Expected POB to auto-end mock live location.",
+    );
+    await clickBlockedLiveLocation("Mock live location has ended for this job.");
     await clickStatus("Job Completed", "Job Completed");
+    const completedLiveLocationState = await pageState();
+    assert.ok(
+      completedLiveLocationState.visibleText.includes("Mock live location inactive"),
+      "Expected Job Completed to leave mock live location ended.",
+    );
+    await clickBlockedLiveLocation("Mock live location has ended for this job.");
+    await resetMockDriverJobData();
 
     for (const [token, label] of [
       ["not-a-real-token", "invalid"],
@@ -591,10 +760,12 @@ async function runChromeTest() {
 
       assert.equal(
         blockedState.buttonLabels.some((buttonLabel) =>
-          ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+          ["Acknowledge Job", "Activate Mock Live Location", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(
+            buttonLabel,
+          ),
         ),
         false,
-        `${label} token should not show acknowledgement, details, or status buttons.`,
+        `${label} token should not show acknowledgement, mock live location, details, or status buttons.`,
       );
       assert.equal(blockedState.visibleText.includes("Mock Pickup A"), false);
       assert.equal(blockedState.visibleText.includes("Mock Dropoff A"), false);

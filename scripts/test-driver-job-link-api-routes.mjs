@@ -14,8 +14,11 @@ function routeContext(token) {
   };
 }
 
-async function getDriverJob(token) {
-  const response = await GET(new Request(`http://localhost/api/driver-job/${token}`), routeContext(token));
+async function getDriverJob(token, headers = {}) {
+  const response = await GET(
+    new Request(`http://localhost/api/driver-job/${token}`, { headers }),
+    routeContext(token),
+  );
 
   return {
     body: await response.json(),
@@ -87,6 +90,22 @@ for (const [token, expectedStatus, expectedReason] of [
   assert.deepEqual(result.body.payload.waypoints, ["Mock Waypoint A"]);
   assert.equal(result.body.payload.status, "assigned");
   assertNoSensitiveData(result);
+}
+
+{
+  resetMockDriverJobLinkDataForTests();
+
+  const completedPatch = await patchDriverJobStatus(mockDriverJobTokens.validA, "Job Completed");
+  const resetResult = await getDriverJob(mockDriverJobTokens.validA, {
+    "x-prestige-driver-job-mock-reset": "1",
+  });
+
+  assert.equal(completedPatch.body.payload.status, "completed");
+  assert.equal(resetResult.status, 200);
+  assert.equal(resetResult.body.ok, true);
+  assert.equal(resetResult.body.payload.reference, "MOCK-DRIVER-JOB-A");
+  assert.equal(resetResult.body.payload.status, "assigned");
+  assertNoSensitiveData(resetResult);
 }
 
 for (const [requestedStatus, expectedStatus] of [

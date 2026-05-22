@@ -629,7 +629,16 @@ async function runChromeTest() {
       assert.deepEqual(smallTextareas, [], `${viewport.label}: expected comfortable paste textarea`);
       assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver buttons`);
       assert.deepEqual(
-        ["Acknowledge Job", "Parse Driver Details", "Save", "OTW", "OTS", "POB", "Job Completed"].filter(
+        [
+          "Acknowledge Job",
+          "Activate Mock Live Location",
+          "Parse Driver Details",
+          "Save",
+          "OTW",
+          "OTS",
+          "POB",
+          "Job Completed",
+        ].filter(
           (label) => !initialState.buttonLabels.includes(label),
         ),
         [],
@@ -680,6 +689,40 @@ async function runChromeTest() {
         `${viewport.label}: expected pre-acknowledgement status feedback close to OTW`,
       );
 
+      const preAcknowledgementLiveLocationFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      await clickDriverDemoButton(
+        "[data-driver-demo-live-location]",
+        `${viewport.label} blocked pre-ack mock live location`,
+      );
+      const preAcknowledgementLiveLocationState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-live-location]");
+            const message = document.querySelector("[data-driver-demo-live-location-message]");
+            const state = document.querySelector("[data-driver-demo-live-location-state]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === "Acknowledge this job before activating mock live location." &&
+              state?.textContent.trim() === "Mock live location inactive"
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  fetchCount: (window.__driverDemoFetchCalls || []).length,
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} pre-acknowledgement mock live location block`,
+      );
+      assert.equal(preAcknowledgementLiveLocationState.fetchCount, preAcknowledgementLiveLocationFetchCount);
+      assert.equal(
+        preAcknowledgementLiveLocationState.distance <= 16,
+        true,
+        `${viewport.label}: expected pre-acknowledgement live location feedback close to button`,
+      );
+
       await clickDriverDemoButton("[data-driver-demo-acknowledge]", `${viewport.label} Acknowledge Job`);
       const acknowledgedState = await waitForCondition(
         () =>
@@ -707,6 +750,41 @@ async function runChromeTest() {
         acknowledgedState.distance <= 16,
         true,
         `${viewport.label}: expected acknowledgement feedback close to Acknowledge Job`,
+      );
+
+      const liveLocationFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      await clickDriverDemoButton(
+        "[data-driver-demo-live-location]",
+        `${viewport.label} Activate Mock Live Location`,
+      );
+      const liveLocationState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-live-location]");
+            const message = document.querySelector("[data-driver-demo-live-location-message]");
+            const state = document.querySelector("[data-driver-demo-live-location-state]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() ===
+              "Mock live location active locally for this mock driver page. No phone location is captured or sent." &&
+              state?.textContent.trim() === "Mock live location active"
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  fetchCount: (window.__driverDemoFetchCalls || []).length,
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} mock live location activation`,
+      );
+      assert.equal(liveLocationState.fetchCount, liveLocationFetchCount);
+      assert.equal(
+        liveLocationState.distance <= 16,
+        true,
+        `${viewport.label}: expected mock live location feedback close to button`,
       );
 
       const parseDriverDetailsSample = async (sample, description) => {
@@ -859,6 +937,17 @@ async function runChromeTest() {
         `${viewport.label} acknowledgement after driver details reload`,
       );
 
+      await clickDriverDemoButton(
+        "[data-driver-demo-live-location]",
+        `${viewport.label} Activate Mock Live Location before valid status flow`,
+      );
+      await waitForCondition(
+        () =>
+          evaluate(`document.querySelector("[data-driver-demo-live-location-state]")?.textContent.trim() === "Mock live location active"`),
+        10000,
+        `${viewport.label} active mock live location before status flow`,
+      );
+
       const clickBlockedStatus = async (label, expectedMessage, expectedStatus) => {
         await clickDriverDemoButton(
           `[data-driver-demo-status="${label}"]`,
@@ -937,6 +1026,40 @@ async function runChromeTest() {
         );
       };
 
+      const clickBlockedLiveLocationAfterEnd = async (description) => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        await clickDriverDemoButton("[data-driver-demo-live-location]", description);
+        const blockedLiveLocationState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-live-location]");
+              const message = document.querySelector("[data-driver-demo-live-location-message]");
+              const state = document.querySelector("[data-driver-demo-live-location-state]");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+
+              return message?.textContent.trim() === "Mock live location has ended for this job." &&
+                state?.textContent.trim() === "Mock live location inactive"
+                ? {
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                    stateText: state.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} mock live location remains ended`,
+        );
+
+        assert.equal(blockedLiveLocationState.fetchCount, beforeFetchCount);
+        assert.equal(
+          blockedLiveLocationState.distance <= 16,
+          true,
+          `${viewport.label}: expected ended mock live location feedback close to button`,
+        );
+      };
+
       await clickBlockedStatus("OTS", "Update OTW before OTS.", "Assigned");
       await clickBlockedStatus("POB", "Update OTW before POB.", "Assigned");
       await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", "Assigned");
@@ -944,8 +1067,26 @@ async function runChromeTest() {
       await clickBlockedStatus("POB", "Update OTS before POB.", "OTW");
       await clickValidStatus("OTS", "Status updated: OTS");
       await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
-      await clickValidStatus("POB", "Status updated: POB");
+      await clickValidStatus("POB", "Status updated: POB. Mock live location ended locally.");
+      await waitForCondition(
+        () =>
+          evaluate(`document.querySelector("[data-driver-demo-live-location-state]")?.textContent.trim() === "Mock live location inactive"`),
+        10000,
+        `${viewport.label} mock live location ended at POB`,
+      );
+      await clickBlockedLiveLocationAfterEnd(
+        `${viewport.label} blocked mock live location after POB`,
+      );
       await clickValidStatus("Job Completed", "Status updated: Completed");
+      await waitForCondition(
+        () =>
+          evaluate(`document.querySelector("[data-driver-demo-live-location-state]")?.textContent.trim() === "Mock live location inactive"`),
+        10000,
+        `${viewport.label} mock live location remains ended after Job Completed`,
+      );
+      await clickBlockedLiveLocationAfterEnd(
+        `${viewport.label} blocked mock live location after Job Completed`,
+      );
 
       const networkState = await evaluate(`(() => {
         const resourceCalls = performance.getEntriesByType("resource")

@@ -6,6 +6,8 @@ import path from "node:path";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
+const driverJobPublicBaseUrl = process.env.NEXT_PUBLIC_APP_URL || appUrl;
+const driverJobMockUrl = new URL("/driver-job/mock-driver-job-valid-a", driverJobPublicBaseUrl).toString();
 const browserName = (process.env.BROWSER || "chrome").toLowerCase();
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -4057,7 +4059,7 @@ async function runChromeTest() {
     );
     assert.doesNotMatch(
       loadedDispatchDriverCopyState.copiedText,
-      /Driver Job Link|\/driver-job-demo/,
+      /Driver Job Link|\/driver-job(?:\/|$)/,
       "Expected existing Driver Dispatch copy output not to include Driver Job Link text",
     );
 
@@ -4159,16 +4161,31 @@ async function runChromeTest() {
     assert.match(driverJobLinkCopyState.previewText, /Copy Driver Job Link|Driver Job Link/);
     assert.match(driverJobLinkCopyState.copiedText, /^Driver Job Link/);
     assert.match(driverJobLinkCopyState.copiedText, /Hi DASHBOARD TEST DRIVER,/);
-    assert.match(driverJobLinkCopyState.copiedText, /https?:\/\/\S+\/driver-job-demo/);
+    assert.match(driverJobLinkCopyState.copiedText, /https?:\/\/\S+\/driver-job\/mock-driver-job-valid-a/);
     assert.ok(
-      driverJobLinkCopyState.copiedText.includes(driverDemoUrl),
-      `Expected Driver Job Link copy to include absolute demo URL ${driverDemoUrl}`,
+      driverJobLinkCopyState.copiedText.includes(driverJobMockUrl),
+      `Expected Driver Job Link copy to include absolute mock driver job URL ${driverJobMockUrl}`,
     );
     assert.doesNotMatch(
       driverJobLinkCopyState.copiedText,
-      /^\/driver-job-demo$/m,
-      "Expected Driver Job Link copy not to use a relative-only demo path",
+      /^\/driver-job\/mock-driver-job-valid-a$/m,
+      "Expected Driver Job Link copy not to use a relative-only mock driver job path",
     );
+    assert.doesNotMatch(
+      driverJobLinkCopyState.copiedText,
+      /\/driver-job-demo/,
+      "Expected Driver Job Link copy not to point to the old demo page",
+    );
+    assert.match(
+      driverJobLinkCopyState.copiedText,
+      /Mock\/demo driver job link only until secure production driver links are implemented\./,
+    );
+    if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(driverJobMockUrl)) {
+      assert.match(
+        driverJobLinkCopyState.copiedText,
+        /Local demo link only\. Set NEXT_PUBLIC_APP_URL before sending to drivers\./,
+      );
+    }
     assert.match(driverJobLinkCopyState.copiedText, /Reference: ui-dashboard-driver-assignment-fixture/);
     assert.match(driverJobLinkCopyState.copiedText, /29 May 2026, 1115hrs/);
     assert.match(driverJobLinkCopyState.copiedText, /Flight: SQ777/);
@@ -4187,7 +4204,7 @@ async function runChromeTest() {
     );
     assert.doesNotMatch(
       loadedCustomerCopyState.copiedText,
-      /Driver Job Link|\/driver-job-demo/,
+      /Driver Job Link|\/driver-job(?:\/|$)/,
       "Expected existing Customer Copy output not to include Driver Job Link text",
     );
 
@@ -4252,6 +4269,11 @@ async function runChromeTest() {
     assert.match(
       dashboardJobCardCopyState.copiedTexts[dashboardJobCardCopyState.copiedTexts.length - 1] || "",
       /SQ777/,
+    );
+    assert.doesNotMatch(
+      dashboardJobCardCopyState.copiedTexts[dashboardJobCardCopyState.copiedTexts.length - 1] || "",
+      /Driver Job Link|\/driver-job(?:\/|$)/,
+      "Expected existing Job Card copy output not to include Driver Job Link text",
     );
 
     const assignedDriverClearInitialState = await evaluate(`(() => {

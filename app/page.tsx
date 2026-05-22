@@ -27,6 +27,7 @@ import {
   type RateRules,
   type RateSettings,
 } from "../lib/pricing";
+import { mockDriverJobTokens } from "../lib/driver-job-link-mock-tokens";
 import { supabase } from "../lib/supabase";
 
 type BookingForm = {
@@ -369,18 +370,43 @@ const dispatchCopyLabels: Record<DispatchCopyTarget, string> = {
   jobCard: "Job card",
 };
 
-const driverJobDemoPath = "/driver-job-demo";
-const fallbackDriverJobDemoUrl = `http://localhost:3000${driverJobDemoPath}`;
+const mockDriverJobPath = `/driver-job/${mockDriverJobTokens.validA}`;
+const fallbackDriverJobUrl = `http://localhost:3000${mockDriverJobPath}`;
+const configuredDriverJobBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || "";
 
-function getDriverJobDemoUrl() {
-  if (typeof window === "undefined" || !window.location?.origin) {
-    return fallbackDriverJobDemoUrl;
+function normalizePublicBaseUrl(value: string) {
+  const cleanValue = value.trim();
+
+  if (!cleanValue) {
+    return "";
   }
 
-  return new URL(driverJobDemoPath, window.location.origin).toString();
+  try {
+    return new URL(cleanValue).origin;
+  } catch {
+    return "";
+  }
 }
 
-function subscribeToDriverJobDemoUrlChange() {
+function getDriverJobBaseUrl() {
+  const configuredBaseUrl = normalizePublicBaseUrl(configuredDriverJobBaseUrl);
+
+  if (configuredBaseUrl) {
+    return configuredBaseUrl;
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return "http://localhost:3000";
+}
+
+function getDriverJobUrl() {
+  return new URL(mockDriverJobPath, getDriverJobBaseUrl()).toString();
+}
+
+function subscribeToDriverJobUrlChange() {
   return () => {};
 }
 
@@ -2106,9 +2132,9 @@ export default function Home() {
     text: "Ready for dispatch.",
   });
   const driverJobLinkUrl = useSyncExternalStore(
-    subscribeToDriverJobDemoUrlChange,
-    getDriverJobDemoUrl,
-    () => fallbackDriverJobDemoUrl,
+    subscribeToDriverJobUrlChange,
+    getDriverJobUrl,
+    () => fallbackDriverJobUrl,
   );
 
   useEffect(() => {
@@ -2493,6 +2519,9 @@ export default function Home() {
   const driverJobLinkMessage = useMemo(() => {
     const driverName = clean(booking.driverName) || "Driver";
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
+    const localDemoWarning = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(driverJobLinkUrl)
+      ? "Local demo link only. Set NEXT_PUBLIC_APP_URL before sending to drivers."
+      : "";
     const routeText = isDspItinerary
       ? [
           clean(booking.pickup) ? `Pickup: ${clean(booking.pickup)}` : "",
@@ -2509,6 +2538,8 @@ export default function Home() {
         `Hi ${driverName},`,
         "Please open this driver job link and update your status:",
         driverJobLinkUrl,
+        "Mock/demo driver job link only until secure production driver links are implemented.",
+        localDemoWarning,
       ],
       [
         "Job:",
@@ -6348,8 +6379,8 @@ export default function Home() {
         </nav>
 
         {activeTab === "dispatch" ? (
-        <section className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-          <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+        <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-semibold">Dispatcher Intake</h2>
@@ -6747,7 +6778,7 @@ export default function Home() {
             </div>
 
             <div className="mt-5 rounded-md border border-sky-200 bg-sky-50 p-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-sky-950">Assigned Driver</h3>
                   <p className="text-sm text-slate-600">Manual assignment with payout control.</p>
@@ -6970,9 +7001,9 @@ export default function Home() {
             ) : null}
           </div>
 
-          <aside className="flex flex-col gap-5">
-            <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex items-center justify-between gap-3">
+          <aside className="flex min-w-0 flex-col gap-5">
+            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold">Job Card Preview</h2>
                   <p className="text-sm text-slate-500">WhatsApp-ready driver message.</p>
@@ -7046,7 +7077,7 @@ export default function Home() {
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm"
                   data-copy-preview="jobCard"
                 >
                   {jobCardCopyText}
@@ -7054,8 +7085,8 @@ export default function Home() {
               )}
             </div>
 
-            <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold">Customer Copy</h2>
                   <p className="text-sm text-slate-500">Customer-facing booking and driver details.</p>
@@ -7126,7 +7157,7 @@ export default function Home() {
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
                   data-copy-preview="customerCopy"
                 >
                   {customerCopyText}
@@ -7134,8 +7165,8 @@ export default function Home() {
               )}
             </div>
 
-            <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold">Driver Dispatch</h2>
                   <p className="text-sm text-slate-500">Internal WhatsApp copy for assigned driver.</p>
@@ -7200,7 +7231,7 @@ export default function Home() {
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap rounded-lg bg-sky-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-lg bg-sky-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
                   data-copy-preview="driverDispatch"
                 >
                   {driverDispatchCopyText}
@@ -7209,8 +7240,8 @@ export default function Home() {
             </div>
 
             {showDriverJobLinkCopy ? (
-              <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-xl font-semibold">Driver Job Link</h2>
                     <p className="text-sm text-slate-500">Temporary driver link message for status updates.</p>
@@ -7237,7 +7268,7 @@ export default function Home() {
                   </div>
                 </div>
                 <pre
-                  className="whitespace-pre-wrap rounded-lg bg-indigo-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-lg bg-indigo-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
                   data-copy-preview="driverJobLink"
                 >
                   {driverJobLinkMessage}

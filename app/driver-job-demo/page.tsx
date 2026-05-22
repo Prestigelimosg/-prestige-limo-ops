@@ -19,6 +19,13 @@ type ParsedDriverDetails = Partial<DriverDetails> & {
   paymentDetailsDetected: boolean;
 };
 
+type ActivityLogEvent = {
+  detail: string;
+  id: number;
+  label: string;
+  time: string;
+};
+
 const mockJobDetails = [
   { label: "Date/time", value: "27 May 2026, 1530hrs" },
   { label: "Booking type", value: "MNG / Arrival" },
@@ -167,6 +174,13 @@ function parseDriverDetailsText(text: string): ParsedDriverDetails {
   };
 }
 
+function activityTime() {
+  return new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function DriverJobDemoPage() {
   const [driverDetails, setDriverDetails] = useState<DriverDetails>({
     name: "",
@@ -182,10 +196,23 @@ export default function DriverJobDemoPage() {
   const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ParseFeedback | null>(null);
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
   const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ParseFeedback | null>(null);
+  const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [status, setStatus] = useState("Assigned");
   const [statusMessage, setStatusMessage] = useState("");
   const [statusMessageTone, setStatusMessageTone] = useState<ParseFeedback["tone"]>("success");
   const [statusMessageTarget, setStatusMessageTarget] = useState("");
+
+  function addActivity(label: string, detail: string) {
+    setActivityLog((currentLog) => [
+      ...currentLog,
+      {
+        detail,
+        id: currentLog.length + 1,
+        label,
+        time: activityTime(),
+      },
+    ]);
+  }
 
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
@@ -253,6 +280,7 @@ export default function DriverJobDemoPage() {
       tone: "success",
       text: "Driver details saved locally for this mock driver page.",
     });
+    addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
   }
 
   function acknowledgeJob() {
@@ -263,6 +291,7 @@ export default function DriverJobDemoPage() {
       tone: "success",
       text: "Job acknowledged locally for this mock driver page.",
     });
+    addActivity("Job acknowledged", "Driver acknowledged this mock job locally.");
   }
 
   function activateMockLiveLocation() {
@@ -288,6 +317,7 @@ export default function DriverJobDemoPage() {
       tone: "success",
       text: "Mock live location active locally for this mock driver page. No phone location is captured or sent.",
     });
+    addActivity("Mock live location activated", "Local mock live location state is active. No location was sent.");
   }
 
   function updateStatus(nextStatus: string, label: string, message: string) {
@@ -326,6 +356,10 @@ export default function DriverJobDemoPage() {
     );
     setStatusMessageTone("success");
     setStatusMessageTarget(nextStatus);
+    addActivity(`${label} marked`, `Driver status updated to ${label}.`);
+    if (transitionGuard.status === "pob" && mockLiveLocationActive) {
+      addActivity("Mock live location auto-ended at POB", "Local mock live location state ended after POB.");
+    }
   }
 
   return (
@@ -533,6 +567,38 @@ export default function DriverJobDemoPage() {
                 </p>
               ) : null}
             </div>
+          </div>
+        </section>
+
+        <section className="space-y-3" aria-labelledby="driver-activity-log-heading">
+          <h2 id="driver-activity-log-heading" className="text-base font-semibold text-slate-900">
+            Driver Activity Log
+          </h2>
+          <div
+            className="space-y-3 rounded-md border border-stone-200 bg-white p-3"
+            data-driver-demo-activity-log="true"
+          >
+            {activityLog.length > 0 ? (
+              <ol className="space-y-2">
+                {activityLog.map((event) => (
+                  <li
+                    className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+                    data-driver-demo-activity-log-item="true"
+                    key={event.id}
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-semibold" data-driver-demo-activity-log-label="true">
+                        {event.label}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500">{event.time}</span>
+                    </div>
+                    <p className="mt-1 break-words text-slate-600">{event.detail}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm font-medium text-slate-600">No mock driver activity recorded yet.</p>
+            )}
           </div>
         </section>
 

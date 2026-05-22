@@ -327,6 +327,8 @@ async function runChromeTest() {
 
     const pageState = () =>
       evaluate(`(() => ({
+        activityLogLabels: [...document.querySelectorAll("[data-driver-job-activity-log-label]")]
+          .map((item) => item.textContent.trim()),
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
@@ -543,6 +545,11 @@ async function runChromeTest() {
         beforeState.fetchCalls.length,
         "Blocked mock live location activation should not make a network request.",
       );
+      assert.deepEqual(
+        afterState.activityLogLabels,
+        beforeState.activityLogLabels,
+        "Blocked mock live location activation should not create a success log entry.",
+      );
       assertNoSensitiveText(afterState);
       return afterState;
     };
@@ -683,6 +690,11 @@ async function runChromeTest() {
         beforeState.fetchCalls.length,
         `${label} blocked status should not make a network request.`,
       );
+      assert.deepEqual(
+        afterState.activityLogLabels,
+        beforeState.activityLogLabels,
+        `${label} blocked status should not create a success log entry.`,
+      );
       assertNoSensitiveText(afterState);
       return afterState;
     };
@@ -700,6 +712,8 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Live Location"));
     assert.ok(validState.visibleText.includes("Mock/local only. No phone location is captured or sent."));
     assert.ok(validState.visibleText.includes("Activate Mock Live Location"));
+    assert.ok(validState.visibleText.includes("Driver Activity Log"));
+    assert.ok(validState.visibleText.includes("No mock driver activity recorded yet."));
     assert.ok(validState.visibleText.includes("Driver Details"));
     assert.ok(validState.visibleText.includes("Driver name"));
     assert.ok(validState.visibleText.includes("Contact"));
@@ -747,6 +761,20 @@ async function runChromeTest() {
     assert.ok(
       completedLiveLocationState.visibleText.includes("Mock live location inactive"),
       "Expected Job Completed to leave mock live location ended.",
+    );
+    assert.deepEqual(
+      completedLiveLocationState.activityLogLabels,
+      [
+        "Job acknowledged",
+        "Mock live location activated",
+        "Mock driver details saved",
+        "OTW marked",
+        "OTS marked",
+        "POB marked",
+        "Mock live location auto-ended at POB",
+        "Job Completed marked",
+      ],
+      "Expected public driver activity log to preserve successful workflow event order.",
     );
     await clickBlockedLiveLocation("Mock live location has ended for this job.");
     await resetMockDriverJobData();

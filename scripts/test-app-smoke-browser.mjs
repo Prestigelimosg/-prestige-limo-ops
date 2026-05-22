@@ -566,6 +566,8 @@ async function runChromeTest() {
 
         return {
           adminTabsVisible: document.querySelectorAll("button[role='tab']").length,
+          activityLogLabels: [...document.querySelectorAll("[data-driver-demo-activity-log-label]")]
+            .map((item) => item.textContent.trim()),
           bodyScrollWidth: body.scrollWidth,
           buttonLabels: buttons.map((button) => button.text),
           buttons,
@@ -657,8 +659,21 @@ async function runChromeTest() {
         true,
         `${viewport.label}: expected exact demo-only warning`,
       );
+      assert.equal(
+        initialState.text.includes("Driver Activity Log"),
+        true,
+        `${viewport.label}: expected driver activity log section`,
+      );
+      assert.deepEqual(
+        initialState.activityLogLabels,
+        [],
+        `${viewport.label}: expected empty driver activity log before successful actions`,
+      );
 
       const preAcknowledgementFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      const preAcknowledgementLogLabels = await evaluate(
+        `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+      );
       await clickDriverDemoButton("[data-driver-demo-status=\"OTW\"]", `${viewport.label} blocked pre-ack OTW`);
       const preAcknowledgementStatusState = await waitForCondition(
         () =>
@@ -683,6 +698,11 @@ async function runChromeTest() {
       );
       assert.equal(preAcknowledgementStatusState.currentStatus, "Assigned");
       assert.equal(preAcknowledgementStatusState.fetchCount, preAcknowledgementFetchCount);
+      assert.deepEqual(
+        await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+        preAcknowledgementLogLabels,
+        `${viewport.label}: expected blocked pre-ack OTW not to create a log entry`,
+      );
       assert.equal(
         preAcknowledgementStatusState.distance <= 16,
         true,
@@ -690,6 +710,9 @@ async function runChromeTest() {
       );
 
       const preAcknowledgementLiveLocationFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      const preAcknowledgementLiveLocationLogLabels = await evaluate(
+        `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+      );
       await clickDriverDemoButton(
         "[data-driver-demo-live-location]",
         `${viewport.label} blocked pre-ack mock live location`,
@@ -717,6 +740,11 @@ async function runChromeTest() {
         `${viewport.label} pre-acknowledgement mock live location block`,
       );
       assert.equal(preAcknowledgementLiveLocationState.fetchCount, preAcknowledgementLiveLocationFetchCount);
+      assert.deepEqual(
+        await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+        preAcknowledgementLiveLocationLogLabels,
+        `${viewport.label}: expected blocked pre-ack mock live location not to create a log entry`,
+      );
       assert.equal(
         preAcknowledgementLiveLocationState.distance <= 16,
         true,
@@ -949,6 +977,9 @@ async function runChromeTest() {
       );
 
       const clickBlockedStatus = async (label, expectedMessage, expectedStatus) => {
+        const beforeLogLabels = await evaluate(
+          `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+        );
         await clickDriverDemoButton(
           `[data-driver-demo-status="${label}"]`,
           `${viewport.label} blocked ${label}`,
@@ -979,6 +1010,11 @@ async function runChromeTest() {
         );
 
         assert.equal(blockedStatusState.currentStatus, expectedStatus);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          beforeLogLabels,
+          `${viewport.label}: expected blocked ${label} not to create a log entry`,
+        );
         assert.equal(blockedStatusState.messageText, expectedMessage);
         assert.equal(blockedStatusState.messageCount, 1);
         assert.equal(
@@ -1028,6 +1064,9 @@ async function runChromeTest() {
 
       const clickBlockedLiveLocationAfterEnd = async (description) => {
         const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        const beforeLogLabels = await evaluate(
+          `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+        );
         await clickDriverDemoButton("[data-driver-demo-live-location]", description);
         const blockedLiveLocationState = await waitForCondition(
           () =>
@@ -1053,6 +1092,11 @@ async function runChromeTest() {
         );
 
         assert.equal(blockedLiveLocationState.fetchCount, beforeFetchCount);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          beforeLogLabels,
+          `${viewport.label}: expected blocked ended mock live location not to create a log entry`,
+        );
         assert.equal(
           blockedLiveLocationState.distance <= 16,
           true,
@@ -1086,6 +1130,20 @@ async function runChromeTest() {
       );
       await clickBlockedLiveLocationAfterEnd(
         `${viewport.label} blocked mock live location after Job Completed`,
+      );
+      assert.deepEqual(
+        await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+        [
+          "Mock driver details saved",
+          "Job acknowledged",
+          "Mock live location activated",
+          "OTW marked",
+          "OTS marked",
+          "POB marked",
+          "Mock live location auto-ended at POB",
+          "Job Completed marked",
+        ],
+        `${viewport.label}: expected driver demo activity log to preserve successful event order`,
       );
 
       const networkState = await evaluate(`(() => {

@@ -40,6 +40,7 @@ type StatusFeedback = {
 
 const statusActions = [
   { label: "OTW", value: "OTW" },
+  { label: "OTS", value: "OTS" },
   { label: "POB", value: "POB" },
   { label: "Job Completed", value: "Job Completed" },
 ] as const;
@@ -292,7 +293,7 @@ export default function DriverJobPage() {
               <h2 id="driver-status-heading" className="text-base font-semibold text-slate-900">
                 Job Status
               </h2>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 {statusActions.map((statusAction) => (
                   <div className="space-y-2" key={statusAction.label}>
                     <button

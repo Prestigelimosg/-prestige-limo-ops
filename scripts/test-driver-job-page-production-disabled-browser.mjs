@@ -478,7 +478,9 @@ async function runChromeTest() {
     assert.ok(state.visibleText.includes("Driver job link unavailable"));
     assert.ok(state.visibleText.includes("This driver job link is unavailable right now."));
     assert.equal(
-      state.buttonLabels.some((buttonLabel) => ["OTW", "POB", "Job Completed"].includes(buttonLabel)),
+      state.buttonLabels.some((buttonLabel) =>
+        ["OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+      ),
       false,
       "Production-disabled page should not show driver status buttons.",
     );

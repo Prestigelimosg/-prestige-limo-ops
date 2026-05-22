@@ -648,11 +648,13 @@ async function runChromeTest() {
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
         "Save",
         "OTW",
+        "OTS",
         "POB",
         "Job Completed",
       ], "driver job demo");
       await checkDriverRouteViewport(viewport, publicDriverJobUrl, "Mock Pickup A", [
         "OTW",
+        "OTS",
         "POB",
         "Job Completed",
       ], "public driver job page");

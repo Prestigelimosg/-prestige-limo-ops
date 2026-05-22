@@ -11415,7 +11415,7 @@ async function runChromeTest() {
       () =>
         evaluate(`(() => {
           return document.body.innerText.includes("Prestige Limo Driver Job") &&
-            ["OTW", "POB", "Job Completed"].every((label) =>
+            ["OTW", "OTS", "POB", "Job Completed"].every((label) =>
               Boolean(document.querySelector(\`[data-driver-demo-status="\${label}"]\`)),
             );
         })()`),
@@ -11435,9 +11435,11 @@ async function runChromeTest() {
       };
     })()`);
     assert.deepEqual(
-      ["OTW", "POB", "Job Completed"].filter((label) => !driverDemoInitialState.buttonLabels.includes(label)),
+      ["OTW", "OTS", "POB", "Job Completed"].filter(
+        (label) => !driverDemoInitialState.buttonLabels.includes(label),
+      ),
       [],
-      "Expected driver demo to show OTW, POB, and Job Completed buttons",
+      "Expected driver demo to show OTW, OTS, POB, and Job Completed buttons",
     );
     assert.match(driverDemoInitialState.jobSummaryText, /Changi Airport T3 Arrival Pickup/);
     assert.match(driverDemoInitialState.jobSummaryText, /Raffles Hotel Singapore/);
@@ -11715,6 +11717,12 @@ async function runChromeTest() {
         expectedMessage: "Status updated: OTW",
         label: "OTW",
         reportPattern: /OTW|On the Way/i,
+      },
+      {
+        currentStatus: "OTS",
+        expectedMessage: "Status updated: OTS",
+        label: "OTS",
+        reportPattern: /OTS|On the Spot/i,
       },
       {
         currentStatus: "POB",

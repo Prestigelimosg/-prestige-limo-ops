@@ -376,12 +376,17 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("SQ333"));
     assert.ok(validState.visibleText.includes("Mock Passenger A"));
     assert.ok(validState.visibleText.includes("Mock Assigned Driver A"));
-    assert.ok(validState.buttonLabels.includes("OTW"));
-    assert.ok(validState.buttonLabels.includes("POB"));
-    assert.ok(validState.buttonLabels.includes("Job Completed"));
+    assert.deepEqual(
+      validState.buttonLabels.filter((buttonLabel) =>
+        ["OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+      ),
+      ["OTW", "OTS", "POB", "Job Completed"],
+      "Expected public driver job page to show status buttons in workflow order.",
+    );
     assertNoSensitiveText(validState);
 
     await clickStatus("OTW", "OTW");
+    await clickStatus("OTS", "OTS");
     await clickStatus("POB", "POB");
     await clickStatus("Job Completed", "Job Completed");
 
@@ -393,7 +398,9 @@ async function runChromeTest() {
       const blockedState = await navigateToDriverJob(token, "Driver job link unavailable");
 
       assert.equal(
-        blockedState.buttonLabels.some((buttonLabel) => ["OTW", "POB", "Job Completed"].includes(buttonLabel)),
+        blockedState.buttonLabels.some((buttonLabel) =>
+          ["OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+        ),
         false,
         `${label} token should not show status buttons.`,
       );

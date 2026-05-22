@@ -120,6 +120,8 @@ assert.doesNotMatch(safePayloadText, /\b95\b/, "Safe payload should not expose d
 
 assert.equal(validateDriverJobStatusUpdate("OTW"), "driver_otw");
 assert.equal(validateDriverJobStatusUpdate("driver_otw"), "driver_otw");
+assert.equal(validateDriverJobStatusUpdate("OTS"), "ots");
+assert.equal(validateDriverJobStatusUpdate("on the spot"), "ots");
 assert.equal(validateDriverJobStatusUpdate("POB"), "pob");
 assert.equal(validateDriverJobStatusUpdate("Job Completed"), "completed");
 assert.equal(validateDriverJobStatusUpdate("completed"), "completed");

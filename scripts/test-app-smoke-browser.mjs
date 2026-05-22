@@ -628,7 +628,7 @@ async function runChromeTest() {
       assert.deepEqual(smallTextareas, [], `${viewport.label}: expected comfortable paste textarea`);
       assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver buttons`);
       assert.deepEqual(
-        ["Parse Driver Details", "Save", "OTW", "POB", "Job Completed"].filter(
+        ["Parse Driver Details", "Save", "OTW", "OTS", "POB", "Job Completed"].filter(
           (label) => !initialState.buttonLabels.includes(label),
         ),
         [],
@@ -789,6 +789,7 @@ async function runChromeTest() {
 
       const statusChecks = [
         { label: "OTW", message: "Status updated: OTW" },
+        { label: "OTS", message: "Status updated: OTS" },
         { label: "POB", message: "Status updated: POB" },
         { label: "Job Completed", message: "Status updated: Completed" },
       ];

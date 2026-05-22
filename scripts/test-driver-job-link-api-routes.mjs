@@ -91,6 +91,7 @@ for (const [token, expectedStatus, expectedReason] of [
 
 for (const [requestedStatus, expectedStatus] of [
   ["OTW", "driver_otw"],
+  ["OTS", "ots"],
   ["POB", "pob"],
   ["Job Completed", "completed"],
 ]) {

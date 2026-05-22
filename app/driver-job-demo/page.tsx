@@ -32,6 +32,7 @@ const mockJobDetails = [
 
 const statusOptions = [
   { label: "OTW", message: "Status updated: OTW" },
+  { label: "OTS", message: "Status updated: OTS" },
   { label: "POB", message: "Status updated: POB" },
   { label: "Job Completed", message: "Status updated: Completed" },
 ];
@@ -399,7 +400,7 @@ export default function DriverJobDemoPage() {
           <h2 id="driver-status-heading" className="text-base font-semibold text-slate-900">
             Job Status
           </h2>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             {statusOptions.map((statusOption) => (
               <div className="space-y-2" key={statusOption.label}>
                 <button

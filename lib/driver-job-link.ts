@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 export const defaultDriverJobLinkTokenByteLength = 32;
 export const defaultDriverJobLinkTtlHours = 48;
 
-export type DriverJobStatusUpdate = "driver_otw" | "pob" | "completed";
+export type DriverJobStatusUpdate = "driver_otw" | "ots" | "pob" | "completed";
 
 export type DriverJobBookingLike = Record<string, unknown>;
 
@@ -42,6 +42,7 @@ const statusLabels: Record<string, string> = {
   completed: "Job Completed",
   confirmed: "Confirmed",
   driver_otw: "OTW",
+  ots: "OTS",
   pob: "POB",
 };
 
@@ -99,6 +100,10 @@ export function validateDriverJobStatusUpdate(value: string): DriverJobStatusUpd
 
   if (normalized === "otw" || normalized === "driver_otw" || normalized === "on_the_way") {
     return "driver_otw";
+  }
+
+  if (normalized === "ots" || normalized === "on_the_spot") {
+    return "ots";
   }
 
   if (normalized === "pob" || normalized === "passenger_on_board") {

@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import type { SafeDriverJobPayload } from "../../../lib/driver-job-link";
+import {
+  driverJobStatusDisplayLabels,
+  guardDriverJobStatusTransition,
+} from "../../../lib/driver-job-status-workflow";
 
 type DriverJobApiBlockedReason = "expired" | "revoked" | "unauthorized" | "invalid_status" | "unavailable";
 
@@ -72,6 +76,13 @@ const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   unavailable: "This driver job link is unavailable right now. Please contact dispatch.",
 };
 
+const statusLabels: Record<string, string> = {
+  assigned: "Assigned",
+  confirmed: "Confirmed",
+  pending: "Pending",
+  ...driverJobStatusDisplayLabels,
+};
+
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
   return value === "expired" || value === "revoked" || value === "unauthorized" || value === "invalid_status"
     ? value
@@ -91,8 +102,8 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
   };
 }
 
-function statusDisplay(job: SafeDriverJobPayload) {
-  return job.statusLabel || job.status || "Pending";
+function statusDisplay(status: string, fallbackLabel = "") {
+  return statusLabels[status.toLowerCase()] || fallbackLabel || status || "Pending";
 }
 
 function feedbackClassName(tone: StatusFeedback["tone"] | ControlFeedback["tone"]) {
@@ -128,6 +139,7 @@ export default function DriverJobPage() {
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
+  const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
 
   useEffect(() => {
@@ -152,6 +164,7 @@ export default function DriverJobPage() {
       setDriverDetails(emptyDriverDetails);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
+      setWorkflowStatus("assigned");
 
       try {
         // Mock-backed until William approves the secure Supabase driver_job_links table and RLS/API policy.
@@ -197,6 +210,7 @@ export default function DriverJobPage() {
 
   function acknowledgeJob() {
     setAcknowledged(true);
+    setStatusFeedback(null);
     setAcknowledgementFeedback({
       tone: "success",
       text: "Job acknowledged locally for this mock driver page.",
@@ -247,13 +261,28 @@ export default function DriverJobPage() {
       return;
     }
 
+    const transitionGuard = guardDriverJobStatusTransition({
+      acknowledged,
+      currentStatus: workflowStatus,
+      nextStatus,
+    });
+
+    if (!transitionGuard.ok) {
+      setStatusFeedback({
+        target: label,
+        tone: "error",
+        text: transitionGuard.message,
+      });
+      return;
+    }
+
     setUpdatingStatus(label);
     setStatusFeedback(null);
 
     try {
       // Mock-backed status update only. Production must verify the secure token before any Supabase write.
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/status`, {
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ status: transitionGuard.status }),
         cache: "no-store",
         headers: { "content-type": "application/json" },
         method: "PATCH",
@@ -278,11 +307,12 @@ export default function DriverJobPage() {
         return;
       }
 
+      setWorkflowStatus(result.payload.status);
       setPageState({ kind: "ready", job: result.payload });
       setStatusFeedback({
         target: label,
         tone: "success",
-        text: `Status updated to ${statusDisplay(result.payload)}.`,
+        text: `Status updated to ${statusDisplay(result.payload.status, result.payload.statusLabel)}.`,
       });
     } catch {
       setStatusFeedback({
@@ -334,7 +364,7 @@ export default function DriverJobPage() {
                   className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-current-status="true"
                 >
-                  {statusDisplay(pageState.job)}
+                  {statusDisplay(pageState.job.status, pageState.job.statusLabel)}
                 </span>
               </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { guardDriverJobStatusTransition } from "../../lib/driver-job-status-workflow";
 
 type DriverDetails = {
   name: string;
@@ -31,10 +32,10 @@ const mockJobDetails = [
 ];
 
 const statusOptions = [
-  { label: "OTW", message: "Status updated: OTW" },
-  { label: "OTS", message: "Status updated: OTS" },
-  { label: "POB", message: "Status updated: POB" },
-  { label: "Job Completed", message: "Status updated: Completed" },
+  { label: "OTW", message: "Status updated: OTW", value: "OTW" },
+  { label: "OTS", message: "Status updated: OTS", value: "OTS" },
+  { label: "POB", message: "Status updated: POB", value: "POB" },
+  { label: "Job Completed", message: "Status updated: Completed", value: "Job Completed" },
 ];
 
 const paymentDetailsPattern = /\b(paynow|pay now|bank|account|acct)\b/i;
@@ -181,6 +182,7 @@ export default function DriverJobDemoPage() {
   const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ParseFeedback | null>(null);
   const [status, setStatus] = useState("Assigned");
   const [statusMessage, setStatusMessage] = useState("");
+  const [statusMessageTone, setStatusMessageTone] = useState<ParseFeedback["tone"]>("success");
   const [statusMessageTarget, setStatusMessageTarget] = useState("");
 
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
@@ -253,15 +255,31 @@ export default function DriverJobDemoPage() {
 
   function acknowledgeJob() {
     setAcknowledged(true);
+    setStatusMessage("");
+    setStatusMessageTarget("");
     setAcknowledgementFeedback({
       tone: "success",
       text: "Job acknowledged locally for this mock driver page.",
     });
   }
 
-  function updateStatus(nextStatus: string, message: string) {
+  function updateStatus(nextStatus: string, label: string, message: string) {
+    const transitionGuard = guardDriverJobStatusTransition({
+      acknowledged,
+      currentStatus: status,
+      nextStatus,
+    });
+
+    if (!transitionGuard.ok) {
+      setStatusMessage(transitionGuard.message);
+      setStatusMessageTone("error");
+      setStatusMessageTarget(label);
+      return;
+    }
+
     setStatus(nextStatus);
     setStatusMessage(message);
+    setStatusMessageTone("success");
     setStatusMessageTarget(nextStatus);
   }
 
@@ -448,14 +466,14 @@ export default function DriverJobDemoPage() {
                 <button
                   className="h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-base font-semibold text-slate-900 transition active:bg-slate-100"
                   data-driver-demo-status={statusOption.label}
-                  onClick={() => updateStatus(statusOption.label, statusOption.message)}
+                  onClick={() => updateStatus(statusOption.label, statusOption.label, statusOption.message)}
                   type="button"
                 >
                   {statusOption.label}
                 </button>
                 {statusMessageTarget === statusOption.label ? (
                   <p
-                    className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800"
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(statusMessageTone)}`}
                     data-driver-demo-status-message={statusOption.label}
                   >
                     {statusMessage}

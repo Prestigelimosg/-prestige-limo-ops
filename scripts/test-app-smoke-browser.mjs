@@ -649,6 +649,37 @@ async function runChromeTest() {
         `${viewport.label}: expected exact demo-only warning`,
       );
 
+      const preAcknowledgementFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      await clickDriverDemoButton("[data-driver-demo-status=\"OTW\"]", `${viewport.label} blocked pre-ack OTW`);
+      const preAcknowledgementStatusState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-status='OTW']");
+            const message = document.querySelector("[data-driver-demo-status-message='OTW']");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === "Acknowledge this job before updating status." &&
+              document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() === "Assigned"
+              ? {
+                  currentStatus: "Assigned",
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  fetchCount: (window.__driverDemoFetchCalls || []).length,
+                  messageText: message.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} pre-acknowledgement status block`,
+      );
+      assert.equal(preAcknowledgementStatusState.currentStatus, "Assigned");
+      assert.equal(preAcknowledgementStatusState.fetchCount, preAcknowledgementFetchCount);
+      assert.equal(
+        preAcknowledgementStatusState.distance <= 16,
+        true,
+        `${viewport.label}: expected pre-acknowledgement status feedback close to OTW`,
+      );
+
       await clickDriverDemoButton("[data-driver-demo-acknowledge]", `${viewport.label} Acknowledge Job`);
       const acknowledgedState = await waitForCondition(
         () =>
@@ -817,23 +848,67 @@ async function runChromeTest() {
         `${viewport.label}: expected driver details saved message close to button`,
       );
 
-      const statusChecks = [
-        { label: "OTW", message: "Status updated: OTW" },
-        { label: "OTS", message: "Status updated: OTS" },
-        { label: "POB", message: "Status updated: POB" },
-        { label: "Job Completed", message: "Status updated: Completed" },
-      ];
+      await clickDriverDemoButton(
+        "[data-driver-demo-acknowledge]",
+        `${viewport.label} Acknowledge Job after driver details reload`,
+      );
+      await waitForCondition(
+        () =>
+          evaluate(`document.querySelector("[data-driver-demo-acknowledged-state]")?.textContent.trim() === "Acknowledged"`),
+        10000,
+        `${viewport.label} acknowledgement after driver details reload`,
+      );
 
-      for (const statusCheck of statusChecks) {
+      const clickBlockedStatus = async (label, expectedMessage, expectedStatus) => {
         await clickDriverDemoButton(
-          `[data-driver-demo-status="${statusCheck.label}"]`,
-          `${viewport.label} ${statusCheck.label}`,
+          `[data-driver-demo-status="${label}"]`,
+          `${viewport.label} blocked ${label}`,
+        );
+        const blockedStatusState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const statusLabel = ${JSON.stringify(label)};
+              const expectedMessage = ${JSON.stringify(expectedMessage)};
+              const expectedStatus = ${JSON.stringify(expectedStatus)};
+              const button = document.querySelector(\`[data-driver-demo-status="\${statusLabel}"]\`);
+              const message = document.querySelector(\`[data-driver-demo-status-message="\${statusLabel}"]\`);
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+              const currentStatus = document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "";
+
+              return message?.textContent.trim() === expectedMessage && currentStatus === expectedStatus
+                ? {
+                    currentStatus,
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    messageCount: document.querySelectorAll("[data-driver-demo-status-message]").length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} blocked ${label} status message`,
+        );
+
+        assert.equal(blockedStatusState.currentStatus, expectedStatus);
+        assert.equal(blockedStatusState.messageText, expectedMessage);
+        assert.equal(blockedStatusState.messageCount, 1);
+        assert.equal(
+          blockedStatusState.distance <= 16,
+          true,
+          `${viewport.label}: expected blocked ${label} status message close to button`,
+        );
+      };
+
+      const clickValidStatus = async (label, expectedMessage) => {
+        await clickDriverDemoButton(
+          `[data-driver-demo-status="${label}"]`,
+          `${viewport.label} ${label}`,
         );
         const statusState = await waitForCondition(
           () =>
             evaluate(`(() => {
-              const statusLabel = ${JSON.stringify(statusCheck.label)};
-              const expectedMessage = ${JSON.stringify(statusCheck.message)};
+              const statusLabel = ${JSON.stringify(label)};
+              const expectedMessage = ${JSON.stringify(expectedMessage)};
               const button = document.querySelector(\`[data-driver-demo-status="\${statusLabel}"]\`);
               const message = document.querySelector(\`[data-driver-demo-status-message="\${statusLabel}"]\`);
               const buttonRect = button?.getBoundingClientRect();
@@ -849,18 +924,28 @@ async function runChromeTest() {
                 : false;
             })()`),
           10000,
-          `${viewport.label} ${statusCheck.label} status message`,
+          `${viewport.label} ${label} status message`,
         );
 
-        assert.equal(statusState.currentStatus, statusCheck.label);
-        assert.equal(statusState.messageText, statusCheck.message);
+        assert.equal(statusState.currentStatus, label);
+        assert.equal(statusState.messageText, expectedMessage);
         assert.equal(statusState.messageCount, 1);
         assert.equal(
           statusState.distance <= 16,
           true,
-          `${viewport.label}: expected ${statusCheck.label} status message close to button`,
+          `${viewport.label}: expected ${label} status message close to button`,
         );
-      }
+      };
+
+      await clickBlockedStatus("OTS", "Update OTW before OTS.", "Assigned");
+      await clickBlockedStatus("POB", "Update OTW before POB.", "Assigned");
+      await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", "Assigned");
+      await clickValidStatus("OTW", "Status updated: OTW");
+      await clickBlockedStatus("POB", "Update OTS before POB.", "OTW");
+      await clickValidStatus("OTS", "Status updated: OTS");
+      await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
+      await clickValidStatus("POB", "Status updated: POB");
+      await clickValidStatus("Job Completed", "Status updated: Completed");
 
       const networkState = await evaluate(`(() => {
         const resourceCalls = performance.getEntriesByType("resource")

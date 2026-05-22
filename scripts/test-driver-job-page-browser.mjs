@@ -203,7 +203,15 @@ function assertNoSensitiveText(state) {
   assert.doesNotMatch(text, /SECRET_DRIVER_OVERRIDE_REASON/);
   assert.doesNotMatch(text, /SECRET_DRIVER_DATABASE_ROW/);
   assert.doesNotMatch(text, /SECRET_DRIVER_DATABASE_LIST/);
+  assert.doesNotMatch(text, /SECRET_WORKFLOW_BOOKER_EMAIL/);
+  assert.doesNotMatch(text, /SECRET_WORKFLOW_BOOKER_NAME/);
+  assert.doesNotMatch(text, /SECRET_WORKFLOW_CRM_COMPANY/);
+  assert.doesNotMatch(text, /secret-workflow-crm\.example\.com/);
+  assert.doesNotMatch(text, /SECRET_WORKFLOW_DRIVER_OVERRIDE_REASON/);
+  assert.doesNotMatch(text, /SECRET_WORKFLOW_DRIVER_DATABASE_LIST/);
   assert.doesNotMatch(text, /BOOKING_B_SECRET_/);
+  assert.doesNotMatch(text, /\b188\b/, "Driver job page should not expose workflow customer price.");
+  assert.doesNotMatch(text, /\b99\b/, "Driver job page should not expose workflow driver payout.");
   assert.doesNotMatch(text, /\b160\b/, "Driver job page should not expose customer price.");
   assert.doesNotMatch(text, /\b95\b/, "Driver job page should not expose driver payout.");
   assert.equal(text.includes("Driver Database"), false, "Driver job page should not expose Driver Database UI.");
@@ -487,13 +495,65 @@ async function runChromeTest() {
       return state;
     };
 
-    const validState = await navigateToDriverJob(mockDriverJobTokens.validA, "Mock Pickup A");
-    assert.ok(validState.visibleText.includes("Mock Dropoff A"));
-    assert.ok(validState.visibleText.includes("Mock Pickup A > Mock Waypoint A > Mock Dropoff A"));
-    assert.ok(validState.visibleText.includes("Mock Waypoint A"));
-    assert.ok(validState.visibleText.includes("SQ333"));
-    assert.ok(validState.visibleText.includes("Mock Passenger A"));
-    assert.ok(validState.visibleText.includes("Mock Assigned Driver A"));
+    const clickBlockedStatus = async (label, expectedMessage, expectedStatusText) => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = [...document.querySelectorAll("[data-driver-job-status]")].find(
+          (candidate) => candidate.getAttribute("data-driver-job-status") === ${JSON.stringify(label)},
+        );
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, `Expected ${label} status button to be clickable.`);
+
+      const blockedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector(${JSON.stringify(`[data-driver-job-status="${label}"]`)});
+            const message = document.querySelector(${JSON.stringify(`[data-driver-job-status-message="${label}"]`)});
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
+
+            return message?.textContent.trim() === ${JSON.stringify(expectedMessage)} &&
+              statusText === ${JSON.stringify(expectedStatusText)}
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  statusText,
+                }
+              : false;
+          })()`),
+        10000,
+        `${label} blocked status feedback`,
+      );
+
+      assert.equal(blockedState.distance <= 16, true, `Expected ${label} blocked feedback near button.`);
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        `${label} blocked status should not make a network request.`,
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
+    const validState = await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");
+    assert.ok(validState.visibleText.includes("Mock Workflow Dropoff"));
+    assert.ok(validState.visibleText.includes("Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff"));
+    assert.ok(validState.visibleText.includes("Mock Workflow Waypoint"));
+    assert.ok(validState.visibleText.includes("SQ889"));
+    assert.ok(validState.visibleText.includes("Mock Workflow Passenger"));
+    assert.ok(validState.visibleText.includes("Mock Workflow Driver"));
+    const startingStatusText = validState.statusText || "Assigned";
     assert.ok(validState.visibleText.includes("Acknowledge Job"));
     assert.ok(validState.visibleText.includes("Driver Details"));
     assert.ok(validState.visibleText.includes("Driver name"));
@@ -509,10 +569,16 @@ async function runChromeTest() {
     );
     assertNoSensitiveText(validState);
 
+    await clickBlockedStatus("OTW", "Acknowledge this job before updating status.", startingStatusText);
     await clickAcknowledge();
     await saveDriverDetails();
+    await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
+    await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
+    await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);
     await clickStatus("OTW", "OTW");
+    await clickBlockedStatus("POB", "Update OTS before POB.", "OTW");
     await clickStatus("OTS", "OTS");
+    await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
     await clickStatus("POB", "POB");
     await clickStatus("Job Completed", "Job Completed");
 

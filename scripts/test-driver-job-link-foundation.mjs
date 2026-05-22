@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   generateDriverJobLinkToken,
   getDriverJobLinkExpiresAt,
+  guardDriverJobStatusTransition,
   hashDriverJobLinkToken,
   isDriverJobLinkExpired,
   mapBookingToSafeDriverJobPayload,
@@ -127,5 +128,54 @@ assert.equal(validateDriverJobStatusUpdate("Job Completed"), "completed");
 assert.equal(validateDriverJobStatusUpdate("completed"), "completed");
 assert.equal(validateDriverJobStatusUpdate("unknown"), null);
 assert.equal(validateDriverJobStatusUpdate("cancelled"), null);
+
+{
+  const blockedBeforeAcknowledgement = guardDriverJobStatusTransition({
+    acknowledged: false,
+    currentStatus: "assigned",
+    nextStatus: "OTW",
+  });
+  assert.equal(blockedBeforeAcknowledgement.ok, false);
+  assert.equal(blockedBeforeAcknowledgement.reason, "acknowledgement_required");
+  assert.match(blockedBeforeAcknowledgement.message, /Acknowledge this job/);
+
+  const blockedOutOfOrder = guardDriverJobStatusTransition({
+    acknowledged: true,
+    currentStatus: "assigned",
+    nextStatus: "POB",
+  });
+  assert.equal(blockedOutOfOrder.ok, false);
+  assert.equal(blockedOutOfOrder.reason, "out_of_order");
+  assert.match(blockedOutOfOrder.message, /Update OTW before POB/);
+
+  const validOtwTransition = guardDriverJobStatusTransition({
+    acknowledged: true,
+    currentStatus: "assigned",
+    nextStatus: "OTW",
+  });
+  assert.deepEqual(validOtwTransition, {
+    ok: true,
+    status: "driver_otw",
+  });
+
+  const validOtsTransition = guardDriverJobStatusTransition({
+    acknowledged: true,
+    currentStatus: "driver_otw",
+    nextStatus: "OTS",
+  });
+  assert.deepEqual(validOtsTransition, {
+    ok: true,
+    status: "ots",
+  });
+
+  const blockedCompletedBeforePob = guardDriverJobStatusTransition({
+    acknowledged: true,
+    currentStatus: "OTS",
+    nextStatus: "Job Completed",
+  });
+  assert.equal(blockedCompletedBeforePob.ok, false);
+  assert.equal(blockedCompletedBeforePob.reason, "out_of_order");
+  assert.match(blockedCompletedBeforePob.message, /Update POB before Job Completed/);
+}
 
 console.log("Driver job link foundation tests passed.");

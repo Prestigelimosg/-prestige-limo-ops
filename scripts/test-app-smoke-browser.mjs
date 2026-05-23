@@ -1062,6 +1062,94 @@ async function runChromeTest() {
         );
       };
 
+      const clickMissingProofPob = async () => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        const beforeLogLabels = await evaluate(
+          `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+        );
+        await clickDriverDemoButton("[data-driver-demo-status=\"POB\"]", `${viewport.label} missing-proof POB`);
+        const blockedProofState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-status='POB']");
+              const message = document.querySelector("[data-driver-demo-status-message='POB']");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+              const activityLogText = document.querySelector("[data-driver-demo-activity-log]")?.innerText || "";
+
+              return message?.textContent.trim() === "Add mock OTS photo proof before POB." &&
+                document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() === "OTS" &&
+                activityLogText.includes("POB blocked") &&
+                activityLogText.includes("POB was blocked because OTS photo proof is missing.")
+                ? {
+                    currentStatus: "OTS",
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} missing-proof POB block`,
+        );
+
+        assert.equal(blockedProofState.currentStatus, "OTS");
+        assert.equal(blockedProofState.fetchCount, beforeFetchCount);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          [...beforeLogLabels, "POB blocked"],
+          `${viewport.label}: expected missing-proof POB to create a blocked log entry`,
+        );
+        assert.equal(
+          blockedProofState.distance <= 16,
+          true,
+          `${viewport.label}: expected missing-proof POB feedback close to button`,
+        );
+      };
+
+      const clickAddMockOtsPhotoProof = async () => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        await waitForCondition(
+          () =>
+            evaluate(`Boolean(document.querySelector("[data-driver-demo-ots-photo-proof-section]")) &&
+              document.querySelector("[data-driver-demo-ots-photo-proof-section]")?.innerText.includes("Mock/local only. No real file upload, camera, or storage is used.")`),
+          10000,
+          `${viewport.label} mock OTS photo proof section`,
+        );
+        await clickDriverDemoButton(
+          "[data-driver-demo-ots-photo-proof]",
+          `${viewport.label} Add Mock OTS Photo Proof`,
+        );
+        const proofState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-ots-photo-proof]");
+              const message = document.querySelector("[data-driver-demo-ots-photo-proof-message]");
+              const state = document.querySelector("[data-driver-demo-ots-photo-proof-state]");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+
+              return message?.textContent.trim() === "Mock OTS photo proof added locally. No real file upload, camera, or storage was used." &&
+                state?.textContent.trim() === "Mock OTS photo proof added"
+                ? {
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} mock OTS photo proof added`,
+        );
+
+        assert.equal(proofState.fetchCount, beforeFetchCount);
+        assert.equal(
+          proofState.distance <= 16,
+          true,
+          `${viewport.label}: expected proof feedback close to proof button`,
+        );
+      };
+
       const clickBlockedLiveLocationAfterEnd = async (description) => {
         const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
         const beforeLogLabels = await evaluate(
@@ -1111,6 +1199,8 @@ async function runChromeTest() {
       await clickBlockedStatus("POB", "Update OTS before POB.", "OTW");
       await clickValidStatus("OTS", "Status updated: OTS");
       await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
+      await clickMissingProofPob();
+      await clickAddMockOtsPhotoProof();
       await clickValidStatus("POB", "Status updated: POB. Mock live location ended locally.");
       await waitForCondition(
         () =>
@@ -1139,6 +1229,9 @@ async function runChromeTest() {
           "Mock live location activated",
           "OTW marked",
           "OTS marked",
+          "OTS photo proof requested",
+          "POB blocked",
+          "Mock OTS photo proof added",
           "POB marked",
           "Mock live location auto-ended at POB",
           "Job Completed marked",

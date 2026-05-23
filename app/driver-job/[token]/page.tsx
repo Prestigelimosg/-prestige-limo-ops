@@ -6,6 +6,7 @@ import type { SafeDriverJobPayload } from "../../../lib/driver-job-link";
 import {
   driverJobStatusDisplayLabels,
   guardDriverJobStatusTransition,
+  validateDriverJobStatusUpdate,
 } from "../../../lib/driver-job-status-workflow";
 
 type DriverJobApiBlockedReason = "expired" | "revoked" | "unauthorized" | "invalid_status" | "unavailable";
@@ -132,6 +133,16 @@ function detailRows(job: SafeDriverJobPayload) {
   ].filter((row) => row.value);
 }
 
+function isArrivalStyleJob(job: SafeDriverJobPayload) {
+  return job.bookingType.trim().toUpperCase() === "MNG" || job.bookingTypeLabel.toLowerCase().includes("arrival");
+}
+
+function hasReachedOts(status: string) {
+  const normalizedStatus = validateDriverJobStatusUpdate(status);
+
+  return normalizedStatus === "ots" || normalizedStatus === "pob" || normalizedStatus === "completed";
+}
+
 function activityTime() {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -154,10 +165,15 @@ export default function DriverJobPage() {
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
   const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ControlFeedback | null>(null);
+  const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
+  const [mockOtsPhotoProofFeedback, setMockOtsPhotoProofFeedback] = useState<ControlFeedback | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
+  const readyJob = pageState.kind === "ready" ? pageState.job : null;
+  const requiresMockOtsPhotoProof = readyJob ? isArrivalStyleJob(readyJob) : false;
+  const showMockOtsPhotoProof = requiresMockOtsPhotoProof && hasReachedOts(workflowStatus);
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -193,6 +209,8 @@ export default function DriverJobPage() {
       setDriverDetails(emptyDriverDetails);
       setMockLiveLocationActive(false);
       setMockLiveLocationFeedback(null);
+      setMockOtsPhotoProofAdded(false);
+      setMockOtsPhotoProofFeedback(null);
       setActivityLog([]);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
@@ -317,6 +335,23 @@ export default function DriverJobPage() {
     addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
   }
 
+  function addMockOtsPhotoProof() {
+    if (!showMockOtsPhotoProof) {
+      return;
+    }
+
+    setMockOtsPhotoProofAdded(true);
+    setMockOtsPhotoProofFeedback({
+      tone: "success",
+      text: "Mock OTS photo proof added locally. No real file upload, camera, or storage was used.",
+    });
+    setStatusFeedback(null);
+    addActivity(
+      "Mock OTS photo proof added",
+      "Mock/local OTS photo proof was added. No file upload, camera, or storage was used.",
+    );
+  }
+
   async function updateStatus(nextStatus: string, label: string) {
     if (!token || pageState.kind !== "ready") {
       return;
@@ -334,6 +369,16 @@ export default function DriverJobPage() {
         tone: "error",
         text: transitionGuard.message,
       });
+      return;
+    }
+
+    if (transitionGuard.status === "pob" && isArrivalStyleJob(pageState.job) && !mockOtsPhotoProofAdded) {
+      setStatusFeedback({
+        target: label,
+        tone: "error",
+        text: "Add mock OTS photo proof before POB.",
+      });
+      addActivity("POB blocked", "POB was blocked because OTS photo proof is missing.");
       return;
     }
 
@@ -387,6 +432,9 @@ export default function DriverJobPage() {
       setWorkflowStatus(result.payload.status);
       setPageState({ kind: "ready", job: result.payload });
       addActivity(`${label} marked`, `Driver status updated to ${nextStatusText}.`);
+      if (transitionGuard.status === "ots" && isArrivalStyleJob(result.payload)) {
+        addActivity("OTS photo proof requested", "Mock/local OTS photo proof is required before POB.");
+      }
       if (transitionGuard.status === "pob" && mockLiveLocationActive) {
         addActivity("Mock live location auto-ended at POB", "Local mock live location state ended after POB.");
       }
@@ -562,6 +610,51 @@ export default function DriverJobPage() {
                 </div>
               </div>
             </section>
+
+            {showMockOtsPhotoProof ? (
+              <section
+                className="space-y-3"
+                aria-labelledby="driver-ots-photo-proof-heading"
+                data-driver-job-ots-photo-proof-section="true"
+              >
+                <h2 id="driver-ots-photo-proof-heading" className="text-base font-semibold text-slate-900">
+                  Mock OTS Photo Proof
+                </h2>
+                <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+                  <p
+                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                    data-driver-job-ots-photo-proof-state="true"
+                  >
+                    {mockOtsPhotoProofAdded
+                      ? "Mock OTS photo proof added"
+                      : "Mock OTS photo proof required before POB"}
+                  </p>
+                  <p className="text-sm font-medium text-slate-600">
+                    Mock/local only. No real file upload, camera, or storage is used.
+                  </p>
+                  <div className="space-y-2">
+                    <button
+                      className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-driver-job-ots-photo-proof="true"
+                      disabled={mockOtsPhotoProofAdded}
+                      onClick={addMockOtsPhotoProof}
+                      type="button"
+                    >
+                      Add Mock OTS Photo Proof
+                    </button>
+                    {mockOtsPhotoProofFeedback ? (
+                      <p
+                        aria-live="polite"
+                        className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockOtsPhotoProofFeedback.tone)}`}
+                        data-driver-job-ots-photo-proof-message="true"
+                      >
+                        {mockOtsPhotoProofFeedback.text}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            ) : null}
 
             <section className="space-y-3" aria-labelledby="driver-details-heading">
               <h2 id="driver-details-heading" className="text-base font-semibold text-slate-900">

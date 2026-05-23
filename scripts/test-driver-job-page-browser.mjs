@@ -213,6 +213,12 @@ function assertNoSensitiveText(state) {
   assert.doesNotMatch(text, /secret-workflow-crm\.example\.com/);
   assert.doesNotMatch(text, /SECRET_WORKFLOW_DRIVER_OVERRIDE_REASON/);
   assert.doesNotMatch(text, /SECRET_WORKFLOW_DRIVER_DATABASE_LIST/);
+  assert.doesNotMatch(text, /SECRET_ARRIVAL_BOOKER_EMAIL/);
+  assert.doesNotMatch(text, /SECRET_ARRIVAL_BOOKER_NAME/);
+  assert.doesNotMatch(text, /SECRET_ARRIVAL_CRM_COMPANY/);
+  assert.doesNotMatch(text, /secret-arrival-crm\.example\.com/);
+  assert.doesNotMatch(text, /SECRET_ARRIVAL_DRIVER_OVERRIDE_REASON/);
+  assert.doesNotMatch(text, /SECRET_ARRIVAL_DRIVER_DATABASE_LIST/);
   assert.doesNotMatch(text, /BOOKING_B_SECRET_/);
   assert.doesNotMatch(text, /\b188\b/, "Driver job page should not expose workflow customer price.");
   assert.doesNotMatch(text, /\b99\b/, "Driver job page should not expose workflow driver payout.");
@@ -234,9 +240,13 @@ async function assertNoRealLocationImplementation() {
   const source = guardedSources.join("\n");
 
   assert.doesNotMatch(source, /navigator\.geolocation/i, "Driver pages must not call navigator.geolocation.");
+  assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?live-location/i, "Driver pages must not add live location endpoints.");
+  assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:ots-photo|photo-proof)/i, "Driver pages must not add photo upload endpoints.");
   assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
   assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
+  assert.doesNotMatch(source, /type=["']file["']|capture=|accept=["'][^"']*image/i, "Driver pages must not add file or camera inputs.");
+  assert.doesNotMatch(source, /new FormData|URL\.createObjectURL|supabase\.storage|storage\.from/i, "Driver pages must not add upload/storage plumbing.");
 }
 
 async function runChromeTest() {
@@ -327,6 +337,8 @@ async function runChromeTest() {
 
     const pageState = () =>
       evaluate(`(() => ({
+        activityLogItems: [...document.querySelectorAll("[data-driver-job-activity-log-item]")]
+          .map((item) => item.innerText.trim()),
         activityLogLabels: [...document.querySelectorAll("[data-driver-job-activity-log-label]")]
           .map((item) => item.textContent.trim()),
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -699,6 +711,123 @@ async function runChromeTest() {
       return afterState;
     };
 
+    const clickMissingProofPob = async () => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-status='POB']");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected POB status button to be clickable before proof.");
+
+      const blockedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-status='POB']");
+            const message = document.querySelector("[data-driver-job-status-message='POB']");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
+            const activityLogText = document.querySelector("[data-driver-job-activity-log]")?.innerText || "";
+
+            return message?.textContent.trim() === "Add mock OTS photo proof before POB." &&
+              statusText === "OTS" &&
+              activityLogText.includes("POB blocked") &&
+              activityLogText.includes("POB was blocked because OTS photo proof is missing.")
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  statusText,
+                }
+              : false;
+          })()`),
+        10000,
+        "POB blocked by missing mock OTS photo proof",
+      );
+
+      assert.equal(blockedState.distance <= 16, true, "Expected missing-proof feedback near POB button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Missing-proof POB block should not make a network request.",
+      );
+      assert.deepEqual(
+        afterState.activityLogLabels.slice(-1),
+        ["POB blocked"],
+        "Expected missing-proof POB block to add a local activity log entry.",
+      );
+      assert.ok(
+        afterState.activityLogItems.at(-1)?.includes("POB was blocked because OTS photo proof is missing."),
+        "Expected missing-proof POB log entry detail.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
+    const clickAddMockOtsPhotoProof = async () => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-ots-photo-proof]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected Add Mock OTS Photo Proof button to be clickable.");
+
+      const proofState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-ots-photo-proof]");
+            const message = document.querySelector("[data-driver-job-ots-photo-proof-message]");
+            const state = document.querySelector("[data-driver-job-ots-photo-proof-state]");
+            const section = document.querySelector("[data-driver-job-ots-photo-proof-section]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return section?.innerText.includes("Mock/local only. No real file upload, camera, or storage is used.") &&
+              message?.textContent.trim() === "Mock OTS photo proof added locally. No real file upload, camera, or storage was used." &&
+              state?.textContent.trim() === "Mock OTS photo proof added"
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "mock OTS photo proof added",
+      );
+
+      assert.equal(proofState.distance <= 16, true, "Expected proof feedback near proof button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Adding mock OTS photo proof should stay local and avoid network requests.",
+      );
+      assert.deepEqual(
+        afterState.activityLogLabels.slice(-1),
+        ["Mock OTS photo proof added"],
+        "Expected mock OTS photo proof addition to create an activity log entry.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
     await resetMockDriverJobData();
     const validState = await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");
     assert.ok(validState.visibleText.includes("Mock Workflow Dropoff"));
@@ -712,6 +841,11 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Live Location"));
     assert.ok(validState.visibleText.includes("Mock/local only. No phone location is captured or sent."));
     assert.ok(validState.visibleText.includes("Activate Mock Live Location"));
+    assert.equal(
+      validState.visibleText.includes("Add Mock OTS Photo Proof"),
+      false,
+      "DEP public mock job should not show OTS photo proof at Assigned.",
+    );
     assert.ok(validState.visibleText.includes("Driver Activity Log"));
     assert.ok(validState.visibleText.includes("No mock driver activity recorded yet."));
     assert.ok(validState.visibleText.includes("Driver Details"));
@@ -748,6 +882,12 @@ async function runChromeTest() {
     await clickStatus("OTW", "OTW");
     await clickBlockedStatus("POB", "Update OTS before POB.", "OTW");
     await clickStatus("OTS", "OTS");
+    const depOtsState = await pageState();
+    assert.equal(
+      depOtsState.visibleText.includes("Add Mock OTS Photo Proof"),
+      false,
+      "DEP public mock job should not require OTS photo proof after OTS.",
+    );
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
     await clickStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
     const endedLiveLocationState = await pageState();
@@ -777,6 +917,67 @@ async function runChromeTest() {
       "Expected public driver activity log to preserve successful workflow event order.",
     );
     await clickBlockedLiveLocation("Mock live location has ended for this job.");
+    await resetMockDriverJobData();
+
+    const arrivalState = await navigateToDriverJob(mockDriverJobTokens.arrivalWorkflow, "Mock Arrival Pickup");
+    assert.ok(arrivalState.visibleText.includes("Mock Arrival Dropoff"));
+    assert.ok(arrivalState.visibleText.includes("Mock Arrival Pickup > Mock Arrival Waypoint > Mock Arrival Dropoff"));
+    assert.ok(arrivalState.visibleText.includes("SQ777"));
+    assert.ok(arrivalState.visibleText.includes("Mock Arrival Passenger"));
+    assert.ok(arrivalState.visibleText.includes("Mock Arrival Driver"));
+    assert.equal(
+      arrivalState.visibleText.includes("Add Mock OTS Photo Proof"),
+      false,
+      "Arrival public mock job should show OTS photo proof only after OTS.",
+    );
+    assertNoSensitiveText(arrivalState);
+
+    await clickAcknowledge();
+    await clickActivateLiveLocation();
+    await clickStatus("OTW", "OTW");
+    await clickStatus("OTS", "OTS");
+    const arrivalOtsState = await waitForCondition(
+      async () => {
+        const state = await pageState();
+
+        return state.visibleText.includes("Mock OTS Photo Proof") &&
+          state.visibleText.includes("Mock/local only. No real file upload, camera, or storage is used.") &&
+          state.visibleText.includes("Add Mock OTS Photo Proof") &&
+          state.activityLogLabels.includes("OTS photo proof requested")
+          ? state
+          : false;
+      },
+      10000,
+      "Arrival mock OTS photo proof section",
+    );
+    assertNoSensitiveText(arrivalOtsState);
+    await clickMissingProofPob();
+    await clickAddMockOtsPhotoProof();
+    await clickStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
+    const arrivalPobState = await pageState();
+    assert.ok(
+      arrivalPobState.visibleText.includes("Mock live location inactive"),
+      "Expected Arrival POB to auto-end mock live location after proof.",
+    );
+    await clickStatus("Job Completed", "Job Completed");
+    const arrivalCompletedState = await pageState();
+    assert.deepEqual(
+      arrivalCompletedState.activityLogLabels,
+      [
+        "Job acknowledged",
+        "Mock live location activated",
+        "OTW marked",
+        "OTS marked",
+        "OTS photo proof requested",
+        "POB blocked",
+        "Mock OTS photo proof added",
+        "POB marked",
+        "Mock live location auto-ended at POB",
+        "Job Completed marked",
+      ],
+      "Expected Arrival public driver activity log to include proof request, blocked POB, proof, and successful completion.",
+    );
+    assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
 
     for (const [token, label] of [

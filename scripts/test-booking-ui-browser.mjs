@@ -11782,6 +11782,53 @@ async function runChromeTest() {
     ];
 
     for (const statusCheck of driverDemoStatusChecks) {
+      if (statusCheck.label === "POB") {
+        const proofSectionVisible = await waitForCondition(
+          () =>
+            evaluate(`Boolean(document.querySelector("[data-driver-demo-ots-photo-proof-section]")) &&
+              document.querySelector("[data-driver-demo-ots-photo-proof-section]")?.innerText.includes("Mock/local only. No real file upload, camera, or storage is used.")`),
+          10000,
+          "driver demo OTS photo proof section",
+        );
+        assert.equal(proofSectionVisible, true, "Expected mock OTS photo proof section after OTS");
+
+        const clickedProof = await evaluate(`(() => {
+          const button = document.querySelector("[data-driver-demo-ots-photo-proof]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clickedProof, true, "Expected Add Mock OTS Photo Proof to be clickable before POB");
+
+        const proofState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-ots-photo-proof]");
+              const message = document.querySelector("[data-driver-demo-ots-photo-proof-message]");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+
+              return message?.textContent.trim() === "Mock OTS photo proof added locally. No real file upload, camera, or storage was used."
+                ? {
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          "driver demo OTS photo proof added",
+        );
+        assert.equal(
+          proofState.distance <= 16,
+          true,
+          "Expected OTS photo proof feedback close to button",
+        );
+      }
+
       const clickedStatus = await evaluate(`(() => {
         const button = document.querySelector(${JSON.stringify(`[data-driver-demo-status="${statusCheck.label}"]`)});
 

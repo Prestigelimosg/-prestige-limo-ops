@@ -71,6 +71,41 @@ const initialMockBookingsById = {
       traveler_name: "BOOKING_B_SECRET_PASSENGER",
     },
   },
+  "mock-booking-arrival-workflow": {
+    public_reference: "MOCK-DRIVER-JOB-ARRIVAL-WORKFLOW",
+    booking_type: "MNG",
+    pickup_date: "2026-05-29",
+    pickup_time: "1715hrs",
+    pickup_address: "Mock Arrival Pickup",
+    dropoff_address: "Mock Arrival Dropoff",
+    route: "Mock Arrival Pickup > Mock Arrival Waypoint > Mock Arrival Dropoff",
+    flight_no: "SQ777",
+    status: "assigned",
+    driver_name: "Mock Arrival Driver",
+    driver_contact: "+65 8666 0000",
+    driver_plate_number: "SMA777X",
+    driver_vehicle_model: "Toyota Alphard",
+    travelers: {
+      traveler_name: "Mock Arrival Passenger",
+      booker_email: "SECRET_ARRIVAL_BOOKER_EMAIL@example.com",
+    },
+    bookers: {
+      booker_name: "SECRET_ARRIVAL_BOOKER_NAME",
+      email: "SECRET_ARRIVAL_DIRECT_BOOKER_EMAIL@example.com",
+    },
+    companies: {
+      company_name: "SECRET_ARRIVAL_CRM_COMPANY",
+      domain: "secret-arrival-crm.example.com",
+    },
+    customer_price_amount: 188,
+    driver_payout_amount: 99,
+    driver_payout_reason: "SECRET_ARRIVAL_DRIVER_OVERRIDE_REASON",
+    driverDatabase: [
+      {
+        driver_name: "SECRET_ARRIVAL_DRIVER_DATABASE_LIST",
+      },
+    ],
+  },
   "mock-booking-workflow-order": {
     public_reference: "MOCK-DRIVER-JOB-WORKFLOW",
     booking_type: "DEP",
@@ -118,6 +153,12 @@ export const mockDriverJobLinks: DriverJobLinkContractRecord[] = [
   {
     tokenHash: hashDriverJobLinkToken(mockDriverJobTokens.validB),
     bookingId: "mock-booking-b",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    revokedAt: null,
+  },
+  {
+    tokenHash: hashDriverJobLinkToken(mockDriverJobTokens.arrivalWorkflow),
+    bookingId: "mock-booking-arrival-workflow",
     expiresAt: "2099-01-01T00:00:00.000Z",
     revokedAt: null,
   },

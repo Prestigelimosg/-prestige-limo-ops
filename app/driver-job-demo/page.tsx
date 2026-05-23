@@ -89,6 +89,12 @@ function hasReachedOts(status: string) {
   return normalizedStatus === "ots" || normalizedStatus === "pob" || normalizedStatus === "completed";
 }
 
+function hasReachedPassengerPickup(status: string) {
+  const normalizedStatus = validateDriverJobStatusUpdate(status);
+
+  return normalizedStatus === "pob" || normalizedStatus === "completed";
+}
+
 function lineValue(text: string, labels: string[]) {
   const labelPattern = labels.map(escapeRegExp).join("|");
   const matcher = new RegExp(`^\\s*(?:${labelPattern})\\s*(?::|=|-)\\s*(.+?)\\s*$`, "i");
@@ -207,6 +213,8 @@ export default function DriverJobDemoPage() {
   const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ParseFeedback | null>(null);
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
   const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ParseFeedback | null>(null);
+  const [mockReminderFeedback, setMockReminderFeedback] = useState<ParseFeedback | null>(null);
+  const [mockDispatcherNotificationLog, setMockDispatcherNotificationLog] = useState("");
   const [mockLatestEtaAcknowledged, setMockLatestEtaAcknowledged] = useState(false);
   const [mockLatestEtaFeedback, setMockLatestEtaFeedback] = useState<ParseFeedback | null>(null);
   const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
@@ -370,6 +378,32 @@ export default function DriverJobDemoPage() {
     addActivity("Mock live location activated", "Local mock live location state is active. No location was sent.");
   }
 
+  function triggerMockDriverReminder() {
+    if (hasReachedPassengerPickup(status)) {
+      setMockReminderFeedback({
+        tone: "error",
+        text: "Mock reminder is blocked after POB or Job Completed.",
+      });
+      setMockDispatcherNotificationLog(
+        "Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed. Mock only. No message was sent.",
+      );
+      addActivity("Mock reminder blocked", "Mock reminder was blocked after POB or Job Completed. No message was sent.");
+      return;
+    }
+
+    setMockReminderFeedback({
+      tone: "success",
+      text: "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent.",
+    });
+    setMockDispatcherNotificationLog(
+      "Mock dispatcher notification log: Driver reminder recorded locally. Mock only. No message was sent.",
+    );
+    addActivity(
+      "Mock 1-hour reminder triggered",
+      "Mock reminder tells the driver to activate mock live location and continue the workflow.",
+    );
+  }
+
   function updateStatus(nextStatus: string, label: string, message: string) {
     const transitionGuard = guardDriverJobStatusTransition({
       acknowledged,
@@ -530,6 +564,56 @@ export default function DriverJobDemoPage() {
                   data-driver-demo-live-location-message="true"
                 >
                   {mockLiveLocationFeedback.text}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <section
+          className="space-y-3"
+          aria-labelledby="driver-demo-reminder-heading"
+          data-driver-demo-reminder-section="true"
+        >
+          <h2 id="driver-demo-reminder-heading" className="text-base font-semibold text-slate-900">
+            Mock Driver Reminder
+          </h2>
+          <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+            <p className="text-sm font-medium text-slate-600">
+              Mock/local only. No real notification, WhatsApp, or SMS is sent.
+            </p>
+            <p
+              className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+              data-driver-demo-reminder-timing="true"
+            >
+              Mock reminder: 1 hour before pickup
+            </p>
+            <p className="text-sm font-medium text-slate-600">
+              Reminder tells the driver to activate mock live location and continue workflow.
+            </p>
+            <div className="space-y-2">
+              <button
+                className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
+                data-driver-demo-reminder="true"
+                onClick={triggerMockDriverReminder}
+                type="button"
+              >
+                Trigger Mock 1-Hour Reminder
+              </button>
+              {mockReminderFeedback ? (
+                <p
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockReminderFeedback.tone)}`}
+                  data-driver-demo-reminder-message="true"
+                >
+                  {mockReminderFeedback.text}
+                </p>
+              ) : null}
+              {mockDispatcherNotificationLog ? (
+                <p
+                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                  data-driver-demo-dispatcher-notification-log="true"
+                >
+                  {mockDispatcherNotificationLog}
                 </p>
               ) : null}
             </div>

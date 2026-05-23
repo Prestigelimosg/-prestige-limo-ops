@@ -243,8 +243,9 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?live-location/i, "Driver pages must not add live location endpoints.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:ots-photo|photo-proof)/i, "Driver pages must not add photo upload endpoints.");
-  assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:flight|eta|notification|notify)/i, "Driver pages must not add flight or notification endpoints.");
+  assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:flight|eta|reminder|notification|notify|sms|whatsapp)/i, "Driver pages must not add flight or notification endpoints.");
   assert.doesNotMatch(source, /aviationstack|flightaware|flightstats|flightradar|opensky|aeroapi/i, "Driver pages must not add real flight API integrations.");
+  assert.doesNotMatch(source, /twilio|messagebird|vonage|nexmo|api\.whatsapp\.com|wa\.me|whatsapp\.send|sendWhatsApp|sendWhatsapp|sendSms|sendSMS|sms\.send/i, "Driver pages must not add WhatsApp/SMS integrations.");
   assert.doesNotMatch(source, /\b(?:Notification|PushManager|serviceWorker|showNotification|sendNotification)\b/, "Driver pages must not add notification APIs.");
   assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
   assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
@@ -619,6 +620,127 @@ async function runChromeTest() {
       return afterState;
     };
 
+    const clickMockDriverReminder = async (expectedStatusText) => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-reminder]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected Trigger Mock 1-Hour Reminder button to be clickable.");
+
+      const reminderState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-reminder]");
+            const message = document.querySelector("[data-driver-job-reminder-message]");
+            const section = document.querySelector("[data-driver-job-reminder-section]");
+            const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
+
+            return section?.innerText.includes("Mock Driver Reminder") &&
+              section?.innerText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent.") &&
+              section?.innerText.includes("Mock reminder: 1 hour before pickup") &&
+              section?.innerText.includes("Reminder tells the driver to activate mock live location and continue workflow.") &&
+              message?.textContent.trim() === "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent." &&
+              dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
+              dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
+              statusText === ${JSON.stringify(expectedStatusText)}
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  dispatcherText: dispatcherLog.textContent.trim(),
+                  messageText: message.textContent.trim(),
+                  statusText,
+                }
+              : false;
+          })()`),
+        10000,
+        "mock 1-hour driver reminder",
+      );
+
+      assert.equal(reminderState.distance <= 16, true, "Expected mock reminder feedback near reminder button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Mock driver reminder should stay local and avoid network requests.",
+      );
+      assert.deepEqual(
+        afterState.activityLogLabels.slice(-1),
+        ["Mock 1-hour reminder triggered"],
+        "Expected mock reminder trigger to create an activity log entry.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
+    const clickBlockedMockDriverReminder = async (expectedStatusText) => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-reminder]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected Trigger Mock 1-Hour Reminder button to be clickable after POB.");
+
+      const blockedReminderState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-reminder]");
+            const message = document.querySelector("[data-driver-job-reminder-message]");
+            const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
+
+            return message?.textContent.trim() === "Mock reminder is blocked after POB or Job Completed." &&
+              dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
+              dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
+              statusText === ${JSON.stringify(expectedStatusText)}
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  dispatcherText: dispatcherLog.textContent.trim(),
+                  messageText: message.textContent.trim(),
+                  statusText,
+                }
+              : false;
+          })()`),
+        10000,
+        "blocked mock 1-hour driver reminder",
+      );
+
+      assert.equal(blockedReminderState.distance <= 16, true, "Expected blocked reminder feedback near reminder button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Blocked mock driver reminder should stay local and avoid network requests.",
+      );
+      assert.deepEqual(
+        afterState.activityLogLabels.slice(-1),
+        ["Mock reminder blocked"],
+        "Expected blocked mock reminder to create an activity log entry.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
     const clickStatus = async (
       label,
       expectedStatus,
@@ -963,6 +1085,10 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Live Location"));
     assert.ok(validState.visibleText.includes("Mock/local only. No phone location is captured or sent."));
     assert.ok(validState.visibleText.includes("Activate Mock Live Location"));
+    assert.ok(validState.visibleText.includes("Mock Driver Reminder"));
+    assert.ok(validState.visibleText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent."));
+    assert.ok(validState.visibleText.includes("Mock reminder: 1 hour before pickup"));
+    assert.ok(validState.visibleText.includes("Trigger Mock 1-Hour Reminder"));
     assert.equal(
       validState.visibleText.includes("Add Mock OTS Photo Proof"),
       false,
@@ -989,15 +1115,34 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       validState.buttonLabels.filter((buttonLabel) =>
-        ["Acknowledge Job", "Activate Mock Live Location", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(
+        [
+          "Acknowledge Job",
+          "Activate Mock Live Location",
+          "Trigger Mock 1-Hour Reminder",
+          "Save",
+          "OTW",
+          "OTS",
+          "POB",
+          "Job Completed",
+        ].includes(
           buttonLabel,
         ),
       ),
-      ["Acknowledge Job", "Activate Mock Live Location", "Save", "OTW", "OTS", "POB", "Job Completed"],
-      "Expected public driver job page to show mock live location control before details/status controls.",
+      [
+        "Acknowledge Job",
+        "Activate Mock Live Location",
+        "Trigger Mock 1-Hour Reminder",
+        "Save",
+        "OTW",
+        "OTS",
+        "POB",
+        "Job Completed",
+      ],
+      "Expected public driver job page to show mock live location and reminder controls before details/status controls.",
     );
     assertNoSensitiveText(validState);
 
+    await clickMockDriverReminder(startingStatusText);
     await clickBlockedLiveLocation();
     await clickBlockedStatus("OTW", "Acknowledge this job before updating status.", startingStatusText);
     await clickAcknowledge();
@@ -1027,6 +1172,7 @@ async function runChromeTest() {
       endedLiveLocationState.visibleText.includes("Mock live location inactive"),
       "Expected POB to auto-end mock live location.",
     );
+    await clickBlockedMockDriverReminder("POB");
     await clickBlockedLiveLocation("Mock live location has ended for this job.");
     await clickStatus("Job Completed", "Job Completed");
     const completedLiveLocationState = await pageState();
@@ -1037,6 +1183,7 @@ async function runChromeTest() {
     assert.deepEqual(
       completedLiveLocationState.activityLogLabels,
       [
+        "Mock 1-hour reminder triggered",
         "Job acknowledged",
         "Mock live location activated",
         "Mock driver details saved",
@@ -1044,9 +1191,10 @@ async function runChromeTest() {
         "OTS marked",
         "POB marked",
         "Mock live location auto-ended at POB",
+        "Mock reminder blocked",
         "Job Completed marked",
       ],
-      "Expected public driver activity log to preserve successful workflow event order.",
+      "Expected public driver activity log to preserve reminder and successful workflow event order.",
     );
     await clickBlockedLiveLocation("Mock live location has ended for this job.");
     await resetMockDriverJobData();
@@ -1057,6 +1205,8 @@ async function runChromeTest() {
     assert.ok(arrivalState.visibleText.includes("SQ777"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Passenger"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Driver"));
+    assert.ok(arrivalState.visibleText.includes("Mock Driver Reminder"));
+    assert.ok(arrivalState.visibleText.includes("Trigger Mock 1-Hour Reminder"));
     assert.ok(arrivalState.visibleText.includes("Mock Latest Flight ETA"));
     assert.ok(arrivalState.visibleText.includes("Mock/local only. No real flight API is called and no notification is sent."));
     assert.ok(arrivalState.visibleText.includes("Latest mock flight ETA: 15:45"));
@@ -1129,7 +1279,16 @@ async function runChromeTest() {
 
       assert.equal(
         blockedState.buttonLabels.some((buttonLabel) =>
-          ["Acknowledge Job", "Activate Mock Live Location", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(
+          [
+            "Acknowledge Job",
+            "Activate Mock Live Location",
+            "Trigger Mock 1-Hour Reminder",
+            "Save",
+            "OTW",
+            "OTS",
+            "POB",
+            "Job Completed",
+          ].includes(
             buttonLabel,
           ),
         ),

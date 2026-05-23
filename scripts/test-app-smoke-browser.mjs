@@ -634,6 +634,7 @@ async function runChromeTest() {
         [
           "Acknowledge Job",
           "Activate Mock Live Location",
+          "Trigger Mock 1-Hour Reminder",
           "Acknowledge Latest ETA",
           "Parse Driver Details",
           "Save",
@@ -659,6 +660,21 @@ async function runChromeTest() {
         initialState.text.includes("Demo only — not connected to live bookings yet."),
         true,
         `${viewport.label}: expected exact demo-only warning`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock Driver Reminder"),
+        true,
+        `${viewport.label}: expected mock driver reminder section`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent."),
+        true,
+        `${viewport.label}: expected mock/local reminder explanation`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock reminder: 1 hour before pickup"),
+        true,
+        `${viewport.label}: expected mock 1-hour reminder timing`,
       );
       assert.equal(
         initialState.text.includes("Mock Latest Flight ETA"),
@@ -992,6 +1008,109 @@ async function runChromeTest() {
         `${viewport.label} active mock live location before status flow`,
       );
 
+      const clickMockDriverReminder = async (expectedStatus) => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        const beforeLogLabels = await evaluate(
+          `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+        );
+        await clickDriverDemoButton(
+          "[data-driver-demo-reminder]",
+          `${viewport.label} Trigger Mock 1-Hour Reminder`,
+        );
+        const reminderState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-reminder]");
+              const message = document.querySelector("[data-driver-demo-reminder-message]");
+              const section = document.querySelector("[data-driver-demo-reminder-section]");
+              const dispatcherLog = document.querySelector("[data-driver-demo-dispatcher-notification-log]");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+              const currentStatus = document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "";
+
+              return section?.innerText.includes("Mock Driver Reminder") &&
+                section?.innerText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent.") &&
+                section?.innerText.includes("Mock reminder: 1 hour before pickup") &&
+                section?.innerText.includes("Reminder tells the driver to activate mock live location and continue workflow.") &&
+                message?.textContent.trim() === "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent." &&
+                dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
+                dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
+                currentStatus === ${JSON.stringify(expectedStatus)}
+                ? {
+                    currentStatus,
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} mock 1-hour reminder`,
+        );
+
+        assert.equal(reminderState.currentStatus, expectedStatus);
+        assert.equal(reminderState.fetchCount, beforeFetchCount);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          [...beforeLogLabels, "Mock 1-hour reminder triggered"],
+          `${viewport.label}: expected mock reminder to create a local log entry`,
+        );
+        assert.equal(
+          reminderState.distance <= 16,
+          true,
+          `${viewport.label}: expected reminder feedback close to button`,
+        );
+      };
+
+      const clickBlockedMockDriverReminder = async (expectedStatus) => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        const beforeLogLabels = await evaluate(
+          `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+        );
+        await clickDriverDemoButton(
+          "[data-driver-demo-reminder]",
+          `${viewport.label} blocked Trigger Mock 1-Hour Reminder`,
+        );
+        const reminderState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-reminder]");
+              const message = document.querySelector("[data-driver-demo-reminder-message]");
+              const dispatcherLog = document.querySelector("[data-driver-demo-dispatcher-notification-log]");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+              const currentStatus = document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "";
+
+              return message?.textContent.trim() === "Mock reminder is blocked after POB or Job Completed." &&
+                dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
+                dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
+                currentStatus === ${JSON.stringify(expectedStatus)}
+                ? {
+                    currentStatus,
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} blocked mock 1-hour reminder`,
+        );
+
+        assert.equal(reminderState.currentStatus, expectedStatus);
+        assert.equal(reminderState.fetchCount, beforeFetchCount);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          [...beforeLogLabels, "Mock reminder blocked"],
+          `${viewport.label}: expected blocked mock reminder to create a local log entry`,
+        );
+        assert.equal(
+          reminderState.distance <= 16,
+          true,
+          `${viewport.label}: expected blocked reminder feedback close to button`,
+        );
+      };
+
       const clickBlockedStatus = async (label, expectedMessage, expectedStatus) => {
         const beforeLogLabels = await evaluate(
           `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
@@ -1128,6 +1247,7 @@ async function runChromeTest() {
             "Mock driver details saved",
             "Job acknowledged",
             "Mock live location activated",
+            "Mock 1-hour reminder triggered",
             "OTW blocked",
             "Latest ETA acknowledged",
           ],
@@ -1308,6 +1428,7 @@ async function runChromeTest() {
         );
       };
 
+      await clickMockDriverReminder("Assigned");
       await clickBlockedStatus("OTS", "Update OTW before OTS.", "Assigned");
       await clickBlockedStatus("POB", "Update OTW before POB.", "Assigned");
       await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", "Assigned");
@@ -1326,6 +1447,7 @@ async function runChromeTest() {
         10000,
         `${viewport.label} mock live location ended at POB`,
       );
+      await clickBlockedMockDriverReminder("POB");
       await clickBlockedLiveLocationAfterEnd(
         `${viewport.label} blocked mock live location after POB`,
       );
@@ -1345,6 +1467,7 @@ async function runChromeTest() {
           "Mock driver details saved",
           "Job acknowledged",
           "Mock live location activated",
+          "Mock 1-hour reminder triggered",
           "OTW blocked",
           "Latest ETA acknowledged",
           "OTW marked",
@@ -1354,6 +1477,7 @@ async function runChromeTest() {
           "Mock OTS photo proof added",
           "POB marked",
           "Mock live location auto-ended at POB",
+          "Mock reminder blocked",
           "Job Completed marked",
         ],
         `${viewport.label}: expected driver demo activity log to preserve successful event order`,

@@ -30,6 +30,16 @@ Each customer folder should behave like a clean customer file. It must be easy t
 
 The customer folder should not be a public customer portal. It is an internal dispatcher/accounts view and should not expose unrelated customers, driver payout, private internal notes, or payment provider secrets.
 
+Current protected mock folder state after Stage 4A-17:
+
+- UBS, Ritz Carlton, and Individual VIP Customer folders exist as mock customer folders.
+- Each folder shows invoice prefix/running examples, booking history, payment history, follow-up notes, and collection rules.
+- Each folder shows a mock/read-only `Payment Collection Detail` section.
+- `Payment Collection Detail` shows only the selected customer's active collection rows.
+- Unrelated customer invoices must not leak into another customer's `Payment Collection Detail`.
+- Paid rows stay visible in booking/payment history but are excluded from active collection due rows.
+- Monthly account statement readiness is mock/read-only only where applicable and does not generate, save, send, or number a statement.
+
 ## 3. Customers Dashboard Concept
 
 The customers dashboard should be a single overview page for payment collection and account follow-up. It must stay clean, simple, and not messy. The core job is to help dispatch/accounts quickly locate a customer folder, see who owes money, and decide the next follow-up action.
@@ -54,6 +64,18 @@ The dashboard should follow Zoho Invoice-style simplicity:
 - open customer folder action
 
 The dashboard should favor action lists over raw accounting complexity: who owes money, how much, which job created the balance, when it is due, and what follow-up is next.
+
+Current protected mock dashboard state after Stage 4A-17:
+
+- `/customers` uses search-first customer lookup and does not show all mock customers by default.
+- `Outstanding Payments Review` shows unpaid, overdue, partially paid, invoice-sent, and monthly-account balance-due rows from mock data.
+- Mock manual payment controls can simulate invoice sent, partial payment, paid, and waived states with local page state only.
+- `Mock Payment Event Log` records those local mock actions without creating payment records.
+- `Collection Follow-up Queue` shows collection follow-up items for outstanding balances.
+- `Mock Follow-up Event Log` records local mock follow-up actions without sending messages.
+- `Monthly Account Statement Preview` groups monthly-account balance-due rows for preview only.
+- `Mock Statement Preview Log` records local mock preview actions without creating statements.
+- Dashboard actions and logs are mock/local only; refresh resets local action state.
 
 ## 4. Booking Payment Fields
 
@@ -110,6 +132,8 @@ Core collection rules:
 - monthly account jobs group into a customer statement
 - paid bookings disappear from the outstanding list but remain in customer history
 - partial payment keeps the remaining balance visible until fully settled, waived, refunded, or cancelled
+- customer-folder active collection due rows must be scoped to the selected customer only
+- monthly account statement readiness is preview-only until statement schema, RLS, numbering, and generation rules are explicitly approved
 
 Outstanding and overdue views should be derived from booking/payment state rather than manually maintained lists. Follow-up dates should make collection work visible before it is forgotten.
 
@@ -145,6 +169,8 @@ The first safe workflow should be manual-first:
 7. Dispatcher sets the next follow-up date when money is still outstanding.
 
 No real payment API integration should be added in this stage. No card charge, PayNow request, bank API lookup, webhook, or notification should be sent by the app.
+
+The current Stage 4A mock controls do not persist changes. Manual payment, follow-up, and statement preview actions update local mock UI state only and reset on refresh.
 
 ## 10. Future Automation Plan
 
@@ -190,6 +216,19 @@ Customer payment and folder surfaces must not expose:
 
 Future public-facing customer or payment views, if ever approved, must use a separate safe projection and should never reuse internal dashboard payloads.
 
+Current mock-only boundaries:
+
+- no Supabase customer/payment writes
+- no payment provider API
+- no bank API
+- no webhook
+- no notification sending
+- no WhatsApp, email, or SMS sending
+- no real invoice generation
+- no real statement generation
+- no production payment behavior
+- local mock actions reset on refresh and are not persisted
+
 ## 13. Suggested Database Planning Only
 
 No migration is approved by this document. These are planning targets for a later schema/RLS proposal:
@@ -234,10 +273,22 @@ Future tests should cover:
 
 - customer dashboard loads
 - customer dashboard stays clean and searchable
+- search-first customer lookup does not show all customers by default
+- Outstanding Payments Review appears and excludes fully paid rows
+- mock manual payment controls update local state only
+- Mock Payment Event Log records local mock actions only
+- Collection Follow-up Queue appears for collection attention rows
+- Mock Follow-up Event Log records local mock follow-up actions only
+- Monthly Account Statement Preview excludes paid rows from mock totals
+- Mock Statement Preview Log records local mock previews only
+- Payment Collection Detail appears on customer folders
 - customer folder shows only that customer's bookings
+- customer folder `Payment Collection Detail` shows only selected-customer active collection rows
+- unrelated customer invoices do not leak into another customer's `Payment Collection Detail`
 - customer folder shows all booking history clearly
 - unpaid completed booking appears as outstanding
 - paid booking disappears from outstanding
+- paid booking remains visible in customer history
 - partial payment shows balance due
 - monthly account groups jobs into a statement view
 - customer invoice prefix creates sequential invoice numbers
@@ -250,15 +301,32 @@ Future tests should cover:
 - no payment provider API is called in manual-first stages
 - no driver payout or unrelated customer bookings appear in customer payment views
 
-## 15. Recommended Implementation Order
+## 15. Production Approval Gate
+
+Before any production implementation, the user must explicitly approve:
+
+- customer/payment schema
+- RLS policy shape
+- server-only route design
+- invoice sequence design
+- audit event design
+- whether customer-facing links will ever exist
+- migration creation and application
+- any payment provider, bank, webhook, notification, WhatsApp, email, or SMS integration
+
+Approval for mock UI or docs alignment does not approve migrations, Supabase schema changes, production payment behavior, invoice generation, statement generation, provider integration, bank integration, or notification sending.
+
+## 16. Recommended Implementation Order
 
 Recommended staged path:
 
-1. Design doc.
-2. Mock UI only for customer folders, outstanding payments, and manual payment states.
-3. Schema/RLS proposal only.
-4. Migration only after explicit approval.
-5. Manual payment tracking with internal-only access.
-6. Future payment provider integration only after a separate provider, webhook, reconciliation, and secrets-management design is approved.
+1. Keep the current phase mock-only/docs-only.
+2. Use protected mock UI to validate dashboard and customer-folder workflow ergonomics.
+3. Prepare a schema/RLS proposal only after explicit approval.
+4. Create or apply migrations only after separate explicit approval.
+5. Add server-side manual payment tracking only after schema/RLS approval.
+6. Persist audit events only after role checks, RLS, and server route boundaries are approved.
+7. Enforce invoice sequences only through an approved transaction-safe design.
+8. Add payment provider, bank, webhook, notification, WhatsApp, email, or SMS integration only after separate approval.
 
-The next safest coding step after this document is mock UI only for customer folders and outstanding payment review, still with no migration and no payment API.
+The next safest task after this docs alignment is a customer/payment schema/RLS proposal review only, unless the business wants more mock UI hardening first. Real production payment implementation should wait.

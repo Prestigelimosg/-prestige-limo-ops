@@ -583,10 +583,16 @@ async function runChromeTest() {
           outstandingReviewBoundary:
             document.querySelector("[data-outstanding-review-boundary]")?.textContent.trim() || "",
           outstandingRows: [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) => ({
+            actions: [...row.querySelectorAll("[data-payment-action]")].map((button) => button.textContent.trim()),
             href: row.querySelector("[data-outstanding-open-customer-folder]")?.getAttribute("href") || "",
             id: row.getAttribute("data-outstanding-payment-row"),
             text: row.innerText,
           })),
+          eventLogBoundary:
+            document.querySelector("[data-mock-payment-event-log-boundary]")?.textContent.trim() || "",
+          eventLogText: document.querySelector("[data-mock-payment-event-log]")?.innerText || "",
+          paymentSectionFeedback:
+            document.querySelector("[data-payment-section-feedback]")?.textContent.trim() || "",
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
           searchInputVisible: Boolean(searchInput && searchRect.width > 0 && searchRect.height >= 40),
           summaryCards: [...document.querySelectorAll("[data-customer-summary-card]")].map((card) =>
@@ -608,8 +614,8 @@ async function runChromeTest() {
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
       assert.equal(
         dashboardState.outstandingReviewBoundary,
-        "Mock/read-only only. No payment API, bank API, notification, or Supabase write is used.",
-        "Expected read-only mock boundary in outstanding payments review",
+        "Mock/local only. Changes reset on refresh and are not saved. No payment API, bank API, notification, or Supabase write is used.",
+        "Expected local-only mock boundary in outstanding payments review",
       );
       assert.deepEqual(
         dashboardState.outstandingRows.map((row) => row.id),
@@ -637,6 +643,28 @@ async function runChromeTest() {
         dashboardState.outstandingPaidInvoiceMentions,
         [],
         "Expected fully paid invoices to stay out of Outstanding Payments Review",
+      );
+      for (const row of dashboardState.outstandingRows) {
+        assert.deepEqual(
+          row.actions,
+          ["Mark Invoice Sent", "Record Partial Payment", "Mark Paid", "Waive Balance"],
+          `Expected mock manual payment controls on ${row.id}`,
+        );
+      }
+      assert.equal(
+        dashboardState.paymentSectionFeedback,
+        "Mock controls only. Use the buttons to simulate manual payment tracking without saving records.",
+        "Expected helper feedback near mock payment controls before actions",
+      );
+      assert.equal(
+        dashboardState.eventLogBoundary,
+        "Mock only. No payment record, invoice record, bank record, notification, or Supabase row is created.",
+        "Expected mock payment event log boundary",
+      );
+      assert.equal(
+        dashboardState.eventLogText.includes("No mock payment actions recorded yet."),
+        true,
+        "Expected mock payment event log empty state before actions",
       );
       for (const expectedOutstandingText of [
         "Outstanding Payments Review",
@@ -680,10 +708,171 @@ async function runChromeTest() {
         "Invoice numbers are unique and must not be reused.",
         "Once issued, invoice numbers are immutable.",
         "Changing a customer invoice prefix later requires warning/protection",
+        "Mock/local only. Changes reset on refresh and are not saved.",
+        "Mock Payment Event Log",
+        "Mock only. No payment record, invoice record, bank record, notification, or Supabase row is created.",
       ]) {
         assert.ok(dashboardState.text.includes(expectedText), `Expected customer dashboard text: ${expectedText}`);
       }
       assertNoPaymentIntegrationResources(dashboardState.resourceCalls, "customer dashboard");
+
+      await evaluate(`(() => {
+        window.__customerPaymentIntegrationCalls = [];
+        const originalFetch = window.__customerPaymentOriginalFetch || window.fetch.bind(window);
+        window.__customerPaymentOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const target = args[0]?.url || args[0];
+          const method = args[1]?.method || args[0]?.method || "GET";
+          window.__customerPaymentIntegrationCalls.push(\`\${method} \${String(target)}\`);
+          return originalFetch(...args);
+        };
+
+        const originalOpen = window.__customerPaymentOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__customerPaymentOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function patchedCustomerPaymentOpen(method, url, ...rest) {
+          window.__customerPaymentIntegrationCalls.push(\`\${method} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...rest);
+        };
+
+        if (navigator.sendBeacon && !window.__customerPaymentOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__customerPaymentOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            window.__customerPaymentIntegrationCalls.push(\`BEACON \${String(args[0])}\`);
+            return originalSendBeacon(...args);
+          };
+        }
+      })()`);
+
+      const clickMockPaymentAction = async (rowId, action, description) => {
+        const rowSelector = `[data-outstanding-payment-row="${rowId}"]`;
+        const actionSelector = `[data-payment-action="${action}"]`;
+        const clicked = await evaluate(`(() => {
+          const row = document.querySelector(${JSON.stringify(rowSelector)});
+          const button = row?.querySelector(${JSON.stringify(actionSelector)});
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
+      await clickMockPaymentAction("ritz-carlton:RITZ-0004", "invoice-sent", "Mark Invoice Sent");
+      await clickMockPaymentAction("ubs:UBS-0004", "partial-payment", "Record Partial Payment");
+      await clickMockPaymentAction("ritz-carlton:RITZ-0003", "paid", "Mark Paid");
+      await clickMockPaymentAction("vip-customer:VIP-0003", "waived", "Waive Balance");
+
+      const paymentActionState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rows = [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) => ({
+              id: row.getAttribute("data-outstanding-payment-row"),
+              text: row.innerText,
+            }));
+            const eventRows = [...document.querySelectorAll("[data-mock-payment-event]")].map((event) => ({
+              invoice: event.getAttribute("data-mock-payment-event"),
+              text: event.innerText,
+            }));
+
+            if (
+              eventRows.length < 4 ||
+              rows.some((row) => row.id === "ritz-carlton:RITZ-0003") ||
+              rows.some((row) => row.id === "vip-customer:VIP-0003")
+            ) {
+              return false;
+            }
+
+            return {
+              eventLogBoundary:
+                document.querySelector("[data-mock-payment-event-log-boundary]")?.textContent.trim() || "",
+              eventLogText: document.querySelector("[data-mock-payment-event-log]")?.innerText || "",
+              eventRows,
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              paymentSectionFeedback:
+                document.querySelector("[data-payment-section-feedback]")?.textContent.trim() || "",
+              rowFeedback: Object.fromEntries(
+                [...document.querySelectorAll("[data-payment-action-feedback]")].map((feedback) => [
+                  feedback.getAttribute("data-payment-action-feedback"),
+                  feedback.textContent.trim(),
+                ]),
+              ),
+              rows,
+            };
+          })()`),
+        10000,
+        "mock manual payment action updates",
+      );
+
+      assert.deepEqual(
+        paymentActionState.rows.map((row) => row.id),
+        ["ubs:UBS-0003", "ubs:UBS-0004", "ritz-carlton:RITZ-0004"],
+        "Expected paid and waived mock rows to leave Outstanding Payments Review locally",
+      );
+      assert.equal(
+        paymentActionState.rows.find((row) => row.id === "ubs:UBS-0004")?.text.includes("Partially Paid"),
+        true,
+        "Expected Record Partial Payment to keep the row visible with partial status",
+      );
+      assert.equal(
+        paymentActionState.rows.find((row) => row.id === "ubs:UBS-0004")?.text.includes("$600"),
+        true,
+        "Expected Record Partial Payment to show a local remaining balance",
+      );
+      assert.equal(
+        paymentActionState.rows.find((row) => row.id === "ritz-carlton:RITZ-0004")?.text.includes("Invoice Sent"),
+        true,
+        "Expected Mark Invoice Sent to keep the row visible with invoice-sent status",
+      );
+      assert.equal(
+        paymentActionState.rowFeedback["ritz-carlton:RITZ-0004"]?.includes("marked invoice sent locally"),
+        true,
+        "Expected Mark Invoice Sent feedback near that row",
+      );
+      assert.equal(
+        paymentActionState.rowFeedback["ubs:UBS-0004"]?.includes("partial payment recorded locally"),
+        true,
+        "Expected Record Partial Payment feedback near that row",
+      );
+      assert.equal(
+        paymentActionState.paymentSectionFeedback.includes("VIP-0003 balance waived locally"),
+        true,
+        "Expected section feedback near the controls after a removed-row action",
+      );
+      for (const expectedEventText of [
+        "RITZ-0004",
+        "Marked invoice sent",
+        "UBS-0004",
+        "Recorded partial payment",
+        "RITZ-0003",
+        "Marked paid",
+        "VIP-0003",
+        "Waived balance",
+        "Mock invoice-sent status only",
+        "Mock partial payment only",
+        "Mock paid action only",
+        "Mock waiver only",
+      ]) {
+        assert.ok(
+          paymentActionState.eventLogText.includes(expectedEventText),
+          `Expected mock payment event log text: ${expectedEventText}`,
+        );
+      }
+      assert.equal(
+        paymentActionState.eventLogBoundary,
+        "Mock only. No payment record, invoice record, bank record, notification, or Supabase row is created.",
+        "Expected event log to keep the no-record boundary after actions",
+      );
+      assert.deepEqual(
+        paymentActionState.integrationCalls.filter((call) =>
+          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|webhook|notification|supabase|\/rest\/v1\//i.test(call),
+        ),
+        [],
+        "Expected mock payment buttons not to call payment, bank, webhook, notification, or Supabase resources",
+      );
 
       const searchCustomers = async (term, expectedRows, description) =>
         waitForCondition(

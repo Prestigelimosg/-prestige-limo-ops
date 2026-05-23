@@ -35,12 +35,49 @@ type OutstandingPaymentReviewItem = {
   dueOrFollowUpDate: string;
   invoiceNumber: string;
   isMonthlyAccount: boolean;
+  key: string;
   paymentStatus: MockPaymentStatus;
   reason: string;
 };
 
+type MockPaymentAction = "invoice-sent" | "partial-payment" | "paid" | "waived";
+
+type MockPaymentLocalUpdate = {
+  balanceDue: string;
+  feedback: string;
+  paymentStatus: MockPaymentStatus;
+  removeFromOutstanding: boolean;
+};
+
+type MockPaymentEvent = {
+  action: string;
+  customerName: string;
+  id: string;
+  invoiceNumber: string;
+  note: string;
+  timestamp: string;
+};
+
 function hasMockBalanceDue(balanceDue: string) {
   return Number(balanceDue.replace(/[^\d.-]/g, "")) > 0;
+}
+
+function parseMockCurrency(value: string) {
+  return Number(value.replace(/[^\d.-]/g, ""));
+}
+
+function formatMockCurrency(value: number) {
+  return `$${Math.max(0, Math.round(value)).toLocaleString("en-US")}`;
+}
+
+function getMockPartialBalance(balanceDue: string) {
+  const currentBalance = parseMockCurrency(balanceDue);
+
+  if (!Number.isFinite(currentBalance) || currentBalance <= 1) {
+    return balanceDue;
+  }
+
+  return formatMockCurrency(currentBalance / 2);
 }
 
 function getOutstandingPaymentReason(customer: MockCustomer, booking: MockCustomerBooking) {
@@ -75,6 +112,7 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
         customer.nextFollowUpDate,
       invoiceNumber: booking.invoiceNumber,
       isMonthlyAccount: customer.accountType === "Monthly Account",
+      key: `${customer.id}:${booking.invoiceNumber}`,
       paymentStatus: booking.paymentStatus,
       reason: getOutstandingPaymentReason(customer, booking),
     })),
@@ -82,6 +120,13 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
 
 export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
+  const [mockPaymentLocalUpdates, setMockPaymentLocalUpdates] = useState<
+    Record<string, MockPaymentLocalUpdate>
+  >({});
+  const [mockPaymentSectionFeedback, setMockPaymentSectionFeedback] = useState(
+    "Mock controls only. Use the buttons to simulate manual payment tracking without saving records.",
+  );
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filteredCustomers = useMemo(() => {
     if (!normalizedSearchTerm) {
@@ -96,6 +141,103 @@ export default function MockCustomerDashboardPage() {
       )
       .slice(0, maxCustomerSearchResults);
   }, [normalizedSearchTerm]);
+  const visibleOutstandingPaymentReviewItems = useMemo(
+    () =>
+      outstandingPaymentReviewItems
+        .map((item) => {
+          const localUpdate = mockPaymentLocalUpdates[item.key];
+
+          return {
+            ...item,
+            balanceDue: localUpdate?.balanceDue ?? item.balanceDue,
+            feedback: localUpdate?.feedback,
+            paymentStatus: localUpdate?.paymentStatus ?? item.paymentStatus,
+            removeFromOutstanding: localUpdate?.removeFromOutstanding ?? false,
+          };
+        })
+        .filter(
+          (item) =>
+            !item.removeFromOutstanding &&
+            item.paymentStatus !== "Paid" &&
+            hasMockBalanceDue(item.balanceDue),
+        ),
+    [mockPaymentLocalUpdates],
+  );
+
+  function handleMockPaymentAction(item: OutstandingPaymentReviewItem, action: MockPaymentAction) {
+    const actionTimestamp = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const currentBalance = mockPaymentLocalUpdates[item.key]?.balanceDue ?? item.balanceDue;
+    const actionConfig: Record<
+      MockPaymentAction,
+      {
+        actionLabel: string;
+        balanceDue: string;
+        feedback: string;
+        note: string;
+        paymentStatus: MockPaymentStatus;
+        removeFromOutstanding: boolean;
+      }
+    > = {
+      "invoice-sent": {
+        actionLabel: "Marked invoice sent",
+        balanceDue: currentBalance,
+        feedback: `${item.invoiceNumber} marked invoice sent locally. No invoice record was created.`,
+        note: "Mock invoice-sent status only; dispatcher confirmation is not saved.",
+        paymentStatus: "Invoice Sent",
+        removeFromOutstanding: false,
+      },
+      "partial-payment": {
+        actionLabel: "Recorded partial payment",
+        balanceDue: getMockPartialBalance(currentBalance),
+        feedback: `${item.invoiceNumber} partial payment recorded locally. Remaining balance stays visible.`,
+        note: "Mock partial payment only; no payment record or bank confirmation exists.",
+        paymentStatus: "Partially Paid",
+        removeFromOutstanding: false,
+      },
+      paid: {
+        actionLabel: "Marked paid",
+        balanceDue: "$0",
+        feedback: `${item.invoiceNumber} marked paid locally and removed from outstanding.`,
+        note: "Mock paid action only; customer history/source data is unchanged.",
+        paymentStatus: "Paid",
+        removeFromOutstanding: true,
+      },
+      waived: {
+        actionLabel: "Waived balance",
+        balanceDue: "$0",
+        feedback: `${item.invoiceNumber} balance waived locally and removed from outstanding.`,
+        note: "Mock waiver only; no waiver record or accounting entry was created.",
+        paymentStatus: "Paid",
+        removeFromOutstanding: true,
+      },
+    };
+    const nextUpdate = actionConfig[action];
+
+    setMockPaymentLocalUpdates((currentUpdates) => ({
+      ...currentUpdates,
+      [item.key]: {
+        balanceDue: nextUpdate.balanceDue,
+        feedback: nextUpdate.feedback,
+        paymentStatus: nextUpdate.paymentStatus,
+        removeFromOutstanding: nextUpdate.removeFromOutstanding,
+      },
+    }));
+    setMockPaymentEvents((currentEvents) => [
+      {
+        action: nextUpdate.actionLabel,
+        customerName: item.customerName,
+        id: `${item.key}:${action}:${Date.now()}`,
+        invoiceNumber: item.invoiceNumber,
+        note: nextUpdate.note,
+        timestamp: actionTimestamp,
+      },
+      ...currentEvents,
+    ]);
+    setMockPaymentSectionFeedback(nextUpdate.feedback);
+  }
 
   return (
     <main className="min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
@@ -221,51 +363,154 @@ export default function MockCustomerDashboardPage() {
               <div>
                 <h2 className="text-lg font-bold text-slate-950">Outstanding Payments Review</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600" data-outstanding-review-boundary="true">
-                  Mock/read-only only. No payment API, bank API, notification, or Supabase write is used.
+                  Mock/local only. Changes reset on refresh and are not saved. No payment API, bank API,
+                  notification, or Supabase write is used.
                 </p>
               </div>
               <p className="text-sm font-semibold text-slate-600">
-                {outstandingPaymentReviewItems.length} mock items need account follow-up.
+                {visibleOutstandingPaymentReviewItems.length} mock items need account follow-up.
               </p>
             </div>
+            <p
+              aria-live="polite"
+              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+              data-payment-section-feedback="true"
+            >
+              {mockPaymentSectionFeedback}
+            </p>
           </div>
 
           <div className="divide-y divide-slate-200">
-            {outstandingPaymentReviewItems.map((item) => (
-              <article
-                className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.1fr_0.75fr_0.75fr_0.85fr_1.15fr_auto] lg:items-center"
-                data-outstanding-payment-row={`${item.customerId}:${item.invoiceNumber}`}
-                key={`${item.customerId}-${item.invoiceNumber}`}
-              >
-                <div>
-                  <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{item.invoiceNumber}</p>
-                  {item.isMonthlyAccount ? (
-                    <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
-                  ) : null}
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
-                  <p className="mt-1 text-sm font-bold text-slate-900">{item.paymentStatus}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Balance Due</p>
-                  <p className="mt-1 text-sm font-bold text-slate-950">{item.balanceDue}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due / Follow-up</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
-                </div>
-                <p className="text-sm leading-6 text-slate-700">{item.reason}</p>
-                <Link
-                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
-                  data-outstanding-open-customer-folder={`${item.customerId}:${item.invoiceNumber}`}
-                  href={`/customers/${item.customerId}`}
+            {visibleOutstandingPaymentReviewItems.length > 0 ? (
+              visibleOutstandingPaymentReviewItems.map((item) => (
+                <article
+                  className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[1fr_0.7fr_0.7fr_0.8fr_1fr_1.35fr] xl:items-start"
+                  data-outstanding-payment-row={item.key}
+                  key={item.key}
                 >
-                  Open Customer Folder
-                </Link>
-              </article>
-            ))}
+                  <div>
+                    <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
+                    <p className="mt-1 text-sm text-slate-600">{item.invoiceNumber}</p>
+                    {item.isMonthlyAccount ? (
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
+                    <p className="mt-1 text-sm font-bold text-slate-900">{item.paymentStatus}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Balance Due</p>
+                    <p className="mt-1 text-sm font-bold text-slate-950">{item.balanceDue}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due / Follow-up</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
+                  </div>
+                  <p className="text-sm leading-6 text-slate-700">{item.reason}</p>
+                  <div className="flex flex-col gap-3">
+                    <Link
+                      className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
+                      data-outstanding-open-customer-folder={item.key}
+                      href={`/customers/${item.customerId}`}
+                    >
+                      Open Customer Folder
+                    </Link>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                      <button
+                        className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                        data-payment-action="invoice-sent"
+                        onClick={() => handleMockPaymentAction(item, "invoice-sent")}
+                        type="button"
+                      >
+                        Mark Invoice Sent
+                      </button>
+                      <button
+                        className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                        data-payment-action="partial-payment"
+                        onClick={() => handleMockPaymentAction(item, "partial-payment")}
+                        type="button"
+                      >
+                        Record Partial Payment
+                      </button>
+                      <button
+                        className="min-h-11 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-emerald-600"
+                        data-payment-action="paid"
+                        onClick={() => handleMockPaymentAction(item, "paid")}
+                        type="button"
+                      >
+                        Mark Paid
+                      </button>
+                      <button
+                        className="min-h-11 rounded-md border border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
+                        data-payment-action="waived"
+                        onClick={() => handleMockPaymentAction(item, "waived")}
+                        type="button"
+                      >
+                        Waive Balance
+                      </button>
+                    </div>
+                    <p
+                      aria-live="polite"
+                      className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
+                      data-payment-action-feedback={item.key}
+                    >
+                      {item.feedback ?? "Mock helper: this row updates local page state only."}
+                    </p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm text-slate-600" data-outstanding-payments-empty="true">
+                No mock outstanding payment items remain after local actions. Refreshing the page restores the mock data.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-mock-payment-event-log="true">
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <h2 className="text-lg font-bold text-slate-950">Mock Payment Event Log</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600" data-mock-payment-event-log-boundary="true">
+              Mock only. No payment record, invoice record, bank record, notification, or Supabase row is created.
+            </p>
+          </div>
+          <div className="p-4 sm:p-5">
+            {mockPaymentEvents.length > 0 ? (
+              <div className="grid gap-3" aria-live="polite">
+                {mockPaymentEvents.map((event) => (
+                  <article
+                    className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm lg:grid-cols-[0.8fr_1fr_0.8fr_0.7fr_1.2fr]"
+                    data-mock-payment-event={event.invoiceNumber}
+                    key={event.id}
+                  >
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Invoice / Reference
+                      </p>
+                      <p className="mt-1 font-bold text-slate-950">{event.invoiceNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.customerName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Action</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.action}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Local Time</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.timestamp}</p>
+                    </div>
+                    <p className="leading-6 text-slate-700">{event.note}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                No mock payment actions recorded yet.
+              </div>
+            )}
           </div>
         </section>
 

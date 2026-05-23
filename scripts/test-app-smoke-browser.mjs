@@ -29,7 +29,6 @@ const responsiveTabViewports = [
 ];
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
 const customerDashboardUrl = new URL("/customers", appUrl).toString();
-const customerFolderUrl = new URL("/customers/ritz-carlton", appUrl).toString();
 const driverDemoViewports = [
   { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
@@ -1384,53 +1383,203 @@ async function runChromeTest() {
         "mock customer folder link navigation",
       );
 
-      await setCustomerViewportAndLoad(customerFolderUrl, desktopViewport);
-      await waitForCondition(
-        () =>
-          evaluate(`document.body.innerText.includes("CUSTOMER FOLDER") &&
-            document.body.innerText.includes("Ritz Carlton")`),
-        10000,
-        "mock customer folder route",
+      const inspectCustomerFolder = async ({
+        customerId,
+        customerName,
+        excludedPaidInvoices,
+        expectedRows,
+        expectedText,
+        unrelatedInvoices,
+      }) => {
+        const folderUrl = new URL(`/customers/${customerId}`, appUrl).toString();
+
+        await setCustomerViewportAndLoad(folderUrl, desktopViewport);
+        await waitForCondition(
+          () =>
+            evaluate(`document.body.innerText.includes("CUSTOMER FOLDER") &&
+              document.body.innerText.includes(${JSON.stringify(customerName)}) &&
+              Boolean(document.querySelector("[data-payment-collection-detail='${customerId}']"))`),
+          10000,
+          `${customerName} mock customer folder route`,
+        );
+
+        const state = await evaluate(`(() => {
+          const text = document.body.innerText;
+          const detail = document.querySelector("[data-payment-collection-detail='${customerId}']");
+          return {
+            bookingHistory: document.querySelector("[data-customer-booking-history]")?.innerText || "",
+            boundary: detail?.querySelector("[data-payment-collection-boundary]")?.textContent.trim() || "",
+            detailText: detail?.innerText || "",
+            forbiddenText: ["driver payout", "private crm", "stripe", "hitpay", "paypal", "secret key"].filter(
+              (value) => text.toLowerCase().includes(value),
+            ),
+            invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
+            isolation:
+              detail?.querySelector("[data-payment-collection-isolation]")?.textContent.trim() || "",
+            paymentHistory: document.body.innerText.includes("Payment history"),
+            resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+            rows: [...(detail?.querySelectorAll("[data-payment-collection-row]") || [])].map((row) => ({
+              id: row.getAttribute("data-payment-collection-row"),
+              text: row.innerText,
+            })),
+            statementReadiness:
+              detail?.querySelector("[data-payment-collection-statement-readiness]")?.innerText || "",
+            text,
+          };
+        })()`);
+
+        assert.deepEqual(state.forbiddenText, [], `Expected no sensitive ${customerName} customer folder text`);
+        assert.equal(
+          state.boundary,
+          "Mock/read-only only. No payment record, invoice record, statement record, notification, bank record, or Supabase row is created.",
+          `Expected mock/read-only collection detail boundary for ${customerName}`,
+        );
+        assert.equal(
+          state.isolation,
+          "This folder only shows this selected customer's mock payment collection detail.",
+          `Expected selected-customer-only boundary for ${customerName}`,
+        );
+        assert.deepEqual(
+          state.rows.map((row) => row.id),
+          expectedRows,
+          `Expected active collection rows for ${customerName}`,
+        );
+        for (const invoiceNumber of excludedPaidInvoices) {
+          assert.equal(
+            state.detailText.includes(invoiceNumber),
+            false,
+            `Expected paid ${invoiceNumber} not to appear in active collection detail for ${customerName}`,
+          );
+          assert.equal(
+            state.bookingHistory.includes(invoiceNumber) || state.invoiceRulesText.includes(invoiceNumber),
+            true,
+            `Expected paid ${invoiceNumber} to remain in ${customerName} folder history`,
+          );
+        }
+        for (const invoiceNumber of unrelatedInvoices) {
+          assert.equal(
+            state.detailText.includes(invoiceNumber),
+            false,
+            `Expected ${customerName} payment collection detail not to leak ${invoiceNumber}`,
+          );
+        }
+        for (const expected of expectedText) {
+          assert.ok(state.text.includes(expected), `Expected ${customerName} folder text: ${expected}`);
+        }
+        assert.equal(state.paymentHistory, true, `Expected ${customerName} payment history to remain visible`);
+        assert.equal(
+          state.text.includes("All booking history"),
+          true,
+          `Expected ${customerName} booking history to remain visible`,
+        );
+        assertNoPaymentIntegrationResources(state.resourceCalls, `${customerName} customer folder`);
+
+        return state;
+      };
+
+      const ubsFolderState = await inspectCustomerFolder({
+        customerId: "ubs",
+        customerName: "UBS",
+        excludedPaidInvoices: ["UBS-0002"],
+        expectedRows: ["ubs:UBS-0003", "ubs:UBS-0004"],
+        expectedText: [
+          "Payment Collection Detail",
+          "UBS",
+          "Fixed invoice prefix",
+          "UBS",
+          "Outstanding balance",
+          "$1,840",
+          "OVERDUE BALANCE",
+          "$640",
+          "UBS-0003",
+          "UBS-0004",
+          "Overdue",
+          "Invoice Sent",
+          "22 May 2026",
+          "30 May 2026",
+          "29 May 2026",
+          "Due date passed + balance due = Overdue",
+          "Invoice sent but balance remains due",
+          "Paid items remain in history but are not collection due.",
+          "Statement readiness",
+          "Monthly account can be grouped into statement later.",
+          "Mock statement-ready total: $1,840",
+          "No statement is generated, saved, sent, or numbered.",
+          "UBS-0001, UBS-0002, UBS-0003",
+          "Payment collection rules",
+        ],
+        unrelatedInvoices: ["RITZ-0003", "RITZ-0004", "VIP-0003"],
+      });
+      assert.equal(
+        ubsFolderState.statementReadiness.includes("Monthly account can be grouped into statement later."),
+        true,
+        "Expected UBS monthly account statement readiness",
       );
 
-      const folderState = await evaluate(`(() => {
-        const text = document.body.innerText;
-        return {
-          bookingHistory: document.querySelector("[data-customer-booking-history]")?.innerText || "",
-          forbiddenText: ["driver payout", "private crm", "stripe", "hitpay", "paypal", "secret key"].filter(
-            (value) => text.toLowerCase().includes(value),
-          ),
-          resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
-          text,
-        };
-      })()`);
+      const ritzFolderState = await inspectCustomerFolder({
+        customerId: "ritz-carlton",
+        customerName: "Ritz Carlton",
+        excludedPaidInvoices: ["RITZ-0002"],
+        expectedRows: ["ritz-carlton:RITZ-0003", "ritz-carlton:RITZ-0004"],
+        expectedText: [
+          "Payment Collection Detail",
+          "Ritz Carlton",
+          "Fixed invoice prefix",
+          "RITZ",
+          "Outstanding balance",
+          "$800",
+          "OVERDUE BALANCE",
+          "$380",
+          "RITZ-0003",
+          "RITZ-0004",
+          "Partially Paid",
+          "Unpaid",
+          "19 May 2026",
+          "31 May 2026",
+          "23 May 2026",
+          "Partial payment still has balance due",
+          "Completed job + balance due = Outstanding",
+          "Paid items remain in history but are not collection due.",
+          "RITZ-0001, RITZ-0002, RITZ-0003",
+          "Payment collection rules",
+        ],
+        unrelatedInvoices: ["UBS-0003", "UBS-0004", "VIP-0003"],
+      });
+      assert.equal(
+        ritzFolderState.statementReadiness,
+        "",
+        "Expected Ritz folder not to show monthly account statement readiness",
+      );
 
-      assert.deepEqual(folderState.forbiddenText, [], "Expected no sensitive customer folder text");
-      for (const expectedText of [
-        "Customer/company details",
-        "Contacts",
-        "All booking history",
-        "Upcoming jobs",
-        "Completed jobs",
-        "Invoices",
-        "Payment history",
-        "Outstanding balance",
-        "Payment terms",
-        "Follow-up notes",
-        "Documents/receipts later",
-        "RITZ-0001, RITZ-0002, RITZ-0003",
-        "RITZ-0003",
-        "RITZ-0002",
-        "RITZ-0004",
-        "Partially Paid",
-        "Paid",
-        "Unpaid",
-        "Payment collection rules",
-      ]) {
-        assert.ok(folderState.text.includes(expectedText), `Expected customer folder text: ${expectedText}`);
-      }
-      assert.equal(folderState.text.includes("UBS-0001"), false, "Expected selected folder not to show unrelated UBS invoices");
-      assertNoPaymentIntegrationResources(folderState.resourceCalls, "customer folder");
+      const vipFolderState = await inspectCustomerFolder({
+        customerId: "vip-customer",
+        customerName: "Individual VIP Customer",
+        excludedPaidInvoices: ["VIP-0002"],
+        expectedRows: ["vip-customer:VIP-0003"],
+        expectedText: [
+          "Payment Collection Detail",
+          "Individual VIP Customer",
+          "Fixed invoice prefix",
+          "VIP",
+          "Outstanding balance",
+          "$1,700",
+          "OVERDUE BALANCE",
+          "$0",
+          "VIP-0003",
+          "Invoice Sent",
+          "25 May 2026",
+          "Invoice sent but balance remains due",
+          "Paid items remain in history but are not collection due.",
+          "VIP-0001, VIP-0002",
+          "Payment collection rules",
+        ],
+        unrelatedInvoices: ["UBS-0003", "RITZ-0003", "RITZ-0004"],
+      });
+      assert.equal(
+        vipFolderState.statementReadiness,
+        "",
+        "Expected VIP folder not to show monthly account statement readiness",
+      );
 
       await setCustomerViewportAndLoad(customerDashboardUrl, desktopViewport);
       const outstandingFolderClicked = await evaluate(`(() => {

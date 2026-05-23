@@ -1,12 +1,76 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { collectionRules, findMockCustomer, mockCustomers } from "../_data/mock-customers";
+import {
+  collectionRules,
+  findMockCustomer,
+  mockCustomers,
+  type MockCustomer,
+  type MockCustomerBooking,
+} from "../_data/mock-customers";
 
 type CustomerFolderPageProps = {
   params: Promise<{
     customerId: string;
   }>;
 };
+
+type PaymentCollectionDetailRow = {
+  balanceDue: string;
+  dueDate: string;
+  followUpDate: string;
+  invoiceNumber: string;
+  key: string;
+  paymentStatus: MockCustomerBooking["paymentStatus"];
+  reason: string;
+};
+
+function hasMockBalanceDue(balanceDue: string) {
+  return Number(balanceDue.replace(/[^\d.-]/g, "")) > 0;
+}
+
+function parseMockCurrency(value: string) {
+  return Number(value.replace(/[^\d.-]/g, ""));
+}
+
+function formatMockCurrency(value: number) {
+  return `$${Math.max(0, Math.round(value)).toLocaleString("en-US")}`;
+}
+
+function getPaymentCollectionReason(customer: MockCustomer, booking: MockCustomerBooking) {
+  if (booking.paymentStatus === "Overdue") {
+    return "Due date passed + balance due = Overdue";
+  }
+
+  if (booking.paymentStatus === "Partially Paid") {
+    return "Partial payment still has balance due";
+  }
+
+  if (booking.paymentStatus === "Invoice Sent") {
+    return "Invoice sent but balance remains due";
+  }
+
+  if (customer.accountType === "Monthly Account") {
+    return "Monthly account can be grouped into statement later";
+  }
+
+  return "Completed job + balance due = Outstanding";
+}
+
+function getPaymentCollectionDetailRows(customer: MockCustomer): PaymentCollectionDetailRow[] {
+  return customer.bookingHistory
+    .filter((booking) => booking.paymentStatus !== "Paid" && hasMockBalanceDue(booking.balanceDue))
+    .map((booking) => ({
+      balanceDue: booking.balanceDue,
+      dueDate:
+        customer.invoices.find((invoice) => invoice.invoiceNumber === booking.invoiceNumber)?.dueDate ??
+        customer.nextFollowUpDate,
+      followUpDate: customer.nextFollowUpDate,
+      invoiceNumber: booking.invoiceNumber,
+      key: `${customer.id}:${booking.invoiceNumber}`,
+      paymentStatus: booking.paymentStatus,
+      reason: getPaymentCollectionReason(customer, booking),
+    }));
+}
 
 export function generateStaticParams() {
   return mockCustomers.map((customer) => ({
@@ -24,6 +88,11 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
 
   const upcomingJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Upcoming");
   const completedJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Completed");
+  const paymentCollectionRows = getPaymentCollectionDetailRows(customer);
+  const statementReadyRows = customer.accountType === "Monthly Account" ? paymentCollectionRows : [];
+  const statementReadyTotal = formatMockCurrency(
+    statementReadyRows.reduce((total, row) => total + parseMockCurrency(row.balanceDue), 0),
+  );
 
   return (
     <main className="min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
@@ -99,6 +168,109 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
               </div>
             </dl>
           </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-payment-collection-detail={customer.id}
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Payment Collection Detail</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-payment-collection-boundary="true">
+                  Mock/read-only only. No payment record, invoice record, statement record, notification, bank record,
+                  or Supabase row is created.
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-payment-collection-isolation="true">
+                  This folder only shows this selected customer&apos;s mock payment collection detail.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                {paymentCollectionRows.length} active collection due row
+                {paymentCollectionRows.length === 1 ? "" : "s"}.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer/company</p>
+              <p className="mt-1 text-base font-bold text-slate-950">{customer.companyName}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Fixed invoice prefix</p>
+              <p className="mt-1 text-base font-bold text-slate-950">{customer.invoicePrefix}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Outstanding balance</p>
+              <p className="mt-1 text-base font-bold text-slate-950">{customer.outstandingAmount}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Overdue balance</p>
+              <p className="mt-1 text-base font-bold text-rose-700">{customer.overdueAmount}</p>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <h3 className="text-base font-bold text-slate-950">Outstanding invoice/reference rows</h3>
+              <p className="text-sm text-slate-600">Paid items remain in history but are not collection due.</p>
+            </div>
+
+            {paymentCollectionRows.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {paymentCollectionRows.map((row) => (
+                  <article
+                    className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm lg:grid-cols-[0.8fr_0.8fr_0.7fr_0.7fr_0.8fr_1.2fr]"
+                    data-payment-collection-row={row.key}
+                    key={row.key}
+                  >
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Invoice</p>
+                      <p className="mt-1 font-bold text-slate-950">{row.invoiceNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
+                      <p className="mt-1 font-semibold text-slate-900">{row.paymentStatus}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Balance Due</p>
+                      <p className="mt-1 font-bold text-slate-950">{row.balanceDue}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due Date</p>
+                      <p className="mt-1 font-semibold text-slate-900">{row.dueDate}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Follow-up Date</p>
+                      <p className="mt-1 font-semibold text-slate-900">{row.followUpDate}</p>
+                    </div>
+                    <p className="leading-6 text-slate-700">{row.reason}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div
+                className="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600"
+                data-payment-collection-empty="true"
+              >
+                No active mock collection due rows for this selected customer.
+              </div>
+            )}
+          </div>
+
+          {statementReadyRows.length > 0 ? (
+            <div
+              className="border-t border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 sm:p-5"
+              data-payment-collection-statement-readiness={customer.id}
+            >
+              <strong className="block text-slate-950">Statement readiness</strong>
+              Monthly account can be grouped into statement later. Mock statement-ready total:{" "}
+              <strong>{statementReadyTotal}</strong> across {statementReadyRows.length} active balance-due row
+              {statementReadyRows.length === 1 ? "" : "s"}. No statement is generated, saved, sent, or numbered.
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm" data-customer-invoice-rules="true">

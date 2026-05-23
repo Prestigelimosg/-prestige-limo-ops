@@ -76,6 +76,8 @@ const emptyDriverDetails: DriverDetails = {
   vehicleModel: "",
 };
 
+const mockLatestFlightEta = "15:45";
+
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
   invalid_status: "This status update was not accepted. Please try again or contact dispatch.",
@@ -165,6 +167,8 @@ export default function DriverJobPage() {
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
   const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ControlFeedback | null>(null);
+  const [mockLatestEtaAcknowledged, setMockLatestEtaAcknowledged] = useState(false);
+  const [mockLatestEtaFeedback, setMockLatestEtaFeedback] = useState<ControlFeedback | null>(null);
   const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
   const [mockOtsPhotoProofFeedback, setMockOtsPhotoProofFeedback] = useState<ControlFeedback | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
@@ -172,7 +176,9 @@ export default function DriverJobPage() {
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
   const readyJob = pageState.kind === "ready" ? pageState.job : null;
+  const requiresMockLatestEtaAcknowledgement = readyJob ? isArrivalStyleJob(readyJob) : false;
   const requiresMockOtsPhotoProof = readyJob ? isArrivalStyleJob(readyJob) : false;
+  const showMockLatestFlightEta = requiresMockLatestEtaAcknowledgement;
   const showMockOtsPhotoProof = requiresMockOtsPhotoProof && hasReachedOts(workflowStatus);
 
   function addActivity(label: string, detail: string) {
@@ -209,6 +215,8 @@ export default function DriverJobPage() {
       setDriverDetails(emptyDriverDetails);
       setMockLiveLocationActive(false);
       setMockLiveLocationFeedback(null);
+      setMockLatestEtaAcknowledged(false);
+      setMockLatestEtaFeedback(null);
       setMockOtsPhotoProofAdded(false);
       setMockOtsPhotoProofFeedback(null);
       setActivityLog([]);
@@ -335,6 +343,20 @@ export default function DriverJobPage() {
     addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
   }
 
+  function acknowledgeLatestEta() {
+    if (!showMockLatestFlightEta || mockLatestEtaAcknowledged) {
+      return;
+    }
+
+    setMockLatestEtaAcknowledged(true);
+    setMockLatestEtaFeedback({
+      tone: "success",
+      text: "Latest mock flight ETA acknowledged locally. No real flight API or notification was used.",
+    });
+    setStatusFeedback(null);
+    addActivity("Latest ETA acknowledged", "Driver acknowledged the latest mock flight ETA locally.");
+  }
+
   function addMockOtsPhotoProof() {
     if (!showMockOtsPhotoProof) {
       return;
@@ -369,6 +391,16 @@ export default function DriverJobPage() {
         tone: "error",
         text: transitionGuard.message,
       });
+      return;
+    }
+
+    if (transitionGuard.status === "driver_otw" && isArrivalStyleJob(pageState.job) && !mockLatestEtaAcknowledged) {
+      setStatusFeedback({
+        target: label,
+        tone: "error",
+        text: "Acknowledge latest mock flight ETA before OTW.",
+      });
+      addActivity("OTW blocked", "OTW was blocked because latest ETA acknowledgement is missing.");
       return;
     }
 
@@ -610,6 +642,57 @@ export default function DriverJobPage() {
                 </div>
               </div>
             </section>
+
+            {showMockLatestFlightEta ? (
+              <section
+                className="space-y-3"
+                aria-labelledby="driver-latest-eta-heading"
+                data-driver-job-latest-eta-section="true"
+              >
+                <h2 id="driver-latest-eta-heading" className="text-base font-semibold text-slate-900">
+                  Mock Latest Flight ETA
+                </h2>
+                <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+                  <p
+                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                    data-driver-job-latest-eta-state="true"
+                  >
+                    {mockLatestEtaAcknowledged
+                      ? "Latest mock flight ETA acknowledged"
+                      : "Latest mock flight ETA acknowledgement required before OTW"}
+                  </p>
+                  <p className="text-sm font-medium text-slate-600">
+                    Mock/local only. No real flight API is called and no notification is sent.
+                  </p>
+                  <p
+                    className="text-sm font-semibold text-slate-800"
+                    data-driver-job-latest-eta-value="true"
+                  >
+                    Latest mock flight ETA: {mockLatestFlightEta}
+                  </p>
+                  <div className="space-y-2">
+                    <button
+                      className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-driver-job-latest-eta="true"
+                      disabled={mockLatestEtaAcknowledged}
+                      onClick={acknowledgeLatestEta}
+                      type="button"
+                    >
+                      Acknowledge Latest ETA
+                    </button>
+                    {mockLatestEtaFeedback ? (
+                      <p
+                        aria-live="polite"
+                        className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockLatestEtaFeedback.tone)}`}
+                        data-driver-job-latest-eta-message="true"
+                      >
+                        {mockLatestEtaFeedback.text}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            ) : null}
 
             {showMockOtsPhotoProof ? (
               <section

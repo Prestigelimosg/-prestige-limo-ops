@@ -243,6 +243,9 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?live-location/i, "Driver pages must not add live location endpoints.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:ots-photo|photo-proof)/i, "Driver pages must not add photo upload endpoints.");
+  assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:flight|eta|notification|notify)/i, "Driver pages must not add flight or notification endpoints.");
+  assert.doesNotMatch(source, /aviationstack|flightaware|flightstats|flightradar|opensky|aeroapi/i, "Driver pages must not add real flight API integrations.");
+  assert.doesNotMatch(source, /\b(?:Notification|PushManager|serviceWorker|showNotification|sendNotification)\b/, "Driver pages must not add notification APIs.");
   assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
   assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
   assert.doesNotMatch(source, /type=["']file["']|capture=|accept=["'][^"']*image/i, "Driver pages must not add file or camera inputs.");
@@ -711,6 +714,67 @@ async function runChromeTest() {
       return afterState;
     };
 
+    const clickMissingEtaOtw = async () => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-status='OTW']");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected OTW status button to be clickable before ETA acknowledgement.");
+
+      const blockedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-status='OTW']");
+            const message = document.querySelector("[data-driver-job-status-message='OTW']");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
+            const activityLogText = document.querySelector("[data-driver-job-activity-log]")?.innerText || "";
+
+            return message?.textContent.trim() === "Acknowledge latest mock flight ETA before OTW." &&
+              statusText === "Assigned" &&
+              activityLogText.includes("OTW blocked") &&
+              activityLogText.includes("OTW was blocked because latest ETA acknowledgement is missing.")
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  statusText,
+                }
+              : false;
+          })()`),
+        10000,
+        "OTW blocked by missing latest mock flight ETA acknowledgement",
+      );
+
+      assert.equal(blockedState.distance <= 16, true, "Expected missing-ETA feedback near OTW button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Missing-ETA OTW block should not make a network request.",
+      );
+      assert.deepEqual(
+        afterState.activityLogLabels.slice(-1),
+        ["OTW blocked"],
+        "Expected missing-ETA OTW block to add a local activity log entry.",
+      );
+      assert.ok(
+        afterState.activityLogItems.at(-1)?.includes("OTW was blocked because latest ETA acknowledgement is missing."),
+        "Expected missing-ETA OTW log entry detail.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
     const clickMissingProofPob = async () => {
       const beforeState = await pageState();
       const clicked = await evaluate(`(() => {
@@ -767,6 +831,64 @@ async function runChromeTest() {
       assert.ok(
         afterState.activityLogItems.at(-1)?.includes("POB was blocked because OTS photo proof is missing."),
         "Expected missing-proof POB log entry detail.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
+    };
+
+    const clickAcknowledgeLatestEta = async () => {
+      const beforeState = await pageState();
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-latest-eta]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected Acknowledge Latest ETA button to be clickable.");
+
+      const etaState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-latest-eta]");
+            const message = document.querySelector("[data-driver-job-latest-eta-message]");
+            const state = document.querySelector("[data-driver-job-latest-eta-state]");
+            const section = document.querySelector("[data-driver-job-latest-eta-section]");
+            const etaValue = document.querySelector("[data-driver-job-latest-eta-value]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return section?.innerText.includes("Mock/local only. No real flight API is called and no notification is sent.") &&
+              etaValue?.textContent.trim() === "Latest mock flight ETA: 15:45" &&
+              message?.textContent.trim() === "Latest mock flight ETA acknowledged locally. No real flight API or notification was used." &&
+              state?.textContent.trim() === "Latest mock flight ETA acknowledged"
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "latest mock flight ETA acknowledged",
+      );
+
+      assert.equal(etaState.distance <= 16, true, "Expected ETA acknowledgement feedback near ETA button.");
+
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length,
+        "Acknowledging latest mock flight ETA should stay local and avoid network requests.",
+      );
+      assert.deepEqual(
+        afterState.activityLogLabels.slice(-1),
+        ["Latest ETA acknowledged"],
+        "Expected latest ETA acknowledgement to create an activity log entry.",
       );
       assertNoSensitiveText(afterState);
       return afterState;
@@ -846,6 +968,11 @@ async function runChromeTest() {
       false,
       "DEP public mock job should not show OTS photo proof at Assigned.",
     );
+    assert.equal(
+      validState.visibleText.includes("Acknowledge Latest ETA"),
+      false,
+      "DEP public mock job should not show latest ETA acknowledgement.",
+    );
     assert.ok(validState.visibleText.includes("Driver Activity Log"));
     assert.ok(validState.visibleText.includes("No mock driver activity recorded yet."));
     assert.ok(validState.visibleText.includes("Driver Details"));
@@ -888,6 +1015,11 @@ async function runChromeTest() {
       false,
       "DEP public mock job should not require OTS photo proof after OTS.",
     );
+    assert.equal(
+      depOtsState.visibleText.includes("Acknowledge Latest ETA"),
+      false,
+      "DEP public mock job should not require latest ETA acknowledgement after OTS.",
+    );
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
     await clickStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
     const endedLiveLocationState = await pageState();
@@ -925,6 +1057,10 @@ async function runChromeTest() {
     assert.ok(arrivalState.visibleText.includes("SQ777"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Passenger"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Driver"));
+    assert.ok(arrivalState.visibleText.includes("Mock Latest Flight ETA"));
+    assert.ok(arrivalState.visibleText.includes("Mock/local only. No real flight API is called and no notification is sent."));
+    assert.ok(arrivalState.visibleText.includes("Latest mock flight ETA: 15:45"));
+    assert.ok(arrivalState.visibleText.includes("Acknowledge Latest ETA"));
     assert.equal(
       arrivalState.visibleText.includes("Add Mock OTS Photo Proof"),
       false,
@@ -934,6 +1070,8 @@ async function runChromeTest() {
 
     await clickAcknowledge();
     await clickActivateLiveLocation();
+    await clickMissingEtaOtw();
+    await clickAcknowledgeLatestEta();
     await clickStatus("OTW", "OTW");
     await clickStatus("OTS", "OTS");
     const arrivalOtsState = await waitForCondition(
@@ -966,6 +1104,8 @@ async function runChromeTest() {
       [
         "Job acknowledged",
         "Mock live location activated",
+        "OTW blocked",
+        "Latest ETA acknowledged",
         "OTW marked",
         "OTS marked",
         "OTS photo proof requested",

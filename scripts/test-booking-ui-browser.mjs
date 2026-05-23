@@ -11520,6 +11520,52 @@ async function runChromeTest() {
       "Expected acknowledgement feedback close to Acknowledge Job",
     );
 
+    const clickedLatestEta = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-demo-latest-eta]");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedLatestEta, true, "Expected Acknowledge Latest ETA to be clickable");
+
+    const latestEtaState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-driver-demo-latest-eta]");
+          const message = document.querySelector("[data-driver-demo-latest-eta-message]");
+          const state = document.querySelector("[data-driver-demo-latest-eta-state]");
+          const section = document.querySelector("[data-driver-demo-latest-eta-section]");
+          const buttonRect = button?.getBoundingClientRect();
+          const messageRect = message?.getBoundingClientRect();
+          const requests = window.__prestigeDriverDemoRequests || [];
+
+          return section?.innerText.includes("Mock/local only. No real flight API is called and no notification is sent.") &&
+            section?.innerText.includes("Latest mock flight ETA: 15:45") &&
+            message?.textContent.trim() === "Latest mock flight ETA acknowledged locally. No real flight API or notification was used." &&
+            state?.textContent.trim() === "Latest mock flight ETA acknowledged"
+            ? {
+                distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                messageText: message.textContent.trim(),
+                requestCount: requests.length,
+                stateText: state.textContent.trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "driver demo latest ETA acknowledgement stays local",
+    );
+    assert.equal(latestEtaState.stateText, "Latest mock flight ETA acknowledged");
+    assert.equal(latestEtaState.requestCount, 0);
+    assert.equal(
+      latestEtaState.distance <= 16,
+      true,
+      "Expected latest ETA acknowledgement feedback close to button",
+    );
+
     const alisonDriverDetailsPaste = [
       "Driver’s detail",
       "Name: Alison Toh",

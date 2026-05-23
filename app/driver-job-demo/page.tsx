@@ -52,6 +52,7 @@ const paymentDetailsPattern = /\b(paynow|pay now|bank|account|acct)\b/i;
 const vehicleModelPattern =
   /\b(alphard|vellfire|hiace|mercedes|benz|bmw|audi|toyota|honda|hyundai|kia|lexus|estima|camry|viano|voxy|noah|prius|combi|maxi\s?cab|mpv|van|bus|e\s?class|s\s?class)\b/i;
 const isArrivalStyleDemoJob = true;
+const mockLatestFlightEta = "15:45";
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -206,6 +207,8 @@ export default function DriverJobDemoPage() {
   const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ParseFeedback | null>(null);
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
   const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ParseFeedback | null>(null);
+  const [mockLatestEtaAcknowledged, setMockLatestEtaAcknowledged] = useState(false);
+  const [mockLatestEtaFeedback, setMockLatestEtaFeedback] = useState<ParseFeedback | null>(null);
   const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
   const [mockOtsPhotoProofFeedback, setMockOtsPhotoProofFeedback] = useState<ParseFeedback | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
@@ -213,6 +216,7 @@ export default function DriverJobDemoPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [statusMessageTone, setStatusMessageTone] = useState<ParseFeedback["tone"]>("success");
   const [statusMessageTarget, setStatusMessageTarget] = useState("");
+  const showMockLatestFlightEta = isArrivalStyleDemoJob;
   const showMockOtsPhotoProof = isArrivalStyleDemoJob && hasReachedOts(status);
 
   function addActivity(label: string, detail: string) {
@@ -296,6 +300,21 @@ export default function DriverJobDemoPage() {
     addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
   }
 
+  function acknowledgeLatestEta() {
+    if (!showMockLatestFlightEta || mockLatestEtaAcknowledged) {
+      return;
+    }
+
+    setMockLatestEtaAcknowledged(true);
+    setMockLatestEtaFeedback({
+      tone: "success",
+      text: "Latest mock flight ETA acknowledged locally. No real flight API or notification was used.",
+    });
+    setStatusMessage("");
+    setStatusMessageTarget("");
+    addActivity("Latest ETA acknowledged", "Driver acknowledged the latest mock flight ETA locally.");
+  }
+
   function addMockOtsPhotoProof() {
     if (!showMockOtsPhotoProof) {
       return;
@@ -362,6 +381,14 @@ export default function DriverJobDemoPage() {
       setStatusMessage(transitionGuard.message);
       setStatusMessageTone("error");
       setStatusMessageTarget(label);
+      return;
+    }
+
+    if (transitionGuard.status === "driver_otw" && isArrivalStyleDemoJob && !mockLatestEtaAcknowledged) {
+      setStatusMessage("Acknowledge latest mock flight ETA before OTW.");
+      setStatusMessageTone("error");
+      setStatusMessageTarget(label);
+      addActivity("OTW blocked", "OTW was blocked because latest ETA acknowledgement is missing.");
       return;
     }
 
@@ -508,6 +535,56 @@ export default function DriverJobDemoPage() {
             </div>
           </div>
         </section>
+
+        {showMockLatestFlightEta ? (
+          <section
+            className="space-y-3"
+            aria-labelledby="driver-demo-latest-eta-heading"
+            data-driver-demo-latest-eta-section="true"
+          >
+            <h2 id="driver-demo-latest-eta-heading" className="text-base font-semibold text-slate-900">
+              Mock Latest Flight ETA
+            </h2>
+            <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+              <p
+                className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                data-driver-demo-latest-eta-state="true"
+              >
+                {mockLatestEtaAcknowledged
+                  ? "Latest mock flight ETA acknowledged"
+                  : "Latest mock flight ETA acknowledgement required before OTW"}
+              </p>
+              <p className="text-sm font-medium text-slate-600">
+                Mock/local only. No real flight API is called and no notification is sent.
+              </p>
+              <p
+                className="text-sm font-semibold text-slate-800"
+                data-driver-demo-latest-eta-value="true"
+              >
+                Latest mock flight ETA: {mockLatestFlightEta}
+              </p>
+              <div className="space-y-2">
+                <button
+                  className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-driver-demo-latest-eta="true"
+                  disabled={mockLatestEtaAcknowledged}
+                  onClick={acknowledgeLatestEta}
+                  type="button"
+                >
+                  Acknowledge Latest ETA
+                </button>
+                {mockLatestEtaFeedback ? (
+                  <p
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockLatestEtaFeedback.tone)}`}
+                    data-driver-demo-latest-eta-message="true"
+                  >
+                    {mockLatestEtaFeedback.text}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {showMockOtsPhotoProof ? (
           <section

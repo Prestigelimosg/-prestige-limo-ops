@@ -634,6 +634,7 @@ async function runChromeTest() {
         [
           "Acknowledge Job",
           "Activate Mock Live Location",
+          "Acknowledge Latest ETA",
           "Parse Driver Details",
           "Save",
           "OTW",
@@ -658,6 +659,21 @@ async function runChromeTest() {
         initialState.text.includes("Demo only — not connected to live bookings yet."),
         true,
         `${viewport.label}: expected exact demo-only warning`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock Latest Flight ETA"),
+        true,
+        `${viewport.label}: expected mock latest flight ETA section`,
+      );
+      assert.equal(
+        initialState.text.includes("Latest mock flight ETA: 15:45"),
+        true,
+        `${viewport.label}: expected mock latest flight ETA value`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock/local only. No real flight API is called and no notification is sent."),
+        true,
+        `${viewport.label}: expected mock/local latest ETA explanation`,
       );
       assert.equal(
         initialState.text.includes("Driver Activity Log"),
@@ -1024,6 +1040,106 @@ async function runChromeTest() {
         );
       };
 
+      const clickMissingEtaOtw = async () => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        const beforeLogLabels = await evaluate(
+          `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+        );
+        await clickDriverDemoButton("[data-driver-demo-status=\"OTW\"]", `${viewport.label} missing-ETA OTW`);
+        const blockedEtaState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-status='OTW']");
+              const message = document.querySelector("[data-driver-demo-status-message='OTW']");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+              const activityLogText = document.querySelector("[data-driver-demo-activity-log]")?.innerText || "";
+
+              return message?.textContent.trim() === "Acknowledge latest mock flight ETA before OTW." &&
+                document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() === "Assigned" &&
+                activityLogText.includes("OTW blocked") &&
+                activityLogText.includes("OTW was blocked because latest ETA acknowledgement is missing.")
+                ? {
+                    currentStatus: "Assigned",
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} missing-ETA OTW block`,
+        );
+
+        assert.equal(blockedEtaState.currentStatus, "Assigned");
+        assert.equal(blockedEtaState.fetchCount, beforeFetchCount);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          [...beforeLogLabels, "OTW blocked"],
+          `${viewport.label}: expected missing-ETA OTW to create a blocked log entry`,
+        );
+        assert.equal(
+          blockedEtaState.distance <= 16,
+          true,
+          `${viewport.label}: expected missing-ETA OTW feedback close to button`,
+        );
+      };
+
+      const clickAcknowledgeLatestEta = async () => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        await waitForCondition(
+          () =>
+            evaluate(`Boolean(document.querySelector("[data-driver-demo-latest-eta-section]")) &&
+              document.querySelector("[data-driver-demo-latest-eta-section]")?.innerText.includes("Latest mock flight ETA: 15:45") &&
+              document.querySelector("[data-driver-demo-latest-eta-section]")?.innerText.includes("Mock/local only. No real flight API is called and no notification is sent.")`),
+          10000,
+          `${viewport.label} mock latest flight ETA section`,
+        );
+        await clickDriverDemoButton(
+          "[data-driver-demo-latest-eta]",
+          `${viewport.label} Acknowledge Latest ETA`,
+        );
+        const etaState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const button = document.querySelector("[data-driver-demo-latest-eta]");
+              const message = document.querySelector("[data-driver-demo-latest-eta-message]");
+              const state = document.querySelector("[data-driver-demo-latest-eta-state]");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+
+              return message?.textContent.trim() === "Latest mock flight ETA acknowledged locally. No real flight API or notification was used." &&
+                state?.textContent.trim() === "Latest mock flight ETA acknowledged"
+                ? {
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} mock latest flight ETA acknowledged`,
+        );
+
+        assert.equal(etaState.fetchCount, beforeFetchCount);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          [
+            "Mock driver details saved",
+            "Job acknowledged",
+            "Mock live location activated",
+            "OTW blocked",
+            "Latest ETA acknowledged",
+          ],
+          `${viewport.label}: expected latest ETA acknowledgement to create a local log entry`,
+        );
+        assert.equal(
+          etaState.distance <= 16,
+          true,
+          `${viewport.label}: expected latest ETA feedback close to button`,
+        );
+      };
+
       const clickValidStatus = async (label, expectedMessage) => {
         await clickDriverDemoButton(
           `[data-driver-demo-status="${label}"]`,
@@ -1195,6 +1311,8 @@ async function runChromeTest() {
       await clickBlockedStatus("OTS", "Update OTW before OTS.", "Assigned");
       await clickBlockedStatus("POB", "Update OTW before POB.", "Assigned");
       await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", "Assigned");
+      await clickMissingEtaOtw();
+      await clickAcknowledgeLatestEta();
       await clickValidStatus("OTW", "Status updated: OTW");
       await clickBlockedStatus("POB", "Update OTS before POB.", "OTW");
       await clickValidStatus("OTS", "Status updated: OTS");
@@ -1227,6 +1345,8 @@ async function runChromeTest() {
           "Mock driver details saved",
           "Job acknowledged",
           "Mock live location activated",
+          "OTW blocked",
+          "Latest ETA acknowledged",
           "OTW marked",
           "OTS marked",
           "OTS photo proof requested",

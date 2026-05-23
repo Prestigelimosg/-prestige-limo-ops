@@ -564,6 +564,8 @@ async function runChromeTest() {
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
+        const searchInput = document.querySelector("[data-customer-search]");
+        const searchRect = searchInput?.getBoundingClientRect();
         return {
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
@@ -571,8 +573,10 @@ async function runChromeTest() {
           forbiddenText: ["driver payout", "private crm", "stripe", "hitpay", "paypal", "secret key"].filter(
             (value) => text.toLowerCase().includes(value),
           ),
+          helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+          searchInputVisible: Boolean(searchInput && searchRect.width > 0 && searchRect.height >= 40),
           summaryCards: [...document.querySelectorAll("[data-customer-summary-card]")].map((card) =>
             card.getAttribute("data-customer-summary-card"),
           ),
@@ -585,25 +589,15 @@ async function runChromeTest() {
         ["Total Outstanding", "Overdue", "Paid This Month", "Follow-ups Today"],
         "Expected customer dashboard summary cards",
       );
-      assert.deepEqual(dashboardState.customerRows, ["ubs", "ritz-carlton", "vip-customer"]);
+      assert.deepEqual(dashboardState.customerRows, [], "Expected no customer rows before search");
+      assert.deepEqual(dashboardState.links, [], "Expected no customer folder links before search");
+      assert.equal(dashboardState.helperVisible, true, "Expected search helper before results");
+      assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
-      assert.deepEqual(
-        ["/customers/ubs", "/customers/ritz-carlton", "/customers/vip-customer"].filter(
-          (href) => !dashboardState.links.includes(href),
-        ),
-        [],
-        "Expected open customer folder links",
-      );
       for (const expectedText of [
         "Local/mock only. No payment API, bank API, notification, or Supabase write is used.",
         "Search customer/company",
-        "UBS",
-        "Ritz Carlton",
-        "Individual VIP Customer",
-        "Open Customer Folder",
-        "UBS-0001, UBS-0002, UBS-0003",
-        "RITZ-0001, RITZ-0002, RITZ-0003",
-        "VIP-0001, VIP-0002",
+        "Type a customer or company name to search.",
         "Unpaid",
         "Invoice Sent",
         "Partially Paid",
@@ -623,28 +617,107 @@ async function runChromeTest() {
       }
       assertNoPaymentIntegrationResources(dashboardState.resourceCalls, "customer dashboard");
 
-      const searchState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const input = document.querySelector("[data-customer-search]");
-            if (!input) {
-              return false;
-            }
+      const searchCustomers = async (term, expectedRows, description) =>
+        waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const input = document.querySelector("[data-customer-search]");
+              const expectedRows = ${JSON.stringify(expectedRows)};
+              if (!input) {
+                return false;
+              }
 
-            const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
-            descriptor?.set?.call(input, "Ritz");
-            input.dispatchEvent(new Event("input", { bubbles: true }));
+              const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+              descriptor?.set?.call(input, ${JSON.stringify(term)});
+              input.dispatchEvent(new Event("input", { bubbles: true }));
 
-            const rows = [...document.querySelectorAll("[data-customer-row]")].map((row) =>
-              row.getAttribute("data-customer-row"),
-            );
+              const rows = [...document.querySelectorAll("[data-customer-row]")].map((row) =>
+                row.getAttribute("data-customer-row"),
+              );
+              const links = [...document.querySelectorAll("[data-open-customer-folder]")].map((link) =>
+                link.getAttribute("href"),
+              );
+              const noResultsVisible = Boolean(document.querySelector("[data-customer-empty-state]"));
+              const text = document.body.innerText;
+              const rowsMatch =
+                rows.length === expectedRows.length &&
+                expectedRows.every((row, index) => rows[index] === row);
 
-            return rows.length === 1 ? { rows, text: document.body.innerText } : false;
-          })()`),
-        10000,
-        "mock customer search",
+              if (!rowsMatch || (expectedRows.length === 0 && !noResultsVisible)) {
+                return false;
+              }
+
+              return {
+                links,
+                noResultsVisible,
+                rows,
+                text,
+              };
+            })()`),
+          10000,
+          description,
+        ).then((state) => {
+          assert.deepEqual(state.rows, expectedRows, `Expected customer search rows for ${term}`);
+          return state;
+        });
+
+      const ubsSearchState = await searchCustomers("UBS", ["ubs"], "mock customer UBS search");
+      assert.equal(ubsSearchState.text.includes("UBS"), true, "Expected UBS result text");
+      assert.equal(ubsSearchState.text.includes("UBS-0001, UBS-0002, UBS-0003"), true, "Expected UBS invoice examples");
+      assert.deepEqual(ubsSearchState.links, ["/customers/ubs"], "Expected UBS folder link");
+
+      const ritzSearchState = await searchCustomers("Ritz", ["ritz-carlton"], "mock customer Ritz search");
+      assert.equal(ritzSearchState.text.includes("Ritz Carlton"), true, "Expected Ritz Carlton result text");
+      assert.equal(
+        ritzSearchState.text.includes("RITZ-0001, RITZ-0002, RITZ-0003"),
+        true,
+        "Expected Ritz invoice examples",
       );
-      assert.deepEqual(searchState.rows, ["ritz-carlton"], "Expected customer search to find Ritz Carlton only");
+      assert.deepEqual(ritzSearchState.links, ["/customers/ritz-carlton"], "Expected Ritz Carlton folder link");
+
+      const ritzPrefixSearchState = await searchCustomers("RITZ", ["ritz-carlton"], "mock customer RITZ prefix search");
+      assert.deepEqual(
+        ritzPrefixSearchState.links,
+        ["/customers/ritz-carlton"],
+        "Expected RITZ invoice prefix search to find Ritz Carlton",
+      );
+
+      const vipSearchState = await searchCustomers("VIP", ["vip-customer"], "mock customer VIP search");
+      assert.equal(
+        vipSearchState.text.includes("Individual VIP Customer"),
+        true,
+        "Expected Individual VIP Customer result text",
+      );
+      assert.equal(vipSearchState.text.includes("VIP-0001, VIP-0002"), true, "Expected VIP invoice examples");
+      assert.deepEqual(vipSearchState.links, ["/customers/vip-customer"], "Expected VIP folder link");
+
+      const noMatchSearchState = await searchCustomers("No Match Customer", [], "mock customer no-match search");
+      assert.equal(noMatchSearchState.noResultsVisible, true, "Expected no-results message for unmatched customer search");
+      assert.equal(
+        noMatchSearchState.text.includes("No mock customers match this search."),
+        true,
+        "Expected customer no-results message",
+      );
+
+      await searchCustomers("RITZ", ["ritz-carlton"], "mock customer Ritz folder search");
+      const folderClicked = await evaluate(`(() => {
+        const link = document.querySelector("[data-open-customer-folder='ritz-carlton']");
+        if (!link) {
+          return false;
+        }
+
+        link.click();
+        return true;
+      })()`);
+      assert.equal(folderClicked, true, "Expected Ritz customer folder link to be clickable");
+      await waitForCondition(
+        () =>
+          evaluate(`location.pathname === "/customers/ritz-carlton" &&
+            document.body.innerText.includes("Ritz Carlton") &&
+            document.body.innerText.includes("RITZ-0001, RITZ-0002, RITZ-0003")`),
+        10000,
+        "mock customer folder link navigation",
+      );
 
       await setCustomerViewportAndLoad(customerFolderUrl, desktopViewport);
       await waitForCondition(
@@ -705,13 +778,15 @@ async function runChromeTest() {
             return {
               docClientWidth: document.documentElement.clientWidth,
               docScrollWidth: document.documentElement.scrollWidth,
+              helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
               rowCount: document.querySelectorAll("[data-customer-row]").length,
             };
           })()`),
         10000,
         "mobile mock customer dashboard",
       );
-      assert.equal(mobileDashboardState.rowCount, 3, "Expected all mock customers on mobile dashboard");
+      assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
+      assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
         `Expected mobile customer dashboard not to overflow horizontally: ${mobileDashboardState.docScrollWidth} > ${mobileDashboardState.docClientWidth}`,
@@ -739,10 +814,16 @@ async function runChromeTest() {
       );
 
       return {
-        dashboardRows: dashboardState.customerRows,
+        dashboardRowsBeforeSearch: dashboardState.customerRows,
         folder: "/customers/ritz-carlton",
         mobileDashboard: mobileDashboardState,
         mobileFolder: mobileFolderState,
+        searchRows: {
+          noMatch: noMatchSearchState.rows,
+          ritz: ritzSearchState.rows,
+          ubs: ubsSearchState.rows,
+          vip: vipSearchState.rows,
+        },
         summaryCards: dashboardState.summaryCards,
       };
     };

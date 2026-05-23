@@ -11,19 +11,23 @@ const summaryCards = [
   { label: "Follow-ups Today", value: mockPaymentSummary.followUpsToday },
 ];
 
+const maxCustomerSearchResults = 8;
+
 export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filteredCustomers = useMemo(() => {
     if (!normalizedSearchTerm) {
-      return mockCustomers;
+      return [];
     }
 
-    return mockCustomers.filter((customer) =>
-      `${customer.companyName} ${customer.invoicePrefix} ${customer.paymentStatusSummary}`
-        .toLowerCase()
-        .includes(normalizedSearchTerm),
-    );
+    return mockCustomers
+      .filter((customer) =>
+        `${customer.companyName} ${customer.invoicePrefix} ${customer.paymentStatusSummary}`
+          .toLowerCase()
+          .includes(normalizedSearchTerm),
+      )
+      .slice(0, maxCustomerSearchResults);
   }, [normalizedSearchTerm]);
 
   return (
@@ -62,9 +66,9 @@ export default function MockCustomerDashboardPage() {
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Customer List</h2>
+                <h2 className="text-lg font-bold text-slate-950">Find Customer Folder</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Zoho Invoice-style simplicity: search, scan payment state, then open the customer folder.
+                  Zoho Invoice-style simplicity: search first, scan the payment state, then open the customer folder.
                 </p>
               </div>
               <label className="flex w-full flex-col gap-1 text-sm font-semibold text-slate-700 lg:max-w-sm">
@@ -73,7 +77,7 @@ export default function MockCustomerDashboardPage() {
                   className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none focus:border-slate-700"
                   data-customer-search="true"
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search UBS, Ritz, VIP, invoice prefix..."
+                  placeholder="Type a customer, company, or invoice prefix"
                   type="search"
                   value={searchTerm}
                 />
@@ -81,45 +85,63 @@ export default function MockCustomerDashboardPage() {
             </div>
           </div>
 
-          <div className="divide-y divide-slate-200">
-            {filteredCustomers.map((customer) => (
-              <article
-                className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.35fr_0.8fr_0.8fr_1fr_auto] lg:items-center"
-                data-customer-row={customer.id}
-                key={customer.id}
+          <div className="p-4 sm:p-5">
+            {!normalizedSearchTerm ? (
+              <div
+                className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600"
+                data-customer-search-helper="true"
               >
-                <div>
-                  <h3 className="text-base font-bold text-slate-950">{customer.companyName}</h3>
-                  <p className="mt-1 text-sm text-slate-600">Fixed invoice prefix: {customer.invoicePrefix}</p>
-                  <p className="mt-1 text-xs text-slate-500">Examples: {customer.invoiceExamples.join(", ")}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Outstanding</p>
-                  <p className="mt-1 text-base font-bold text-slate-950">{customer.outstandingAmount}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Overdue</p>
-                  <p className="mt-1 text-base font-bold text-rose-700">{customer.overdueAmount}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">{customer.paymentStatusSummary}</p>
-                  <p className="mt-1 text-xs text-slate-500">Next follow-up: {customer.nextFollowUpDate}</p>
-                </div>
-                <Link
-                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
-                  data-open-customer-folder={customer.id}
-                  href={`/customers/${customer.id}`}
-                >
-                  Open Customer Folder
-                </Link>
-              </article>
-            ))}
-            {filteredCustomers.length === 0 ? (
-              <div className="p-5 text-sm text-slate-600" data-customer-empty-state="true">
-                No mock customers match this search.
+                Type a customer or company name to search.
               </div>
-            ) : null}
+            ) : (
+              <div
+                aria-live="polite"
+                className="overflow-hidden rounded-md border border-slate-200"
+                data-customer-results-panel="true"
+              >
+                {filteredCustomers.length > 0 ? (
+                  <div className="divide-y divide-slate-200">
+                    {filteredCustomers.map((customer) => (
+                      <article
+                        className="grid gap-4 p-4 lg:grid-cols-[1.35fr_0.8fr_0.8fr_1fr_auto] lg:items-center"
+                        data-customer-row={customer.id}
+                        key={customer.id}
+                      >
+                        <div>
+                          <h3 className="text-base font-bold text-slate-950">{customer.companyName}</h3>
+                          <p className="mt-1 text-sm text-slate-600">Fixed invoice prefix: {customer.invoicePrefix}</p>
+                          <p className="mt-1 text-xs text-slate-500">Examples: {customer.invoiceExamples.join(", ")}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Outstanding</p>
+                          <p className="mt-1 text-base font-bold text-slate-950">{customer.outstandingAmount}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Overdue</p>
+                          <p className="mt-1 text-base font-bold text-rose-700">{customer.overdueAmount}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-800">{customer.paymentStatusSummary}</p>
+                          <p className="mt-1 text-xs text-slate-500">Follow-up: {customer.nextFollowUpDate}</p>
+                        </div>
+                        <Link
+                          className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
+                          data-open-customer-folder={customer.id}
+                          href={`/customers/${customer.id}`}
+                        >
+                          Open Customer Folder
+                        </Link>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-5 text-sm text-slate-600" data-customer-empty-state="true">
+                    No mock customers match this search.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 

@@ -214,6 +214,8 @@ export default function DriverJobDemoPage() {
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
   const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ParseFeedback | null>(null);
   const [mockReminderFeedback, setMockReminderFeedback] = useState<ParseFeedback | null>(null);
+  const [mockDriverReminderState, setMockDriverReminderState] = useState("Not triggered");
+  const [mockDriverReminderStatus, setMockDriverReminderStatus] = useState("Pending local trigger");
   const [mockDispatcherNotificationLog, setMockDispatcherNotificationLog] = useState("");
   const [mockLatestEtaAcknowledged, setMockLatestEtaAcknowledged] = useState(false);
   const [mockLatestEtaFeedback, setMockLatestEtaFeedback] = useState<ParseFeedback | null>(null);
@@ -384,6 +386,8 @@ export default function DriverJobDemoPage() {
         tone: "error",
         text: "Mock reminder is blocked after POB or Job Completed.",
       });
+      setMockDriverReminderState("Blocked");
+      setMockDriverReminderStatus("Blocked locally");
       setMockDispatcherNotificationLog(
         "Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed. Mock only. No message was sent.",
       );
@@ -395,6 +399,8 @@ export default function DriverJobDemoPage() {
       tone: "success",
       text: "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent.",
     });
+    setMockDriverReminderState("Triggered");
+    setMockDriverReminderStatus("Triggered locally");
     setMockDispatcherNotificationLog(
       "Mock dispatcher notification log: Driver reminder recorded locally. Mock only. No message was sent.",
     );
@@ -591,6 +597,31 @@ export default function DriverJobDemoPage() {
             <p className="text-sm font-medium text-slate-600">
               Reminder tells the driver to activate mock live location and continue workflow.
             </p>
+            <div
+              className="space-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"
+              data-driver-demo-reminder-summary="true"
+            >
+              <p className="font-semibold text-slate-900">Mock dispatcher reminder summary</p>
+              <dl className="grid gap-2">
+                <div className="grid gap-1">
+                  <dt className="font-semibold text-slate-500">Mock driver reminder status</dt>
+                  <dd data-driver-demo-reminder-summary-status="true">{mockDriverReminderStatus}</dd>
+                </div>
+                <div className="grid gap-1">
+                  <dt className="font-semibold text-slate-500">Reminder triggered / blocked state</dt>
+                  <dd data-driver-demo-reminder-summary-state="true">{mockDriverReminderState}</dd>
+                </div>
+                <div className="grid gap-1">
+                  <dt className="font-semibold text-slate-500">Mock dispatcher notification log</dt>
+                  <dd data-driver-demo-reminder-summary-log="true">
+                    {mockDispatcherNotificationLog || "No mock dispatcher notification recorded yet."}
+                  </dd>
+                </div>
+              </dl>
+              <p className="font-semibold text-slate-800" data-driver-demo-reminder-summary-mock-only="true">
+                Mock only. No real message was sent.
+              </p>
+            </div>
             <div className="space-y-2">
               <button
                 className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"

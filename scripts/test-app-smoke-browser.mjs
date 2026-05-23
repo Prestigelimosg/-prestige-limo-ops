@@ -579,7 +579,8 @@ async function runChromeTest() {
             "crm",
             "booker email",
             "internal notes",
-            "dispatch",
+            "driver dispatch",
+            "dispatcher intake",
             "dashboard",
             "driver database",
             "rates",
@@ -665,6 +666,36 @@ async function runChromeTest() {
         initialState.text.includes("Mock Driver Reminder"),
         true,
         `${viewport.label}: expected mock driver reminder section`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock dispatcher reminder summary"),
+        true,
+        `${viewport.label}: expected mock dispatcher reminder summary`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock driver reminder status"),
+        true,
+        `${viewport.label}: expected mock driver reminder status`,
+      );
+      assert.equal(
+        initialState.text.includes("Pending local trigger"),
+        true,
+        `${viewport.label}: expected initial mock reminder status`,
+      );
+      assert.equal(
+        initialState.text.includes("Reminder triggered / blocked state"),
+        true,
+        `${viewport.label}: expected mock reminder triggered/blocked state`,
+      );
+      assert.equal(
+        initialState.text.includes("No mock dispatcher notification recorded yet."),
+        true,
+        `${viewport.label}: expected empty mock dispatcher notification log`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock only. No real message was sent."),
+        true,
+        `${viewport.label}: expected no-real-message mock dispatcher summary`,
       );
       assert.equal(
         initialState.text.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent."),
@@ -1024,11 +1055,21 @@ async function runChromeTest() {
               const message = document.querySelector("[data-driver-demo-reminder-message]");
               const section = document.querySelector("[data-driver-demo-reminder-section]");
               const dispatcherLog = document.querySelector("[data-driver-demo-dispatcher-notification-log]");
+              const summary = document.querySelector("[data-driver-demo-reminder-summary]");
+              const summaryStatus = document.querySelector("[data-driver-demo-reminder-summary-status]");
+              const summaryState = document.querySelector("[data-driver-demo-reminder-summary-state]");
+              const summaryLog = document.querySelector("[data-driver-demo-reminder-summary-log]");
+              const summaryMockOnly = document.querySelector("[data-driver-demo-reminder-summary-mock-only]");
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
               const currentStatus = document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "";
 
               return section?.innerText.includes("Mock Driver Reminder") &&
+                summary?.innerText.includes("Mock dispatcher reminder summary") &&
+                summaryStatus?.textContent.trim() === "Triggered locally" &&
+                summaryState?.textContent.trim() === "Triggered" &&
+                summaryLog?.textContent.includes("Mock dispatcher notification log: Driver reminder recorded locally.") &&
+                summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
                 section?.innerText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent.") &&
                 section?.innerText.includes("Mock reminder: 1 hour before pickup") &&
                 section?.innerText.includes("Reminder tells the driver to activate mock live location and continue workflow.") &&
@@ -1077,11 +1118,21 @@ async function runChromeTest() {
               const button = document.querySelector("[data-driver-demo-reminder]");
               const message = document.querySelector("[data-driver-demo-reminder-message]");
               const dispatcherLog = document.querySelector("[data-driver-demo-dispatcher-notification-log]");
+              const summary = document.querySelector("[data-driver-demo-reminder-summary]");
+              const summaryStatus = document.querySelector("[data-driver-demo-reminder-summary-status]");
+              const summaryState = document.querySelector("[data-driver-demo-reminder-summary-state]");
+              const summaryLog = document.querySelector("[data-driver-demo-reminder-summary-log]");
+              const summaryMockOnly = document.querySelector("[data-driver-demo-reminder-summary-mock-only]");
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
               const currentStatus = document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "";
 
               return message?.textContent.trim() === "Mock reminder is blocked after POB or Job Completed." &&
+                summary?.innerText.includes("Mock dispatcher reminder summary") &&
+                summaryStatus?.textContent.trim() === "Blocked locally" &&
+                summaryState?.textContent.trim() === "Blocked" &&
+                summaryLog?.textContent.includes("Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed.") &&
+                summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
                 dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
                 dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
                 currentStatus === ${JSON.stringify(expectedStatus)}

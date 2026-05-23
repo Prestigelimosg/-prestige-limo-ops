@@ -174,6 +174,8 @@ export default function DriverJobPage() {
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
   const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ControlFeedback | null>(null);
   const [mockReminderFeedback, setMockReminderFeedback] = useState<ControlFeedback | null>(null);
+  const [mockDriverReminderState, setMockDriverReminderState] = useState("Not triggered");
+  const [mockDriverReminderStatus, setMockDriverReminderStatus] = useState("Pending local trigger");
   const [mockDispatcherNotificationLog, setMockDispatcherNotificationLog] = useState("");
   const [mockLatestEtaAcknowledged, setMockLatestEtaAcknowledged] = useState(false);
   const [mockLatestEtaFeedback, setMockLatestEtaFeedback] = useState<ControlFeedback | null>(null);
@@ -224,6 +226,8 @@ export default function DriverJobPage() {
       setMockLiveLocationActive(false);
       setMockLiveLocationFeedback(null);
       setMockReminderFeedback(null);
+      setMockDriverReminderState("Not triggered");
+      setMockDriverReminderStatus("Pending local trigger");
       setMockDispatcherNotificationLog("");
       setMockLatestEtaAcknowledged(false);
       setMockLatestEtaFeedback(null);
@@ -319,6 +323,8 @@ export default function DriverJobPage() {
         tone: "error",
         text: "Mock reminder is blocked after POB or Job Completed.",
       });
+      setMockDriverReminderState("Blocked");
+      setMockDriverReminderStatus("Blocked locally");
       setMockDispatcherNotificationLog(
         "Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed. Mock only. No message was sent.",
       );
@@ -330,6 +336,8 @@ export default function DriverJobPage() {
       tone: "success",
       text: "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent.",
     });
+    setMockDriverReminderState("Triggered");
+    setMockDriverReminderStatus("Triggered locally");
     setMockDispatcherNotificationLog(
       "Mock dispatcher notification log: Driver reminder recorded locally. Mock only. No message was sent.",
     );
@@ -700,6 +708,31 @@ export default function DriverJobPage() {
                 <p className="text-sm font-medium text-slate-600">
                   Reminder tells the driver to activate mock live location and continue workflow.
                 </p>
+                <div
+                  className="space-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"
+                  data-driver-job-reminder-summary="true"
+                >
+                  <p className="font-semibold text-slate-900">Mock dispatcher reminder summary</p>
+                  <dl className="grid gap-2">
+                    <div className="grid gap-1">
+                      <dt className="font-semibold text-slate-500">Mock driver reminder status</dt>
+                      <dd data-driver-job-reminder-summary-status="true">{mockDriverReminderStatus}</dd>
+                    </div>
+                    <div className="grid gap-1">
+                      <dt className="font-semibold text-slate-500">Reminder triggered / blocked state</dt>
+                      <dd data-driver-job-reminder-summary-state="true">{mockDriverReminderState}</dd>
+                    </div>
+                    <div className="grid gap-1">
+                      <dt className="font-semibold text-slate-500">Mock dispatcher notification log</dt>
+                      <dd data-driver-job-reminder-summary-log="true">
+                        {mockDispatcherNotificationLog || "No mock dispatcher notification recorded yet."}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="font-semibold text-slate-800" data-driver-job-reminder-summary-mock-only="true">
+                    Mock only. No real message was sent.
+                  </p>
+                </div>
                 <div className="space-y-2">
                   <button
                     className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"

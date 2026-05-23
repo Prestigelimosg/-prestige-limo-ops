@@ -642,11 +642,21 @@ async function runChromeTest() {
             const message = document.querySelector("[data-driver-job-reminder-message]");
             const section = document.querySelector("[data-driver-job-reminder-section]");
             const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
+            const summary = document.querySelector("[data-driver-job-reminder-summary]");
+            const summaryStatus = document.querySelector("[data-driver-job-reminder-summary-status]");
+            const summaryState = document.querySelector("[data-driver-job-reminder-summary-state]");
+            const summaryLog = document.querySelector("[data-driver-job-reminder-summary-log]");
+            const summaryMockOnly = document.querySelector("[data-driver-job-reminder-summary-mock-only]");
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
             const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
 
             return section?.innerText.includes("Mock Driver Reminder") &&
+              summary?.innerText.includes("Mock dispatcher reminder summary") &&
+              summaryStatus?.textContent.trim() === "Triggered locally" &&
+              summaryState?.textContent.trim() === "Triggered" &&
+              summaryLog?.textContent.includes("Mock dispatcher notification log: Driver reminder recorded locally.") &&
+              summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
               section?.innerText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent.") &&
               section?.innerText.includes("Mock reminder: 1 hour before pickup") &&
               section?.innerText.includes("Reminder tells the driver to activate mock live location and continue workflow.") &&
@@ -704,11 +714,21 @@ async function runChromeTest() {
             const button = document.querySelector("[data-driver-job-reminder]");
             const message = document.querySelector("[data-driver-job-reminder-message]");
             const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
+            const summary = document.querySelector("[data-driver-job-reminder-summary]");
+            const summaryStatus = document.querySelector("[data-driver-job-reminder-summary-status]");
+            const summaryState = document.querySelector("[data-driver-job-reminder-summary-state]");
+            const summaryLog = document.querySelector("[data-driver-job-reminder-summary-log]");
+            const summaryMockOnly = document.querySelector("[data-driver-job-reminder-summary-mock-only]");
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
             const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
 
             return message?.textContent.trim() === "Mock reminder is blocked after POB or Job Completed." &&
+              summary?.innerText.includes("Mock dispatcher reminder summary") &&
+              summaryStatus?.textContent.trim() === "Blocked locally" &&
+              summaryState?.textContent.trim() === "Blocked" &&
+              summaryLog?.textContent.includes("Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed.") &&
+              summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
               dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
               dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
               statusText === ${JSON.stringify(expectedStatusText)}
@@ -1086,6 +1106,14 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock/local only. No phone location is captured or sent."));
     assert.ok(validState.visibleText.includes("Activate Mock Live Location"));
     assert.ok(validState.visibleText.includes("Mock Driver Reminder"));
+    assert.ok(validState.visibleText.includes("Mock dispatcher reminder summary"));
+    assert.ok(validState.visibleText.includes("Mock driver reminder status"));
+    assert.ok(validState.visibleText.includes("Pending local trigger"));
+    assert.ok(validState.visibleText.includes("Reminder triggered / blocked state"));
+    assert.ok(validState.visibleText.includes("Not triggered"));
+    assert.ok(validState.visibleText.includes("Mock dispatcher notification log"));
+    assert.ok(validState.visibleText.includes("No mock dispatcher notification recorded yet."));
+    assert.ok(validState.visibleText.includes("Mock only. No real message was sent."));
     assert.ok(validState.visibleText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent."));
     assert.ok(validState.visibleText.includes("Mock reminder: 1 hour before pickup"));
     assert.ok(validState.visibleText.includes("Trigger Mock 1-Hour Reminder"));
@@ -1206,6 +1234,8 @@ async function runChromeTest() {
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Passenger"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Driver"));
     assert.ok(arrivalState.visibleText.includes("Mock Driver Reminder"));
+    assert.ok(arrivalState.visibleText.includes("Mock dispatcher reminder summary"));
+    assert.ok(arrivalState.visibleText.includes("Mock only. No real message was sent."));
     assert.ok(arrivalState.visibleText.includes("Trigger Mock 1-Hour Reminder"));
     assert.ok(arrivalState.visibleText.includes("Mock Latest Flight ETA"));
     assert.ok(arrivalState.visibleText.includes("Mock/local only. No real flight API is called and no notification is sent."));

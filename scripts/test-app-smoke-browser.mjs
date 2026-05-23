@@ -589,6 +589,12 @@ async function runChromeTest() {
           text,
           textareas,
           warningVisible: Boolean(document.querySelector("[data-driver-demo-warning]")),
+          workflowSummaryRows: Object.fromEntries(
+            [...document.querySelectorAll("[data-driver-demo-workflow-summary-row]")].map((row) => [
+              row.getAttribute("data-driver-demo-workflow-summary-row"),
+              row.querySelector("[data-driver-demo-workflow-summary-value]")?.textContent.trim() || "",
+            ]),
+          ),
         };
       })()`);
 
@@ -666,6 +672,32 @@ async function runChromeTest() {
         initialState.text.includes("Mock Driver Reminder"),
         true,
         `${viewport.label}: expected mock driver reminder section`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock Dispatcher Driver Workflow Summary"),
+        true,
+        `${viewport.label}: expected mock dispatcher workflow summary`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock/local only. Dispatcher-facing workflow checklist for this mock driver page."),
+        true,
+        `${viewport.label}: expected mock dispatcher workflow summary local-only text`,
+      );
+      assert.deepEqual(
+        initialState.workflowSummaryRows,
+        {
+          completed: "Pending",
+          "dispatcher-log": "No mock dispatcher notification recorded yet.",
+          "job-acknowledged": "Waiting",
+          "latest-eta": "Pending acknowledgement",
+          "live-location": "Inactive",
+          ots: "Pending",
+          "ots-photo-proof": "Pending proof",
+          otw: "Pending",
+          pob: "Pending",
+          "reminder-status": "Pending local trigger (Not triggered)",
+        },
+        `${viewport.label}: expected initial mock dispatcher workflow summary state`,
       );
       assert.equal(
         initialState.text.includes("Mock dispatcher reminder summary"),
@@ -821,11 +853,15 @@ async function runChromeTest() {
             const button = document.querySelector("[data-driver-demo-acknowledge]");
             const message = document.querySelector("[data-driver-demo-acknowledge-message]");
             const acknowledged = document.querySelector("[data-driver-demo-acknowledged-state]");
+            const workflowAcknowledgement = document
+              .querySelector("[data-driver-demo-workflow-summary-row='job-acknowledged'] [data-driver-demo-workflow-summary-value]")
+              ?.textContent.trim();
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
             return message?.textContent.trim() === "Job acknowledged locally for this mock driver page." &&
-              acknowledged?.textContent.trim() === "Acknowledged"
+              acknowledged?.textContent.trim() === "Acknowledged" &&
+              workflowAcknowledgement === "Acknowledged"
               ? {
                   distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                   messageText: message.textContent.trim(),
@@ -854,12 +890,16 @@ async function runChromeTest() {
             const button = document.querySelector("[data-driver-demo-live-location]");
             const message = document.querySelector("[data-driver-demo-live-location-message]");
             const state = document.querySelector("[data-driver-demo-live-location-state]");
+            const workflowLiveLocation = document
+              .querySelector("[data-driver-demo-workflow-summary-row='live-location'] [data-driver-demo-workflow-summary-value]")
+              ?.textContent.trim();
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
             return message?.textContent.trim() ===
               "Mock live location active locally for this mock driver page. No phone location is captured or sent." &&
-              state?.textContent.trim() === "Mock live location active"
+              state?.textContent.trim() === "Mock live location active" &&
+              workflowLiveLocation === "Active"
               ? {
                   distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                   fetchCount: (window.__driverDemoFetchCalls || []).length,
@@ -1060,6 +1100,13 @@ async function runChromeTest() {
               const summaryState = document.querySelector("[data-driver-demo-reminder-summary-state]");
               const summaryLog = document.querySelector("[data-driver-demo-reminder-summary-log]");
               const summaryMockOnly = document.querySelector("[data-driver-demo-reminder-summary-mock-only]");
+              const workflowReminder = document
+                .querySelector("[data-driver-demo-workflow-summary-row='reminder-status'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
+              const workflowDispatcherLog = document
+                .querySelector("[data-driver-demo-workflow-summary-row='dispatcher-log'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
+              const workflowMockOnly = document.querySelector("[data-driver-demo-workflow-summary-mock-only]");
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
               const currentStatus = document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "";
@@ -1070,6 +1117,9 @@ async function runChromeTest() {
                 summaryState?.textContent.trim() === "Triggered" &&
                 summaryLog?.textContent.includes("Mock dispatcher notification log: Driver reminder recorded locally.") &&
                 summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
+                workflowReminder === "Triggered locally (Triggered)" &&
+                workflowDispatcherLog?.includes("Mock dispatcher notification log: Driver reminder recorded locally.") &&
+                workflowMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
                 section?.innerText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent.") &&
                 section?.innerText.includes("Mock reminder: 1 hour before pickup") &&
                 section?.innerText.includes("Reminder tells the driver to activate mock live location and continue workflow.") &&
@@ -1123,6 +1173,13 @@ async function runChromeTest() {
               const summaryState = document.querySelector("[data-driver-demo-reminder-summary-state]");
               const summaryLog = document.querySelector("[data-driver-demo-reminder-summary-log]");
               const summaryMockOnly = document.querySelector("[data-driver-demo-reminder-summary-mock-only]");
+              const workflowReminder = document
+                .querySelector("[data-driver-demo-workflow-summary-row='reminder-status'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
+              const workflowDispatcherLog = document
+                .querySelector("[data-driver-demo-workflow-summary-row='dispatcher-log'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
+              const workflowMockOnly = document.querySelector("[data-driver-demo-workflow-summary-mock-only]");
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
               const currentStatus = document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "";
@@ -1133,6 +1190,9 @@ async function runChromeTest() {
                 summaryState?.textContent.trim() === "Blocked" &&
                 summaryLog?.textContent.includes("Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed.") &&
                 summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
+                workflowReminder === "Blocked locally (Blocked)" &&
+                workflowDispatcherLog?.includes("Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed.") &&
+                workflowMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
                 dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
                 dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
                 currentStatus === ${JSON.stringify(expectedStatus)}
@@ -1224,9 +1284,17 @@ async function runChromeTest() {
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
               const activityLogText = document.querySelector("[data-driver-demo-activity-log]")?.innerText || "";
+              const workflowOtw = document
+                .querySelector("[data-driver-demo-workflow-summary-row='otw'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
+              const workflowLatestEta = document
+                .querySelector("[data-driver-demo-workflow-summary-row='latest-eta'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
 
               return message?.textContent.trim() === "Acknowledge latest mock flight ETA before OTW." &&
                 document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() === "Assigned" &&
+                workflowOtw === "Pending" &&
+                workflowLatestEta === "Pending acknowledgement" &&
                 activityLogText.includes("OTW blocked") &&
                 activityLogText.includes("OTW was blocked because latest ETA acknowledgement is missing.")
                 ? {
@@ -1275,11 +1343,15 @@ async function runChromeTest() {
               const button = document.querySelector("[data-driver-demo-latest-eta]");
               const message = document.querySelector("[data-driver-demo-latest-eta-message]");
               const state = document.querySelector("[data-driver-demo-latest-eta-state]");
+              const workflowLatestEta = document
+                .querySelector("[data-driver-demo-workflow-summary-row='latest-eta'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
 
               return message?.textContent.trim() === "Latest mock flight ETA acknowledged locally. No real flight API or notification was used." &&
-                state?.textContent.trim() === "Latest mock flight ETA acknowledged"
+                state?.textContent.trim() === "Latest mock flight ETA acknowledged" &&
+                workflowLatestEta === "Acknowledged"
                 ? {
                     distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                     fetchCount: (window.__driverDemoFetchCalls || []).length,
@@ -1323,10 +1395,22 @@ async function runChromeTest() {
               const expectedMessage = ${JSON.stringify(expectedMessage)};
               const button = document.querySelector(\`[data-driver-demo-status="\${statusLabel}"]\`);
               const message = document.querySelector(\`[data-driver-demo-status-message="\${statusLabel}"]\`);
+              const workflowKey = ${JSON.stringify({
+                "Job Completed": "completed",
+                OTS: "ots",
+                OTW: "otw",
+                POB: "pob",
+              }[label])};
+              const workflowValue = workflowKey
+                ? document
+                    .querySelector(\`[data-driver-demo-workflow-summary-row="\${workflowKey}"] [data-driver-demo-workflow-summary-value]\`)
+                    ?.textContent.trim()
+                : "";
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
 
-              return message?.textContent.trim() === expectedMessage
+              return message?.textContent.trim() === expectedMessage &&
+                (!workflowKey || workflowValue === "Done")
                 ? {
                     currentStatus: document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "",
                     distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
@@ -1363,9 +1447,17 @@ async function runChromeTest() {
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
               const activityLogText = document.querySelector("[data-driver-demo-activity-log]")?.innerText || "";
+              const workflowPob = document
+                .querySelector("[data-driver-demo-workflow-summary-row='pob'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
+              const workflowProof = document
+                .querySelector("[data-driver-demo-workflow-summary-row='ots-photo-proof'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
 
               return message?.textContent.trim() === "Add mock OTS photo proof before POB." &&
                 document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() === "OTS" &&
+                workflowPob === "Pending" &&
+                workflowProof === "Pending proof" &&
                 activityLogText.includes("POB blocked") &&
                 activityLogText.includes("POB was blocked because OTS photo proof is missing.")
                 ? {
@@ -1413,11 +1505,15 @@ async function runChromeTest() {
               const button = document.querySelector("[data-driver-demo-ots-photo-proof]");
               const message = document.querySelector("[data-driver-demo-ots-photo-proof-message]");
               const state = document.querySelector("[data-driver-demo-ots-photo-proof-state]");
+              const workflowProof = document
+                .querySelector("[data-driver-demo-workflow-summary-row='ots-photo-proof'] [data-driver-demo-workflow-summary-value]")
+                ?.textContent.trim();
               const buttonRect = button?.getBoundingClientRect();
               const messageRect = message?.getBoundingClientRect();
 
               return message?.textContent.trim() === "Mock OTS photo proof added locally. No real file upload, camera, or storage was used." &&
-                state?.textContent.trim() === "Mock OTS photo proof added"
+                state?.textContent.trim() === "Mock OTS photo proof added" &&
+                workflowProof === "Added"
                 ? {
                     distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                     fetchCount: (window.__driverDemoFetchCalls || []).length,
@@ -1494,7 +1590,9 @@ async function runChromeTest() {
       await clickValidStatus("POB", "Status updated: POB. Mock live location ended locally.");
       await waitForCondition(
         () =>
-          evaluate(`document.querySelector("[data-driver-demo-live-location-state]")?.textContent.trim() === "Mock live location inactive"`),
+          evaluate(`document.querySelector("[data-driver-demo-live-location-state]")?.textContent.trim() === "Mock live location inactive" &&
+            document.querySelector("[data-driver-demo-workflow-summary-row='pob'] [data-driver-demo-workflow-summary-value]")?.textContent.trim() === "Done" &&
+            document.querySelector("[data-driver-demo-workflow-summary-row='live-location'] [data-driver-demo-workflow-summary-value]")?.textContent.trim() === "Inactive"`),
         10000,
         `${viewport.label} mock live location ended at POB`,
       );
@@ -1505,7 +1603,8 @@ async function runChromeTest() {
       await clickValidStatus("Job Completed", "Status updated: Completed");
       await waitForCondition(
         () =>
-          evaluate(`document.querySelector("[data-driver-demo-live-location-state]")?.textContent.trim() === "Mock live location inactive"`),
+          evaluate(`document.querySelector("[data-driver-demo-live-location-state]")?.textContent.trim() === "Mock live location inactive" &&
+            document.querySelector("[data-driver-demo-workflow-summary-row='completed'] [data-driver-demo-workflow-summary-value]")?.textContent.trim() === "Done"`),
         10000,
         `${viewport.label} mock live location remains ended after Job Completed`,
       );

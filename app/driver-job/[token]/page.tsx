@@ -145,10 +145,44 @@ function hasReachedOts(status: string) {
   return normalizedStatus === "ots" || normalizedStatus === "pob" || normalizedStatus === "completed";
 }
 
+function workflowStepIndex(status: string) {
+  const normalizedStatus = validateDriverJobStatusUpdate(status);
+
+  if (normalizedStatus === "driver_otw") {
+    return 0;
+  }
+
+  if (normalizedStatus === "ots") {
+    return 1;
+  }
+
+  if (normalizedStatus === "pob") {
+    return 2;
+  }
+
+  if (normalizedStatus === "completed") {
+    return 3;
+  }
+
+  return -1;
+}
+
+function hasReachedOtw(status: string) {
+  return workflowStepIndex(status) >= 0;
+}
+
 function hasReachedPassengerPickup(status: string) {
   const normalizedStatus = validateDriverJobStatusUpdate(status);
 
   return normalizedStatus === "pob" || normalizedStatus === "completed";
+}
+
+function hasReachedCompleted(status: string) {
+  return validateDriverJobStatusUpdate(status) === "completed";
+}
+
+function workflowChecklistState(done: boolean) {
+  return done ? "Done" : "Pending";
 }
 
 function activityTime() {
@@ -190,6 +224,66 @@ export default function DriverJobPage() {
   const requiresMockOtsPhotoProof = readyJob ? isArrivalStyleJob(readyJob) : false;
   const showMockLatestFlightEta = requiresMockLatestEtaAcknowledgement;
   const showMockOtsPhotoProof = requiresMockOtsPhotoProof && hasReachedOts(workflowStatus);
+  const mockDispatcherWorkflowChecklist = [
+    {
+      key: "job-acknowledged",
+      label: "Job acknowledged",
+      value: acknowledged ? "Acknowledged" : "Waiting",
+    },
+    {
+      key: "reminder-status",
+      label: "Mock 1-hour reminder status",
+      value: `${mockDriverReminderStatus} (${mockDriverReminderState})`,
+    },
+    ...(requiresMockLatestEtaAcknowledgement
+      ? [
+          {
+            key: "latest-eta",
+            label: "Arrival/MNG latest ETA acknowledged",
+            value: mockLatestEtaAcknowledged ? "Acknowledged" : "Pending acknowledgement",
+          },
+        ]
+      : []),
+    {
+      key: "otw",
+      label: "OTW",
+      value: workflowChecklistState(hasReachedOtw(workflowStatus)),
+    },
+    {
+      key: "ots",
+      label: "OTS",
+      value: workflowChecklistState(hasReachedOts(workflowStatus)),
+    },
+    ...(requiresMockOtsPhotoProof
+      ? [
+          {
+            key: "ots-photo-proof",
+            label: "Arrival/MNG mock OTS photo proof added",
+            value: mockOtsPhotoProofAdded ? "Added" : "Pending proof",
+          },
+        ]
+      : []),
+    {
+      key: "pob",
+      label: "POB",
+      value: workflowChecklistState(hasReachedPassengerPickup(workflowStatus)),
+    },
+    {
+      key: "completed",
+      label: "Job Completed",
+      value: workflowChecklistState(hasReachedCompleted(workflowStatus)),
+    },
+    {
+      key: "live-location",
+      label: "Mock live location state",
+      value: mockLiveLocationActive ? "Active" : "Inactive",
+    },
+    {
+      key: "dispatcher-log",
+      label: "Mock dispatcher notification log",
+      value: mockDispatcherNotificationLog || "No mock dispatcher notification recorded yet.",
+    },
+  ];
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -616,6 +710,46 @@ export default function DriverJobPage() {
                   </dd>
                 </div>
               </dl>
+            </section>
+
+            <section
+              className="space-y-3"
+              aria-labelledby="driver-workflow-summary-heading"
+              data-driver-job-workflow-summary="true"
+            >
+              <h2 id="driver-workflow-summary-heading" className="text-base font-semibold text-slate-900">
+                Mock Dispatcher Driver Workflow Summary
+              </h2>
+              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+                <p className="text-sm font-medium text-slate-600">
+                  Mock/local only. Dispatcher-facing workflow checklist for this mock driver page.
+                </p>
+                <dl className="grid gap-2">
+                  {mockDispatcherWorkflowChecklist.map((item) => (
+                    <div
+                      className="grid gap-1 rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200"
+                      data-driver-job-workflow-summary-row={item.key}
+                      key={item.key}
+                    >
+                      <dt
+                        className="font-semibold text-slate-500"
+                        data-driver-job-workflow-summary-label="true"
+                      >
+                        {item.label}
+                      </dt>
+                      <dd
+                        className="break-words font-semibold text-slate-800"
+                        data-driver-job-workflow-summary-value="true"
+                      >
+                        {item.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="font-semibold text-slate-800" data-driver-job-workflow-summary-mock-only="true">
+                  Mock only. No real message was sent.
+                </p>
+              </div>
             </section>
 
             <section className="space-y-3" aria-labelledby="driver-acknowledgement-heading">

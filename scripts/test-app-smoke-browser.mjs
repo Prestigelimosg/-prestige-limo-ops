@@ -502,10 +502,10 @@ async function runChromeTest() {
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
         resourceCalls.filter((url) =>
-          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|webhook|notification|supabase|\/rest\/v1\//i.test(url),
+          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i.test(url),
         ),
         [],
-        `${context}: expected no payment provider, bank API, webhook, notification, or Supabase resources`,
+        `${context}: expected no payment provider, bank API, webhook, notification, WhatsApp, email, SMS, or Supabase resources`,
       );
     };
 
@@ -588,9 +588,27 @@ async function runChromeTest() {
             id: row.getAttribute("data-outstanding-payment-row"),
             text: row.innerText,
           })),
+          collectionFollowUpBoundary:
+            document.querySelector("[data-collection-follow-up-boundary]")?.textContent.trim() || "",
+          collectionFollowUpNoSendBoundary:
+            document.querySelector("[data-collection-follow-up-no-send-boundary]")?.textContent.trim() || "",
+          collectionFollowUpRows: [...document.querySelectorAll("[data-collection-follow-up-row]")].map((row) => ({
+            actions: [...row.querySelectorAll("[data-follow-up-action]")].map((button) => button.textContent.trim()),
+            href: row.querySelector("[data-follow-up-open-customer-folder]")?.getAttribute("href") || "",
+            id: row.getAttribute("data-collection-follow-up-row"),
+            text: row.innerText,
+          })),
+          collectionFollowUpPaidInvoiceMentions: ["UBS-0002", "RITZ-0002", "VIP-0002"].filter((invoiceNumber) =>
+            document.querySelector("[data-collection-follow-up-queue]")?.innerText.includes(invoiceNumber),
+          ),
           eventLogBoundary:
             document.querySelector("[data-mock-payment-event-log-boundary]")?.textContent.trim() || "",
           eventLogText: document.querySelector("[data-mock-payment-event-log]")?.innerText || "",
+          followUpEventLogBoundary:
+            document.querySelector("[data-mock-follow-up-event-log-boundary]")?.textContent.trim() || "",
+          followUpEventLogText: document.querySelector("[data-mock-follow-up-event-log]")?.innerText || "",
+          followUpSectionFeedback:
+            document.querySelector("[data-follow-up-section-feedback]")?.textContent.trim() || "",
           paymentSectionFeedback:
             document.querySelector("[data-payment-section-feedback]")?.textContent.trim() || "",
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
@@ -644,6 +662,43 @@ async function runChromeTest() {
         [],
         "Expected fully paid invoices to stay out of Outstanding Payments Review",
       );
+      assert.equal(
+        dashboardState.collectionFollowUpBoundary,
+        "Mock/local only. Follow-up changes reset on refresh and are not saved.",
+        "Expected local-only mock boundary in collection follow-up queue",
+      );
+      assert.equal(
+        dashboardState.collectionFollowUpNoSendBoundary,
+        "No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.",
+        "Expected no-send mock boundary in collection follow-up queue",
+      );
+      assert.deepEqual(
+        dashboardState.collectionFollowUpRows.map((row) => row.id),
+        [
+          "ubs:UBS-0003",
+          "ubs:UBS-0004",
+          "ritz-carlton:RITZ-0003",
+          "ritz-carlton:RITZ-0004",
+          "vip-customer:VIP-0003",
+        ],
+        "Expected collection follow-up queue to include outstanding collection items",
+      );
+      assert.deepEqual(
+        dashboardState.collectionFollowUpRows.map((row) => row.href),
+        [
+          "/customers/ubs",
+          "/customers/ubs",
+          "/customers/ritz-carlton",
+          "/customers/ritz-carlton",
+          "/customers/vip-customer",
+        ],
+        "Expected every collection follow-up row to link to its customer folder",
+      );
+      assert.deepEqual(
+        dashboardState.collectionFollowUpPaidInvoiceMentions,
+        [],
+        "Expected fully paid invoices to stay out of Collection Follow-up Queue",
+      );
       for (const row of dashboardState.outstandingRows) {
         assert.deepEqual(
           row.actions,
@@ -651,10 +706,22 @@ async function runChromeTest() {
           `Expected mock manual payment controls on ${row.id}`,
         );
       }
+      for (const row of dashboardState.collectionFollowUpRows) {
+        assert.deepEqual(
+          row.actions,
+          ["Schedule Follow-up", "Mark Follow-up Done", "Add Mock Note"],
+          `Expected mock collection follow-up controls on ${row.id}`,
+        );
+      }
       assert.equal(
         dashboardState.paymentSectionFeedback,
         "Mock controls only. Use the buttons to simulate manual payment tracking without saving records.",
         "Expected helper feedback near mock payment controls before actions",
+      );
+      assert.equal(
+        dashboardState.followUpSectionFeedback,
+        "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
+        "Expected helper feedback near mock follow-up controls before actions",
       );
       assert.equal(
         dashboardState.eventLogBoundary,
@@ -665,6 +732,16 @@ async function runChromeTest() {
         dashboardState.eventLogText.includes("No mock payment actions recorded yet."),
         true,
         "Expected mock payment event log empty state before actions",
+      );
+      assert.equal(
+        dashboardState.followUpEventLogBoundary,
+        "Mock only. No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.",
+        "Expected mock follow-up event log boundary",
+      );
+      assert.equal(
+        dashboardState.followUpEventLogText.includes("No mock follow-up actions recorded yet."),
+        true,
+        "Expected mock follow-up event log empty state before actions",
       );
       for (const expectedOutstandingText of [
         "Outstanding Payments Review",
@@ -689,6 +766,24 @@ async function runChromeTest() {
             dashboardState.text.includes(expectedOutstandingText),
           `Expected outstanding payment review text: ${expectedOutstandingText}`,
         );
+      }
+      for (const expectedFollowUpText of [
+        "Collection Follow-up Queue",
+        "Mock/local only. Follow-up changes reset on refresh and are not saved.",
+        "No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.",
+        "NEXT FOLLOW-UP",
+        "Overdue balance needs collection follow-up",
+        "Partial payment still has balance due",
+        "Invoice sent but balance remains due",
+        "Monthly account can be grouped into statement later",
+        "Unpaid balance needs collection follow-up",
+        "Schedule Follow-up",
+        "Mark Follow-up Done",
+        "Add Mock Note",
+        "Mock Follow-up Event Log",
+        "Mock only. No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.",
+      ]) {
+        assert.ok(dashboardState.text.includes(expectedFollowUpText), `Expected collection follow-up text: ${expectedFollowUpText}`);
       }
       for (const expectedText of [
         "Local/mock only. No payment API, bank API, notification, or Supabase write is used.",
@@ -761,6 +856,129 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
+      const clickMockFollowUpAction = async (rowId, action, description) => {
+        const rowSelector = `[data-collection-follow-up-row="${rowId}"]`;
+        const actionSelector = `[data-follow-up-action="${action}"]`;
+        const clicked = await evaluate(`(() => {
+          const row = document.querySelector(${JSON.stringify(rowSelector)});
+          const button = row?.querySelector(${JSON.stringify(actionSelector)});
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
+      await clickMockFollowUpAction("ubs:UBS-0003", "schedule", "Schedule Follow-up");
+      await clickMockFollowUpAction("ritz-carlton:RITZ-0003", "done", "Mark Follow-up Done");
+      await clickMockFollowUpAction("vip-customer:VIP-0003", "note", "Add Mock Note");
+
+      const followUpActionState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rows = [...document.querySelectorAll("[data-collection-follow-up-row]")].map((row) => ({
+              id: row.getAttribute("data-collection-follow-up-row"),
+              text: row.innerText,
+            }));
+            const eventRows = [...document.querySelectorAll("[data-mock-follow-up-event]")].map((event) => ({
+              invoice: event.getAttribute("data-mock-follow-up-event"),
+              text: event.innerText,
+            }));
+
+            if (eventRows.length < 3) {
+              return false;
+            }
+
+            return {
+              eventLogBoundary:
+                document.querySelector("[data-mock-follow-up-event-log-boundary]")?.textContent.trim() || "",
+              eventLogText: document.querySelector("[data-mock-follow-up-event-log]")?.innerText || "",
+              eventRows,
+              followUpSectionFeedback:
+                document.querySelector("[data-follow-up-section-feedback]")?.textContent.trim() || "",
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              rowFeedback: Object.fromEntries(
+                [...document.querySelectorAll("[data-follow-up-action-feedback]")].map((feedback) => [
+                  feedback.getAttribute("data-follow-up-action-feedback"),
+                  feedback.textContent.trim(),
+                ]),
+              ),
+              rows,
+            };
+          })()`),
+        10000,
+        "mock collection follow-up action updates",
+      );
+
+      assert.deepEqual(
+        followUpActionState.rows.map((row) => row.id),
+        [
+          "ubs:UBS-0003",
+          "ubs:UBS-0004",
+          "ritz-carlton:RITZ-0003",
+          "ritz-carlton:RITZ-0004",
+          "vip-customer:VIP-0003",
+        ],
+        "Expected mock follow-up actions to keep collection rows visible while balances remain due",
+      );
+      assert.equal(
+        followUpActionState.rows.find((row) => row.id === "ubs:UBS-0003")?.text.includes("Tomorrow (mock/local)"),
+        true,
+        "Expected Schedule Follow-up to update the local follow-up date",
+      );
+      assert.equal(
+        followUpActionState.rowFeedback["ubs:UBS-0003"]?.includes("follow-up scheduled locally"),
+        true,
+        "Expected Schedule Follow-up feedback near that row",
+      );
+      assert.equal(
+        followUpActionState.rowFeedback["ritz-carlton:RITZ-0003"]?.includes("follow-up marked done locally"),
+        true,
+        "Expected Mark Follow-up Done feedback near that row",
+      );
+      assert.equal(
+        followUpActionState.rowFeedback["vip-customer:VIP-0003"]?.includes("mock note added locally"),
+        true,
+        "Expected Add Mock Note feedback near that row",
+      );
+      assert.equal(
+        followUpActionState.followUpSectionFeedback.includes("VIP-0003 mock note added locally"),
+        true,
+        "Expected section feedback near follow-up controls after Add Mock Note",
+      );
+      for (const expectedEventText of [
+        "UBS-0003",
+        "Scheduled follow-up",
+        "RITZ-0003",
+        "Marked follow-up done",
+        "VIP-0003",
+        "Added mock note",
+        "Mock follow-up schedule only",
+        "Mock follow-up completion only",
+        "Mock note only",
+      ]) {
+        assert.ok(
+          followUpActionState.eventLogText.includes(expectedEventText),
+          `Expected mock follow-up event log text: ${expectedEventText}`,
+        );
+      }
+      assert.equal(
+        followUpActionState.eventLogBoundary,
+        "Mock only. No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.",
+        "Expected follow-up event log to keep the no-send/no-record boundary after actions",
+      );
+      assert.deepEqual(
+        followUpActionState.integrationCalls.filter((call) =>
+          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i.test(call),
+        ),
+        [],
+        "Expected mock follow-up buttons not to call payment, bank, webhook, notification, WhatsApp, email, SMS, or Supabase resources",
+      );
+
       await clickMockPaymentAction("ritz-carlton:RITZ-0004", "invoice-sent", "Mark Invoice Sent");
       await clickMockPaymentAction("ubs:UBS-0004", "partial-payment", "Record Partial Payment");
       await clickMockPaymentAction("ritz-carlton:RITZ-0003", "paid", "Mark Paid");
@@ -773,6 +991,10 @@ async function runChromeTest() {
               id: row.getAttribute("data-outstanding-payment-row"),
               text: row.innerText,
             }));
+            const followUpRows = [...document.querySelectorAll("[data-collection-follow-up-row]")].map((row) => ({
+              id: row.getAttribute("data-collection-follow-up-row"),
+              text: row.innerText,
+            }));
             const eventRows = [...document.querySelectorAll("[data-mock-payment-event]")].map((event) => ({
               invoice: event.getAttribute("data-mock-payment-event"),
               text: event.innerText,
@@ -781,7 +1003,9 @@ async function runChromeTest() {
             if (
               eventRows.length < 4 ||
               rows.some((row) => row.id === "ritz-carlton:RITZ-0003") ||
-              rows.some((row) => row.id === "vip-customer:VIP-0003")
+              rows.some((row) => row.id === "vip-customer:VIP-0003") ||
+              followUpRows.some((row) => row.id === "ritz-carlton:RITZ-0003") ||
+              followUpRows.some((row) => row.id === "vip-customer:VIP-0003")
             ) {
               return false;
             }
@@ -791,6 +1015,7 @@ async function runChromeTest() {
                 document.querySelector("[data-mock-payment-event-log-boundary]")?.textContent.trim() || "",
               eventLogText: document.querySelector("[data-mock-payment-event-log]")?.innerText || "",
               eventRows,
+              followUpRows,
               integrationCalls: window.__customerPaymentIntegrationCalls || [],
               paymentSectionFeedback:
                 document.querySelector("[data-payment-section-feedback]")?.textContent.trim() || "",
@@ -811,6 +1036,11 @@ async function runChromeTest() {
         paymentActionState.rows.map((row) => row.id),
         ["ubs:UBS-0003", "ubs:UBS-0004", "ritz-carlton:RITZ-0004"],
         "Expected paid and waived mock rows to leave Outstanding Payments Review locally",
+      );
+      assert.deepEqual(
+        paymentActionState.followUpRows.map((row) => row.id),
+        ["ubs:UBS-0003", "ubs:UBS-0004", "ritz-carlton:RITZ-0004"],
+        "Expected paid and waived mock rows to leave Collection Follow-up Queue locally",
       );
       assert.equal(
         paymentActionState.rows.find((row) => row.id === "ubs:UBS-0004")?.text.includes("Partially Paid"),
@@ -868,10 +1098,10 @@ async function runChromeTest() {
       );
       assert.deepEqual(
         paymentActionState.integrationCalls.filter((call) =>
-          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|webhook|notification|supabase|\/rest\/v1\//i.test(call),
+          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i.test(call),
         ),
         [],
-        "Expected mock payment buttons not to call payment, bank, webhook, notification, or Supabase resources",
+        "Expected mock payment buttons not to call payment, bank, webhook, notification, WhatsApp, email, SMS, or Supabase resources",
       );
 
       const searchCustomers = async (term, expectedRows, description) =>

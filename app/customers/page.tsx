@@ -33,11 +33,17 @@ type OutstandingPaymentReviewItem = {
   customerId: string;
   customerName: string;
   dueOrFollowUpDate: string;
+  followUpDate: string;
   invoiceNumber: string;
   isMonthlyAccount: boolean;
   key: string;
   paymentStatus: MockPaymentStatus;
   reason: string;
+};
+
+type VisibleOutstandingPaymentReviewItem = OutstandingPaymentReviewItem & {
+  feedback?: string;
+  removeFromOutstanding: boolean;
 };
 
 type MockPaymentAction = "invoice-sent" | "partial-payment" | "paid" | "waived";
@@ -50,6 +56,23 @@ type MockPaymentLocalUpdate = {
 };
 
 type MockPaymentEvent = {
+  action: string;
+  customerName: string;
+  id: string;
+  invoiceNumber: string;
+  note: string;
+  timestamp: string;
+};
+
+type MockFollowUpAction = "schedule" | "done" | "note";
+
+type MockFollowUpLocalUpdate = {
+  feedback: string;
+  followUpDate?: string;
+  note?: string;
+};
+
+type MockFollowUpEvent = {
   action: string;
   customerName: string;
   id: string;
@@ -96,6 +119,26 @@ function getOutstandingPaymentReason(customer: MockCustomer, booking: MockCustom
   return "Completed job + balance due = Outstanding";
 }
 
+function getCollectionFollowUpReason(item: OutstandingPaymentReviewItem) {
+  if (item.paymentStatus === "Overdue") {
+    return "Overdue balance needs collection follow-up";
+  }
+
+  if (item.paymentStatus === "Partially Paid") {
+    return "Partial payment still has balance due";
+  }
+
+  if (item.isMonthlyAccount) {
+    return "Monthly account can be grouped into statement later";
+  }
+
+  if (item.paymentStatus === "Invoice Sent") {
+    return "Invoice sent but balance remains due";
+  }
+
+  return "Unpaid balance needs collection follow-up";
+}
+
 const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustomers.flatMap((customer) =>
   customer.bookingHistory
     .filter(
@@ -110,6 +153,7 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
       dueOrFollowUpDate:
         customer.invoices.find((invoice) => invoice.invoiceNumber === booking.invoiceNumber)?.dueDate ??
         customer.nextFollowUpDate,
+      followUpDate: customer.nextFollowUpDate,
       invoiceNumber: booking.invoiceNumber,
       isMonthlyAccount: customer.accountType === "Monthly Account",
       key: `${customer.id}:${booking.invoiceNumber}`,
@@ -121,11 +165,18 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
 export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
+  const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
   const [mockPaymentLocalUpdates, setMockPaymentLocalUpdates] = useState<
     Record<string, MockPaymentLocalUpdate>
   >({});
+  const [mockFollowUpLocalUpdates, setMockFollowUpLocalUpdates] = useState<
+    Record<string, MockFollowUpLocalUpdate>
+  >({});
   const [mockPaymentSectionFeedback, setMockPaymentSectionFeedback] = useState(
     "Mock controls only. Use the buttons to simulate manual payment tracking without saving records.",
+  );
+  const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
+    "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
   );
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filteredCustomers = useMemo(() => {
@@ -162,6 +213,20 @@ export default function MockCustomerDashboardPage() {
             hasMockBalanceDue(item.balanceDue),
         ),
     [mockPaymentLocalUpdates],
+  );
+  const visibleCollectionFollowUpItems = useMemo(
+    () =>
+      visibleOutstandingPaymentReviewItems.map((item) => {
+        const localFollowUpUpdate = mockFollowUpLocalUpdates[item.key];
+
+        return {
+          ...item,
+          followUpDate: localFollowUpUpdate?.followUpDate ?? item.followUpDate,
+          followUpFeedback: localFollowUpUpdate?.feedback,
+          followUpNote: localFollowUpUpdate?.note,
+        };
+      }),
+    [mockFollowUpLocalUpdates, visibleOutstandingPaymentReviewItems],
   );
 
   function handleMockPaymentAction(item: OutstandingPaymentReviewItem, action: MockPaymentAction) {
@@ -237,6 +302,61 @@ export default function MockCustomerDashboardPage() {
       ...currentEvents,
     ]);
     setMockPaymentSectionFeedback(nextUpdate.feedback);
+  }
+
+  function handleMockFollowUpAction(item: VisibleOutstandingPaymentReviewItem, action: MockFollowUpAction) {
+    const actionTimestamp = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const actionConfig: Record<
+      MockFollowUpAction,
+      {
+        actionLabel: string;
+        feedback: string;
+        followUpDate?: string;
+        note: string;
+      }
+    > = {
+      schedule: {
+        actionLabel: "Scheduled follow-up",
+        feedback: `${item.invoiceNumber} follow-up scheduled locally. No message was sent.`,
+        followUpDate: "Tomorrow (mock/local)",
+        note: "Mock follow-up schedule only; no WhatsApp, email, SMS, or notification was sent.",
+      },
+      done: {
+        actionLabel: "Marked follow-up done",
+        feedback: `${item.invoiceNumber} follow-up marked done locally. Balance still needs manual review.`,
+        note: "Mock follow-up completion only; no collection record or Supabase row was created.",
+      },
+      note: {
+        actionLabel: "Added mock note",
+        feedback: `${item.invoiceNumber} mock note added locally. Source data is unchanged.`,
+        note: "Mock note only; no customer note, payment record, or notification was created.",
+      },
+    };
+    const nextUpdate = actionConfig[action];
+
+    setMockFollowUpLocalUpdates((currentUpdates) => ({
+      ...currentUpdates,
+      [item.key]: {
+        feedback: nextUpdate.feedback,
+        followUpDate: nextUpdate.followUpDate ?? currentUpdates[item.key]?.followUpDate,
+        note: nextUpdate.note,
+      },
+    }));
+    setMockFollowUpEvents((currentEvents) => [
+      {
+        action: nextUpdate.actionLabel,
+        customerName: item.customerName,
+        id: `${item.key}:${action}:${Date.now()}`,
+        invoiceNumber: item.invoiceNumber,
+        note: nextUpdate.note,
+        timestamp: actionTimestamp,
+      },
+      ...currentEvents,
+    ]);
+    setMockFollowUpSectionFeedback(nextUpdate.feedback);
   }
 
   return (
@@ -468,6 +588,118 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
 
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-collection-follow-up-queue="true">
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Collection Follow-up Queue</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-collection-follow-up-boundary="true">
+                  Mock/local only. Follow-up changes reset on refresh and are not saved.
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-collection-follow-up-no-send-boundary="true">
+                  No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                {visibleCollectionFollowUpItems.length} mock follow-ups need collection attention.
+              </p>
+            </div>
+            <p
+              aria-live="polite"
+              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+              data-follow-up-section-feedback="true"
+            >
+              {mockFollowUpSectionFeedback}
+            </p>
+          </div>
+
+          <div className="divide-y divide-slate-200">
+            {visibleCollectionFollowUpItems.length > 0 ? (
+              visibleCollectionFollowUpItems.map((item) => (
+                <article
+                  className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[1fr_0.7fr_0.7fr_0.8fr_1fr_1.25fr] xl:items-start"
+                  data-collection-follow-up-row={item.key}
+                  key={item.key}
+                >
+                  <div>
+                    <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
+                    <p className="mt-1 text-sm text-slate-600">{item.invoiceNumber}</p>
+                    {item.isMonthlyAccount ? (
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
+                    <p className="mt-1 text-sm font-bold text-slate-900">{item.paymentStatus}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Balance Due</p>
+                    <p className="mt-1 text-sm font-bold text-slate-950">{item.balanceDue}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Next Follow-up</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{item.followUpDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm leading-6 text-slate-700">{getCollectionFollowUpReason(item)}</p>
+                    {item.followUpNote ? (
+                      <p className="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                        {item.followUpNote}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <Link
+                      className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
+                      data-follow-up-open-customer-folder={item.key}
+                      href={`/customers/${item.customerId}`}
+                    >
+                      Open Customer Folder
+                    </Link>
+                    <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                      <button
+                        className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                        data-follow-up-action="schedule"
+                        onClick={() => handleMockFollowUpAction(item, "schedule")}
+                        type="button"
+                      >
+                        Schedule Follow-up
+                      </button>
+                      <button
+                        className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                        data-follow-up-action="done"
+                        onClick={() => handleMockFollowUpAction(item, "done")}
+                        type="button"
+                      >
+                        Mark Follow-up Done
+                      </button>
+                      <button
+                        className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                        data-follow-up-action="note"
+                        onClick={() => handleMockFollowUpAction(item, "note")}
+                        type="button"
+                      >
+                        Add Mock Note
+                      </button>
+                    </div>
+                    <p
+                      aria-live="polite"
+                      className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
+                      data-follow-up-action-feedback={item.key}
+                    >
+                      {item.followUpFeedback ?? "Mock helper: this follow-up updates local page state only."}
+                    </p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm text-slate-600" data-collection-follow-up-empty="true">
+                No mock collection follow-up items remain after local actions. Refreshing the page restores the mock data.
+              </div>
+            )}
+          </div>
+        </section>
+
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-mock-payment-event-log="true">
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <h2 className="text-lg font-bold text-slate-950">Mock Payment Event Log</h2>
@@ -509,6 +741,53 @@ export default function MockCustomerDashboardPage() {
             ) : (
               <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
                 No mock payment actions recorded yet.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-mock-follow-up-event-log="true">
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <h2 className="text-lg font-bold text-slate-950">Mock Follow-up Event Log</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600" data-mock-follow-up-event-log-boundary="true">
+              Mock only. No notification, WhatsApp message, email, payment record, bank record, or Supabase row is
+              created.
+            </p>
+          </div>
+          <div className="p-4 sm:p-5">
+            {mockFollowUpEvents.length > 0 ? (
+              <div className="grid gap-3" aria-live="polite">
+                {mockFollowUpEvents.map((event) => (
+                  <article
+                    className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm lg:grid-cols-[0.8fr_1fr_0.8fr_0.7fr_1.2fr]"
+                    data-mock-follow-up-event={event.invoiceNumber}
+                    key={event.id}
+                  >
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Invoice / Reference
+                      </p>
+                      <p className="mt-1 font-bold text-slate-950">{event.invoiceNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.customerName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Action</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.action}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Local Time</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.timestamp}</p>
+                    </div>
+                    <p className="leading-6 text-slate-700">{event.note}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                No mock follow-up actions recorded yet.
               </div>
             )}
           </div>

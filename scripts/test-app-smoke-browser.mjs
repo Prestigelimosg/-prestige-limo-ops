@@ -28,6 +28,8 @@ const responsiveTabViewports = [
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
+const customerDashboardUrl = new URL("/customers", appUrl).toString();
+const customerFolderUrl = new URL("/customers/ritz-carlton", appUrl).toString();
 const driverDemoViewports = [
   { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
@@ -49,6 +51,7 @@ const requiredVisibleText = [
   "Save Driver Profile",
   "Rates",
   "Saved Rate Overrides",
+  "Customers & Payments",
 ];
 const forbiddenRuntimeText = [
   "formatOverrideSummary is not defined",
@@ -481,6 +484,267 @@ async function runChromeTest() {
       }
 
       return tabStates;
+    };
+
+    const setCustomerViewportAndLoad = async (url, viewport) => {
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: viewport.scale,
+        height: viewport.height,
+        mobile: viewport.mobile,
+        width: viewport.width,
+      });
+
+      const viewportLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url });
+      await viewportLoadEvent;
+    };
+
+    const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
+      assert.deepEqual(
+        resourceCalls.filter((url) => /stripe|hitpay|paypal|api\/payment|api\/bank/i.test(url)),
+        [],
+        `${context}: expected no payment provider or bank API resources`,
+      );
+    };
+
+    const checkCustomerPaymentsRoute = async () => {
+      const desktopViewport = { height: 900, label: "desktop customer dashboard", mobile: false, scale: 1, width: 1440 };
+      const mobileViewport = { height: 667, label: "mobile customer dashboard", mobile: true, scale: 2, width: 375 };
+
+      await setCustomerViewportAndLoad(appUrl, desktopViewport);
+      await waitForTabs();
+      const entryPointState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const entry = document.querySelector("[data-customers-payments-entry]");
+            if (!entry) {
+              return false;
+            }
+
+            const rect = entry.getBoundingClientRect();
+            return {
+              href: entry.getAttribute("href"),
+              text: entry.textContent.trim(),
+              visible: rect.width > 0 && rect.height >= 40,
+            };
+          })()`),
+        10000,
+        "Customers & Payments entry point",
+      );
+      assert.deepEqual(
+        entryPointState,
+        { href: "/customers", text: "Customers & Payments", visible: true },
+        "Expected a visible Customers & Payments entry point to /customers",
+      );
+
+      const entryClicked = await evaluate(`(() => {
+        const entry = document.querySelector("[data-customers-payments-entry]");
+        if (!entry) {
+          return false;
+        }
+
+        entry.click();
+        return true;
+      })()`);
+      assert.equal(entryClicked, true, "Expected Customers & Payments entry point to be clickable");
+      await waitForCondition(
+        () =>
+          evaluate(`location.pathname === "/customers" &&
+            document.body.innerText.includes("Mock customer payments dashboard")`),
+        10000,
+        "Customers & Payments entry navigation",
+      );
+
+      await setCustomerViewportAndLoad(customerDashboardUrl, desktopViewport);
+      await waitForCondition(
+        () => evaluate(`document.body.innerText.includes("Mock customer payments dashboard")`),
+        10000,
+        "mock customer dashboard route",
+      );
+
+      const dashboardState = await evaluate(`(() => {
+        const text = document.body.innerText;
+        return {
+          customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
+            row.getAttribute("data-customer-row"),
+          ),
+          forbiddenText: ["driver payout", "private crm", "stripe", "hitpay", "paypal", "secret key"].filter(
+            (value) => text.toLowerCase().includes(value),
+          ),
+          links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
+          resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+          summaryCards: [...document.querySelectorAll("[data-customer-summary-card]")].map((card) =>
+            card.getAttribute("data-customer-summary-card"),
+          ),
+          text,
+        };
+      })()`);
+
+      assert.deepEqual(
+        dashboardState.summaryCards,
+        ["Total Outstanding", "Overdue", "Paid This Month", "Follow-ups Today"],
+        "Expected customer dashboard summary cards",
+      );
+      assert.deepEqual(dashboardState.customerRows, ["ubs", "ritz-carlton", "vip-customer"]);
+      assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
+      assert.deepEqual(
+        ["/customers/ubs", "/customers/ritz-carlton", "/customers/vip-customer"].filter(
+          (href) => !dashboardState.links.includes(href),
+        ),
+        [],
+        "Expected open customer folder links",
+      );
+      for (const expectedText of [
+        "Local/mock only. No payment API, bank API, notification, or Supabase write is used.",
+        "Search customer/company",
+        "UBS",
+        "Ritz Carlton",
+        "Individual VIP Customer",
+        "Open Customer Folder",
+        "UBS-0001, UBS-0002, UBS-0003",
+        "RITZ-0001, RITZ-0002, RITZ-0003",
+        "VIP-0001, VIP-0002",
+        "Unpaid",
+        "Invoice Sent",
+        "Partially Paid",
+        "Paid",
+        "Overdue",
+        "Monthly Account",
+        "Completed job + balance due = Outstanding",
+        "Due date passed + balance due = Overdue",
+        "Partial payment keeps the remaining balance visible",
+        "Paid booking disappears from outstanding list but remains in customer history",
+        "Monthly account jobs can be grouped later into statements",
+        "Invoice numbers are unique and must not be reused.",
+        "Once issued, invoice numbers are immutable.",
+        "Changing a customer invoice prefix later requires warning/protection",
+      ]) {
+        assert.ok(dashboardState.text.includes(expectedText), `Expected customer dashboard text: ${expectedText}`);
+      }
+      assertNoPaymentIntegrationResources(dashboardState.resourceCalls, "customer dashboard");
+
+      const searchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const input = document.querySelector("[data-customer-search]");
+            if (!input) {
+              return false;
+            }
+
+            const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+            descriptor?.set?.call(input, "Ritz");
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+
+            const rows = [...document.querySelectorAll("[data-customer-row]")].map((row) =>
+              row.getAttribute("data-customer-row"),
+            );
+
+            return rows.length === 1 ? { rows, text: document.body.innerText } : false;
+          })()`),
+        10000,
+        "mock customer search",
+      );
+      assert.deepEqual(searchState.rows, ["ritz-carlton"], "Expected customer search to find Ritz Carlton only");
+
+      await setCustomerViewportAndLoad(customerFolderUrl, desktopViewport);
+      await waitForCondition(
+        () =>
+          evaluate(`document.body.innerText.includes("CUSTOMER FOLDER") &&
+            document.body.innerText.includes("Ritz Carlton")`),
+        10000,
+        "mock customer folder route",
+      );
+
+      const folderState = await evaluate(`(() => {
+        const text = document.body.innerText;
+        return {
+          bookingHistory: document.querySelector("[data-customer-booking-history]")?.innerText || "",
+          forbiddenText: ["driver payout", "private crm", "stripe", "hitpay", "paypal", "secret key"].filter(
+            (value) => text.toLowerCase().includes(value),
+          ),
+          resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+          text,
+        };
+      })()`);
+
+      assert.deepEqual(folderState.forbiddenText, [], "Expected no sensitive customer folder text");
+      for (const expectedText of [
+        "Customer/company details",
+        "Contacts",
+        "All booking history",
+        "Upcoming jobs",
+        "Completed jobs",
+        "Invoices",
+        "Payment history",
+        "Outstanding balance",
+        "Payment terms",
+        "Follow-up notes",
+        "Documents/receipts later",
+        "RITZ-0001, RITZ-0002, RITZ-0003",
+        "RITZ-0003",
+        "RITZ-0002",
+        "RITZ-0004",
+        "Partially Paid",
+        "Paid",
+        "Unpaid",
+        "Payment collection rules",
+      ]) {
+        assert.ok(folderState.text.includes(expectedText), `Expected customer folder text: ${expectedText}`);
+      }
+      assert.equal(folderState.text.includes("UBS-0001"), false, "Expected selected folder not to show unrelated UBS invoices");
+      assertNoPaymentIntegrationResources(folderState.resourceCalls, "customer folder");
+
+      await setCustomerViewportAndLoad(customerDashboardUrl, mobileViewport);
+      const mobileDashboardState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            if (!document.body.innerText.includes("Mock customer payments dashboard")) {
+              return false;
+            }
+
+            return {
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              rowCount: document.querySelectorAll("[data-customer-row]").length,
+            };
+          })()`),
+        10000,
+        "mobile mock customer dashboard",
+      );
+      assert.equal(mobileDashboardState.rowCount, 3, "Expected all mock customers on mobile dashboard");
+      assert.ok(
+        mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
+        `Expected mobile customer dashboard not to overflow horizontally: ${mobileDashboardState.docScrollWidth} > ${mobileDashboardState.docClientWidth}`,
+      );
+
+      await setCustomerViewportAndLoad(new URL("/customers/ubs", appUrl).toString(), mobileViewport);
+      const mobileFolderState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            if (!document.body.innerText.includes("UBS") || !document.body.innerText.includes("All booking history")) {
+              return false;
+            }
+
+            return {
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+            };
+          })()`),
+        10000,
+        "mobile mock customer folder",
+      );
+      assert.ok(
+        mobileFolderState.docScrollWidth <= mobileFolderState.docClientWidth + 2,
+        `Expected mobile customer folder not to overflow horizontally: ${mobileFolderState.docScrollWidth} > ${mobileFolderState.docClientWidth}`,
+      );
+
+      return {
+        dashboardRows: dashboardState.customerRows,
+        folder: "/customers/ritz-carlton",
+        mobileDashboard: mobileDashboardState,
+        mobileFolder: mobileFolderState,
+        summaryCards: dashboardState.summaryCards,
+      };
     };
 
     const setDriverDemoViewportAndLoad = async (viewport) => {
@@ -1705,6 +1969,7 @@ async function runChromeTest() {
       const responsiveStates = await checkResponsiveTabs(viewport);
       state.responsiveTabs.push(...responsiveStates);
     }
+    state.customerPayments = await checkCustomerPaymentsRoute();
     state.driverJobDemo = [];
     for (const viewport of driverDemoViewports) {
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));

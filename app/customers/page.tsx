@@ -81,6 +81,26 @@ type MockFollowUpEvent = {
   timestamp: string;
 };
 
+type MockStatementPreviewGroup = {
+  customerId: string;
+  customerName: string;
+  feedback?: string;
+  invoicePrefix: string;
+  items: VisibleOutstandingPaymentReviewItem[];
+  key: string;
+  periodLabel: string;
+  statementTotal: string;
+};
+
+type MockStatementPreviewEvent = {
+  action: string;
+  customerName: string;
+  id: string;
+  note: string;
+  periodLabel: string;
+  timestamp: string;
+};
+
 function hasMockBalanceDue(balanceDue: string) {
   return Number(balanceDue.replace(/[^\d.-]/g, "")) > 0;
 }
@@ -139,6 +159,27 @@ function getCollectionFollowUpReason(item: OutstandingPaymentReviewItem) {
   return "Unpaid balance needs collection follow-up";
 }
 
+function getMockStatementPreviewGroups(items: VisibleOutstandingPaymentReviewItem[]) {
+  return mockCustomers
+    .filter((customer) => customer.accountType === "Monthly Account")
+    .map((customer) => {
+      const statementItems = items.filter((item) => item.customerId === customer.id && item.isMonthlyAccount);
+
+      return {
+        customerId: customer.id,
+        customerName: customer.companyName,
+        invoicePrefix: customer.invoicePrefix,
+        items: statementItems,
+        key: customer.id,
+        periodLabel: "May 2026 billing cycle (mock preview)",
+        statementTotal: formatMockCurrency(
+          statementItems.reduce((total, item) => total + parseMockCurrency(item.balanceDue), 0),
+        ),
+      };
+    })
+    .filter((group) => group.items.length > 0);
+}
+
 const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustomers.flatMap((customer) =>
   customer.bookingHistory
     .filter(
@@ -166,12 +207,14 @@ export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
   const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
+  const [mockStatementPreviewEvents, setMockStatementPreviewEvents] = useState<MockStatementPreviewEvent[]>([]);
   const [mockPaymentLocalUpdates, setMockPaymentLocalUpdates] = useState<
     Record<string, MockPaymentLocalUpdate>
   >({});
   const [mockFollowUpLocalUpdates, setMockFollowUpLocalUpdates] = useState<
     Record<string, MockFollowUpLocalUpdate>
   >({});
+  const [mockStatementPreviewFeedback, setMockStatementPreviewFeedback] = useState<Record<string, string>>({});
   const [mockPaymentSectionFeedback, setMockPaymentSectionFeedback] = useState(
     "Mock controls only. Use the buttons to simulate manual payment tracking without saving records.",
   );
@@ -227,6 +270,14 @@ export default function MockCustomerDashboardPage() {
         };
       }),
     [mockFollowUpLocalUpdates, visibleOutstandingPaymentReviewItems],
+  );
+  const mockStatementPreviewGroups = useMemo(
+    () =>
+      getMockStatementPreviewGroups(visibleOutstandingPaymentReviewItems).map((group) => ({
+        ...group,
+        feedback: mockStatementPreviewFeedback[group.key],
+      })),
+    [mockStatementPreviewFeedback, visibleOutstandingPaymentReviewItems],
   );
 
   function handleMockPaymentAction(item: OutstandingPaymentReviewItem, action: MockPaymentAction) {
@@ -357,6 +408,30 @@ export default function MockCustomerDashboardPage() {
       ...currentEvents,
     ]);
     setMockFollowUpSectionFeedback(nextUpdate.feedback);
+  }
+
+  function handleMockStatementPreview(group: MockStatementPreviewGroup) {
+    const actionTimestamp = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const feedback = `${group.customerName} mock statement preview opened locally. No statement was generated, sent, saved, or numbered.`;
+
+    setMockStatementPreviewFeedback((currentFeedback) => ({
+      ...currentFeedback,
+      [group.key]: feedback,
+    }));
+    setMockStatementPreviewEvents((currentEvents) => [
+      {
+        action: "Previewed mock statement",
+        customerName: group.customerName,
+        id: `${group.key}:statement-preview:${Date.now()}`,
+        note: "Mock statement preview only; no statement record, invoice record, payment record, bank record, notification, WhatsApp message, email, SMS, or Supabase row was created.",
+        periodLabel: group.periodLabel,
+        timestamp: actionTimestamp,
+      },
+      ...currentEvents,
+    ]);
   }
 
   return (
@@ -700,6 +775,120 @@ export default function MockCustomerDashboardPage() {
           </div>
         </section>
 
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-monthly-statement-preview="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Monthly Account Statement Preview</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-boundary="true">
+                  Mock/read-only only. No statement record, invoice record, payment record, bank record, notification,
+                  or Supabase row is created.
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-monthly-statement-no-number-boundary="true">
+                  No statement is generated, sent, saved, or assigned a real statement number.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                {mockStatementPreviewGroups.length} mock monthly account preview.
+              </p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200">
+            {mockStatementPreviewGroups.length > 0 ? (
+              mockStatementPreviewGroups.map((group) => (
+                <article
+                  className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[1fr_1.2fr_0.8fr_1fr] xl:items-start"
+                  data-monthly-statement-group={group.key}
+                  key={group.key}
+                >
+                  <div>
+                    <h3 className="text-base font-bold text-slate-950">{group.customerName}</h3>
+                    <p className="mt-1 text-sm text-slate-600">Fixed invoice prefix: {group.invoicePrefix}</p>
+                    <p className="mt-1 text-sm text-slate-600">Statement period: {group.periodLabel}</p>
+                    <p className="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                      Statement number: Not generated (mock/read-only preview)
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Included invoice/reference rows
+                    </p>
+                    <div className="mt-3 grid gap-2">
+                      {group.items.map((item) => (
+                        <div
+                          className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"
+                          data-monthly-statement-row={item.key}
+                          key={item.key}
+                        >
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="font-bold text-slate-950">{item.invoiceNumber}</p>
+                              <p className="mt-1 text-slate-600">{item.paymentStatus}</p>
+                            </div>
+                            <p className="font-bold text-slate-950">{item.balanceDue}</p>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">Follow-up: {item.followUpDate}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Mock statement total
+                    </p>
+                    <p className="mt-2 text-2xl font-bold text-slate-950" data-monthly-statement-total={group.key}>
+                      {group.statementTotal}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Fully paid rows are excluded from this mock total.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <p className="text-sm leading-6 text-slate-700">
+                      Monthly account can be grouped into statement later. Balance due remains visible until paid.
+                      Statement preview is not generated or saved.
+                    </p>
+                    <Link
+                      className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
+                      data-monthly-statement-open-customer-folder={group.key}
+                      href={`/customers/${group.customerId}`}
+                    >
+                      Open Customer Folder
+                    </Link>
+                    <button
+                      className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                      data-statement-preview-action={group.key}
+                      onClick={() => handleMockStatementPreview(group)}
+                      type="button"
+                    >
+                      Preview Mock Statement
+                    </button>
+                    <p
+                      aria-live="polite"
+                      className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
+                      data-statement-preview-feedback={group.key}
+                    >
+                      {group.feedback ?? "Mock helper: preview only; nothing is generated, saved, or sent."}
+                    </p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="p-5 text-sm text-slate-600" data-monthly-statement-empty="true">
+                No mock monthly account statement items remain after local actions. Refreshing the page restores the
+                mock data.
+              </div>
+            )}
+          </div>
+        </section>
+
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-mock-payment-event-log="true">
           <div className="border-b border-slate-200 p-4 sm:p-5">
             <h2 className="text-lg font-bold text-slate-950">Mock Payment Event Log</h2>
@@ -788,6 +977,53 @@ export default function MockCustomerDashboardPage() {
             ) : (
               <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
                 No mock follow-up actions recorded yet.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-mock-statement-preview-log="true">
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <h2 className="text-lg font-bold text-slate-950">Mock Statement Preview Log</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600" data-mock-statement-preview-log-boundary="true">
+              Mock only. No statement record, invoice record, payment record, bank record, notification, WhatsApp
+              message, email, SMS, or Supabase row is created.
+            </p>
+          </div>
+          <div className="p-4 sm:p-5">
+            {mockStatementPreviewEvents.length > 0 ? (
+              <div className="grid gap-3" aria-live="polite">
+                {mockStatementPreviewEvents.map((event) => (
+                  <article
+                    className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm lg:grid-cols-[1fr_1fr_0.8fr_0.7fr_1.2fr]"
+                    data-mock-statement-preview-event={event.customerName}
+                    key={event.id}
+                  >
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer</p>
+                      <p className="mt-1 font-bold text-slate-950">{event.customerName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Mock statement period
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.periodLabel}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Action</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.action}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Local Time</p>
+                      <p className="mt-1 font-semibold text-slate-900">{event.timestamp}</p>
+                    </div>
+                    <p className="leading-6 text-slate-700">{event.note}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                No mock statement previews recorded yet.
               </div>
             )}
           </div>

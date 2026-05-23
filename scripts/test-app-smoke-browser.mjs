@@ -601,6 +601,23 @@ async function runChromeTest() {
           collectionFollowUpPaidInvoiceMentions: ["UBS-0002", "RITZ-0002", "VIP-0002"].filter((invoiceNumber) =>
             document.querySelector("[data-collection-follow-up-queue]")?.innerText.includes(invoiceNumber),
           ),
+          monthlyStatementBoundary:
+            document.querySelector("[data-monthly-statement-boundary]")?.textContent.trim() || "",
+          monthlyStatementGroups: [...document.querySelectorAll("[data-monthly-statement-group]")].map((group) => ({
+            action: group.querySelector("[data-statement-preview-action]")?.textContent.trim() || "",
+            href: group.querySelector("[data-monthly-statement-open-customer-folder]")?.getAttribute("href") || "",
+            id: group.getAttribute("data-monthly-statement-group"),
+            rows: [...group.querySelectorAll("[data-monthly-statement-row]")].map((row) =>
+              row.getAttribute("data-monthly-statement-row"),
+            ),
+            text: group.innerText,
+            total: group.querySelector("[data-monthly-statement-total]")?.textContent.trim() || "",
+          })),
+          monthlyStatementNoNumberBoundary:
+            document.querySelector("[data-monthly-statement-no-number-boundary]")?.textContent.trim() || "",
+          monthlyStatementPaidInvoiceMentions: ["UBS-0002", "RITZ-0002", "VIP-0002"].filter((invoiceNumber) =>
+            document.querySelector("[data-monthly-statement-preview]")?.innerText.includes(invoiceNumber),
+          ),
           eventLogBoundary:
             document.querySelector("[data-mock-payment-event-log-boundary]")?.textContent.trim() || "",
           eventLogText: document.querySelector("[data-mock-payment-event-log]")?.innerText || "",
@@ -611,6 +628,9 @@ async function runChromeTest() {
             document.querySelector("[data-follow-up-section-feedback]")?.textContent.trim() || "",
           paymentSectionFeedback:
             document.querySelector("[data-payment-section-feedback]")?.textContent.trim() || "",
+          statementPreviewLogBoundary:
+            document.querySelector("[data-mock-statement-preview-log-boundary]")?.textContent.trim() || "",
+          statementPreviewLogText: document.querySelector("[data-mock-statement-preview-log]")?.innerText || "",
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
           searchInputVisible: Boolean(searchInput && searchRect.width > 0 && searchRect.height >= 40),
           summaryCards: [...document.querySelectorAll("[data-customer-summary-card]")].map((card) =>
@@ -699,6 +719,51 @@ async function runChromeTest() {
         [],
         "Expected fully paid invoices to stay out of Collection Follow-up Queue",
       );
+      assert.equal(
+        dashboardState.monthlyStatementBoundary,
+        "Mock/read-only only. No statement record, invoice record, payment record, bank record, notification, or Supabase row is created.",
+        "Expected mock/read-only statement preview boundary",
+      );
+      assert.equal(
+        dashboardState.monthlyStatementNoNumberBoundary,
+        "No statement is generated, sent, saved, or assigned a real statement number.",
+        "Expected no-real-statement-number boundary",
+      );
+      assert.deepEqual(
+        dashboardState.monthlyStatementGroups.map((group) => group.id),
+        ["ubs"],
+        "Expected monthly account statement preview to group outstanding monthly-account rows by customer",
+      );
+      assert.deepEqual(
+        dashboardState.monthlyStatementGroups[0]?.rows,
+        ["ubs:UBS-0003", "ubs:UBS-0004"],
+        "Expected monthly statement preview to include UBS balance-due rows only",
+      );
+      assert.equal(
+        dashboardState.monthlyStatementGroups[0]?.total,
+        "$1,840",
+        "Expected mock statement total to exclude fully paid UBS-0002",
+      );
+      assert.equal(
+        dashboardState.monthlyStatementGroups[0]?.href,
+        "/customers/ubs",
+        "Expected monthly statement preview to link to the customer folder",
+      );
+      assert.equal(
+        dashboardState.monthlyStatementGroups[0]?.action,
+        "Preview Mock Statement",
+        "Expected monthly statement preview action",
+      );
+      assert.equal(
+        /STMT-\d|STATEMENT-\d|statement number:\s*[A-Z]+-\d/i.test(dashboardState.monthlyStatementGroups[0]?.text || ""),
+        false,
+        "Expected monthly statement preview not to generate a real statement number",
+      );
+      assert.deepEqual(
+        dashboardState.monthlyStatementPaidInvoiceMentions,
+        [],
+        "Expected fully paid invoices to stay out of Monthly Account Statement Preview",
+      );
       for (const row of dashboardState.outstandingRows) {
         assert.deepEqual(
           row.actions,
@@ -743,6 +808,16 @@ async function runChromeTest() {
         true,
         "Expected mock follow-up event log empty state before actions",
       );
+      assert.equal(
+        dashboardState.statementPreviewLogBoundary,
+        "Mock only. No statement record, invoice record, payment record, bank record, notification, WhatsApp message, email, SMS, or Supabase row is created.",
+        "Expected mock statement preview log boundary",
+      );
+      assert.equal(
+        dashboardState.statementPreviewLogText.includes("No mock statement previews recorded yet."),
+        true,
+        "Expected mock statement preview log empty state before actions",
+      );
       for (const expectedOutstandingText of [
         "Outstanding Payments Review",
         "UBS",
@@ -784,6 +859,27 @@ async function runChromeTest() {
         "Mock only. No notification, WhatsApp message, email, payment record, bank record, or Supabase row is created.",
       ]) {
         assert.ok(dashboardState.text.includes(expectedFollowUpText), `Expected collection follow-up text: ${expectedFollowUpText}`);
+      }
+      for (const expectedStatementText of [
+        "Monthly Account Statement Preview",
+        "Mock/read-only only. No statement record, invoice record, payment record, bank record, notification, or Supabase row is created.",
+        "No statement is generated, sent, saved, or assigned a real statement number.",
+        "Statement number: Not generated (mock/read-only preview)",
+        "May 2026 billing cycle (mock preview)",
+        "INCLUDED INVOICE/REFERENCE ROWS",
+        "UBS-0003",
+        "UBS-0004",
+        "MOCK STATEMENT TOTAL",
+        "$1,840",
+        "Fully paid rows are excluded from this mock total.",
+        "Monthly account can be grouped into statement later",
+        "Balance due remains visible until paid",
+        "Statement preview is not generated or saved",
+        "Preview Mock Statement",
+        "Mock Statement Preview Log",
+        "Mock only. No statement record, invoice record, payment record, bank record, notification, WhatsApp message, email, SMS, or Supabase row is created.",
+      ]) {
+        assert.ok(dashboardState.text.includes(expectedStatementText), `Expected statement preview text: ${expectedStatementText}`);
       }
       for (const expectedText of [
         "Local/mock only. No payment API, bank API, notification, or Supabase write is used.",
@@ -872,6 +968,88 @@ async function runChromeTest() {
         })()`);
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
+
+      const clickMockStatementPreviewAction = async (groupId, description) => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector(${JSON.stringify(`[data-statement-preview-action="${groupId}"]`)});
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
+      await clickMockStatementPreviewAction("ubs", "Preview Mock Statement");
+
+      const statementPreviewActionState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const eventRows = [...document.querySelectorAll("[data-mock-statement-preview-event]")].map((event) => ({
+              customer: event.getAttribute("data-mock-statement-preview-event"),
+              text: event.innerText,
+            }));
+
+            if (eventRows.length < 1) {
+              return false;
+            }
+
+            return {
+              eventLogBoundary:
+                document.querySelector("[data-mock-statement-preview-log-boundary]")?.textContent.trim() || "",
+              eventLogText: document.querySelector("[data-mock-statement-preview-log]")?.innerText || "",
+              eventRows,
+              feedback:
+                document.querySelector("[data-statement-preview-feedback='ubs']")?.textContent.trim() || "",
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              statementRows: [...document.querySelectorAll("[data-monthly-statement-row]")].map((row) =>
+                row.getAttribute("data-monthly-statement-row"),
+              ),
+            };
+          })()`),
+        10000,
+        "mock statement preview action updates",
+      );
+
+      assert.deepEqual(
+        statementPreviewActionState.statementRows,
+        ["ubs:UBS-0003", "ubs:UBS-0004"],
+        "Expected Preview Mock Statement to keep statement preview rows read-only",
+      );
+      assert.equal(
+        statementPreviewActionState.feedback.includes("UBS mock statement preview opened locally"),
+        true,
+        "Expected Preview Mock Statement feedback near the UBS preview control",
+      );
+      assert.equal(
+        statementPreviewActionState.eventLogBoundary,
+        "Mock only. No statement record, invoice record, payment record, bank record, notification, WhatsApp message, email, SMS, or Supabase row is created.",
+        "Expected statement preview log to keep the no-record/no-send boundary after action",
+      );
+      for (const expectedEventText of [
+        "UBS",
+        "May 2026 billing cycle (mock preview)",
+        "Previewed mock statement",
+        "Mock statement preview only",
+        "no statement record",
+        "WhatsApp message",
+        "Supabase row",
+      ]) {
+        assert.ok(
+          statementPreviewActionState.eventLogText.includes(expectedEventText),
+          `Expected mock statement preview log text: ${expectedEventText}`,
+        );
+      }
+      assert.deepEqual(
+        statementPreviewActionState.integrationCalls.filter((call) =>
+          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i.test(call),
+        ),
+        [],
+        "Expected Preview Mock Statement not to call payment, bank, webhook, notification, WhatsApp, email, SMS, or Supabase resources",
+      );
 
       await clickMockFollowUpAction("ubs:UBS-0003", "schedule", "Schedule Follow-up");
       await clickMockFollowUpAction("ritz-carlton:RITZ-0003", "done", "Mark Follow-up Done");

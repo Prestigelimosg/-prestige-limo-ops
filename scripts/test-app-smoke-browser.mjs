@@ -501,9 +501,11 @@ async function runChromeTest() {
 
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
-        resourceCalls.filter((url) => /stripe|hitpay|paypal|api\/payment|api\/bank/i.test(url)),
+        resourceCalls.filter((url) =>
+          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|webhook|notification|supabase|\/rest\/v1\//i.test(url),
+        ),
         [],
-        `${context}: expected no payment provider or bank API resources`,
+        `${context}: expected no payment provider, bank API, webhook, notification, or Supabase resources`,
       );
     };
 
@@ -575,6 +577,16 @@ async function runChromeTest() {
           ),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
+          outstandingPaidInvoiceMentions: ["UBS-0002", "RITZ-0002", "VIP-0002"].filter((invoiceNumber) =>
+            document.querySelector("[data-outstanding-payments-review]")?.innerText.includes(invoiceNumber),
+          ),
+          outstandingReviewBoundary:
+            document.querySelector("[data-outstanding-review-boundary]")?.textContent.trim() || "",
+          outstandingRows: [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) => ({
+            href: row.querySelector("[data-outstanding-open-customer-folder]")?.getAttribute("href") || "",
+            id: row.getAttribute("data-outstanding-payment-row"),
+            text: row.innerText,
+          })),
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
           searchInputVisible: Boolean(searchInput && searchRect.width > 0 && searchRect.height >= 40),
           summaryCards: [...document.querySelectorAll("[data-customer-summary-card]")].map((card) =>
@@ -594,6 +606,62 @@ async function runChromeTest() {
       assert.equal(dashboardState.helperVisible, true, "Expected search helper before results");
       assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
+      assert.equal(
+        dashboardState.outstandingReviewBoundary,
+        "Mock/read-only only. No payment API, bank API, notification, or Supabase write is used.",
+        "Expected read-only mock boundary in outstanding payments review",
+      );
+      assert.deepEqual(
+        dashboardState.outstandingRows.map((row) => row.id),
+        [
+          "ubs:UBS-0003",
+          "ubs:UBS-0004",
+          "ritz-carlton:RITZ-0003",
+          "ritz-carlton:RITZ-0004",
+          "vip-customer:VIP-0003",
+        ],
+        "Expected outstanding payment review to include unpaid, overdue, partial, invoice-sent, and monthly account rows",
+      );
+      assert.deepEqual(
+        dashboardState.outstandingRows.map((row) => row.href),
+        [
+          "/customers/ubs",
+          "/customers/ubs",
+          "/customers/ritz-carlton",
+          "/customers/ritz-carlton",
+          "/customers/vip-customer",
+        ],
+        "Expected every outstanding review row to link to its customer folder",
+      );
+      assert.deepEqual(
+        dashboardState.outstandingPaidInvoiceMentions,
+        [],
+        "Expected fully paid invoices to stay out of Outstanding Payments Review",
+      );
+      for (const expectedOutstandingText of [
+        "Outstanding Payments Review",
+        "UBS",
+        "UBS-0003",
+        "UBS-0004",
+        "RITZ-0003",
+        "RITZ-0004",
+        "VIP-0003",
+        "Overdue",
+        "Invoice Sent",
+        "Partially Paid",
+        "Unpaid",
+        "Monthly Account",
+        "Due date passed + balance due = Overdue",
+        "Partial payment keeps balance visible",
+        "Monthly account can be grouped later into statement",
+        "Completed job + balance due = Outstanding",
+      ]) {
+        assert.ok(
+          dashboardState.outstandingRows.some((row) => row.text.includes(expectedOutstandingText)) ||
+            dashboardState.text.includes(expectedOutstandingText),
+          `Expected outstanding payment review text: ${expectedOutstandingText}`,
+        );
+      }
       for (const expectedText of [
         "Local/mock only. No payment API, bank API, notification, or Supabase write is used.",
         "Search customer/company",
@@ -766,6 +834,26 @@ async function runChromeTest() {
       }
       assert.equal(folderState.text.includes("UBS-0001"), false, "Expected selected folder not to show unrelated UBS invoices");
       assertNoPaymentIntegrationResources(folderState.resourceCalls, "customer folder");
+
+      await setCustomerViewportAndLoad(customerDashboardUrl, desktopViewport);
+      const outstandingFolderClicked = await evaluate(`(() => {
+        const link = document.querySelector("[data-outstanding-open-customer-folder='ubs:UBS-0003']");
+        if (!link) {
+          return false;
+        }
+
+        link.click();
+        return true;
+      })()`);
+      assert.equal(outstandingFolderClicked, true, "Expected outstanding review folder link to be clickable");
+      await waitForCondition(
+        () =>
+          evaluate(`location.pathname === "/customers/ubs" &&
+            document.body.innerText.includes("UBS") &&
+            document.body.innerText.includes("UBS-0001, UBS-0002, UBS-0003")`),
+        10000,
+        "outstanding review folder link navigation",
+      );
 
       await setCustomerViewportAndLoad(customerDashboardUrl, mobileViewport);
       const mobileDashboardState = await waitForCondition(

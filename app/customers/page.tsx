@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { collectionRules, mockCustomers, mockPaymentSummary } from "./_data/mock-customers";
+import {
+  collectionRules,
+  mockCustomers,
+  mockPaymentSummary,
+  type MockCustomer,
+  type MockCustomerBooking,
+  type MockPaymentStatus,
+} from "./_data/mock-customers";
 
 const summaryCards = [
   { label: "Total Outstanding", value: mockPaymentSummary.totalOutstanding },
@@ -12,6 +19,66 @@ const summaryCards = [
 ];
 
 const maxCustomerSearchResults = 8;
+
+const outstandingPaymentStatuses = new Set<MockPaymentStatus>([
+  "Invoice Sent",
+  "Monthly Account",
+  "Overdue",
+  "Partially Paid",
+  "Unpaid",
+]);
+
+type OutstandingPaymentReviewItem = {
+  balanceDue: string;
+  customerId: string;
+  customerName: string;
+  dueOrFollowUpDate: string;
+  invoiceNumber: string;
+  isMonthlyAccount: boolean;
+  paymentStatus: MockPaymentStatus;
+  reason: string;
+};
+
+function hasMockBalanceDue(balanceDue: string) {
+  return Number(balanceDue.replace(/[^\d.-]/g, "")) > 0;
+}
+
+function getOutstandingPaymentReason(customer: MockCustomer, booking: MockCustomerBooking) {
+  if (booking.paymentStatus === "Overdue") {
+    return "Due date passed + balance due = Overdue";
+  }
+
+  if (booking.paymentStatus === "Partially Paid") {
+    return "Partial payment keeps balance visible";
+  }
+
+  if (customer.accountType === "Monthly Account") {
+    return "Monthly account can be grouped later into statement";
+  }
+
+  return "Completed job + balance due = Outstanding";
+}
+
+const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustomers.flatMap((customer) =>
+  customer.bookingHistory
+    .filter(
+      (booking) =>
+        outstandingPaymentStatuses.has(booking.paymentStatus) &&
+        hasMockBalanceDue(booking.balanceDue),
+    )
+    .map((booking) => ({
+      balanceDue: booking.balanceDue,
+      customerId: customer.id,
+      customerName: customer.companyName,
+      dueOrFollowUpDate:
+        customer.invoices.find((invoice) => invoice.invoiceNumber === booking.invoiceNumber)?.dueDate ??
+        customer.nextFollowUpDate,
+      invoiceNumber: booking.invoiceNumber,
+      isMonthlyAccount: customer.accountType === "Monthly Account",
+      paymentStatus: booking.paymentStatus,
+      reason: getOutstandingPaymentReason(customer, booking),
+    })),
+);
 
 export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -142,6 +209,63 @@ export default function MockCustomerDashboardPage() {
                 )}
               </div>
             )}
+          </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-outstanding-payments-review="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">Outstanding Payments Review</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600" data-outstanding-review-boundary="true">
+                  Mock/read-only only. No payment API, bank API, notification, or Supabase write is used.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-600">
+                {outstandingPaymentReviewItems.length} mock items need account follow-up.
+              </p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-200">
+            {outstandingPaymentReviewItems.map((item) => (
+              <article
+                className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.1fr_0.75fr_0.75fr_0.85fr_1.15fr_auto] lg:items-center"
+                data-outstanding-payment-row={`${item.customerId}:${item.invoiceNumber}`}
+                key={`${item.customerId}-${item.invoiceNumber}`}
+              >
+                <div>
+                  <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{item.invoiceNumber}</p>
+                  {item.isMonthlyAccount ? (
+                    <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{item.paymentStatus}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Balance Due</p>
+                  <p className="mt-1 text-sm font-bold text-slate-950">{item.balanceDue}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due / Follow-up</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
+                </div>
+                <p className="text-sm leading-6 text-slate-700">{item.reason}</p>
+                <Link
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
+                  data-outstanding-open-customer-folder={`${item.customerId}:${item.invoiceNumber}`}
+                  href={`/customers/${item.customerId}`}
+                >
+                  Open Customer Folder
+                </Link>
+              </article>
+            ))}
           </div>
         </section>
 

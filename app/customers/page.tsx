@@ -337,6 +337,10 @@ export default function MockCustomerDashboardPage() {
   );
   const [regularCustomerDraftInvoicePreview, setRegularCustomerDraftInvoicePreview] =
     useState<RegularCustomerDraftInvoicePreview | null>(null);
+  const [regularCustomerDraftInvoiceClearControlVisible, setRegularCustomerDraftInvoiceClearControlVisible] =
+    useState(false);
+  const [regularCustomerDraftInvoiceSnapshotStale, setRegularCustomerDraftInvoiceSnapshotStale] =
+    useState(false);
   const [regularCustomerDraftInvoiceFeedback, setRegularCustomerDraftInvoiceFeedback] = useState(
     "Create a mock draft invoice preview from the currently visible local mock rows. Nothing is saved, numbered, generated, or sent.",
   );
@@ -460,11 +464,19 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerBookingListFilterFeedback(
       "Local mock filters updated. No booking, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record was changed.",
     );
-    setRegularCustomerDraftInvoicePreview(null);
     setRegularCustomerDraftInvoiceFeedbackTone("info");
-    setRegularCustomerDraftInvoiceFeedback(
-      "Filters changed locally. Create a new mock draft invoice preview from the currently visible rows when ready.",
-    );
+    if (regularCustomerDraftInvoicePreview) {
+      setRegularCustomerDraftInvoiceClearControlVisible(true);
+      setRegularCustomerDraftInvoiceSnapshotStale(true);
+      setRegularCustomerDraftInvoiceFeedback(
+        "Filters changed locally. The visible mock draft preview is still the earlier local snapshot; create a new mock draft preview for the latest visible rows or clear it below.",
+      );
+    } else {
+      setRegularCustomerDraftInvoiceClearControlVisible(false);
+      setRegularCustomerDraftInvoiceFeedback(
+        "Filters changed locally. Create a new mock draft invoice preview from the currently visible rows when ready.",
+      );
+    }
   }
 
   function clearRegularCustomerBookingListFilters() {
@@ -472,19 +484,29 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerBookingListFilterFeedback(
       "Local mock filters cleared. The list is still page-only and no records were changed.",
     );
-    setRegularCustomerDraftInvoicePreview(null);
     setRegularCustomerDraftInvoiceFeedbackTone("info");
-    setRegularCustomerDraftInvoiceFeedback(
-      "Local filters cleared. Any draft preview was cleared locally; the monthly billing list was not changed.",
-    );
+    if (regularCustomerDraftInvoicePreview) {
+      setRegularCustomerDraftInvoiceClearControlVisible(true);
+      setRegularCustomerDraftInvoiceSnapshotStale(true);
+      setRegularCustomerDraftInvoiceFeedback(
+        "Local filters cleared. The visible mock draft preview remains the earlier local snapshot; recreate it for the latest visible rows or clear it below.",
+      );
+    } else {
+      setRegularCustomerDraftInvoiceClearControlVisible(false);
+      setRegularCustomerDraftInvoiceFeedback(
+        "Local filters cleared. The monthly billing list was not changed.",
+      );
+    }
   }
 
   function createRegularCustomerDraftInvoicePreview() {
     if (filteredRegularCustomerBookingListItems.length === 0) {
-      setRegularCustomerDraftInvoicePreview(null);
       setRegularCustomerDraftInvoiceFeedbackTone("error");
+      setRegularCustomerDraftInvoiceClearControlVisible(Boolean(regularCustomerDraftInvoicePreview));
       setRegularCustomerDraftInvoiceFeedback(
-        "No visible local mock booking rows match the current filters. No draft preview was created, and nothing was saved, numbered, generated, sent, synced, or called.",
+        regularCustomerDraftInvoicePreview
+          ? "No visible local mock booking rows match the current filters. No new draft preview was created; the existing mock/local snapshot remains unchanged until staff clear it."
+          : "No visible local mock booking rows match the current filters. No draft preview was created, and nothing was saved, numbered, generated, sent, synced, or called.",
       );
       return;
     }
@@ -509,6 +531,8 @@ export default function MockCustomerDashboardPage() {
       isMixedCustomer: uniqueCustomerNames.length !== 1,
       rows: filteredRegularCustomerBookingListItems.map((item) => ({ ...item })),
     });
+    setRegularCustomerDraftInvoiceClearControlVisible(true);
+    setRegularCustomerDraftInvoiceSnapshotStale(false);
     setRegularCustomerDraftInvoiceFeedbackTone("success");
     setRegularCustomerDraftInvoiceFeedback(
       `${filteredRegularCustomerBookingListItems.length} visible local mock row${filteredRegularCustomerBookingListItems.length === 1 ? "" : "s"} added to a draft preview. No invoice number, PDF, invoice, statement, sending, notification, calendar, payment, bank, audit, payment provider, or Supabase call was made.`,
@@ -517,6 +541,8 @@ export default function MockCustomerDashboardPage() {
 
   function clearRegularCustomerDraftInvoicePreview() {
     setRegularCustomerDraftInvoicePreview(null);
+    setRegularCustomerDraftInvoiceClearControlVisible(true);
+    setRegularCustomerDraftInvoiceSnapshotStale(false);
     setRegularCustomerDraftInvoiceFeedbackTone("info");
     setRegularCustomerDraftInvoiceFeedback(
       "Mock draft invoice preview cleared locally. The local monthly billing list was not changed.",
@@ -563,11 +589,19 @@ export default function MockCustomerDashboardPage() {
       },
       ...currentItems,
     ]);
-    setRegularCustomerDraftInvoicePreview(null);
     setRegularCustomerDraftInvoiceFeedbackTone("info");
-    setRegularCustomerDraftInvoiceFeedback(
-      "A local mock booking row was added. Create a new mock draft invoice preview from the currently visible rows when ready.",
-    );
+    if (regularCustomerDraftInvoicePreview) {
+      setRegularCustomerDraftInvoiceClearControlVisible(true);
+      setRegularCustomerDraftInvoiceSnapshotStale(true);
+      setRegularCustomerDraftInvoiceFeedback(
+        "A local mock booking row was added. The visible draft preview remains the earlier local snapshot; recreate it for the latest visible rows or clear it below.",
+      );
+    } else {
+      setRegularCustomerDraftInvoiceClearControlVisible(false);
+      setRegularCustomerDraftInvoiceFeedback(
+        "A local mock booking row was added. Create a new mock draft invoice preview from the currently visible rows when ready.",
+      );
+    }
     setRegularCustomerBookingFeedbackTone("success");
     setRegularCustomerBookingFeedback(
       `${customerName} mock/local preview created and added to the local monthly billing list. No booking was saved, no customer link was written, no invoice number was created, no invoice or statement was generated, no notification was sent, no calendar sync ran, and no payment, bank, or Supabase call was made.`,
@@ -1388,7 +1422,7 @@ export default function MockCustomerDashboardPage() {
                 </p>
               </div>
 
-              <div className="mt-4 grid gap-3 md:grid-cols-[auto_auto_1fr] md:items-start">
+              <div className="mt-4 grid gap-3 md:grid-cols-[auto_1fr] lg:grid-cols-[auto_auto_1fr] lg:items-start">
                 <button
                   className="min-h-11 rounded-md border border-emerald-900 bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800"
                   data-regular-customer-draft-invoice-create="true"
@@ -1397,19 +1431,23 @@ export default function MockCustomerDashboardPage() {
                 >
                   Create Mock Draft Invoice Preview
                 </button>
-                <button
-                  className="min-h-11 rounded-md border border-emerald-300 bg-white px-4 py-2 text-sm font-bold text-emerald-950 transition hover:border-emerald-700"
-                  data-regular-customer-draft-invoice-clear="true"
-                  onClick={clearRegularCustomerDraftInvoicePreview}
-                  type="button"
-                >
-                  Clear Draft Preview
-                </button>
+                {regularCustomerDraftInvoiceClearControlVisible ? (
+                  <button
+                    className="min-h-11 rounded-md border border-emerald-300 bg-white px-4 py-2 text-sm font-bold text-emerald-950 transition hover:border-emerald-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+                    data-regular-customer-draft-invoice-clear="true"
+                    disabled={!regularCustomerDraftInvoicePreview}
+                    onClick={clearRegularCustomerDraftInvoicePreview}
+                    type="button"
+                  >
+                    Clear Mock Draft Preview
+                  </button>
+                ) : null}
                 <p
                   aria-live="polite"
-                  className={`rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold leading-6 md:col-span-2 lg:col-span-1 ${regularCustomerBookingFeedbackClass(
                     regularCustomerDraftInvoiceFeedbackTone,
                   )}`}
+                  data-regular-customer-draft-invoice-clear-feedback="true"
                   data-regular-customer-draft-invoice-feedback="true"
                   data-regular-customer-draft-invoice-feedback-tone={regularCustomerDraftInvoiceFeedbackTone}
                 >
@@ -1439,6 +1477,24 @@ export default function MockCustomerDashboardPage() {
                       Not issued / no invoice number
                     </p>
                   </div>
+
+                  {regularCustomerDraftInvoiceSnapshotStale ? (
+                    <p
+                      className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold leading-6 text-amber-950"
+                      data-regular-customer-draft-invoice-snapshot-notice="true"
+                    >
+                      Filters or local rows changed after this preview was created. This remains a mock/local snapshot
+                      of the rows captured earlier; create a new mock draft preview for the latest visible filtered rows.
+                    </p>
+                  ) : (
+                    <p
+                      className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold leading-6 text-emerald-950"
+                      data-regular-customer-draft-invoice-snapshot-notice="true"
+                    >
+                      Snapshot is current to the visible local mock rows used when staff clicked create. Nothing is
+                      saved, numbered, generated, or sent.
+                    </p>
+                  )}
 
                   <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <div>

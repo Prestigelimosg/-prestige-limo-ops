@@ -721,6 +721,9 @@ async function runChromeTest() {
             const rect = button?.getBoundingClientRect();
             return Boolean(rect && rect.width > 0 && rect.height >= 40);
           })(),
+          regularDraftInvoiceClearVisible: Boolean(
+            document.querySelector("[data-regular-customer-draft-invoice-clear]"),
+          ),
           regularDraftInvoiceEmpty: Boolean(document.querySelector("[data-regular-customer-draft-invoice-empty]")),
           regularDraftInvoiceFeedback:
             document.querySelector("[data-regular-customer-draft-invoice-feedback]")?.textContent.trim() || "",
@@ -931,6 +934,11 @@ async function runChromeTest() {
         dashboardState.regularDraftInvoiceCreateVisible,
         true,
         "Expected regular customer mock draft invoice preview button to be touch-visible",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceClearVisible,
+        false,
+        "Expected regular customer mock draft clear button to appear only after a preview exists",
       );
       assert.equal(
         dashboardState.regularDraftInvoiceBoundary,
@@ -1304,6 +1312,20 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
+      const clickRegularCustomerDraftInvoiceClear = async (description) => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-draft-invoice-clear]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
       const setRegularCustomerBookingField = async (field, value) => {
         const actualValue = await evaluate(`(() => {
           const input = document.querySelector(${JSON.stringify(`[data-regular-booking-field="${field}"]`)});
@@ -1345,9 +1367,11 @@ async function runChromeTest() {
       const readRegularCustomerDraftInvoiceState = () =>
         evaluate(`(() => {
           const button = document.querySelector("[data-regular-customer-draft-invoice-create]");
+          const clearButton = document.querySelector("[data-regular-customer-draft-invoice-clear]");
           const feedback = document.querySelector("[data-regular-customer-draft-invoice-feedback]");
           const preview = document.querySelector("[data-regular-customer-draft-invoice-preview]");
           const buttonRect = button?.getBoundingClientRect();
+          const clearButtonRect = clearButton?.getBoundingClientRect();
           const feedbackRect = feedback?.getBoundingClientRect();
 
           return {
@@ -1355,8 +1379,13 @@ async function runChromeTest() {
               document.querySelector("[data-regular-customer-draft-invoice-amounts]")?.textContent.trim() || "",
             boundary:
               document.querySelector("[data-regular-customer-draft-invoice-boundary]")?.textContent.trim() || "",
+            clearButtonText: clearButton?.textContent.trim() || "",
+            clearDisabled: Boolean(clearButton?.disabled),
+            clearVisible: Boolean(clearButton),
             distanceFromButton:
               buttonRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - buttonRect.bottom)) : 999,
+            distanceFromClearButton:
+              clearButtonRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - clearButtonRect.bottom)) : 999,
             emptyVisible: Boolean(document.querySelector("[data-regular-customer-draft-invoice-empty]")),
             feedback: feedback?.textContent.trim() || "",
             feedbackTone:
@@ -1370,6 +1399,8 @@ async function runChromeTest() {
               id: row.getAttribute("data-regular-customer-draft-invoice-row") || "",
               text: row.innerText,
             })),
+            snapshotNotice:
+              document.querySelector("[data-regular-customer-draft-invoice-snapshot-notice]")?.textContent.trim() || "",
           };
         })()`);
 
@@ -1896,8 +1927,59 @@ async function runChromeTest() {
         [],
         "Expected single-row draft invoice preview not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assert.equal(
+        regularDraftSinglePreviewState.clearVisible,
+        true,
+        "Expected clear mock draft preview button to appear after creating a draft preview",
+      );
+      assert.equal(
+        regularDraftSinglePreviewState.clearButtonText,
+        "Clear Mock Draft Preview",
+        "Expected clear draft preview button to be labelled clearly",
+      );
+      assert.equal(
+        regularDraftSinglePreviewState.snapshotNotice.includes("Snapshot is current"),
+        true,
+        "Expected new draft preview to show the current local snapshot helper",
+      );
 
       await setRegularCustomerBookingListFilter("billingMonth", "");
+      const regularDraftStaleAfterMonthFilterState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerDraftInvoiceState();
+          return candidateState.feedback.includes("earlier local snapshot") ? candidateState : false;
+        },
+        10000,
+        "regular customer draft invoice stale snapshot after filter change",
+      );
+      assert.equal(
+        regularDraftStaleAfterMonthFilterState.previewVisible,
+        true,
+        "Expected filter changes to keep the existing mock draft preview visible as a snapshot",
+      );
+      assert.equal(
+        regularDraftStaleAfterMonthFilterState.rows.length,
+        1,
+        "Expected filter changes not to rebuild the existing draft preview automatically",
+      );
+      assert.equal(
+        regularDraftStaleAfterMonthFilterState.snapshotNotice.includes("Filters or local rows changed"),
+        true,
+        "Expected filter changes to mark the existing draft preview as a snapshot",
+      );
+      assert.equal(
+        regularDraftStaleAfterMonthFilterState.snapshotNotice.includes("create a new mock draft preview"),
+        true,
+        "Expected stale snapshot notice to tell staff to recreate the preview for latest filtered rows",
+      );
+      assert.deepEqual(
+        regularDraftStaleAfterMonthFilterState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected draft preview stale snapshot notice not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
       await setRegularCustomerBookingListFilter("billingStatus", "paid");
       const regularBookingStatusEmptyFilterState = await waitForCondition(
         async () => {
@@ -1941,8 +2023,18 @@ async function runChromeTest() {
       );
       assert.equal(
         regularDraftFilteredEmptyState.previewVisible,
-        false,
-        "Expected paid-filter draft invoice attempt not to create a preview",
+        true,
+        "Expected paid-filter draft invoice attempt to leave the existing mock snapshot visible",
+      );
+      assert.equal(
+        regularDraftFilteredEmptyState.rows.length,
+        1,
+        "Expected paid-filter draft invoice attempt not to create a new preview row set",
+      );
+      assert.equal(
+        regularDraftFilteredEmptyState.feedback.includes("No new draft preview was created"),
+        true,
+        "Expected paid-filter draft invoice attempt to explain that no new preview was created",
       );
       assert.equal(
         regularDraftFilteredEmptyState.feedbackTone,
@@ -2026,6 +2118,100 @@ async function runChromeTest() {
         ),
         [],
         "Expected mixed draft invoice preview not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assert.equal(
+        regularDraftMixedPreviewState.clearVisible,
+        true,
+        "Expected clear mock draft preview control to remain visible while preview exists",
+      );
+
+      await clickRegularCustomerDraftInvoiceClear("clear mock draft invoice preview");
+      const regularDraftClearedState = await waitForCondition(
+        async () => {
+          const draftState = await readRegularCustomerDraftInvoiceState();
+          const listState = await readRegularCustomerBookingListState();
+          const formState = await evaluate(`(() => ({
+            billingMonth: document.querySelector('[data-regular-booking-field="billingMonth"]')?.value || "",
+            billingStatus: document.querySelector('[data-regular-booking-field="billingStatus"]')?.value || "",
+            customerId: document.querySelector('[data-regular-booking-field="customerId"]')?.value || "",
+            customerSearch: document.querySelector("[data-customer-search]")?.value || "",
+            passengerName: document.querySelector('[data-regular-booking-field="passengerName"]')?.value || "",
+            pickupLocation: document.querySelector('[data-regular-booking-field="pickupLocation"]')?.value || "",
+          }))()`);
+
+          return draftState.feedback.includes("cleared locally")
+            ? {
+                ...draftState,
+                formState,
+                listState,
+              }
+            : false;
+        },
+        10000,
+        "regular customer clear mock draft preview",
+      );
+      assert.equal(
+        regularDraftClearedState.previewVisible,
+        false,
+        "Expected clear mock draft preview to remove only the draft preview from view",
+      );
+      assert.equal(
+        regularDraftClearedState.emptyVisible,
+        true,
+        "Expected clear mock draft preview to return the preview area to its empty state",
+      );
+      assert.equal(
+        regularDraftClearedState.clearVisible,
+        true,
+        "Expected clear mock draft preview control to remain beside its local feedback after clearing",
+      );
+      assert.equal(
+        regularDraftClearedState.clearDisabled,
+        true,
+        "Expected clear mock draft preview control to be disabled after the preview is removed",
+      );
+      assert.equal(
+        regularDraftClearedState.distanceFromClearButton < 160,
+        true,
+        "Expected clear draft preview feedback to appear near the clicked clear control",
+      );
+      assert.equal(
+        regularDraftClearedState.listState.rows.length,
+        2,
+        "Expected clear mock draft preview not to remove local monthly billing list rows",
+      );
+      assert.equal(
+        regularDraftClearedState.listState.countText,
+        "Showing 2 of 2 local mock rows.",
+        "Expected clear mock draft preview not to change the local list count",
+      );
+      assert.deepEqual(
+        regularDraftClearedState.listState.filters,
+        [
+          { field: "customerId", value: "" },
+          { field: "billingMonth", value: "" },
+          { field: "billingStatus", value: "unbilled / draft" },
+        ],
+        "Expected clear mock draft preview not to reset the local filters",
+      );
+      assert.deepEqual(
+        regularDraftClearedState.formState,
+        {
+          billingMonth: "2026-06",
+          billingStatus: "unbilled / draft",
+          customerId: "ritz-carlton",
+          customerSearch: "",
+          passengerName: "Browser Filter Passenger",
+          pickupLocation: "Ritz Carlton",
+        },
+        "Expected clear mock draft preview not to reset the regular customer form or customer search",
+      );
+      assert.deepEqual(
+        regularDraftClearedState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected clear mock draft preview not to call Supabase, payment, bank, notification, or calendar APIs",
       );
 
       const clearRegularBookingFiltersClicked = await evaluate(`(() => {

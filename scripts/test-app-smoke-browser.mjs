@@ -714,6 +714,26 @@ async function runChromeTest() {
           regularBookingListVisible: Boolean(
             document.querySelector("[data-regular-customer-booking-list-preview]"),
           ),
+          regularDraftInvoiceBoundary:
+            document.querySelector("[data-regular-customer-draft-invoice-boundary]")?.textContent.trim() || "",
+          regularDraftInvoiceCreateVisible: (() => {
+            const button = document.querySelector("[data-regular-customer-draft-invoice-create]");
+            const rect = button?.getBoundingClientRect();
+            return Boolean(rect && rect.width > 0 && rect.height >= 40);
+          })(),
+          regularDraftInvoiceEmpty: Boolean(document.querySelector("[data-regular-customer-draft-invoice-empty]")),
+          regularDraftInvoiceFeedback:
+            document.querySelector("[data-regular-customer-draft-invoice-feedback]")?.textContent.trim() || "",
+          regularDraftInvoiceFeedbackTone:
+            document.querySelector("[data-regular-customer-draft-invoice-feedback]")?.getAttribute(
+              "data-regular-customer-draft-invoice-feedback-tone",
+            ) || "",
+          regularDraftInvoicePreviewVisible: Boolean(
+            document.querySelector("[data-regular-customer-draft-invoice-preview]"),
+          ),
+          regularDraftInvoiceSectionVisible: Boolean(
+            document.querySelector("[data-regular-customer-draft-invoice-section]"),
+          ),
           regularBookingLabels: [
             "Customer / account",
             "Booker / contact person",
@@ -901,6 +921,41 @@ async function runChromeTest() {
         dashboardState.regularBookingListRows,
         [],
         "Expected no regular customer booking list rows before valid local submit",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceSectionVisible,
+        true,
+        "Expected regular customer mock draft invoice preview section",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceCreateVisible,
+        true,
+        "Expected regular customer mock draft invoice preview button to be touch-visible",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceBoundary,
+        "Preview-only. Not customer-facing. No invoice number, real invoice, statement, PDF, sending, Supabase save, payment API, bank API, notification, calendar sync, payment provider, or audit record is created.",
+        "Expected mock/local draft invoice preview boundary",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceFeedback,
+        "Create a mock draft invoice preview from the currently visible local mock rows. Nothing is saved, numbered, generated, or sent.",
+        "Expected regular customer draft invoice helper near the button",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceFeedbackTone,
+        "info",
+        "Expected regular customer draft invoice helper to start as info",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceEmpty,
+        true,
+        "Expected no regular customer draft invoice preview before local action",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoicePreviewVisible,
+        false,
+        "Expected draft invoice preview not to exist before local action",
       );
       assert.equal(
         dashboardState.outstandingReviewBoundary,
@@ -1235,6 +1290,20 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
+      const clickRegularCustomerDraftInvoicePreview = async (description) => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-draft-invoice-create]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
       const setRegularCustomerBookingField = async (field, value) => {
         const actualValue = await evaluate(`(() => {
           const input = document.querySelector(${JSON.stringify(`[data-regular-booking-field="${field}"]`)});
@@ -1272,6 +1341,37 @@ async function runChromeTest() {
         })()`);
         assert.equal(actualValue, value, `Expected regular booking list filter ${filter} to accept test value`);
       };
+
+      const readRegularCustomerDraftInvoiceState = () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-draft-invoice-create]");
+          const feedback = document.querySelector("[data-regular-customer-draft-invoice-feedback]");
+          const preview = document.querySelector("[data-regular-customer-draft-invoice-preview]");
+          const buttonRect = button?.getBoundingClientRect();
+          const feedbackRect = feedback?.getBoundingClientRect();
+
+          return {
+            amountText:
+              document.querySelector("[data-regular-customer-draft-invoice-amounts]")?.textContent.trim() || "",
+            boundary:
+              document.querySelector("[data-regular-customer-draft-invoice-boundary]")?.textContent.trim() || "",
+            distanceFromButton:
+              buttonRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - buttonRect.bottom)) : 999,
+            emptyVisible: Boolean(document.querySelector("[data-regular-customer-draft-invoice-empty]")),
+            feedback: feedback?.textContent.trim() || "",
+            feedbackTone:
+              feedback?.getAttribute("data-regular-customer-draft-invoice-feedback-tone") || "",
+            integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            noSaveBoundary:
+              document.querySelector("[data-regular-customer-draft-invoice-no-save-boundary]")?.textContent.trim() || "",
+            previewText: preview?.innerText || "",
+            previewVisible: Boolean(preview),
+            rows: [...document.querySelectorAll("[data-regular-customer-draft-invoice-row]")].map((row) => ({
+              id: row.getAttribute("data-regular-customer-draft-invoice-row") || "",
+              text: row.innerText,
+            })),
+          };
+        })()`);
 
       const readRegularCustomerBookingListState = () =>
         evaluate(`(() => {
@@ -1335,6 +1435,43 @@ async function runChromeTest() {
         routeType: "TRF",
         vehicleType: "E class",
       };
+
+      await clickRegularCustomerDraftInvoicePreview("empty regular customer draft invoice preview");
+      const regularDraftNoRowsState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerDraftInvoiceState();
+          return candidateState.feedback.includes("No visible local mock booking rows") ? candidateState : false;
+        },
+        10000,
+        "regular customer draft invoice preview with no visible rows",
+      );
+      assert.equal(
+        regularDraftNoRowsState.feedbackTone,
+        "error",
+        "Expected empty draft invoice preview attempt to show a local error",
+      );
+      assert.equal(
+        regularDraftNoRowsState.distanceFromButton < 160,
+        true,
+        "Expected empty draft invoice preview help to appear near its button",
+      );
+      assert.equal(
+        regularDraftNoRowsState.previewVisible,
+        false,
+        "Expected empty draft invoice preview attempt not to create a preview",
+      );
+      assert.equal(
+        regularDraftNoRowsState.emptyVisible,
+        true,
+        "Expected draft invoice empty state to remain visible after no-row attempt",
+      );
+      assert.deepEqual(
+        regularDraftNoRowsState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected empty draft invoice preview not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
 
       const regularBookingInvalidClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-booking-submit]");
@@ -1694,6 +1831,72 @@ async function runChromeTest() {
         "Expected billing month local filter not to call Supabase, payment, bank, notification, or calendar APIs",
       );
 
+      await clickRegularCustomerDraftInvoicePreview("single-customer draft invoice preview");
+      const regularDraftSinglePreviewState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerDraftInvoiceState();
+          return candidateState.previewVisible && candidateState.rows.length === 1 ? candidateState : false;
+        },
+        10000,
+        "regular customer draft invoice preview for one filtered row",
+      );
+      assert.equal(
+        regularDraftSinglePreviewState.feedback.includes("1 visible local mock row added"),
+        true,
+        "Expected single-row draft invoice preview feedback near its button",
+      );
+      for (const expectedDraftText of [
+        "Mock/local draft invoice preview",
+        "Draft Preview / Not Issued",
+        "internal staff-only",
+        "Ritz Carlton",
+        "2026-06",
+        "monthly bank transfer manual",
+        "Not created",
+        "Browser Filter Passenger",
+        "Ritz Carlton",
+        "Marina Bay Cruise Centre",
+        "TRF / E class",
+        "PO JUN TEST",
+        "Amount not calculated in this mock preview",
+        "No subtotal, GST, discount, or grand total is created",
+      ]) {
+        assert.equal(
+          regularDraftSinglePreviewState.previewText.includes(expectedDraftText),
+          true,
+          `Expected single-row draft invoice preview text: ${expectedDraftText}`,
+        );
+      }
+      assert.equal(
+        regularDraftSinglePreviewState.previewText.toLowerCase().includes("invoice number"),
+        true,
+        "Expected single-row draft invoice preview to show the invoice number status label",
+      );
+      for (const expectedBoundaryText of [
+        "Bank transfer is manual-record only.",
+        "No bank API, payment API, payment provider, or production payment behavior.",
+        "No invoice number, PDF, real invoice, statement, or sending.",
+        "No Supabase save, notification, WhatsApp, email, SMS, calendar sync, or audit record.",
+      ]) {
+        assert.equal(
+          regularDraftSinglePreviewState.noSaveBoundary.includes(expectedBoundaryText),
+          true,
+          `Expected single-row draft invoice locked note: ${expectedBoundaryText}`,
+        );
+      }
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(regularDraftSinglePreviewState.previewText),
+        false,
+        "Expected single-row draft invoice preview not to allocate an invoice number",
+      );
+      assert.deepEqual(
+        regularDraftSinglePreviewState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected single-row draft invoice preview not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
       await setRegularCustomerBookingListFilter("billingMonth", "");
       await setRegularCustomerBookingListFilter("billingStatus", "paid");
       const regularBookingStatusEmptyFilterState = await waitForCondition(
@@ -1727,6 +1930,33 @@ async function runChromeTest() {
         "Expected billing status local filter not to call Supabase, payment, bank, notification, or calendar APIs",
       );
 
+      await clickRegularCustomerDraftInvoicePreview("paid-filter empty draft invoice preview");
+      const regularDraftFilteredEmptyState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerDraftInvoiceState();
+          return candidateState.feedback.includes("No visible local mock booking rows") ? candidateState : false;
+        },
+        10000,
+        "regular customer draft invoice preview for empty filtered rows",
+      );
+      assert.equal(
+        regularDraftFilteredEmptyState.previewVisible,
+        false,
+        "Expected paid-filter draft invoice attempt not to create a preview",
+      );
+      assert.equal(
+        regularDraftFilteredEmptyState.feedbackTone,
+        "error",
+        "Expected paid-filter draft invoice attempt to stay local/error",
+      );
+      assert.deepEqual(
+        regularDraftFilteredEmptyState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected paid-filter draft invoice attempt not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
       await setRegularCustomerBookingListFilter("billingStatus", "unbilled / draft");
       const regularBookingStatusFilterState = await waitForCondition(
         async () => {
@@ -1750,6 +1980,52 @@ async function runChromeTest() {
         regularBookingStatusFilterState.listText.includes("Invoice number: Not created"),
         false,
         "Expected list cards not to allocate issued invoice numbers while filtering",
+      );
+
+      await clickRegularCustomerDraftInvoicePreview("mixed draft invoice preview");
+      const regularDraftMixedPreviewState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerDraftInvoiceState();
+          return candidateState.previewVisible && candidateState.rows.length === 2 ? candidateState : false;
+        },
+        10000,
+        "regular customer mixed draft invoice preview",
+      );
+      for (const expectedMixedDraftText of [
+        "Mixed customer mock preview",
+        "Mixed mock preview only; not a real customer invoice.",
+        "Mixed billing months mock preview",
+        "Mixed mock preview only; not a final billing period.",
+        "Browser Test Passenger",
+        "Browser Filter Passenger",
+        "UBS / 2026-05",
+        "Ritz Carlton / 2026-06",
+        "2 local mock rows",
+        "Draft Preview / Not Issued",
+        "Amount not calculated in this mock preview",
+      ]) {
+        assert.equal(
+          regularDraftMixedPreviewState.previewText.includes(expectedMixedDraftText),
+          true,
+          `Expected mixed draft invoice preview text: ${expectedMixedDraftText}`,
+        );
+      }
+      assert.equal(
+        regularDraftMixedPreviewState.feedback.includes("2 visible local mock rows added"),
+        true,
+        "Expected mixed draft invoice preview feedback near its button",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(regularDraftMixedPreviewState.previewText),
+        false,
+        "Expected mixed draft invoice preview not to allocate an invoice number",
+      );
+      assert.deepEqual(
+        regularDraftMixedPreviewState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected mixed draft invoice preview not to call Supabase, payment, bank, notification, or calendar APIs",
       );
 
       const clearRegularBookingFiltersClicked = await evaluate(`(() => {
@@ -1795,6 +2071,11 @@ async function runChromeTest() {
         ),
         [],
         "Expected clearing regular customer filters not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assert.equal(
+        (await readRegularCustomerDraftInvoiceState()).previewVisible,
+        false,
+        "Expected clearing local filters to clear only the draft preview, not the booking list",
       );
 
       const regularBookingClearClicked = await evaluate(`(() => {

@@ -156,6 +156,15 @@ type RegularCustomerBookingListFilters = {
   customerId: string;
 };
 
+type RegularCustomerDraftInvoicePreview = {
+  billingMonthLabel: string;
+  createdAtLabel: string;
+  customerLabel: string;
+  isMixedBillingMonth: boolean;
+  isMixedCustomer: boolean;
+  rows: RegularCustomerBookingListItem[];
+};
+
 type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
 
 const initialRegularCustomerBookingListFilters: RegularCustomerBookingListFilters = {
@@ -326,6 +335,13 @@ export default function MockCustomerDashboardPage() {
   const [regularCustomerBookingListFilterFeedback, setRegularCustomerBookingListFilterFeedback] = useState(
     "Mock/local list filters only affect rows on this page. Nothing is saved or sent.",
   );
+  const [regularCustomerDraftInvoicePreview, setRegularCustomerDraftInvoicePreview] =
+    useState<RegularCustomerDraftInvoicePreview | null>(null);
+  const [regularCustomerDraftInvoiceFeedback, setRegularCustomerDraftInvoiceFeedback] = useState(
+    "Create a mock draft invoice preview from the currently visible local mock rows. Nothing is saved, numbered, generated, or sent.",
+  );
+  const [regularCustomerDraftInvoiceFeedbackTone, setRegularCustomerDraftInvoiceFeedbackTone] =
+    useState<RegularCustomerBookingFeedbackTone>("info");
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
   const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
   const [mockStatementPreviewEvents, setMockStatementPreviewEvents] = useState<MockStatementPreviewEvent[]>([]);
@@ -444,12 +460,66 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerBookingListFilterFeedback(
       "Local mock filters updated. No booking, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record was changed.",
     );
+    setRegularCustomerDraftInvoicePreview(null);
+    setRegularCustomerDraftInvoiceFeedbackTone("info");
+    setRegularCustomerDraftInvoiceFeedback(
+      "Filters changed locally. Create a new mock draft invoice preview from the currently visible rows when ready.",
+    );
   }
 
   function clearRegularCustomerBookingListFilters() {
     setRegularCustomerBookingListFilters(initialRegularCustomerBookingListFilters);
     setRegularCustomerBookingListFilterFeedback(
       "Local mock filters cleared. The list is still page-only and no records were changed.",
+    );
+    setRegularCustomerDraftInvoicePreview(null);
+    setRegularCustomerDraftInvoiceFeedbackTone("info");
+    setRegularCustomerDraftInvoiceFeedback(
+      "Local filters cleared. Any draft preview was cleared locally; the monthly billing list was not changed.",
+    );
+  }
+
+  function createRegularCustomerDraftInvoicePreview() {
+    if (filteredRegularCustomerBookingListItems.length === 0) {
+      setRegularCustomerDraftInvoicePreview(null);
+      setRegularCustomerDraftInvoiceFeedbackTone("error");
+      setRegularCustomerDraftInvoiceFeedback(
+        "No visible local mock booking rows match the current filters. No draft preview was created, and nothing was saved, numbered, generated, sent, synced, or called.",
+      );
+      return;
+    }
+
+    const uniqueCustomerNames = Array.from(
+      new Set(filteredRegularCustomerBookingListItems.map((item) => item.customerName.trim()).filter(Boolean)),
+    );
+    const uniqueBillingMonths = Array.from(
+      new Set(filteredRegularCustomerBookingListItems.map((item) => item.billingMonth.trim()).filter(Boolean)),
+    );
+    const createdAtLabel = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    setRegularCustomerDraftInvoicePreview({
+      billingMonthLabel:
+        uniqueBillingMonths.length === 1 ? uniqueBillingMonths[0] : "Mixed billing months mock preview",
+      createdAtLabel,
+      customerLabel: uniqueCustomerNames.length === 1 ? uniqueCustomerNames[0] : "Mixed customer mock preview",
+      isMixedBillingMonth: uniqueBillingMonths.length !== 1,
+      isMixedCustomer: uniqueCustomerNames.length !== 1,
+      rows: filteredRegularCustomerBookingListItems.map((item) => ({ ...item })),
+    });
+    setRegularCustomerDraftInvoiceFeedbackTone("success");
+    setRegularCustomerDraftInvoiceFeedback(
+      `${filteredRegularCustomerBookingListItems.length} visible local mock row${filteredRegularCustomerBookingListItems.length === 1 ? "" : "s"} added to a draft preview. No invoice number, PDF, invoice, statement, sending, notification, calendar, payment, bank, audit, payment provider, or Supabase call was made.`,
+    );
+  }
+
+  function clearRegularCustomerDraftInvoicePreview() {
+    setRegularCustomerDraftInvoicePreview(null);
+    setRegularCustomerDraftInvoiceFeedbackTone("info");
+    setRegularCustomerDraftInvoiceFeedback(
+      "Mock draft invoice preview cleared locally. The local monthly billing list was not changed.",
     );
   }
 
@@ -493,6 +563,11 @@ export default function MockCustomerDashboardPage() {
       },
       ...currentItems,
     ]);
+    setRegularCustomerDraftInvoicePreview(null);
+    setRegularCustomerDraftInvoiceFeedbackTone("info");
+    setRegularCustomerDraftInvoiceFeedback(
+      "A local mock booking row was added. Create a new mock draft invoice preview from the currently visible rows when ready.",
+    );
     setRegularCustomerBookingFeedbackTone("success");
     setRegularCustomerBookingFeedback(
       `${customerName} mock/local preview created and added to the local monthly billing list. No booking was saved, no customer link was written, no invoice number was created, no invoice or statement was generated, no notification was sent, no calendar sync ran, and no payment, bank, or Supabase call was made.`,
@@ -1285,6 +1360,216 @@ export default function MockCustomerDashboardPage() {
                   {regularCustomerBookingListItems.length === 1 ? "" : "s"}.
                 </p>
               </div>
+            </div>
+
+            <div
+              className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-4"
+              data-regular-customer-draft-invoice-section="true"
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-800">
+                    Internal staff-only / mock-local
+                  </p>
+                  <h4 className="mt-2 text-base font-bold text-emerald-950">
+                    Draft Monthly Invoice Preview For Bank Transfer
+                  </h4>
+                  <p
+                    className="mt-1 max-w-4xl text-sm leading-6 text-emerald-900"
+                    data-regular-customer-draft-invoice-boundary="true"
+                  >
+                    Preview-only. Not customer-facing. No invoice number, real invoice, statement, PDF, sending,
+                    Supabase save, payment API, bank API, notification, calendar sync, payment provider, or audit record is
+                    created.
+                  </p>
+                </div>
+                <p className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm font-bold text-emerald-950">
+                  Uses currently visible local mock rows.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-[auto_auto_1fr] md:items-start">
+                <button
+                  className="min-h-11 rounded-md border border-emerald-900 bg-emerald-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-800"
+                  data-regular-customer-draft-invoice-create="true"
+                  onClick={createRegularCustomerDraftInvoicePreview}
+                  type="button"
+                >
+                  Create Mock Draft Invoice Preview
+                </button>
+                <button
+                  className="min-h-11 rounded-md border border-emerald-300 bg-white px-4 py-2 text-sm font-bold text-emerald-950 transition hover:border-emerald-700"
+                  data-regular-customer-draft-invoice-clear="true"
+                  onClick={clearRegularCustomerDraftInvoicePreview}
+                  type="button"
+                >
+                  Clear Draft Preview
+                </button>
+                <p
+                  aria-live="polite"
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+                    regularCustomerDraftInvoiceFeedbackTone,
+                  )}`}
+                  data-regular-customer-draft-invoice-feedback="true"
+                  data-regular-customer-draft-invoice-feedback-tone={regularCustomerDraftInvoiceFeedbackTone}
+                >
+                  {regularCustomerDraftInvoiceFeedback}
+                </p>
+              </div>
+
+              {regularCustomerDraftInvoicePreview ? (
+                <article
+                  className="mt-4 rounded-md border border-emerald-300 bg-white p-4 text-sm leading-6 text-slate-700"
+                  data-regular-customer-draft-invoice-preview="true"
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                        Draft Preview / Not Issued
+                      </p>
+                      <h5 className="mt-2 text-base font-bold text-slate-950">
+                        Mock/local draft invoice preview
+                      </h5>
+                      <p className="mt-1 text-slate-600">
+                        Created locally at {regularCustomerDraftInvoicePreview.createdAtLabel}. This is an internal
+                        staff-only review preview, not a customer invoice.
+                      </p>
+                    </div>
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950">
+                      Not issued / no invoice number
+                    </p>
+                  </div>
+
+                  <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div>
+                      <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                        Customer / account
+                      </dt>
+                      <dd className="mt-1 font-semibold text-slate-950">
+                        {regularCustomerDraftInvoicePreview.customerLabel}
+                      </dd>
+                      {regularCustomerDraftInvoicePreview.isMixedCustomer ? (
+                        <dd className="mt-1 text-xs font-semibold text-amber-800">
+                          Mixed mock preview only; not a real customer invoice.
+                        </dd>
+                      ) : null}
+                    </div>
+                    <div>
+                      <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Billing month</dt>
+                      <dd className="mt-1 font-semibold text-slate-950">
+                        {regularCustomerDraftInvoicePreview.billingMonthLabel}
+                      </dd>
+                      {regularCustomerDraftInvoicePreview.isMixedBillingMonth ? (
+                        <dd className="mt-1 text-xs font-semibold text-amber-800">
+                          Mixed mock preview only; not a final billing period.
+                        </dd>
+                      ) : null}
+                    </div>
+                    <div>
+                      <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                        Payment method
+                      </dt>
+                      <dd className="mt-1 font-semibold text-slate-950">monthly bank transfer manual</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Invoice status</dt>
+                      <dd className="mt-1 font-semibold text-slate-950">Draft Preview / Not Issued</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Invoice number</dt>
+                      <dd className="mt-1 font-semibold text-slate-950">Not created</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Included rows</dt>
+                      <dd className="mt-1 font-semibold text-slate-950">
+                        {regularCustomerDraftInvoicePreview.rows.length} local mock row
+                        {regularCustomerDraftInvoicePreview.rows.length === 1 ? "" : "s"}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="mt-4 grid gap-3">
+                    {regularCustomerDraftInvoicePreview.rows.map((item) => (
+                      <article
+                        className="rounded-md border border-slate-200 bg-slate-50 p-4"
+                        data-regular-customer-draft-invoice-row={item.id}
+                        key={item.id}
+                      >
+                        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <h6 className="font-bold text-slate-950">{item.passengerName}</h6>
+                            <p className="mt-1 text-slate-600">
+                              {item.pickupDate} {item.pickupTime} / {item.routeType} / {item.vehicleType}
+                            </p>
+                          </div>
+                          <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                            Amount not calculated in this mock preview
+                          </p>
+                        </div>
+                        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Pickup</dt>
+                            <dd className="mt-1 text-slate-950">{item.pickupLocation}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Drop-off</dt>
+                            <dd className="mt-1 text-slate-950">{item.dropoffLocation}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                              Customer ref / PO
+                            </dt>
+                            <dd className="mt-1 text-slate-950">
+                              {item.customerReference || "No reference entered"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                              Customer / month
+                            </dt>
+                            <dd className="mt-1 text-slate-950">
+                              {item.customerName} / {item.billingMonth}
+                            </dd>
+                          </div>
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div
+                    className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4"
+                    data-regular-customer-draft-invoice-amounts="true"
+                  >
+                    <h6 className="font-bold text-slate-950">Amounts</h6>
+                    <p className="mt-1 text-slate-700">Amount not calculated in this mock preview.</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                      No subtotal, GST, discount, or grand total is created because these local mock booking rows do
+                      not contain approved price fields.
+                    </p>
+                  </div>
+
+                  <div
+                    className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-4"
+                    data-regular-customer-draft-invoice-no-save-boundary="true"
+                  >
+                    <h6 className="font-bold text-emerald-950">Locked preview notes</h6>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-emerald-950">
+                      <li>Bank transfer is manual-record only.</li>
+                      <li>No bank API, payment API, payment provider, or production payment behavior.</li>
+                      <li>No invoice number, PDF, real invoice, statement, or sending.</li>
+                      <li>No Supabase save, notification, WhatsApp, email, SMS, calendar sync, or audit record.</li>
+                    </ul>
+                  </div>
+                </article>
+              ) : (
+                <div
+                  className="mt-4 rounded-md border border-dashed border-emerald-300 bg-white/70 p-5 text-sm leading-6 text-emerald-900"
+                  data-regular-customer-draft-invoice-empty="true"
+                >
+                  No mock draft invoice preview yet. Use the button above after the filters show the local rows staff
+                  want to review.
+                </div>
+              )}
             </div>
 
             {regularCustomerBookingListItems.length > 0 ? (

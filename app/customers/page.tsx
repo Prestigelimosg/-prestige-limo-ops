@@ -139,6 +139,40 @@ type RegularCustomerBookingPreview = RegularCustomerBookingForm & {
   createdAtLabel: string;
 };
 
+type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
+
+const regularCustomerRequiredFields: Array<{
+  field: keyof RegularCustomerBookingForm;
+  label: string;
+}> = [
+  { field: "customerId", label: "Customer / account" },
+  { field: "booker", label: "Booker / contact person" },
+  { field: "passengerName", label: "Passenger name" },
+  { field: "pickupDate", label: "Pickup date" },
+  { field: "pickupTime", label: "Pickup time" },
+  { field: "pickupLocation", label: "Pickup location" },
+  { field: "dropoffLocation", label: "Drop-off location" },
+  { field: "routeType", label: "Route type" },
+  { field: "vehicleType", label: "Vehicle type" },
+  { field: "billingMonth", label: "Billing month" },
+];
+
+function getMissingRegularCustomerRequiredFields(form: RegularCustomerBookingForm) {
+  return regularCustomerRequiredFields.filter(({ field }) => !form[field].trim());
+}
+
+function regularCustomerBookingFeedbackClass(tone: RegularCustomerBookingFeedbackTone) {
+  if (tone === "error") {
+    return "border-rose-200 bg-rose-50 text-rose-950";
+  }
+
+  if (tone === "success") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-950";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
 function hasMockBalanceDue(balanceDue: string) {
   return Number(balanceDue.replace(/[^\d.-]/g, "")) > 0;
 }
@@ -249,6 +283,16 @@ export default function MockCustomerDashboardPage() {
   const [regularCustomerBookingFeedback, setRegularCustomerBookingFeedback] = useState(
     "Mock/local form foundation only. Submit creates a local preview beside this button.",
   );
+  const [regularCustomerBookingFeedbackTone, setRegularCustomerBookingFeedbackTone] =
+    useState<RegularCustomerBookingFeedbackTone>("info");
+  const [regularCustomerBookingClearFeedback, setRegularCustomerBookingClearFeedback] = useState(
+    "Clear only resets this local draft form and preview.",
+  );
+  const [regularCustomerBookingClearFeedbackTone, setRegularCustomerBookingClearFeedbackTone] =
+    useState<RegularCustomerBookingFeedbackTone>("info");
+  const [regularCustomerBookingMissingFields, setRegularCustomerBookingMissingFields] = useState<
+    Array<keyof RegularCustomerBookingForm>
+  >([]);
   const [regularCustomerBookingPreview, setRegularCustomerBookingPreview] =
     useState<RegularCustomerBookingPreview | null>(null);
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
@@ -335,15 +379,33 @@ export default function MockCustomerDashboardPage() {
       ...currentForm,
       [field]: value,
     }));
+    setRegularCustomerBookingMissingFields((currentFields) =>
+      value.trim() ? currentFields.filter((currentField) => currentField !== field) : currentFields,
+    );
   }
 
   function handleRegularCustomerBookingSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const missingFields = getMissingRegularCustomerRequiredFields(regularCustomerBookingForm);
+
+    if (missingFields.length > 0) {
+      setRegularCustomerBookingPreview(null);
+      setRegularCustomerBookingMissingFields(missingFields.map(({ field }) => field));
+      setRegularCustomerBookingFeedbackTone("error");
+      setRegularCustomerBookingFeedback(
+        `Please complete required fields before creating a mock preview: ${missingFields
+          .map(({ label }) => label)
+          .join(", ")}. No mock booking preview was created.`,
+      );
+      return;
+    }
+
     const customer = mockCustomers.find((candidate) => candidate.id === regularCustomerBookingForm.customerId);
     const customerName = customer?.companyName ?? "Customer not selected";
     const customerFolderHref = customer ? `/customers/${customer.id}` : "";
 
+    setRegularCustomerBookingMissingFields([]);
     setRegularCustomerBookingPreview({
       ...regularCustomerBookingForm,
       customerFolderHref,
@@ -353,6 +415,7 @@ export default function MockCustomerDashboardPage() {
         minute: "2-digit",
       }),
     });
+    setRegularCustomerBookingFeedbackTone("success");
     setRegularCustomerBookingFeedback(
       `${customerName} mock/local preview created. No booking was saved, no customer link was written, no invoice number was created, no invoice or statement was generated, no notification was sent, no calendar sync ran, and no payment, bank, or Supabase call was made.`,
     );
@@ -361,7 +424,13 @@ export default function MockCustomerDashboardPage() {
   function handleRegularCustomerBookingClear() {
     setRegularCustomerBookingForm(initialRegularCustomerBookingForm);
     setRegularCustomerBookingPreview(null);
+    setRegularCustomerBookingMissingFields([]);
+    setRegularCustomerBookingFeedbackTone("info");
     setRegularCustomerBookingFeedback(
+      "Mock/local form foundation only. Submit creates a local preview beside this button.",
+    );
+    setRegularCustomerBookingClearFeedbackTone("success");
+    setRegularCustomerBookingClearFeedback(
       "Regular customer booking form cleared locally. No booking, customer folder, billing, invoice, calendar, payment, bank, notification, or Supabase record was changed.",
     );
   }
@@ -520,6 +589,18 @@ export default function MockCustomerDashboardPage() {
     ]);
   }
 
+  function regularCustomerBookingFieldClass(field: keyof RegularCustomerBookingForm) {
+    const isMissing = regularCustomerBookingMissingFields.includes(field);
+
+    return `min-h-11 rounded-md border px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700 ${
+      isMissing ? "border-rose-500 bg-rose-50" : "border-slate-300 bg-white"
+    }`;
+  }
+
+  function isRegularCustomerBookingFieldMissing(field: keyof RegularCustomerBookingForm) {
+    return regularCustomerBookingMissingFields.includes(field);
+  }
+
   return (
     <main className="min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -582,14 +663,23 @@ export default function MockCustomerDashboardPage() {
           <form
             className="p-4 sm:p-5"
             data-regular-customer-booking-form="true"
+            noValidate
             onSubmit={handleRegularCustomerBookingSubmit}
           >
+            <p
+              className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+              data-regular-customer-required-note="true"
+            >
+              Required fields are marked with * and checked locally before a mock preview can be created.
+            </p>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Customer / account *
                 <select
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("customerId")}
+                  className={regularCustomerBookingFieldClass("customerId")}
                   data-regular-booking-field="customerId"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("customerId", event.target.value)}
                   value={regularCustomerBookingForm.customerId}
                 >
@@ -605,8 +695,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Booker / contact person *
                 <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("booker")}
+                  className={regularCustomerBookingFieldClass("booker")}
                   data-regular-booking-field="booker"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("booker", event.target.value)}
                   placeholder="Account booker or contact"
                   type="text"
@@ -617,8 +709,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Passenger name *
                 <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("passengerName")}
+                  className={regularCustomerBookingFieldClass("passengerName")}
                   data-regular-booking-field="passengerName"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("passengerName", event.target.value)}
                   placeholder="Passenger or guest name"
                   type="text"
@@ -629,8 +723,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Pickup date *
                 <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("pickupDate")}
+                  className={regularCustomerBookingFieldClass("pickupDate")}
                   data-regular-booking-field="pickupDate"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("pickupDate", event.target.value)}
                   type="date"
                   value={regularCustomerBookingForm.pickupDate}
@@ -640,8 +736,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Pickup time *
                 <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("pickupTime")}
+                  className={regularCustomerBookingFieldClass("pickupTime")}
                   data-regular-booking-field="pickupTime"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("pickupTime", event.target.value)}
                   placeholder="1530hrs"
                   type="text"
@@ -664,8 +762,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-1">
                 Pickup location *
                 <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("pickupLocation")}
+                  className={regularCustomerBookingFieldClass("pickupLocation")}
                   data-regular-booking-field="pickupLocation"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("pickupLocation", event.target.value)}
                   placeholder="Pickup address or airport terminal"
                   type="text"
@@ -676,8 +776,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-1">
                 Drop-off location *
                 <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("dropoffLocation")}
+                  className={regularCustomerBookingFieldClass("dropoffLocation")}
                   data-regular-booking-field="dropoffLocation"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("dropoffLocation", event.target.value)}
                   placeholder="Drop-off address"
                   type="text"
@@ -688,8 +790,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Route type *
                 <select
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("routeType")}
+                  className={regularCustomerBookingFieldClass("routeType")}
                   data-regular-booking-field="routeType"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("routeType", event.target.value)}
                   value={regularCustomerBookingForm.routeType}
                 >
@@ -704,8 +808,10 @@ export default function MockCustomerDashboardPage() {
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Vehicle type *
                 <select
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("vehicleType")}
+                  className={regularCustomerBookingFieldClass("vehicleType")}
                   data-regular-booking-field="vehicleType"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("vehicleType", event.target.value)}
                   value={regularCustomerBookingForm.vehicleType}
                 >
@@ -766,10 +872,12 @@ export default function MockCustomerDashboardPage() {
               </label>
 
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Billing month
+                Billing month *
                 <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  aria-invalid={isRegularCustomerBookingFieldMissing("billingMonth")}
+                  className={regularCustomerBookingFieldClass("billingMonth")}
                   data-regular-booking-field="billingMonth"
+                  data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("billingMonth", event.target.value)}
                   placeholder="2026-05"
                   type="text"
@@ -839,31 +947,64 @@ export default function MockCustomerDashboardPage() {
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <button
-                className="min-h-11 rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
-                data-regular-customer-booking-submit="true"
-                type="submit"
-              >
-                Create Mock Booking Preview
-              </button>
-              <button
-                className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
-                data-regular-customer-booking-clear="true"
-                onClick={handleRegularCustomerBookingClear}
-                type="button"
-              >
-                Clear Local Form
-              </button>
-            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <div>
+                <button
+                  className="min-h-11 w-full rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700 sm:w-auto"
+                  data-regular-customer-booking-submit="true"
+                  type="submit"
+                >
+                  Create Mock Booking Preview
+                </button>
 
-            <p
-              aria-live="polite"
-              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
-              data-regular-customer-booking-feedback="true"
-            >
-              {regularCustomerBookingFeedback}
-            </p>
+                <div
+                  aria-live="polite"
+                  className={`mt-3 rounded-md border px-3 py-2 text-sm leading-6 ${regularCustomerBookingFeedbackClass(
+                    regularCustomerBookingFeedbackTone,
+                  )}`}
+                  data-regular-customer-booking-feedback="true"
+                  data-regular-customer-booking-feedback-tone={regularCustomerBookingFeedbackTone}
+                >
+                  <p>{regularCustomerBookingFeedback}</p>
+                  {regularCustomerBookingMissingFields.length > 0 ? (
+                    <ul
+                      className="mt-2 list-disc space-y-1 pl-5"
+                      data-regular-customer-booking-missing-fields="true"
+                    >
+                      {regularCustomerRequiredFields
+                        .filter(({ field }) => regularCustomerBookingMissingFields.includes(field))
+                        .map(({ field, label }) => (
+                          <li data-regular-customer-booking-missing-field={field} key={field}>
+                            {label}
+                          </li>
+                        ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <button
+                  className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50 sm:w-auto"
+                  data-regular-customer-booking-clear="true"
+                  onClick={handleRegularCustomerBookingClear}
+                  type="button"
+                >
+                  Clear Local Form
+                </button>
+
+                <p
+                  aria-live="polite"
+                  className={`mt-3 rounded-md border px-3 py-2 text-sm leading-6 ${regularCustomerBookingFeedbackClass(
+                    regularCustomerBookingClearFeedbackTone,
+                  )}`}
+                  data-regular-customer-booking-clear-feedback="true"
+                  data-regular-customer-booking-clear-feedback-tone={regularCustomerBookingClearFeedbackTone}
+                >
+                  {regularCustomerBookingClearFeedback}
+                </p>
+              </div>
+            </div>
           </form>
 
           <div className="border-t border-slate-200 p-4 sm:p-5">

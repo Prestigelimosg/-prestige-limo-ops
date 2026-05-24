@@ -639,6 +639,10 @@ async function runChromeTest() {
           ),
           regularBookingFeedback:
             document.querySelector("[data-regular-customer-booking-feedback]")?.textContent.trim() || "",
+          regularBookingFeedbackTone:
+            document.querySelector("[data-regular-customer-booking-feedback]")?.getAttribute(
+              "data-regular-customer-booking-feedback-tone",
+            ) || "",
           regularBookingFields: [
             "customerId",
             "booker",
@@ -692,6 +696,9 @@ async function runChromeTest() {
             "Billing status default",
             "Payment method default",
           ].filter((label) => text.includes(label)),
+          regularBookingRequiredFieldCount: document.querySelectorAll("[data-regular-booking-required='true']").length,
+          regularBookingRequiredNote:
+            document.querySelector("[data-regular-customer-required-note]")?.textContent.trim() || "",
           regularBookingSubmitVisible: Boolean(
             document.querySelector("[data-regular-customer-booking-submit]"),
           ),
@@ -766,6 +773,21 @@ async function runChromeTest() {
         dashboardState.regularBookingFeedback,
         "Mock/local form foundation only. Submit creates a local preview beside this button.",
         "Expected regular customer form helper near the submit button",
+      );
+      assert.equal(
+        dashboardState.regularBookingFeedbackTone,
+        "info",
+        "Expected regular customer helper to start as an info message",
+      );
+      assert.equal(
+        dashboardState.regularBookingRequiredFieldCount,
+        10,
+        "Expected ten regular customer booking fields to be marked required",
+      );
+      assert.equal(
+        dashboardState.regularBookingRequiredNote,
+        "Required fields are marked with * and checked locally before a mock preview can be created.",
+        "Expected required-field local validation note",
       );
       assert.equal(
         dashboardState.regularBookingEmptyPreview,
@@ -1152,6 +1174,91 @@ async function runChromeTest() {
         vehicleType: "AVF",
       };
 
+      const regularBookingInvalidClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-booking-submit]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(
+        regularBookingInvalidClicked,
+        true,
+        "Expected regular customer booking invalid submit button to be clickable",
+      );
+
+      const regularBookingInvalidState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-regular-customer-booking-submit]");
+            const feedback = document.querySelector("[data-regular-customer-booking-feedback]");
+
+            if (!feedback?.textContent.includes("Please complete required fields")) {
+              return false;
+            }
+
+            const buttonRect = button?.getBoundingClientRect();
+            const feedbackRect = feedback.getBoundingClientRect();
+
+            return {
+              distanceFromSubmit:
+                buttonRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - buttonRect.bottom)) : 999,
+              emptyPreview: Boolean(document.querySelector("[data-regular-customer-booking-empty-preview]")),
+              feedbackText: feedback.textContent.trim(),
+              feedbackTone: feedback.getAttribute("data-regular-customer-booking-feedback-tone") || "",
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              missingFields: [...document.querySelectorAll("[data-regular-customer-booking-missing-field]")].map(
+                (field) => field.textContent.trim(),
+              ),
+              previewVisible: Boolean(document.querySelector("[data-regular-customer-booking-preview]")),
+            };
+          })()`),
+        10000,
+        "regular customer booking local validation error",
+      );
+
+      assert.equal(
+        regularBookingInvalidState.feedbackTone,
+        "error",
+        "Expected empty regular customer submit to show an error near the submit button",
+      );
+      assert.deepEqual(
+        regularBookingInvalidState.missingFields,
+        [
+          "Customer / account",
+          "Booker / contact person",
+          "Passenger name",
+          "Pickup date",
+          "Pickup time",
+          "Pickup location",
+          "Drop-off location",
+        ],
+        "Expected empty regular customer submit to list missing required fields",
+      );
+      assert.equal(
+        regularBookingInvalidState.emptyPreview,
+        true,
+        "Expected invalid regular customer submit to keep the empty preview state",
+      );
+      assert.equal(
+        regularBookingInvalidState.previewVisible,
+        false,
+        "Expected invalid regular customer submit not to create a mock preview",
+      );
+      assert.equal(
+        regularBookingInvalidState.distanceFromSubmit < 120,
+        true,
+        "Expected validation error to appear near the regular customer submit button",
+      );
+      assert.deepEqual(
+        regularBookingInvalidState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected invalid regular customer submit not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
       for (const [field, value] of Object.entries(regularCustomerBookingFields)) {
         await setRegularCustomerBookingField(field, value);
       }
@@ -1269,7 +1376,8 @@ async function runChromeTest() {
       const regularBookingClearState = await waitForCondition(
         () =>
           evaluate(`(() => {
-            const feedback = document.querySelector("[data-regular-customer-booking-feedback]")?.textContent.trim() || "";
+            const feedback =
+              document.querySelector("[data-regular-customer-booking-clear-feedback]")?.textContent.trim() || "";
 
             if (!feedback.includes("cleared locally")) {
               return false;

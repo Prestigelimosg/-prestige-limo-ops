@@ -1455,11 +1455,12 @@ export default function MockCustomerDashboardPage() {
                 </p>
               </div>
 
-              {regularCustomerDraftInvoicePreview ? (
-                <article
-                  className="mt-4 rounded-md border border-emerald-300 bg-white p-4 text-sm leading-6 text-slate-700"
-                  data-regular-customer-draft-invoice-preview="true"
-                >
+              <div data-regular-customer-draft-invoice-preview-area="true">
+                {regularCustomerDraftInvoicePreview ? (
+                  <article
+                    className="mt-4 rounded-md border border-emerald-300 bg-white p-4 text-sm leading-6 text-slate-700"
+                    data-regular-customer-draft-invoice-preview="true"
+                  >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
@@ -1616,16 +1617,23 @@ export default function MockCustomerDashboardPage() {
                       <li>No Supabase save, notification, WhatsApp, email, SMS, calendar sync, or audit record.</li>
                     </ul>
                   </div>
-                </article>
-              ) : (
-                <div
-                  className="mt-4 rounded-md border border-dashed border-emerald-300 bg-white/70 p-5 text-sm leading-6 text-emerald-900"
-                  data-regular-customer-draft-invoice-empty="true"
-                >
-                  No mock draft invoice preview yet. Use the button above after the filters show the local rows staff
-                  want to review.
-                </div>
-              )}
+                  </article>
+                ) : (
+                  <div
+                    className="mt-4 rounded-md border border-dashed border-emerald-300 bg-white/70 p-5 text-sm leading-6 text-emerald-900"
+                    data-regular-customer-draft-invoice-empty="true"
+                  >
+                    <p className="font-bold text-emerald-950">No draft invoice preview selected yet.</p>
+                    <p className="mt-1">
+                      Select bookings from the mock monthly billing list, then create a draft invoice preview for
+                      staff review.
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-emerald-800">
+                      Empty preview state only. No preview data, invoice number, PDF, sending, or save is active here.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {regularCustomerBookingListItems.length > 0 ? (

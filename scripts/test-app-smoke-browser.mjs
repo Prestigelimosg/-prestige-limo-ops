@@ -725,6 +725,8 @@ async function runChromeTest() {
             document.querySelector("[data-regular-customer-draft-invoice-clear]"),
           ),
           regularDraftInvoiceEmpty: Boolean(document.querySelector("[data-regular-customer-draft-invoice-empty]")),
+          regularDraftInvoiceEmptyText:
+            document.querySelector("[data-regular-customer-draft-invoice-empty]")?.textContent.trim() || "",
           regularDraftInvoiceFeedback:
             document.querySelector("[data-regular-customer-draft-invoice-feedback]")?.textContent.trim() || "",
           regularDraftInvoiceFeedbackTone:
@@ -959,6 +961,16 @@ async function runChromeTest() {
         dashboardState.regularDraftInvoiceEmpty,
         true,
         "Expected no regular customer draft invoice preview before local action",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceEmptyText.includes("No draft invoice preview selected yet."),
+        true,
+        "Expected regular customer draft invoice empty state to explain no preview is selected",
+      );
+      assert.equal(
+        dashboardState.regularDraftInvoiceEmptyText.includes("Select bookings from the mock monthly billing list"),
+        true,
+        "Expected regular customer draft invoice empty state to point staff to the mock list",
       );
       assert.equal(
         dashboardState.regularDraftInvoicePreviewVisible,
@@ -1370,6 +1382,7 @@ async function runChromeTest() {
           const clearButton = document.querySelector("[data-regular-customer-draft-invoice-clear]");
           const feedback = document.querySelector("[data-regular-customer-draft-invoice-feedback]");
           const preview = document.querySelector("[data-regular-customer-draft-invoice-preview]");
+          const previewArea = document.querySelector("[data-regular-customer-draft-invoice-preview-area]");
           const buttonRect = button?.getBoundingClientRect();
           const clearButtonRect = clearButton?.getBoundingClientRect();
           const feedbackRect = feedback?.getBoundingClientRect();
@@ -1387,12 +1400,15 @@ async function runChromeTest() {
             distanceFromClearButton:
               clearButtonRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - clearButtonRect.bottom)) : 999,
             emptyVisible: Boolean(document.querySelector("[data-regular-customer-draft-invoice-empty]")),
+            emptyText:
+              document.querySelector("[data-regular-customer-draft-invoice-empty]")?.textContent.trim() || "",
             feedback: feedback?.textContent.trim() || "",
             feedbackTone:
               feedback?.getAttribute("data-regular-customer-draft-invoice-feedback-tone") || "",
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
             noSaveBoundary:
               document.querySelector("[data-regular-customer-draft-invoice-no-save-boundary]")?.textContent.trim() || "",
+            previewAreaText: previewArea?.innerText || "",
             previewText: preview?.innerText || "",
             previewVisible: Boolean(preview),
             rows: [...document.querySelectorAll("[data-regular-customer-draft-invoice-row]")].map((row) => ({
@@ -2161,6 +2177,44 @@ async function runChromeTest() {
         "Expected clear mock draft preview to return the preview area to its empty state",
       );
       assert.equal(
+        regularDraftClearedState.emptyText.includes("No draft invoice preview selected yet."),
+        true,
+        "Expected clear mock draft preview to show a simple empty state title",
+      );
+      assert.equal(
+        regularDraftClearedState.emptyText.includes("Select bookings from the mock monthly billing list"),
+        true,
+        "Expected clear mock draft preview empty state to guide staff back to the mock list",
+      );
+      assert.equal(
+        regularDraftClearedState.previewText,
+        "",
+        "Expected clear mock draft preview to remove visible preview text",
+      );
+      assert.deepEqual(
+        regularDraftClearedState.rows,
+        [],
+        "Expected clear mock draft preview to remove visible preview rows",
+      );
+      for (const stalePreviewText of [
+        "Mixed customer mock preview",
+        "Mixed billing months mock preview",
+        "Browser Test Passenger",
+        "Browser Filter Passenger",
+        "Ritz Carlton / 2026-06",
+        "UBS / 2026-05",
+        "Amount not calculated in this mock preview",
+        "No subtotal, GST, discount, or grand total is created",
+        "Draft Preview / Not Issued",
+        "unbilled / draft",
+      ]) {
+        assert.equal(
+          regularDraftClearedState.previewAreaText.includes(stalePreviewText),
+          false,
+          `Expected cleared draft invoice preview area not to show stale preview text: ${stalePreviewText}`,
+        );
+      }
+      assert.equal(
         regularDraftClearedState.clearVisible,
         true,
         "Expected clear mock draft preview control to remain beside its local feedback after clearing",
@@ -2212,6 +2266,85 @@ async function runChromeTest() {
         ),
         [],
         "Expected clear mock draft preview not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setRegularCustomerBookingListFilter("customerId", "ubs");
+      await setRegularCustomerBookingListFilter("billingMonth", "2026-05");
+      await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.countText === "Showing 1 of 2 local mock rows." &&
+            candidateState.rows[0]?.text.includes("Browser Test Passenger")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer filters before recreated draft invoice preview",
+      );
+      await clickRegularCustomerDraftInvoicePreview("new single-row draft invoice preview after clear");
+      const regularDraftPreviewAfterClearState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerDraftInvoiceState();
+          return candidateState.previewVisible && candidateState.rows.length === 1 ? candidateState : false;
+        },
+        10000,
+        "regular customer new mock draft invoice preview after clear",
+      );
+      for (const expectedNewPreviewText of [
+        "Mock/local draft invoice preview",
+        "UBS",
+        "2026-05",
+        "Browser Test Passenger",
+        "PO MAY TEST",
+        "Amount not calculated in this mock preview",
+      ]) {
+        assert.equal(
+          regularDraftPreviewAfterClearState.previewText.includes(expectedNewPreviewText),
+          true,
+          `Expected new draft invoice preview after clear to show: ${expectedNewPreviewText}`,
+        );
+      }
+      for (const staleClearedPreviewText of [
+        "Browser Filter Passenger",
+        "Ritz Carlton / 2026-06",
+        "PO JUN TEST",
+        "Mixed customer mock preview",
+        "Mixed billing months mock preview",
+      ]) {
+        assert.equal(
+          regularDraftPreviewAfterClearState.previewText.includes(staleClearedPreviewText),
+          false,
+          `Expected new draft invoice preview after clear not to show stale text: ${staleClearedPreviewText}`,
+        );
+      }
+      assert.deepEqual(
+        regularDraftPreviewAfterClearState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected new draft invoice preview after clear not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await clickRegularCustomerDraftInvoiceClear("clear new mock draft invoice preview after recreate");
+      const regularDraftSecondClearedState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerDraftInvoiceState();
+          return candidateState.emptyVisible && candidateState.feedback.includes("cleared locally")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer clear recreated mock draft invoice preview",
+      );
+      assert.equal(
+        regularDraftSecondClearedState.previewAreaText.includes("Browser Test Passenger"),
+        false,
+        "Expected clearing the recreated draft invoice preview not to leave stale UBS passenger text",
+      );
+      assert.equal(
+        regularDraftSecondClearedState.previewAreaText.includes("UBS / 2026-05"),
+        false,
+        "Expected clearing the recreated draft invoice preview not to leave stale UBS month text",
       );
 
       const clearRegularBookingFiltersClicked = await evaluate(`(() => {

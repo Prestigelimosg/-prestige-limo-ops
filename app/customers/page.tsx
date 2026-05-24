@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import {
   collectionRules,
   mockCustomers,
@@ -19,6 +19,36 @@ const summaryCards = [
 ];
 
 const maxCustomerSearchResults = 8;
+
+const regularCustomerRouteTypeOptions = [
+  { label: "Arrival / MNG", value: "MNG" },
+  { label: "Departure / DEP", value: "DEP" },
+  { label: "Transfer / TRF", value: "TRF" },
+  { label: "Disposal / DSP / hourly", value: "DSP" },
+];
+
+const regularCustomerVehicleTypeOptions = ["AVF", "VVV", "Combi", "E class", "S class"];
+
+const initialRegularCustomerBookingForm = {
+  billingMonth: "2026-05",
+  billingStatus: "unbilled / draft",
+  booker: "",
+  customerId: "",
+  customerReference: "",
+  dropoffLocation: "",
+  extraStops: "",
+  flightNumber: "",
+  internalNote: "",
+  luggage: "",
+  passengerCount: "1",
+  passengerName: "",
+  paymentMethod: "monthly bank transfer manual",
+  pickupDate: "",
+  pickupLocation: "",
+  pickupTime: "",
+  routeType: "MNG",
+  vehicleType: "AVF",
+};
 
 const outstandingPaymentStatuses = new Set<MockPaymentStatus>([
   "Invoice Sent",
@@ -99,6 +129,14 @@ type MockStatementPreviewEvent = {
   note: string;
   periodLabel: string;
   timestamp: string;
+};
+
+type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
+
+type RegularCustomerBookingPreview = RegularCustomerBookingForm & {
+  customerFolderHref: string;
+  customerName: string;
+  createdAtLabel: string;
 };
 
 function hasMockBalanceDue(balanceDue: string) {
@@ -205,6 +243,14 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
 
 export default function MockCustomerDashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
+    initialRegularCustomerBookingForm,
+  );
+  const [regularCustomerBookingFeedback, setRegularCustomerBookingFeedback] = useState(
+    "Mock/local form foundation only. Submit creates a local preview beside this button.",
+  );
+  const [regularCustomerBookingPreview, setRegularCustomerBookingPreview] =
+    useState<RegularCustomerBookingPreview | null>(null);
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
   const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
   const [mockStatementPreviewEvents, setMockStatementPreviewEvents] = useState<MockStatementPreviewEvent[]>([]);
@@ -222,6 +268,10 @@ export default function MockCustomerDashboardPage() {
     "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
   );
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const selectedRegularCustomer = useMemo(
+    () => mockCustomers.find((customer) => customer.id === regularCustomerBookingForm.customerId),
+    [regularCustomerBookingForm.customerId],
+  );
   const filteredCustomers = useMemo(() => {
     if (!normalizedSearchTerm) {
       return [];
@@ -279,6 +329,42 @@ export default function MockCustomerDashboardPage() {
       })),
     [mockStatementPreviewFeedback, visibleOutstandingPaymentReviewItems],
   );
+
+  function updateRegularCustomerBookingField(field: keyof RegularCustomerBookingForm, value: string) {
+    setRegularCustomerBookingForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  }
+
+  function handleRegularCustomerBookingSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const customer = mockCustomers.find((candidate) => candidate.id === regularCustomerBookingForm.customerId);
+    const customerName = customer?.companyName ?? "Customer not selected";
+    const customerFolderHref = customer ? `/customers/${customer.id}` : "";
+
+    setRegularCustomerBookingPreview({
+      ...regularCustomerBookingForm,
+      customerFolderHref,
+      customerName,
+      createdAtLabel: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    });
+    setRegularCustomerBookingFeedback(
+      `${customerName} mock/local preview created. No booking was saved, no customer link was written, no invoice number was created, no invoice or statement was generated, no notification was sent, no calendar sync ran, and no payment, bank, or Supabase call was made.`,
+    );
+  }
+
+  function handleRegularCustomerBookingClear() {
+    setRegularCustomerBookingForm(initialRegularCustomerBookingForm);
+    setRegularCustomerBookingPreview(null);
+    setRegularCustomerBookingFeedback(
+      "Regular customer booking form cleared locally. No booking, customer folder, billing, invoice, calendar, payment, bank, notification, or Supabase record was changed.",
+    );
+  }
 
   function handleMockPaymentAction(item: OutstandingPaymentReviewItem, action: MockPaymentAction) {
     const actionTimestamp = new Date().toLocaleTimeString([], {
@@ -464,6 +550,410 @@ export default function MockCustomerDashboardPage() {
               <p className="mt-3 text-2xl font-bold text-slate-950">{card.value}</p>
             </div>
           ))}
+        </section>
+
+        <section
+          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          data-regular-customer-booking-form-section="true"
+        >
+          <div className="border-b border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Internal dispatcher/admin only
+                </p>
+                <h2 className="mt-2 text-lg font-bold text-slate-950">
+                  Regular Customer Booking Form Foundation
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-sm leading-6 text-slate-600"
+                  data-regular-customer-booking-boundary="true"
+                >
+                  Mock/local only. Not customer-facing. No Supabase save, invoice number, invoice or statement
+                  generation, notification, calendar sync, payment API, or bank API is used.
+                </p>
+              </div>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-950">
+                Bank transfer remains manual-record only.
+              </div>
+            </div>
+          </div>
+
+          <form
+            className="p-4 sm:p-5"
+            data-regular-customer-booking-form="true"
+            onSubmit={handleRegularCustomerBookingSubmit}
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Customer / account *
+                <select
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="customerId"
+                  onChange={(event) => updateRegularCustomerBookingField("customerId", event.target.value)}
+                  value={regularCustomerBookingForm.customerId}
+                >
+                  <option value="">Select customer/account</option>
+                  {mockCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.companyName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Booker / contact person *
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="booker"
+                  onChange={(event) => updateRegularCustomerBookingField("booker", event.target.value)}
+                  placeholder="Account booker or contact"
+                  type="text"
+                  value={regularCustomerBookingForm.booker}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Passenger name *
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="passengerName"
+                  onChange={(event) => updateRegularCustomerBookingField("passengerName", event.target.value)}
+                  placeholder="Passenger or guest name"
+                  type="text"
+                  value={regularCustomerBookingForm.passengerName}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Pickup date *
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="pickupDate"
+                  onChange={(event) => updateRegularCustomerBookingField("pickupDate", event.target.value)}
+                  type="date"
+                  value={regularCustomerBookingForm.pickupDate}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Pickup time *
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="pickupTime"
+                  onChange={(event) => updateRegularCustomerBookingField("pickupTime", event.target.value)}
+                  placeholder="1530hrs"
+                  type="text"
+                  value={regularCustomerBookingForm.pickupTime}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Flight number if any
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="flightNumber"
+                  onChange={(event) => updateRegularCustomerBookingField("flightNumber", event.target.value)}
+                  placeholder="SQ333 or leave blank"
+                  type="text"
+                  value={regularCustomerBookingForm.flightNumber}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-1">
+                Pickup location *
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="pickupLocation"
+                  onChange={(event) => updateRegularCustomerBookingField("pickupLocation", event.target.value)}
+                  placeholder="Pickup address or airport terminal"
+                  type="text"
+                  value={regularCustomerBookingForm.pickupLocation}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-1">
+                Drop-off location *
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="dropoffLocation"
+                  onChange={(event) => updateRegularCustomerBookingField("dropoffLocation", event.target.value)}
+                  placeholder="Drop-off address"
+                  type="text"
+                  value={regularCustomerBookingForm.dropoffLocation}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Route type *
+                <select
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="routeType"
+                  onChange={(event) => updateRegularCustomerBookingField("routeType", event.target.value)}
+                  value={regularCustomerBookingForm.routeType}
+                >
+                  {regularCustomerRouteTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Vehicle type *
+                <select
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="vehicleType"
+                  onChange={(event) => updateRegularCustomerBookingField("vehicleType", event.target.value)}
+                  value={regularCustomerBookingForm.vehicleType}
+                >
+                  {regularCustomerVehicleTypeOptions.map((vehicleType) => (
+                    <option key={vehicleType} value={vehicleType}>
+                      {vehicleType}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Number of passengers
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="passengerCount"
+                  min="1"
+                  onChange={(event) => updateRegularCustomerBookingField("passengerCount", event.target.value)}
+                  type="number"
+                  value={regularCustomerBookingForm.passengerCount}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Luggage
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="luggage"
+                  onChange={(event) => updateRegularCustomerBookingField("luggage", event.target.value)}
+                  placeholder="2 large bags, carry-on, etc."
+                  type="text"
+                  value={regularCustomerBookingForm.luggage}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Extra stops
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="extraStops"
+                  onChange={(event) => updateRegularCustomerBookingField("extraStops", event.target.value)}
+                  placeholder="None, or list stop details"
+                  type="text"
+                  value={regularCustomerBookingForm.extraStops}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Customer reference / PO number if any
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="customerReference"
+                  onChange={(event) => updateRegularCustomerBookingField("customerReference", event.target.value)}
+                  placeholder="PO, cost code, guest reference"
+                  type="text"
+                  value={regularCustomerBookingForm.customerReference}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Billing month
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="billingMonth"
+                  onChange={(event) => updateRegularCustomerBookingField("billingMonth", event.target.value)}
+                  placeholder="2026-05"
+                  type="text"
+                  value={regularCustomerBookingForm.billingMonth}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Billing status default
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                  data-regular-booking-field="billingStatus"
+                  readOnly
+                  type="text"
+                  value={regularCustomerBookingForm.billingStatus}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Payment method default
+                <input
+                  className="min-h-11 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                  data-regular-booking-field="paymentMethod"
+                  readOnly
+                  type="text"
+                  value={regularCustomerBookingForm.paymentMethod}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-3">
+                Internal note
+                <textarea
+                  className="min-h-28 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                  data-regular-booking-field="internalNote"
+                  onChange={(event) => updateRegularCustomerBookingField("internalNote", event.target.value)}
+                  placeholder="Internal dispatcher/admin note only"
+                  value={regularCustomerBookingForm.internalNote}
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.8fr]">
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                <h3 className="font-bold text-slate-950">Mock/local safety guardrails</h3>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  <li>Submit creates a local preview only and does not save a booking.</li>
+                  <li>No invoice number, invoice, statement, notification, calendar sync, payment API, or bank API.</li>
+                  <li>Existing parser booking save and customer match behavior stay separate.</li>
+                </ul>
+              </div>
+
+              <div className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
+                <h3 className="font-bold text-slate-950">Link to customer folder</h3>
+                {selectedRegularCustomer ? (
+                  <Link
+                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-center text-sm font-bold text-white transition hover:bg-slate-700 sm:w-auto"
+                    data-regular-customer-folder-link="true"
+                    href={`/customers/${selectedRegularCustomer.id}`}
+                  >
+                    Open {selectedRegularCustomer.companyName} folder (mock/local)
+                  </Link>
+                ) : (
+                  <p className="mt-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-slate-600">
+                    Select a customer/account to show the mock folder link.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button
+                className="min-h-11 rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
+                data-regular-customer-booking-submit="true"
+                type="submit"
+              >
+                Create Mock Booking Preview
+              </button>
+              <button
+                className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                data-regular-customer-booking-clear="true"
+                onClick={handleRegularCustomerBookingClear}
+                type="button"
+              >
+                Clear Local Form
+              </button>
+            </div>
+
+            <p
+              aria-live="polite"
+              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
+              data-regular-customer-booking-feedback="true"
+            >
+              {regularCustomerBookingFeedback}
+            </p>
+          </form>
+
+          <div className="border-t border-slate-200 p-4 sm:p-5">
+            {regularCustomerBookingPreview ? (
+              <article
+                className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950"
+                data-regular-customer-booking-preview="true"
+              >
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="font-bold">Mock/local preview only</h3>
+                    <p className="mt-1">
+                      Created locally at {regularCustomerBookingPreview.createdAtLabel} for{" "}
+                      {regularCustomerBookingPreview.customerName}.
+                    </p>
+                  </div>
+                  <p className="font-bold">Invoice number: Not created</p>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em]">Booker</p>
+                    <p className="mt-1">{regularCustomerBookingPreview.booker || "Not entered"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em]">Passenger</p>
+                    <p className="mt-1">{regularCustomerBookingPreview.passengerName || "Not entered"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em]">Pickup</p>
+                    <p className="mt-1">
+                      {regularCustomerBookingPreview.pickupDate || "Date TBC"}{" "}
+                      {regularCustomerBookingPreview.pickupTime || "Time TBC"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em]">Billing</p>
+                    <p className="mt-1">
+                      {regularCustomerBookingPreview.billingMonth} / {regularCustomerBookingPreview.billingStatus}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-md bg-white/70 p-3">
+                  <p>
+                    Route: {regularCustomerBookingPreview.pickupLocation || "Pickup TBC"} to{" "}
+                    {regularCustomerBookingPreview.dropoffLocation || "Drop-off TBC"}
+                  </p>
+                  <p>
+                    Type/vehicle: {regularCustomerBookingPreview.routeType} /{" "}
+                    {regularCustomerBookingPreview.vehicleType}
+                  </p>
+                  <p>
+                    Pax/luggage/stops: {regularCustomerBookingPreview.passengerCount || "1"} pax /{" "}
+                    {regularCustomerBookingPreview.luggage || "Luggage not entered"} /{" "}
+                    {regularCustomerBookingPreview.extraStops || "No extra stops entered"}
+                  </p>
+                  <p>
+                    Customer reference: {regularCustomerBookingPreview.customerReference || "No reference entered"}
+                  </p>
+                  <p>Payment method: {regularCustomerBookingPreview.paymentMethod}</p>
+                </div>
+
+                <p
+                  className="mt-4 rounded-md bg-white/70 p-3 font-semibold"
+                  data-regular-customer-booking-no-save-boundary="true"
+                >
+                  Booking save: Not saved. Customer link write: Not written. Invoice/statement: Not generated.
+                  Notification/calendar/payment/bank/Supabase calls: None.
+                </p>
+
+                {regularCustomerBookingPreview.customerFolderHref ? (
+                  <Link
+                    className="mt-4 inline-flex min-h-11 items-center justify-center rounded-md border border-emerald-900 bg-emerald-900 px-4 text-sm font-bold text-white transition hover:bg-emerald-800"
+                    data-regular-customer-preview-folder-link="true"
+                    href={regularCustomerBookingPreview.customerFolderHref}
+                  >
+                    Open customer folder mock link
+                  </Link>
+                ) : null}
+              </article>
+            ) : (
+              <div
+                className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600"
+                data-regular-customer-booking-empty-preview="true"
+              >
+                No mock regular customer booking preview yet.
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm" data-customer-dashboard="true">

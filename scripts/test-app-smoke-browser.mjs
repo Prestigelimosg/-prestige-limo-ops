@@ -498,13 +498,14 @@ async function runChromeTest() {
       await viewportLoadEvent;
     };
 
+    const blockedCustomerIntegrationPattern =
+      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i;
+
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
-        resourceCalls.filter((url) =>
-          /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i.test(url),
-        ),
+        resourceCalls.filter((url) => blockedCustomerIntegrationPattern.test(url)),
         [],
-        `${context}: expected no payment provider, bank API, webhook, notification, WhatsApp, email, SMS, or Supabase resources`,
+        `${context}: expected no payment provider, bank API, calendar API, webhook, notification, WhatsApp, email, SMS, or Supabase resources`,
       );
     };
 
@@ -631,6 +632,69 @@ async function runChromeTest() {
             document.querySelector("[data-mock-statement-preview-log-boundary]")?.textContent.trim() || "",
           statementPreviewLogText: document.querySelector("[data-mock-statement-preview-log]")?.innerText || "",
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+          regularBookingBoundary:
+            document.querySelector("[data-regular-customer-booking-boundary]")?.textContent.trim() || "",
+          regularBookingEmptyPreview: Boolean(
+            document.querySelector("[data-regular-customer-booking-empty-preview]"),
+          ),
+          regularBookingFeedback:
+            document.querySelector("[data-regular-customer-booking-feedback]")?.textContent.trim() || "",
+          regularBookingFields: [
+            "customerId",
+            "booker",
+            "passengerName",
+            "pickupDate",
+            "pickupTime",
+            "pickupLocation",
+            "dropoffLocation",
+            "flightNumber",
+            "routeType",
+            "vehicleType",
+            "passengerCount",
+            "luggage",
+            "extraStops",
+            "customerReference",
+            "internalNote",
+            "billingMonth",
+            "billingStatus",
+            "paymentMethod",
+          ].map((field) => {
+            const input = document.querySelector("[data-regular-booking-field='" + field + "']");
+            const rect = input?.getBoundingClientRect();
+
+            return {
+              field,
+              value: input?.value || "",
+              visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
+            };
+          }),
+          regularBookingFolderLinkVisible: Boolean(
+            document.querySelector("[data-regular-customer-folder-link]"),
+          ),
+          regularBookingFormVisible: Boolean(document.querySelector("[data-regular-customer-booking-form]")),
+          regularBookingLabels: [
+            "Customer / account",
+            "Booker / contact person",
+            "Passenger name",
+            "Pickup date",
+            "Pickup time",
+            "Pickup location",
+            "Drop-off location",
+            "Flight number if any",
+            "Route type",
+            "Vehicle type",
+            "Number of passengers",
+            "Luggage",
+            "Extra stops",
+            "Customer reference / PO number if any",
+            "Internal note",
+            "Billing month",
+            "Billing status default",
+            "Payment method default",
+          ].filter((label) => text.includes(label)),
+          regularBookingSubmitVisible: Boolean(
+            document.querySelector("[data-regular-customer-booking-submit]"),
+          ),
           searchInputVisible: Boolean(searchInput && searchRect.width > 0 && searchRect.height >= 40),
           summaryCards: [...document.querySelectorAll("[data-customer-summary-card]")].map((card) =>
             card.getAttribute("data-customer-summary-card"),
@@ -649,6 +713,75 @@ async function runChromeTest() {
       assert.equal(dashboardState.helperVisible, true, "Expected search helper before results");
       assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
+      assert.equal(
+        dashboardState.regularBookingFormVisible,
+        true,
+        "Expected internal regular customer booking form foundation to be visible",
+      );
+      assert.equal(
+        dashboardState.regularBookingBoundary,
+        "Mock/local only. Not customer-facing. No Supabase save, invoice number, invoice or statement generation, notification, calendar sync, payment API, or bank API is used.",
+        "Expected mock/local boundary on regular customer booking form",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingLabels,
+        [
+          "Customer / account",
+          "Booker / contact person",
+          "Passenger name",
+          "Pickup date",
+          "Pickup time",
+          "Pickup location",
+          "Drop-off location",
+          "Flight number if any",
+          "Route type",
+          "Vehicle type",
+          "Number of passengers",
+          "Luggage",
+          "Extra stops",
+          "Customer reference / PO number if any",
+          "Internal note",
+          "Billing month",
+          "Billing status default",
+          "Payment method default",
+        ],
+        "Expected all regular customer booking fields to be visible",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingFields.filter((field) => !field.visible).map((field) => field.field),
+        [],
+        "Expected regular customer booking fields to be touch-visible",
+      );
+      assert.equal(
+        dashboardState.regularBookingFields.find((field) => field.field === "billingStatus")?.value,
+        "unbilled / draft",
+        "Expected billing status default to be unbilled / draft",
+      );
+      assert.equal(
+        dashboardState.regularBookingFields.find((field) => field.field === "paymentMethod")?.value,
+        "monthly bank transfer manual",
+        "Expected payment method default to be monthly bank transfer manual",
+      );
+      assert.equal(
+        dashboardState.regularBookingFeedback,
+        "Mock/local form foundation only. Submit creates a local preview beside this button.",
+        "Expected regular customer form helper near the submit button",
+      );
+      assert.equal(
+        dashboardState.regularBookingEmptyPreview,
+        true,
+        "Expected no regular customer booking preview before local submit",
+      );
+      assert.equal(
+        dashboardState.regularBookingFolderLinkVisible,
+        false,
+        "Expected no folder link until a regular customer is selected",
+      );
+      assert.equal(
+        dashboardState.regularBookingSubmitVisible,
+        true,
+        "Expected regular customer booking submit button to be visible",
+      );
       assert.equal(
         dashboardState.outstandingReviewBoundary,
         "Mock/local only. Changes reset on refresh and are not saved. No payment API, bank API, notification, or Supabase write is used.",
@@ -981,6 +1114,192 @@ async function runChromeTest() {
         })()`);
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
+
+      const setRegularCustomerBookingField = async (field, value) => {
+        const actualValue = await evaluate(`(() => {
+          const input = document.querySelector(${JSON.stringify(`[data-regular-booking-field="${field}"]`)});
+
+          if (!input) {
+            return null;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+          descriptor?.set?.call(input, ${JSON.stringify(value)});
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+
+          return input.value;
+        })()`);
+        assert.equal(actualValue, value, `Expected regular booking field ${field} to accept test value`);
+      };
+
+      const regularCustomerBookingFields = {
+        billingMonth: "2026-05",
+        booker: "Browser Test Booker",
+        customerId: "ubs",
+        customerReference: "PO MAY TEST",
+        dropoffLocation: "Raffles Place",
+        extraStops: "Marina Bay Sands",
+        flightNumber: "SQ333",
+        internalNote: "Mock/local browser smoke note",
+        luggage: "2 large bags",
+        passengerCount: "2",
+        passengerName: "Browser Test Passenger",
+        pickupDate: "2026-05-28",
+        pickupLocation: "Changi Airport T3",
+        pickupTime: "1530hrs",
+        routeType: "MNG",
+        vehicleType: "AVF",
+      };
+
+      for (const [field, value] of Object.entries(regularCustomerBookingFields)) {
+        await setRegularCustomerBookingField(field, value);
+      }
+
+      const regularBookingClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-booking-submit]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(regularBookingClicked, true, "Expected regular customer booking preview button to be clickable");
+
+      const regularBookingActionState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const preview = document.querySelector("[data-regular-customer-booking-preview]");
+
+            if (!preview) {
+              return false;
+            }
+
+            return {
+              feedback:
+                document.querySelector("[data-regular-customer-booking-feedback]")?.textContent.trim() || "",
+              folderLink:
+                document.querySelector("[data-regular-customer-preview-folder-link]")?.getAttribute("href") || "",
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              noSaveBoundary:
+                document.querySelector("[data-regular-customer-booking-no-save-boundary]")?.textContent.trim() || "",
+              previewText: preview.innerText,
+            };
+          })()`),
+        10000,
+        "regular customer booking mock/local preview",
+      );
+
+      assert.equal(
+        regularBookingActionState.feedback.includes("UBS mock/local preview created"),
+        true,
+        "Expected regular customer booking feedback near submit button",
+      );
+      assert.equal(
+        regularBookingActionState.feedback.includes("No booking was saved"),
+        true,
+        "Expected regular customer booking feedback to confirm no save",
+      );
+      assert.equal(
+        regularBookingActionState.feedback.includes("no invoice number was created"),
+        true,
+        "Expected regular customer booking feedback to confirm no invoice number",
+      );
+      assert.equal(
+        regularBookingActionState.feedback.includes("no payment, bank, or Supabase call was made"),
+        true,
+        "Expected regular customer booking feedback to confirm no integration call",
+      );
+      assert.equal(
+        regularBookingActionState.previewText.includes("Mock/local preview only"),
+        true,
+        "Expected regular customer booking preview to be clearly mock/local",
+      );
+      for (const expectedPreviewText of [
+        "Browser Test Booker",
+        "Browser Test Passenger",
+        "Changi Airport T3",
+        "Raffles Place",
+        "2026-05",
+        "unbilled / draft",
+        "monthly bank transfer manual",
+        "Invoice number: Not created",
+      ]) {
+        assert.equal(
+          regularBookingActionState.previewText.includes(expectedPreviewText),
+          true,
+          `Expected regular customer booking preview text: ${expectedPreviewText}`,
+        );
+      }
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(regularBookingActionState.previewText),
+        false,
+        "Expected regular customer booking preview not to allocate an invoice number",
+      );
+      assert.equal(
+        regularBookingActionState.noSaveBoundary,
+        "Booking save: Not saved. Customer link write: Not written. Invoice/statement: Not generated. Notification/calendar/payment/bank/Supabase calls: None.",
+        "Expected regular customer booking no-save boundary",
+      );
+      assert.equal(
+        regularBookingActionState.folderLink,
+        "/customers/ubs",
+        "Expected regular customer booking preview to link to the selected mock customer folder",
+      );
+      assert.deepEqual(
+        regularBookingActionState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected regular customer booking preview not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      const regularBookingClearClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-booking-clear]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(regularBookingClearClicked, true, "Expected regular customer booking clear button to be clickable");
+
+      const regularBookingClearState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-regular-customer-booking-feedback]")?.textContent.trim() || "";
+
+            if (!feedback.includes("cleared locally")) {
+              return false;
+            }
+
+            return {
+              emptyPreview: Boolean(document.querySelector("[data-regular-customer-booking-empty-preview]")),
+              feedback,
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            };
+          })()`),
+        10000,
+        "regular customer booking local clear",
+      );
+
+      assert.equal(
+        regularBookingClearState.emptyPreview,
+        true,
+        "Expected regular customer booking clear to remove only the local preview",
+      );
+      assert.equal(
+        regularBookingClearState.feedback.includes("No booking, customer folder, billing, invoice, calendar, payment, bank, notification, or Supabase record was changed."),
+        true,
+        "Expected regular customer booking clear feedback near the clear button",
+      );
+      assert.deepEqual(
+        regularBookingClearState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected regular customer booking clear not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
 
       await clickMockStatementPreviewAction("ubs", "Preview Mock Statement");
 

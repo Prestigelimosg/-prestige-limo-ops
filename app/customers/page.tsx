@@ -29,6 +29,13 @@ const regularCustomerRouteTypeOptions = [
 
 const regularCustomerVehicleTypeOptions = ["AVF", "VVV", "Combi", "E class", "S class"];
 
+const regularCustomerBillingStatusFilterOptions = [
+  "unbilled / draft",
+  "billed",
+  "paid",
+  "cancelled",
+];
+
 const initialRegularCustomerBookingForm = {
   billingMonth: "2026-05",
   billingStatus: "unbilled / draft",
@@ -143,7 +150,19 @@ type RegularCustomerBookingListItem = RegularCustomerBookingPreview & {
   id: string;
 };
 
+type RegularCustomerBookingListFilters = {
+  billingMonth: string;
+  billingStatus: string;
+  customerId: string;
+};
+
 type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
+
+const initialRegularCustomerBookingListFilters: RegularCustomerBookingListFilters = {
+  billingMonth: "",
+  billingStatus: "",
+  customerId: "",
+};
 
 const regularCustomerRequiredFields: Array<{
   field: keyof RegularCustomerBookingForm;
@@ -302,6 +321,11 @@ export default function MockCustomerDashboardPage() {
   const [regularCustomerBookingListItems, setRegularCustomerBookingListItems] = useState<
     RegularCustomerBookingListItem[]
   >([]);
+  const [regularCustomerBookingListFilters, setRegularCustomerBookingListFilters] =
+    useState<RegularCustomerBookingListFilters>(initialRegularCustomerBookingListFilters);
+  const [regularCustomerBookingListFilterFeedback, setRegularCustomerBookingListFilterFeedback] = useState(
+    "Mock/local list filters only affect rows on this page. Nothing is saved or sent.",
+  );
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
   const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
   const [mockStatementPreviewEvents, setMockStatementPreviewEvents] = useState<MockStatementPreviewEvent[]>([]);
@@ -380,6 +404,24 @@ export default function MockCustomerDashboardPage() {
       })),
     [mockStatementPreviewFeedback, visibleOutstandingPaymentReviewItems],
   );
+  const filteredRegularCustomerBookingListItems = useMemo(
+    () =>
+      regularCustomerBookingListItems.filter((item) => {
+        const customerMatches =
+          !regularCustomerBookingListFilters.customerId ||
+          item.customerId === regularCustomerBookingListFilters.customerId;
+        const billingMonthMatches =
+          !regularCustomerBookingListFilters.billingMonth.trim() ||
+          item.billingMonth.trim().toLowerCase() ===
+            regularCustomerBookingListFilters.billingMonth.trim().toLowerCase();
+        const billingStatusMatches =
+          !regularCustomerBookingListFilters.billingStatus ||
+          item.billingStatus === regularCustomerBookingListFilters.billingStatus;
+
+        return customerMatches && billingMonthMatches && billingStatusMatches;
+      }),
+    [regularCustomerBookingListFilters, regularCustomerBookingListItems],
+  );
 
   function updateRegularCustomerBookingField(field: keyof RegularCustomerBookingForm, value: string) {
     setRegularCustomerBookingForm((currentForm) => ({
@@ -388,6 +430,26 @@ export default function MockCustomerDashboardPage() {
     }));
     setRegularCustomerBookingMissingFields((currentFields) =>
       value.trim() ? currentFields.filter((currentField) => currentField !== field) : currentFields,
+    );
+  }
+
+  function updateRegularCustomerBookingListFilter(
+    field: keyof RegularCustomerBookingListFilters,
+    value: string,
+  ) {
+    setRegularCustomerBookingListFilters((currentFilters) => ({
+      ...currentFilters,
+      [field]: value,
+    }));
+    setRegularCustomerBookingListFilterFeedback(
+      "Local mock filters updated. No booking, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record was changed.",
+    );
+  }
+
+  function clearRegularCustomerBookingListFilters() {
+    setRegularCustomerBookingListFilters(initialRegularCustomerBookingListFilters);
+    setRegularCustomerBookingListFilterFeedback(
+      "Local mock filters cleared. The list is still page-only and no records were changed.",
     );
   }
 
@@ -1139,85 +1201,190 @@ export default function MockCustomerDashboardPage() {
               </p>
             </div>
 
+            <div
+              className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4"
+              data-regular-customer-booking-list-filters="true"
+            >
+              <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
+                <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                  Customer / account filter (mock/local)
+                  <select
+                    className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                    data-regular-customer-booking-list-filter="customerId"
+                    onChange={(event) =>
+                      updateRegularCustomerBookingListFilter("customerId", event.target.value)
+                    }
+                    value={regularCustomerBookingListFilters.customerId}
+                  >
+                    <option value="">All local mock customers</option>
+                    {mockCustomers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.companyName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                  Billing month filter (mock/local)
+                  <input
+                    className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                    data-regular-customer-booking-list-filter="billingMonth"
+                    onChange={(event) =>
+                      updateRegularCustomerBookingListFilter("billingMonth", event.target.value)
+                    }
+                    placeholder="2026-05"
+                    type="text"
+                    value={regularCustomerBookingListFilters.billingMonth}
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                  Billing status filter (mock/local)
+                  <select
+                    className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                    data-regular-customer-booking-list-filter="billingStatus"
+                    onChange={(event) =>
+                      updateRegularCustomerBookingListFilter("billingStatus", event.target.value)
+                    }
+                    value={regularCustomerBookingListFilters.billingStatus}
+                  >
+                    <option value="">All local mock statuses</option>
+                    {regularCustomerBillingStatusFilterOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-white"
+                  data-regular-customer-booking-list-clear-filters="true"
+                  onClick={clearRegularCustomerBookingListFilters}
+                  type="button"
+                >
+                  Clear Local Filters
+                </button>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
+                <p
+                  aria-live="polite"
+                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700"
+                  data-regular-customer-booking-list-filter-feedback="true"
+                >
+                  {regularCustomerBookingListFilterFeedback}
+                </p>
+                <p
+                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold leading-6 text-slate-950"
+                  data-regular-customer-booking-list-filter-count="true"
+                >
+                  Showing {filteredRegularCustomerBookingListItems.length} of{" "}
+                  {regularCustomerBookingListItems.length} local mock row
+                  {regularCustomerBookingListItems.length === 1 ? "" : "s"}.
+                </p>
+              </div>
+            </div>
+
             {regularCustomerBookingListItems.length > 0 ? (
               <div className="mt-4 grid gap-3">
-                {regularCustomerBookingListItems.map((item) => (
-                  <article
-                    className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 shadow-sm"
-                    data-regular-customer-booking-list-row={item.id}
-                    key={item.id}
-                  >
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <h4 className="text-base font-bold text-slate-950">{item.customerName}</h4>
-                        <p className="mt-1 text-slate-600">
-                          {item.passengerName} / {item.pickupDate} {item.pickupTime}
+                {filteredRegularCustomerBookingListItems.length > 0 ? (
+                  filteredRegularCustomerBookingListItems.map((item) => (
+                    <article
+                      className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 shadow-sm"
+                      data-regular-customer-booking-list-row={item.id}
+                      key={item.id}
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <h4 className="text-base font-bold text-slate-950">{item.customerName}</h4>
+                          <p className="mt-1 text-slate-600">
+                            {item.passengerName} / {item.pickupDate} {item.pickupTime}
+                          </p>
+                        </div>
+                        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950">
+                          Draft list only / not issued
                         </p>
                       </div>
-                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950">
-                        Draft list only / not issued
-                      </p>
-                    </div>
 
-                    <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Pickup</dt>
-                        <dd className="mt-1 text-slate-950">{item.pickupLocation}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Drop-off</dt>
-                        <dd className="mt-1 text-slate-950">{item.dropoffLocation}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Route / vehicle</dt>
-                        <dd className="mt-1 text-slate-950">
-                          {item.routeType} / {item.vehicleType}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Billing</dt>
-                        <dd className="mt-1 text-slate-950">
-                          {item.billingMonth} / {item.billingStatus}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Payment method</dt>
-                        <dd className="mt-1 text-slate-950">{item.paymentMethod}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Customer ref / PO</dt>
-                        <dd className="mt-1 text-slate-950">{item.customerReference || "No reference entered"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Invoice number</dt>
-                        <dd className="mt-1 font-semibold text-slate-950">Not created</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Created locally</dt>
-                        <dd className="mt-1 text-slate-950">{item.createdAtLabel}</dd>
-                      </div>
-                    </dl>
+                      <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Pickup</dt>
+                          <dd className="mt-1 text-slate-950">{item.pickupLocation}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Drop-off</dt>
+                          <dd className="mt-1 text-slate-950">{item.dropoffLocation}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                            Route / vehicle
+                          </dt>
+                          <dd className="mt-1 text-slate-950">
+                            {item.routeType} / {item.vehicleType}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Billing</dt>
+                          <dd className="mt-1 text-slate-950">
+                            {item.billingMonth} / {item.billingStatus}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                            Payment method
+                          </dt>
+                          <dd className="mt-1 text-slate-950">{item.paymentMethod}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                            Customer ref / PO
+                          </dt>
+                          <dd className="mt-1 text-slate-950">{item.customerReference || "No reference entered"}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                            Invoice number
+                          </dt>
+                          <dd className="mt-1 font-semibold text-slate-950">Not created</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                            Created locally
+                          </dt>
+                          <dd className="mt-1 text-slate-950">{item.createdAtLabel}</dd>
+                        </div>
+                      </dl>
 
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p
-                        className="rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-700"
-                        data-regular-customer-booking-list-no-save-boundary={item.id}
-                      >
-                        List row only. No save, invoice, statement, notification, calendar, payment, bank, audit, or
-                        Supabase record.
-                      </p>
-                      {item.customerFolderHref ? (
-                        <Link
-                          className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
-                          data-regular-customer-booking-list-folder-link={item.id}
-                          href={item.customerFolderHref}
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p
+                          className="rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-700"
+                          data-regular-customer-booking-list-no-save-boundary={item.id}
                         >
-                          Open customer folder mock link
-                        </Link>
-                      ) : null}
-                    </div>
-                  </article>
-                ))}
+                          List row only. No save, invoice, statement, notification, calendar, payment, bank, audit, or
+                          Supabase record.
+                        </p>
+                        {item.customerFolderHref ? (
+                          <Link
+                            className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
+                            data-regular-customer-booking-list-folder-link={item.id}
+                            href={item.customerFolderHref}
+                          >
+                            Open customer folder mock link
+                          </Link>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div
+                    className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600"
+                    data-regular-customer-booking-list-filter-empty="true"
+                  >
+                    No local mock rows match these filters. Nothing was saved, sent, numbered, or synced.
+                  </div>
+                )}
               </div>
             ) : (
               <div

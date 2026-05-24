@@ -689,6 +689,28 @@ async function runChromeTest() {
               text: row.innerText,
             }),
           ),
+          regularBookingListFilterControls: [
+            ...document.querySelectorAll("[data-regular-customer-booking-list-filter]"),
+          ].map((control) => {
+            const rect = control.getBoundingClientRect();
+
+            return {
+              field: control.getAttribute("data-regular-customer-booking-list-filter") || "",
+              label: control.closest("label")?.textContent.trim() || "",
+              value: control.value || "",
+              visible: rect.width > 0 && rect.height >= 40,
+            };
+          }),
+          regularBookingListFilterCount:
+            document.querySelector("[data-regular-customer-booking-list-filter-count]")?.textContent.trim() || "",
+          regularBookingListFilterFeedback:
+            document.querySelector("[data-regular-customer-booking-list-filter-feedback]")?.textContent.trim() || "",
+          regularBookingListFiltersVisible: Boolean(
+            document.querySelector("[data-regular-customer-booking-list-filters]"),
+          ),
+          regularBookingListClearFiltersVisible: Boolean(
+            document.querySelector("[data-regular-customer-booking-list-clear-filters]"),
+          ),
           regularBookingListVisible: Boolean(
             document.querySelector("[data-regular-customer-booking-list-preview]"),
           ),
@@ -834,6 +856,46 @@ async function runChromeTest() {
         dashboardState.regularBookingListEmpty,
         true,
         "Expected regular customer booking list preview to start empty",
+      );
+      assert.equal(
+        dashboardState.regularBookingListFiltersVisible,
+        true,
+        "Expected regular customer booking local filters to be visible",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingListFilterControls.map((control) => ({
+          field: control.field,
+          value: control.value,
+          visible: control.visible,
+        })),
+        [
+          { field: "customerId", value: "", visible: true },
+          { field: "billingMonth", value: "", visible: true },
+          { field: "billingStatus", value: "", visible: true },
+        ],
+        "Expected regular customer booking local filter controls",
+      );
+      assert.equal(
+        dashboardState.regularBookingListFilterControls.every((control) =>
+          control.label.includes("(mock/local)"),
+        ),
+        true,
+        "Expected regular customer booking list filters to be labelled mock/local",
+      );
+      assert.equal(
+        dashboardState.regularBookingListClearFiltersVisible,
+        true,
+        "Expected regular customer booking list clear filters button",
+      );
+      assert.equal(
+        dashboardState.regularBookingListFilterCount,
+        "Showing 0 of 0 local mock rows.",
+        "Expected regular customer booking list count to start at zero",
+      );
+      assert.equal(
+        dashboardState.regularBookingListFilterFeedback,
+        "Mock/local list filters only affect rows on this page. Nothing is saved or sent.",
+        "Expected regular customer booking list local-only filter helper",
       );
       assert.deepEqual(
         dashboardState.regularBookingListRows,
@@ -1191,6 +1253,52 @@ async function runChromeTest() {
         assert.equal(actualValue, value, `Expected regular booking field ${field} to accept test value`);
       };
 
+      const setRegularCustomerBookingListFilter = async (filter, value) => {
+        const actualValue = await evaluate(`(() => {
+          const input = document.querySelector(${JSON.stringify(
+            `[data-regular-customer-booking-list-filter="${filter}"]`,
+          )});
+
+          if (!input) {
+            return null;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+          descriptor?.set?.call(input, ${JSON.stringify(value)});
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+
+          return input.value;
+        })()`);
+        assert.equal(actualValue, value, `Expected regular booking list filter ${filter} to accept test value`);
+      };
+
+      const readRegularCustomerBookingListState = () =>
+        evaluate(`(() => {
+          const list = document.querySelector("[data-regular-customer-booking-list-preview]");
+
+          return {
+            countText:
+              document.querySelector("[data-regular-customer-booking-list-filter-count]")?.textContent.trim() || "",
+            feedback:
+              document.querySelector("[data-regular-customer-booking-list-filter-feedback]")?.textContent.trim() || "",
+            filterEmpty: Boolean(document.querySelector("[data-regular-customer-booking-list-filter-empty]")),
+            filters: [...document.querySelectorAll("[data-regular-customer-booking-list-filter]")].map((input) => ({
+              field: input.getAttribute("data-regular-customer-booking-list-filter") || "",
+              value: input.value || "",
+            })),
+            integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            listText: list?.innerText || "",
+            rows: [...document.querySelectorAll("[data-regular-customer-booking-list-row]")].map((row) => ({
+              folderLink:
+                row.querySelector("[data-regular-customer-booking-list-folder-link]")?.getAttribute("href") || "",
+              noSaveBoundary:
+                row.querySelector("[data-regular-customer-booking-list-no-save-boundary]")?.textContent.trim() || "",
+              text: row.innerText,
+            })),
+          };
+        })()`);
+
       const regularCustomerBookingFields = {
         billingMonth: "2026-05",
         booker: "Browser Test Booker",
@@ -1208,6 +1316,24 @@ async function runChromeTest() {
         pickupTime: "1530hrs",
         routeType: "MNG",
         vehicleType: "AVF",
+      };
+      const secondRegularCustomerBookingFields = {
+        ...regularCustomerBookingFields,
+        billingMonth: "2026-06",
+        booker: "Browser Filter Booker",
+        customerId: "ritz-carlton",
+        customerReference: "PO JUN TEST",
+        dropoffLocation: "Marina Bay Cruise Centre",
+        extraStops: "None",
+        internalNote: "Second local mock filter note",
+        luggage: "1 carry-on",
+        passengerCount: "1",
+        passengerName: "Browser Filter Passenger",
+        pickupDate: "2026-06-03",
+        pickupLocation: "Ritz Carlton",
+        pickupTime: "0900hrs",
+        routeType: "TRF",
+        vehicleType: "E class",
       };
 
       const regularBookingInvalidClicked = await evaluate(`(() => {
@@ -1457,6 +1583,219 @@ async function runChromeTest() {
         "List row only. No save, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record.",
         "Expected regular customer booking list row no-save boundary",
       );
+      assert.equal(
+        (await readRegularCustomerBookingListState()).countText,
+        "Showing 1 of 1 local mock row.",
+        "Expected regular customer booking list count after first valid submit",
+      );
+
+      for (const [field, value] of Object.entries(secondRegularCustomerBookingFields)) {
+        await setRegularCustomerBookingField(field, value);
+      }
+
+      const secondRegularBookingClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-booking-submit]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(secondRegularBookingClicked, true, "Expected second regular customer booking submit to be clickable");
+
+      const regularBookingTwoRowsState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.rows.length === 2 ? candidateState : false;
+        },
+        10000,
+        "regular customer booking second mock/local row",
+      );
+      assert.equal(
+        regularBookingTwoRowsState.countText,
+        "Showing 2 of 2 local mock rows.",
+        "Expected regular customer booking list count after second valid submit",
+      );
+      for (const expectedListText of [
+        "Browser Test Passenger",
+        "Browser Filter Passenger",
+        "UBS",
+        "Ritz Carlton",
+        "2026-05 / unbilled / draft",
+        "2026-06 / unbilled / draft",
+        "PO MAY TEST",
+        "PO JUN TEST",
+        "Not created",
+      ]) {
+        assert.equal(
+          regularBookingTwoRowsState.listText.includes(expectedListText),
+          true,
+          `Expected two-row regular customer list text: ${expectedListText}`,
+        );
+      }
+
+      await setRegularCustomerBookingListFilter("customerId", "ubs");
+      const regularBookingCustomerFilterState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.countText === "Showing 1 of 2 local mock rows." ? candidateState : false;
+        },
+        10000,
+        "regular customer booking customer local filter",
+      );
+      assert.equal(
+        regularBookingCustomerFilterState.rows.length,
+        1,
+        "Expected customer filter to show one local mock row",
+      );
+      assert.equal(
+        regularBookingCustomerFilterState.rows[0].text.includes("Browser Test Passenger"),
+        true,
+        "Expected customer filter to show the UBS local row",
+      );
+      assert.equal(
+        regularBookingCustomerFilterState.feedback.includes("Local mock filters updated"),
+        true,
+        "Expected customer filter feedback near local filter controls",
+      );
+      assert.deepEqual(
+        regularBookingCustomerFilterState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected customer local filter not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setRegularCustomerBookingListFilter("customerId", "");
+      await setRegularCustomerBookingListFilter("billingMonth", "2026-06");
+      const regularBookingMonthFilterState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.countText === "Showing 1 of 2 local mock rows." &&
+            candidateState.rows[0]?.text.includes("Browser Filter Passenger")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer booking billing month local filter",
+      );
+      assert.equal(
+        regularBookingMonthFilterState.rows[0].text.includes("Ritz Carlton"),
+        true,
+        "Expected billing month filter to show the June local row",
+      );
+      assert.deepEqual(
+        regularBookingMonthFilterState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected billing month local filter not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setRegularCustomerBookingListFilter("billingMonth", "");
+      await setRegularCustomerBookingListFilter("billingStatus", "paid");
+      const regularBookingStatusEmptyFilterState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.countText === "Showing 0 of 2 local mock rows." ? candidateState : false;
+        },
+        10000,
+        "regular customer booking billing status empty local filter",
+      );
+      assert.equal(
+        regularBookingStatusEmptyFilterState.filterEmpty,
+        true,
+        "Expected paid status filter to show a local empty state",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(regularBookingStatusEmptyFilterState.listText),
+        false,
+        "Expected regular customer status filter not to create an invoice number",
+      );
+      assert.equal(
+        regularBookingStatusEmptyFilterState.listText.includes("No local mock rows match these filters"),
+        true,
+        "Expected filtered empty state to stay local/mock",
+      );
+      assert.deepEqual(
+        regularBookingStatusEmptyFilterState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected billing status local filter not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setRegularCustomerBookingListFilter("billingStatus", "unbilled / draft");
+      const regularBookingStatusFilterState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.countText === "Showing 2 of 2 local mock rows." ? candidateState : false;
+        },
+        10000,
+        "regular customer booking billing status local filter",
+      );
+      assert.equal(
+        regularBookingStatusFilterState.rows.length,
+        2,
+        "Expected unbilled draft status filter to show both local mock rows",
+      );
+      assert.equal(
+        regularBookingStatusFilterState.listText.toLowerCase().includes("invoice number"),
+        true,
+        "Expected billing status filter to preserve invoice number status labels",
+      );
+      assert.equal(
+        regularBookingStatusFilterState.listText.includes("Invoice number: Not created"),
+        false,
+        "Expected list cards not to allocate issued invoice numbers while filtering",
+      );
+
+      const clearRegularBookingFiltersClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-booking-list-clear-filters]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(
+        clearRegularBookingFiltersClicked,
+        true,
+        "Expected regular customer booking list clear filters button to be clickable",
+      );
+      const regularBookingClearFiltersState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.feedback.includes("Local mock filters cleared") ? candidateState : false;
+        },
+        10000,
+        "regular customer booking clear local filters",
+      );
+      assert.equal(
+        regularBookingClearFiltersState.countText,
+        "Showing 2 of 2 local mock rows.",
+        "Expected clearing local filters to show both local mock rows",
+      );
+      assert.deepEqual(
+        regularBookingClearFiltersState.filters,
+        [
+          { field: "customerId", value: "" },
+          { field: "billingMonth", value: "" },
+          { field: "billingStatus", value: "" },
+        ],
+        "Expected regular customer booking list filters to clear locally",
+      );
+      assert.deepEqual(
+        regularBookingClearFiltersState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected clearing regular customer filters not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
 
       const regularBookingClearClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-booking-clear]");
@@ -1508,8 +1847,8 @@ async function runChromeTest() {
       );
       assert.equal(
         regularBookingClearState.listRowCount,
-        1,
-        "Expected regular customer booking clear to keep the local monthly billing list row",
+        2,
+        "Expected regular customer booking clear to keep local monthly billing list rows",
       );
 
       await clickMockStatementPreviewAction("ubs", "Preview Mock Statement");

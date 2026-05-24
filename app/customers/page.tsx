@@ -139,6 +139,10 @@ type RegularCustomerBookingPreview = RegularCustomerBookingForm & {
   createdAtLabel: string;
 };
 
+type RegularCustomerBookingListItem = RegularCustomerBookingPreview & {
+  id: string;
+};
+
 type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
 
 const regularCustomerRequiredFields: Array<{
@@ -295,6 +299,9 @@ export default function MockCustomerDashboardPage() {
   >([]);
   const [regularCustomerBookingPreview, setRegularCustomerBookingPreview] =
     useState<RegularCustomerBookingPreview | null>(null);
+  const [regularCustomerBookingListItems, setRegularCustomerBookingListItems] = useState<
+    RegularCustomerBookingListItem[]
+  >([]);
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
   const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
   const [mockStatementPreviewEvents, setMockStatementPreviewEvents] = useState<MockStatementPreviewEvent[]>([]);
@@ -404,20 +411,29 @@ export default function MockCustomerDashboardPage() {
     const customer = mockCustomers.find((candidate) => candidate.id === regularCustomerBookingForm.customerId);
     const customerName = customer?.companyName ?? "Customer not selected";
     const customerFolderHref = customer ? `/customers/${customer.id}` : "";
-
-    setRegularCustomerBookingMissingFields([]);
-    setRegularCustomerBookingPreview({
+    const createdAtLabel = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const nextBookingPreview = {
       ...regularCustomerBookingForm,
       customerFolderHref,
       customerName,
-      createdAtLabel: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    });
+      createdAtLabel,
+    };
+
+    setRegularCustomerBookingMissingFields([]);
+    setRegularCustomerBookingPreview(nextBookingPreview);
+    setRegularCustomerBookingListItems((currentItems) => [
+      {
+        ...nextBookingPreview,
+        id: `regular-mock-${Date.now()}`,
+      },
+      ...currentItems,
+    ]);
     setRegularCustomerBookingFeedbackTone("success");
     setRegularCustomerBookingFeedback(
-      `${customerName} mock/local preview created. No booking was saved, no customer link was written, no invoice number was created, no invoice or statement was generated, no notification was sent, no calendar sync ran, and no payment, bank, or Supabase call was made.`,
+      `${customerName} mock/local preview created and added to the local monthly billing list. No booking was saved, no customer link was written, no invoice number was created, no invoice or statement was generated, no notification was sent, no calendar sync ran, and no payment, bank, or Supabase call was made.`,
     );
   }
 
@@ -1092,6 +1108,124 @@ export default function MockCustomerDashboardPage() {
                 data-regular-customer-booking-empty-preview="true"
               >
                 No mock regular customer booking preview yet.
+              </div>
+            )}
+          </div>
+
+          <div
+            className="border-t border-slate-200 p-4 sm:p-5"
+            data-regular-customer-booking-list-preview="true"
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Internal dispatcher/admin only
+                </p>
+                <h3 className="mt-2 text-lg font-bold text-slate-950">
+                  Regular Customer Monthly Billing List Preview
+                </h3>
+                <p
+                  className="mt-1 max-w-4xl text-sm leading-6 text-slate-600"
+                  data-regular-customer-booking-list-boundary="true"
+                >
+                  Mock/local only. Rows reset on refresh and are not saved. No Supabase save, customer/payment
+                  record, invoice number, invoice, statement, notification, calendar sync, payment API, or bank API is
+                  used.
+                </p>
+              </div>
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                {regularCustomerBookingListItems.length} local mock booking row
+                {regularCustomerBookingListItems.length === 1 ? "" : "s"}.
+              </p>
+            </div>
+
+            {regularCustomerBookingListItems.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {regularCustomerBookingListItems.map((item) => (
+                  <article
+                    className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 shadow-sm"
+                    data-regular-customer-booking-list-row={item.id}
+                    key={item.id}
+                  >
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h4 className="text-base font-bold text-slate-950">{item.customerName}</h4>
+                        <p className="mt-1 text-slate-600">
+                          {item.passengerName} / {item.pickupDate} {item.pickupTime}
+                        </p>
+                      </div>
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950">
+                        Draft list only / not issued
+                      </p>
+                    </div>
+
+                    <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Pickup</dt>
+                        <dd className="mt-1 text-slate-950">{item.pickupLocation}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Drop-off</dt>
+                        <dd className="mt-1 text-slate-950">{item.dropoffLocation}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Route / vehicle</dt>
+                        <dd className="mt-1 text-slate-950">
+                          {item.routeType} / {item.vehicleType}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Billing</dt>
+                        <dd className="mt-1 text-slate-950">
+                          {item.billingMonth} / {item.billingStatus}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Payment method</dt>
+                        <dd className="mt-1 text-slate-950">{item.paymentMethod}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Customer ref / PO</dt>
+                        <dd className="mt-1 text-slate-950">{item.customerReference || "No reference entered"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Invoice number</dt>
+                        <dd className="mt-1 font-semibold text-slate-950">Not created</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Created locally</dt>
+                        <dd className="mt-1 text-slate-950">{item.createdAtLabel}</dd>
+                      </div>
+                    </dl>
+
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p
+                        className="rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold leading-5 text-slate-700"
+                        data-regular-customer-booking-list-no-save-boundary={item.id}
+                      >
+                        List row only. No save, invoice, statement, notification, calendar, payment, bank, audit, or
+                        Supabase record.
+                      </p>
+                      {item.customerFolderHref ? (
+                        <Link
+                          className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
+                          data-regular-customer-booking-list-folder-link={item.id}
+                          href={item.customerFolderHref}
+                        >
+                          Open customer folder mock link
+                        </Link>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div
+                className="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600"
+                data-regular-customer-booking-list-empty="true"
+              >
+                No mock regular customer monthly billing rows yet. A validated mock booking submit adds a local row
+                here.
               </div>
             )}
           </div>

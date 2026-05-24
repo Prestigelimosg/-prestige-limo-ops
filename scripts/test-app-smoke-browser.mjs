@@ -676,6 +676,22 @@ async function runChromeTest() {
             document.querySelector("[data-regular-customer-folder-link]"),
           ),
           regularBookingFormVisible: Boolean(document.querySelector("[data-regular-customer-booking-form]")),
+          regularBookingListBoundary:
+            document.querySelector("[data-regular-customer-booking-list-boundary]")?.textContent.trim() || "",
+          regularBookingListEmpty: Boolean(document.querySelector("[data-regular-customer-booking-list-empty]")),
+          regularBookingListRows: [...document.querySelectorAll("[data-regular-customer-booking-list-row]")].map(
+            (row) => ({
+              folderLink:
+                row.querySelector("[data-regular-customer-booking-list-folder-link]")?.getAttribute("href") || "",
+              id: row.getAttribute("data-regular-customer-booking-list-row"),
+              noSaveBoundary:
+                row.querySelector("[data-regular-customer-booking-list-no-save-boundary]")?.textContent.trim() || "",
+              text: row.innerText,
+            }),
+          ),
+          regularBookingListVisible: Boolean(
+            document.querySelector("[data-regular-customer-booking-list-preview]"),
+          ),
           regularBookingLabels: [
             "Customer / account",
             "Booker / contact person",
@@ -803,6 +819,26 @@ async function runChromeTest() {
         dashboardState.regularBookingSubmitVisible,
         true,
         "Expected regular customer booking submit button to be visible",
+      );
+      assert.equal(
+        dashboardState.regularBookingListVisible,
+        true,
+        "Expected regular customer monthly billing list preview to be visible",
+      );
+      assert.equal(
+        dashboardState.regularBookingListBoundary,
+        "Mock/local only. Rows reset on refresh and are not saved. No Supabase save, customer/payment record, invoice number, invoice, statement, notification, calendar sync, payment API, or bank API is used.",
+        "Expected mock/local boundary on regular customer booking list preview",
+      );
+      assert.equal(
+        dashboardState.regularBookingListEmpty,
+        true,
+        "Expected regular customer booking list preview to start empty",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingListRows,
+        [],
+        "Expected no regular customer booking list rows before valid local submit",
       );
       assert.equal(
         dashboardState.outstandingReviewBoundary,
@@ -1210,6 +1246,8 @@ async function runChromeTest() {
               feedbackText: feedback.textContent.trim(),
               feedbackTone: feedback.getAttribute("data-regular-customer-booking-feedback-tone") || "",
               integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              listRowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+              listStillEmpty: Boolean(document.querySelector("[data-regular-customer-booking-list-empty]")),
               missingFields: [...document.querySelectorAll("[data-regular-customer-booking-missing-field]")].map(
                 (field) => field.textContent.trim(),
               ),
@@ -1247,6 +1285,16 @@ async function runChromeTest() {
         regularBookingInvalidState.previewVisible,
         false,
         "Expected invalid regular customer submit not to create a mock preview",
+      );
+      assert.equal(
+        regularBookingInvalidState.listStillEmpty,
+        true,
+        "Expected invalid regular customer submit to keep the local booking list empty",
+      );
+      assert.equal(
+        regularBookingInvalidState.listRowCount,
+        0,
+        "Expected invalid regular customer submit not to add a monthly billing list row",
       );
       assert.equal(
         regularBookingInvalidState.distanceFromSubmit < 120,
@@ -1290,6 +1338,13 @@ async function runChromeTest() {
               folderLink:
                 document.querySelector("[data-regular-customer-preview-folder-link]")?.getAttribute("href") || "",
               integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              listRows: [...document.querySelectorAll("[data-regular-customer-booking-list-row]")].map((row) => ({
+                folderLink:
+                  row.querySelector("[data-regular-customer-booking-list-folder-link]")?.getAttribute("href") || "",
+                noSaveBoundary:
+                  row.querySelector("[data-regular-customer-booking-list-no-save-boundary]")?.textContent.trim() || "",
+                text: row.innerText,
+              })),
               noSaveBoundary:
                 document.querySelector("[data-regular-customer-booking-no-save-boundary]")?.textContent.trim() || "",
               previewText: preview.innerText,
@@ -1360,6 +1415,48 @@ async function runChromeTest() {
         [],
         "Expected regular customer booking preview not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assert.equal(
+        regularBookingActionState.listRows.length,
+        1,
+        "Expected valid regular customer submit to add one local monthly billing list row",
+      );
+      for (const expectedListText of [
+        "Browser Test Passenger",
+        "Changi Airport T3",
+        "Raffles Place",
+        "MNG / AVF",
+        "2026-05 / unbilled / draft",
+        "monthly bank transfer manual",
+        "PO MAY TEST",
+        "Not created",
+        "List row only. No save, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record.",
+      ]) {
+        assert.equal(
+          regularBookingActionState.listRows[0].text.includes(expectedListText),
+          true,
+          `Expected regular customer monthly billing list row text: ${expectedListText}`,
+        );
+      }
+      assert.equal(
+        regularBookingActionState.listRows[0].text.toLowerCase().includes("invoice number"),
+        true,
+        "Expected regular customer booking list row to show the invoice number status label",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(regularBookingActionState.listRows[0].text),
+        false,
+        "Expected regular customer booking list not to allocate an invoice number",
+      );
+      assert.equal(
+        regularBookingActionState.listRows[0].folderLink,
+        "/customers/ubs",
+        "Expected regular customer booking list row to link to the selected mock customer folder",
+      );
+      assert.equal(
+        regularBookingActionState.listRows[0].noSaveBoundary,
+        "List row only. No save, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record.",
+        "Expected regular customer booking list row no-save boundary",
+      );
 
       const regularBookingClearClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-booking-clear]");
@@ -1387,6 +1484,7 @@ async function runChromeTest() {
               emptyPreview: Boolean(document.querySelector("[data-regular-customer-booking-empty-preview]")),
               feedback,
               integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              listRowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
             };
           })()`),
         10000,
@@ -1407,6 +1505,11 @@ async function runChromeTest() {
         regularBookingClearState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
         "Expected regular customer booking clear not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assert.equal(
+        regularBookingClearState.listRowCount,
+        1,
+        "Expected regular customer booking clear to keep the local monthly billing list row",
       );
 
       await clickMockStatementPreviewAction("ubs", "Preview Mock Statement");

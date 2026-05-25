@@ -329,6 +329,11 @@ export default function MockCustomerDashboardPage() {
   );
   const [regularCustomerBookingClearFeedbackTone, setRegularCustomerBookingClearFeedbackTone] =
     useState<RegularCustomerBookingFeedbackTone>("info");
+  const [regularCustomerMockSaveFeedback, setRegularCustomerMockSaveFeedback] = useState(
+    "Future real save placeholder only. Mock/local only: no booking save, customer folder link write, Supabase call, invoice number, payment/bank action, notification, or calendar action.",
+  );
+  const [regularCustomerMockSaveFeedbackTone, setRegularCustomerMockSaveFeedbackTone] =
+    useState<RegularCustomerBookingFeedbackTone>("info");
   const [regularCustomerBookingMissingFields, setRegularCustomerBookingMissingFields] = useState<
     Array<keyof RegularCustomerBookingForm>
   >([]);
@@ -581,6 +586,30 @@ export default function MockCustomerDashboardPage() {
     }));
   }
 
+  function handleRegularCustomerMockSave() {
+    const missingFields = getMissingRegularCustomerRequiredFields(regularCustomerBookingForm);
+
+    if (missingFields.length > 0) {
+      setRegularCustomerBookingMissingFields(missingFields.map(({ field }) => field));
+      setRegularCustomerMockSaveFeedbackTone("error");
+      setRegularCustomerMockSaveFeedback(
+        `Real Save Regular Booking is not active yet. Future real save would check required fields first: ${missingFields
+          .map(({ label }) => label)
+          .join(", ")}. No booking was saved, no customer folder was linked, no row was added, no invoice number or audit record was created, and no Supabase, payment, bank, notification, or calendar call was made.`,
+      );
+      return;
+    }
+
+    const customer = mockCustomers.find((candidate) => candidate.id === regularCustomerBookingForm.customerId);
+    const customerName = customer?.companyName ?? "Selected customer";
+
+    setRegularCustomerBookingMissingFields([]);
+    setRegularCustomerMockSaveFeedbackTone("success");
+    setRegularCustomerMockSaveFeedback(
+      `${customerName} Save Regular Booking placeholder clicked. Future real save will require staff confirmation and separate Supabase approval. No booking was saved, no customer folder was linked, no local row was added, no row data changed, no invoice number or audit record was created, and no payment, bank, notification, calendar, or Supabase call was made.`,
+    );
+  }
+
   function handleRegularCustomerBookingSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -647,6 +676,10 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerBookingFeedbackTone("info");
     setRegularCustomerBookingFeedback(
       "Mock/local form foundation only. Submit creates a local preview beside this button.",
+    );
+    setRegularCustomerMockSaveFeedbackTone("info");
+    setRegularCustomerMockSaveFeedback(
+      "Future real save placeholder only. Mock/local only: no booking save, customer folder link write, Supabase call, invoice number, payment/bank action, notification, or calendar action.",
     );
     setRegularCustomerBookingClearFeedbackTone("success");
     setRegularCustomerBookingClearFeedback(
@@ -1163,6 +1196,47 @@ export default function MockCustomerDashboardPage() {
                     Select a customer/account to show the mock folder link.
                   </p>
                 )}
+              </div>
+            </div>
+
+            <div
+              className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4"
+              data-regular-customer-mock-save-section="true"
+            >
+              <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
+                    Future real save placeholder
+                  </p>
+                  <h3 className="mt-2 text-base font-bold text-amber-950">Save/link workflow is not active</h3>
+                  <p
+                    className="mt-1 text-sm font-semibold leading-6 text-amber-950"
+                    data-regular-customer-mock-save-boundary="true"
+                  >
+                    Mock/local only. No booking saved, no customer folder linked, no Supabase call, no invoice
+                    number, no payment/bank action, and no notification/calendar action.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    className="min-h-11 w-full rounded-md border border-amber-900 bg-amber-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-800 sm:w-auto"
+                    data-regular-customer-mock-save="true"
+                    onClick={handleRegularCustomerMockSave}
+                    type="button"
+                  >
+                    Save Regular Booking — Mock Only
+                  </button>
+                  <p
+                    aria-live="polite"
+                    className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+                      regularCustomerMockSaveFeedbackTone,
+                    )}`}
+                    data-regular-customer-mock-save-feedback="true"
+                    data-regular-customer-mock-save-feedback-tone={regularCustomerMockSaveFeedbackTone}
+                  >
+                    {regularCustomerMockSaveFeedback}
+                  </p>
+                </div>
               </div>
             </div>
 

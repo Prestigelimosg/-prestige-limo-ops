@@ -643,6 +643,21 @@ async function runChromeTest() {
             document.querySelector("[data-regular-customer-booking-feedback]")?.getAttribute(
               "data-regular-customer-booking-feedback-tone",
             ) || "",
+          regularMockSaveBoundary:
+            document.querySelector("[data-regular-customer-mock-save-boundary]")?.textContent.trim() || "",
+          regularMockSaveButtonText:
+            document.querySelector("[data-regular-customer-mock-save]")?.textContent.trim() || "",
+          regularMockSaveFeedback:
+            document.querySelector("[data-regular-customer-mock-save-feedback]")?.textContent.trim() || "",
+          regularMockSaveFeedbackTone:
+            document.querySelector("[data-regular-customer-mock-save-feedback]")?.getAttribute(
+              "data-regular-customer-mock-save-feedback-tone",
+            ) || "",
+          regularMockSaveVisible: (() => {
+            const button = document.querySelector("[data-regular-customer-mock-save]");
+            const rect = button?.getBoundingClientRect();
+            return Boolean(rect && rect.width > 0 && rect.height >= 40);
+          })(),
           regularBookingFields: [
             "customerId",
             "booker",
@@ -841,6 +856,31 @@ async function runChromeTest() {
         dashboardState.regularBookingFeedbackTone,
         "info",
         "Expected regular customer helper to start as an info message",
+      );
+      assert.equal(
+        dashboardState.regularMockSaveVisible,
+        true,
+        "Expected mock Save Regular Booking placeholder to be visible",
+      );
+      assert.equal(
+        dashboardState.regularMockSaveButtonText,
+        "Save Regular Booking — Mock Only",
+        "Expected mock Save Regular Booking placeholder label",
+      );
+      assert.equal(
+        dashboardState.regularMockSaveBoundary,
+        "Mock/local only. No booking saved, no customer folder linked, no Supabase call, no invoice number, no payment/bank action, and no notification/calendar action.",
+        "Expected mock Save Regular Booking safety boundary",
+      );
+      assert.equal(
+        dashboardState.regularMockSaveFeedback,
+        "Future real save placeholder only. Mock/local only: no booking save, customer folder link write, Supabase call, invoice number, payment/bank action, notification, or calendar action.",
+        "Expected mock Save Regular Booking helper near the save placeholder",
+      );
+      assert.equal(
+        dashboardState.regularMockSaveFeedbackTone,
+        "info",
+        "Expected mock Save Regular Booking helper to start as info",
       );
       assert.equal(
         dashboardState.regularBookingRequiredFieldCount,
@@ -1338,6 +1378,20 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
+      const clickRegularCustomerMockSave = async (description) => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-mock-save]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
       const clickRegularCustomerMockRowAction = async (rowIndex, action, description) => {
         const clicked = await evaluate(`(() => {
           const row = document.querySelectorAll("[data-regular-customer-booking-list-row]")[${rowIndex}];
@@ -1390,6 +1444,30 @@ async function runChromeTest() {
         })()`);
         assert.equal(actualValue, value, `Expected regular booking list filter ${filter} to accept test value`);
       };
+
+      const readRegularCustomerMockSaveState = () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-mock-save]");
+          const feedback = document.querySelector("[data-regular-customer-mock-save-feedback]");
+          const buttonRect = button?.getBoundingClientRect();
+          const feedbackRect = feedback?.getBoundingClientRect();
+
+          return {
+            distanceFromButton:
+              buttonRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - buttonRect.bottom)) : 999,
+            emptyPreview: Boolean(document.querySelector("[data-regular-customer-booking-empty-preview]")),
+            feedback: feedback?.textContent.trim() || "",
+            feedbackTone: feedback?.getAttribute("data-regular-customer-mock-save-feedback-tone") || "",
+            integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            listRowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+            listText:
+              document.querySelector("[data-regular-customer-booking-list-preview]")?.innerText || "",
+            missingFields: [...document.querySelectorAll("[data-regular-customer-booking-missing-field]")].map(
+              (field) => field.textContent.trim(),
+            ),
+            previewVisible: Boolean(document.querySelector("[data-regular-customer-booking-preview]")),
+          };
+        })()`);
 
       const readRegularCustomerDraftInvoiceState = () =>
         evaluate(`(() => {
@@ -1565,6 +1643,66 @@ async function runChromeTest() {
         "Expected empty draft invoice preview not to call Supabase, payment, bank, notification, or calendar APIs",
       );
 
+      await clickRegularCustomerMockSave("invalid regular customer mock save placeholder");
+      const invalidMockSaveState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerMockSaveState();
+          return candidateState.feedback.includes("Real Save Regular Booking is not active yet")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer invalid mock save placeholder",
+      );
+      assert.equal(
+        invalidMockSaveState.feedbackTone,
+        "error",
+        "Expected invalid mock save placeholder to show an error near the mock save control",
+      );
+      assert.equal(
+        invalidMockSaveState.distanceFromButton < 160,
+        true,
+        "Expected invalid mock save feedback near the mock save control",
+      );
+      assert.deepEqual(
+        invalidMockSaveState.missingFields,
+        [
+          "Customer / account",
+          "Booker / contact person",
+          "Passenger name",
+          "Pickup date",
+          "Pickup time",
+          "Pickup location",
+          "Drop-off location",
+        ],
+        "Expected invalid mock save to list future required-field checks",
+      );
+      assert.equal(
+        invalidMockSaveState.emptyPreview,
+        true,
+        "Expected invalid mock save not to create a mock preview",
+      );
+      assert.equal(
+        invalidMockSaveState.previewVisible,
+        false,
+        "Expected invalid mock save not to show a regular customer preview",
+      );
+      assert.equal(
+        invalidMockSaveState.listRowCount,
+        0,
+        "Expected invalid mock save not to add a local monthly billing row",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(invalidMockSaveState.feedback),
+        false,
+        "Expected invalid mock save feedback not to allocate an invoice number",
+      );
+      assert.deepEqual(
+        invalidMockSaveState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected invalid mock save not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
       const regularBookingInvalidClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-booking-submit]");
 
@@ -1665,6 +1803,79 @@ async function runChromeTest() {
       for (const [field, value] of Object.entries(regularCustomerBookingFields)) {
         await setRegularCustomerBookingField(field, value);
       }
+
+      await clickRegularCustomerMockSave("valid regular customer mock save placeholder");
+      const validMockSaveState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerMockSaveState();
+          return candidateState.feedback.includes("UBS Save Regular Booking placeholder clicked")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer valid mock save placeholder",
+      );
+      assert.equal(
+        validMockSaveState.feedbackTone,
+        "success",
+        "Expected valid mock save placeholder to show a success helper without saving",
+      );
+      assert.equal(
+        validMockSaveState.distanceFromButton < 160,
+        true,
+        "Expected valid mock save feedback near the mock save control",
+      );
+      for (const expectedMockSaveText of [
+        "Future real save will require staff confirmation",
+        "separate Supabase approval",
+        "No booking was saved",
+        "no customer folder was linked",
+        "no local row was added",
+        "no row data changed",
+        "no invoice number or audit record was created",
+        "no payment, bank, notification, calendar, or Supabase call was made",
+      ]) {
+        assert.equal(
+          validMockSaveState.feedback.includes(expectedMockSaveText),
+          true,
+          `Expected valid mock save feedback text: ${expectedMockSaveText}`,
+        );
+      }
+      assert.deepEqual(
+        validMockSaveState.missingFields,
+        [],
+        "Expected valid mock save to clear required-field helper markers",
+      );
+      assert.equal(
+        validMockSaveState.emptyPreview,
+        true,
+        "Expected valid mock save not to create a mock preview",
+      );
+      assert.equal(
+        validMockSaveState.previewVisible,
+        false,
+        "Expected valid mock save not to show a regular customer preview",
+      );
+      assert.equal(
+        validMockSaveState.listRowCount,
+        0,
+        "Expected valid mock save not to add a local monthly billing row",
+      );
+      assert.equal(
+        validMockSaveState.listText.includes("No mock regular customer monthly billing rows yet"),
+        true,
+        "Expected valid mock save to keep the local monthly billing list empty",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(validMockSaveState.feedback),
+        false,
+        "Expected valid mock save feedback not to allocate an invoice number",
+      );
+      assert.deepEqual(
+        validMockSaveState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected valid mock save not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
 
       const regularBookingClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-booking-submit]");

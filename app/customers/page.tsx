@@ -73,17 +73,53 @@ const outstandingPaymentStatuses = new Set<MockPaymentStatus>([
   "Unpaid",
 ]);
 
+type OutstandingReviewFilter = "all" | "due-soon" | "needs-follow-up" | "overdue" | "partial-pending";
+
+type OutstandingReviewSort = "customer-az" | "highest-amount" | "last-follow-up" | "oldest-overdue";
+
+const outstandingReviewFilterOptions: Array<{ label: string; value: OutstandingReviewFilter }> = [
+  { label: "All", value: "all" },
+  { label: "Overdue", value: "overdue" },
+  { label: "Due soon", value: "due-soon" },
+  { label: "Partial / pending", value: "partial-pending" },
+  { label: "Needs follow-up", value: "needs-follow-up" },
+];
+
+const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingReviewSort }> = [
+  { label: "Highest amount first", value: "highest-amount" },
+  { label: "Oldest overdue first", value: "oldest-overdue" },
+  { label: "Customer A-Z", value: "customer-az" },
+  { label: "Last follow-up", value: "last-follow-up" },
+];
+
+const outstandingReviewPageSizeOptions = [10, 25];
+
+const mockTodayDateValue = Date.UTC(2026, 4, 25);
+
+const mockMonthIndexes: Record<string, number> = {
+  Apr: 3,
+  April: 3,
+  Jun: 5,
+  June: 5,
+  May: 4,
+};
+
 type OutstandingPaymentReviewItem = {
+  agingBucket: string;
   balanceDue: string;
   customerId: string;
   customerName: string;
   dueOrFollowUpDate: string;
+  dueStatusLabel: string;
   followUpDate: string;
   invoiceNumber: string;
   isMonthlyAccount: boolean;
   key: string;
+  lastFollowUpDate: string;
+  outstandingBookingsCount: number;
   paymentStatus: MockPaymentStatus;
   reason: string;
+  searchText: string;
 };
 
 type VisibleOutstandingPaymentReviewItem = OutstandingPaymentReviewItem & {
@@ -262,6 +298,117 @@ function getMockPartialBalance(balanceDue: string) {
   return formatMockCurrency(currentBalance / 2);
 }
 
+function parseMockDateValue(dateLabel: string) {
+  const match = dateLabel.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+
+  if (!match) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const [, day, monthLabel, year] = match;
+  const monthIndex = mockMonthIndexes[monthLabel];
+
+  if (monthIndex === undefined) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Date.UTC(Number(year), monthIndex, Number(day));
+}
+
+function getMockDaysUntil(dateLabel: string) {
+  const dateValue = parseMockDateValue(dateLabel);
+
+  if (!Number.isFinite(dateValue)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.round((dateValue - mockTodayDateValue) / 86_400_000);
+}
+
+function getOutstandingAgingBucket(dueDate: string) {
+  const overdueDays = Math.max(0, -getMockDaysUntil(dueDate));
+
+  if (overdueDays > 90) {
+    return "90+";
+  }
+
+  if (overdueDays > 60) {
+    return "61-90";
+  }
+
+  if (overdueDays > 30) {
+    return "31-60";
+  }
+
+  return "0-30";
+}
+
+function getOutstandingDueStatusLabel(dueDate: string) {
+  const daysUntil = getMockDaysUntil(dueDate);
+
+  if (!Number.isFinite(daysUntil)) {
+    return `Due: ${dueDate}`;
+  }
+
+  if (daysUntil < 0) {
+    return `${Math.abs(daysUntil)} day${Math.abs(daysUntil) === 1 ? "" : "s"} overdue`;
+  }
+
+  if (daysUntil === 0) {
+    return "Due today";
+  }
+
+  return `Due in ${daysUntil} day${daysUntil === 1 ? "" : "s"}`;
+}
+
+function getMockLastFollowUpDate(invoiceNumber: string) {
+  const followUpDates: Record<string, string> = {
+    "RITZ-0003": "20 May 2026",
+    "RITZ-0004": "21 May 2026",
+    "UBS-0003": "24 May 2026",
+    "UBS-0004": "24 May 2026",
+    "VIP-0003": "25 May 2026",
+  };
+
+  return followUpDates[invoiceNumber] ?? "Not logged yet";
+}
+
+function getOutstandingNextActionLabel(item: VisibleOutstandingPaymentReviewItem | OutstandingPaymentReviewItem) {
+  if (item.paymentStatus === "Overdue") {
+    return "Call accounts today";
+  }
+
+  if (item.paymentStatus === "Partially Paid") {
+    return "Confirm remaining balance";
+  }
+
+  if (item.isMonthlyAccount) {
+    return "Group for billing review";
+  }
+
+  if (item.paymentStatus === "Invoice Sent") {
+    return "Check expected payment";
+  }
+
+  return "Manual follow-up";
+}
+
+function isOutstandingDueSoon(item: VisibleOutstandingPaymentReviewItem) {
+  const daysUntil = getMockDaysUntil(item.dueOrFollowUpDate);
+
+  return daysUntil >= 0 && daysUntil <= 7;
+}
+
+function isOutstandingNeedsFollowUp(item: VisibleOutstandingPaymentReviewItem) {
+  return (
+    item.paymentStatus === "Overdue" ||
+    item.paymentStatus === "Partially Paid" ||
+    item.paymentStatus === "Invoice Sent" ||
+    item.paymentStatus === "Unpaid" ||
+    item.isMonthlyAccount
+  );
+}
+
 function getOutstandingPaymentReason(customer: MockCustomer, booking: MockCustomerBooking) {
   if (booking.paymentStatus === "Overdue") {
     return "Due date passed + balance due = Overdue";
@@ -326,20 +473,46 @@ const outstandingPaymentReviewItems: OutstandingPaymentReviewItem[] = mockCustom
         outstandingPaymentStatuses.has(booking.paymentStatus) &&
         hasMockBalanceDue(booking.balanceDue),
     )
-    .map((booking) => ({
-      balanceDue: booking.balanceDue,
-      customerId: customer.id,
-      customerName: customer.companyName,
-      dueOrFollowUpDate:
+    .map((booking) => {
+      const dueOrFollowUpDate =
         customer.invoices.find((invoice) => invoice.invoiceNumber === booking.invoiceNumber)?.dueDate ??
-        customer.nextFollowUpDate,
-      followUpDate: customer.nextFollowUpDate,
-      invoiceNumber: booking.invoiceNumber,
-      isMonthlyAccount: customer.accountType === "Monthly Account",
-      key: `${customer.id}:${booking.invoiceNumber}`,
-      paymentStatus: booking.paymentStatus,
-      reason: getOutstandingPaymentReason(customer, booking),
-    })),
+        customer.nextFollowUpDate;
+      const outstandingBookingsCount = customer.bookingHistory.filter(
+        (customerBooking) =>
+          outstandingPaymentStatuses.has(customerBooking.paymentStatus) &&
+          hasMockBalanceDue(customerBooking.balanceDue),
+      ).length;
+      const searchText = [
+        customer.companyName,
+        customer.invoicePrefix,
+        customer.paymentStatusSummary,
+        customer.contacts.map((contact) => `${contact.name} ${contact.value}`).join(" "),
+        booking.invoiceNumber,
+        booking.route,
+        booking.service,
+        booking.paymentStatus,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return {
+        agingBucket: getOutstandingAgingBucket(dueOrFollowUpDate),
+        balanceDue: booking.balanceDue,
+        customerId: customer.id,
+        customerName: customer.companyName,
+        dueOrFollowUpDate,
+        dueStatusLabel: getOutstandingDueStatusLabel(dueOrFollowUpDate),
+        followUpDate: customer.nextFollowUpDate,
+        invoiceNumber: booking.invoiceNumber,
+        isMonthlyAccount: customer.accountType === "Monthly Account",
+        key: `${customer.id}:${booking.invoiceNumber}`,
+        lastFollowUpDate: getMockLastFollowUpDate(booking.invoiceNumber),
+        outstandingBookingsCount,
+        paymentStatus: booking.paymentStatus,
+        reason: getOutstandingPaymentReason(customer, booking),
+        searchText,
+      };
+    }),
 );
 
 export default function MockCustomerDashboardPage() {
@@ -413,6 +586,13 @@ export default function MockCustomerDashboardPage() {
   const [mockPaymentSectionFeedback, setMockPaymentSectionFeedback] = useState(
     "Mock controls only. Use the buttons to simulate manual payment tracking without saving records.",
   );
+  const [outstandingReviewSearchTerm, setOutstandingReviewSearchTerm] = useState("");
+  const [outstandingReviewFilter, setOutstandingReviewFilter] = useState<OutstandingReviewFilter>("all");
+  const [outstandingReviewSort, setOutstandingReviewSort] =
+    useState<OutstandingReviewSort>("highest-amount");
+  const [outstandingReviewPageSize, setOutstandingReviewPageSize] = useState(10);
+  const [outstandingReviewPage, setOutstandingReviewPage] = useState(1);
+  const [expandedOutstandingPaymentKey, setExpandedOutstandingPaymentKey] = useState("");
   const [mockFollowUpSectionFeedback, setMockFollowUpSectionFeedback] = useState(
     "Mock follow-up controls only. Use the buttons to simulate collection follow-up without sending messages.",
   );
@@ -455,6 +635,118 @@ export default function MockCustomerDashboardPage() {
             hasMockBalanceDue(item.balanceDue),
         ),
     [mockPaymentLocalUpdates],
+  );
+  const outstandingReviewSummaryCards = useMemo(() => {
+    const dueSoonItems = visibleOutstandingPaymentReviewItems.filter(isOutstandingDueSoon);
+    const needsFollowUpItems = visibleOutstandingPaymentReviewItems.filter(isOutstandingNeedsFollowUp);
+    const overdueItems = visibleOutstandingPaymentReviewItems.filter(
+      (item) => item.paymentStatus === "Overdue",
+    );
+
+    return [
+      {
+        label: "Total outstanding",
+        value: formatMockCurrency(
+          visibleOutstandingPaymentReviewItems.reduce(
+            (total, item) => total + parseMockCurrency(item.balanceDue),
+            0,
+          ),
+        ),
+        helper: `${visibleOutstandingPaymentReviewItems.length} mock customer balance rows`,
+      },
+      {
+        label: "Overdue amount",
+        value: formatMockCurrency(
+          overdueItems.reduce((total, item) => total + parseMockCurrency(item.balanceDue), 0),
+        ),
+        helper: `${overdueItems.length} overdue`,
+      },
+      {
+        label: "Due soon",
+        value: formatMockCurrency(
+          dueSoonItems.reduce((total, item) => total + parseMockCurrency(item.balanceDue), 0),
+        ),
+        helper: `${dueSoonItems.length} due within 7 days`,
+      },
+      {
+        label: "Needs follow-up",
+        value: String(needsFollowUpItems.length),
+        helper: "Mock manual follow-up only",
+      },
+    ];
+  }, [visibleOutstandingPaymentReviewItems]);
+  const filteredOutstandingReviewItems = useMemo(() => {
+    const normalizedOutstandingSearchTerm = outstandingReviewSearchTerm.trim().toLowerCase();
+
+    return visibleOutstandingPaymentReviewItems
+      .filter((item) => {
+        const searchMatches =
+          !normalizedOutstandingSearchTerm || item.searchText.includes(normalizedOutstandingSearchTerm);
+        const filterMatches =
+          outstandingReviewFilter === "all" ||
+          (outstandingReviewFilter === "overdue" && item.paymentStatus === "Overdue") ||
+          (outstandingReviewFilter === "due-soon" && isOutstandingDueSoon(item)) ||
+          (outstandingReviewFilter === "partial-pending" &&
+            (item.paymentStatus === "Partially Paid" ||
+              item.paymentStatus === "Unpaid" ||
+              item.paymentStatus === "Invoice Sent")) ||
+          (outstandingReviewFilter === "needs-follow-up" && isOutstandingNeedsFollowUp(item));
+
+        return searchMatches && filterMatches;
+      })
+      .sort((firstItem, secondItem) => {
+        if (outstandingReviewSort === "customer-az") {
+          return (
+            firstItem.customerName.localeCompare(secondItem.customerName) ||
+            firstItem.invoiceNumber.localeCompare(secondItem.invoiceNumber)
+          );
+        }
+
+        if (outstandingReviewSort === "oldest-overdue") {
+          return (
+            parseMockDateValue(firstItem.dueOrFollowUpDate) -
+              parseMockDateValue(secondItem.dueOrFollowUpDate) ||
+            secondItem.paymentStatus.localeCompare(firstItem.paymentStatus)
+          );
+        }
+
+        if (outstandingReviewSort === "last-follow-up") {
+          return (
+            parseMockDateValue(firstItem.lastFollowUpDate) -
+              parseMockDateValue(secondItem.lastFollowUpDate) ||
+            firstItem.customerName.localeCompare(secondItem.customerName)
+          );
+        }
+
+        return (
+          parseMockCurrency(secondItem.balanceDue) - parseMockCurrency(firstItem.balanceDue) ||
+          firstItem.customerName.localeCompare(secondItem.customerName)
+        );
+      });
+  }, [
+    outstandingReviewFilter,
+    outstandingReviewSearchTerm,
+    outstandingReviewSort,
+    visibleOutstandingPaymentReviewItems,
+  ]);
+  const outstandingReviewTotalPages = Math.max(
+    1,
+    Math.ceil(filteredOutstandingReviewItems.length / outstandingReviewPageSize),
+  );
+  const currentOutstandingReviewPage = Math.min(outstandingReviewPage, outstandingReviewTotalPages);
+  const outstandingReviewStartIndex =
+    filteredOutstandingReviewItems.length === 0
+      ? 0
+      : (currentOutstandingReviewPage - 1) * outstandingReviewPageSize;
+  const paginatedOutstandingReviewItems = filteredOutstandingReviewItems.slice(
+    outstandingReviewStartIndex,
+    outstandingReviewStartIndex + outstandingReviewPageSize,
+  );
+  const outstandingReviewShowingStart =
+    filteredOutstandingReviewItems.length === 0 ? 0 : outstandingReviewStartIndex + 1;
+  const outstandingReviewShowingEnd = Math.min(
+    outstandingReviewStartIndex + outstandingReviewPageSize,
+    filteredOutstandingReviewItems.length,
   );
   const visibleCollectionFollowUpItems = useMemo(
     () =>
@@ -531,6 +823,26 @@ export default function MockCustomerDashboardPage() {
         "Filters changed locally. Create a new mock draft invoice preview from the currently visible rows when ready.",
       );
     }
+  }
+
+  function updateOutstandingReviewSearch(value: string) {
+    setOutstandingReviewSearchTerm(value);
+    setOutstandingReviewPage(1);
+  }
+
+  function updateOutstandingReviewFilter(value: OutstandingReviewFilter) {
+    setOutstandingReviewFilter(value);
+    setOutstandingReviewPage(1);
+  }
+
+  function updateOutstandingReviewSort(value: OutstandingReviewSort) {
+    setOutstandingReviewSort(value);
+    setOutstandingReviewPage(1);
+  }
+
+  function updateOutstandingReviewPageSize(value: number) {
+    setOutstandingReviewPageSize(value);
+    setOutstandingReviewPage(1);
   }
 
   function clearRegularCustomerBookingListFilters() {
@@ -2321,54 +2633,220 @@ export default function MockCustomerDashboardPage() {
                 {visibleOutstandingPaymentReviewItems.length} mock items need account follow-up.
               </p>
             </div>
-            <p
-              aria-live="polite"
-              className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-              data-payment-section-feedback="true"
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {outstandingReviewSummaryCards.map((card) => (
+                <div
+                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
+                  data-outstanding-review-summary-card={card.label}
+                  key={card.label}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</p>
+                  <p className="mt-2 text-xl font-bold text-slate-950">{card.value}</p>
+                  <p className="mt-1 text-xs text-slate-600">{card.helper}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 xl:grid-cols-[1.3fr_1fr_1fr_0.7fr] xl:items-end">
+              <label className="text-sm font-semibold text-slate-700">
+                Search customer / booker / reference
+                <input
+                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-950"
+                  data-outstanding-review-search="true"
+                  onChange={(event) => updateOutstandingReviewSearch(event.target.value)}
+                  placeholder="Search company, contact, invoice, route"
+                  type="search"
+                  value={outstandingReviewSearchTerm}
+                />
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Sort
+                <select
+                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-outstanding-review-sort="true"
+                  onChange={(event) => updateOutstandingReviewSort(event.target.value as OutstandingReviewSort)}
+                  value={outstandingReviewSort}
+                >
+                  {outstandingReviewSortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Page size
+                <select
+                  className="mt-2 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                  data-outstanding-review-page-size="true"
+                  onChange={(event) => updateOutstandingReviewPageSize(Number(event.target.value))}
+                  value={outstandingReviewPageSize}
+                >
+                  {outstandingReviewPageSizeOptions.map((pageSize) => (
+                    <option key={pageSize} value={pageSize}>
+                      {pageSize} customers
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <p
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                data-outstanding-review-showing="true"
+              >
+                Showing {outstandingReviewShowingStart}-{outstandingReviewShowingEnd} of{" "}
+                {filteredOutstandingReviewItems.length} customers
+              </p>
+            </div>
+
+            <div
+              className="mt-4 flex flex-wrap gap-2"
+              data-outstanding-review-filter-controls="true"
             >
-              {mockPaymentSectionFeedback}
-            </p>
+              {outstandingReviewFilterOptions.map((option) => (
+                <button
+                  className={`min-h-10 rounded-md border px-3 py-2 text-sm font-bold transition ${
+                    outstandingReviewFilter === option.value
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 bg-white text-slate-800 hover:border-slate-500 hover:bg-slate-50"
+                  }`}
+                  data-outstanding-review-filter={option.value}
+                  key={option.value}
+                  onClick={() => updateOutstandingReviewFilter(option.value)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p
+                aria-live="polite"
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 sm:flex-1"
+                data-payment-section-feedback="true"
+              >
+                {mockPaymentSectionFeedback}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-outstanding-review-previous="true"
+                  disabled={currentOutstandingReviewPage <= 1}
+                  onClick={() => setOutstandingReviewPage((currentPage) => Math.max(1, currentPage - 1))}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <button
+                  className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-outstanding-review-next="true"
+                  disabled={currentOutstandingReviewPage >= outstandingReviewTotalPages}
+                  onClick={() =>
+                    setOutstandingReviewPage((currentPage) =>
+                      Math.min(outstandingReviewTotalPages, currentPage + 1),
+                    )
+                  }
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="divide-y divide-slate-200">
-            {visibleOutstandingPaymentReviewItems.length > 0 ? (
-              visibleOutstandingPaymentReviewItems.map((item) => (
-                <article
-                  className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[1fr_0.7fr_0.7fr_0.8fr_1fr_1.35fr] xl:items-start"
-                  data-outstanding-payment-row={item.key}
-                  key={item.key}
-                >
-                  <div>
-                    <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
-                    <p className="mt-1 text-sm text-slate-600">{item.invoiceNumber}</p>
-                    {item.isMonthlyAccount ? (
-                      <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
+            {visibleOutstandingPaymentReviewItems.length === 0 ? (
+              <div className="p-5 text-sm text-slate-600" data-outstanding-payments-empty="true">
+                No mock outstanding payment items remain after local actions. Refreshing the page restores the mock data.
+              </div>
+            ) : paginatedOutstandingReviewItems.length > 0 ? (
+              paginatedOutstandingReviewItems.map((item) => {
+                const isExpanded = expandedOutstandingPaymentKey === item.key;
+
+                return (
+                  <article
+                    className="p-4 sm:p-5"
+                    data-outstanding-payment-row={item.key}
+                    key={item.key}
+                  >
+                    <div className="grid gap-3 xl:grid-cols-[1.1fr_0.85fr_0.75fr_0.75fr_0.85fr_1.1fr] xl:items-start">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-950">{item.customerName}</h3>
+                        <p className="mt-1 text-sm text-slate-600">{item.invoiceNumber}</p>
+                        {item.isMonthlyAccount ? (
+                          <p className="mt-1 text-xs font-semibold text-slate-500">Monthly Account</p>
+                        ) : null}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Outstanding
+                        </p>
+                        <p className="mt-1 text-base font-bold text-slate-950">{item.balanceDue}</p>
+                        <p className="mt-1 text-xs text-slate-500">{item.paymentStatus}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Aging</p>
+                        <p className="mt-1 text-sm font-bold text-slate-900">{item.agingBucket}</p>
+                        <p className="mt-1 text-xs text-slate-500">{item.dueStatusLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due date</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Last follow-up
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{item.lastFollowUpDate}</p>
+                        <p className="mt-1 text-xs text-slate-500">Next action: {getOutstandingNextActionLabel(item)}</p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Link
+                          className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
+                          data-outstanding-open-customer-folder={item.key}
+                          href={`/customers/${item.customerId}`}
+                        >
+                          Open Customer Folder
+                        </Link>
+                        <button
+                          className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                          data-outstanding-review-detail-toggle={item.key}
+                          onClick={() =>
+                            setExpandedOutstandingPaymentKey((currentKey) =>
+                              currentKey === item.key ? "" : item.key,
+                            )
+                          }
+                          type="button"
+                        >
+                          {isExpanded ? "Hide details — Mock Only" : "View details — Mock Only"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-sm leading-6 text-slate-700">{item.reason}</p>
+
+                    {isExpanded ? (
+                      <div
+                        className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950"
+                        data-outstanding-review-detail={item.key}
+                      >
+                        <p className="font-bold">Mock/local detail only for {item.invoiceNumber}</p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5">
+                          <li>Customer folder reminder: open {item.customerName} before any real collection work.</li>
+                          <li>{item.outstandingBookingsCount} mock outstanding booking rows are visible for this account.</li>
+                          <li>Follow-up note placeholder only. No note, payment record, audit record, or customer record is created.</li>
+                          <li>No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.</li>
+                        </ul>
+                      </div>
                     ) : null}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Status</p>
-                    <p className="mt-1 text-sm font-bold text-slate-900">{item.paymentStatus}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Balance Due</p>
-                    <p className="mt-1 text-sm font-bold text-slate-950">{item.balanceDue}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Due / Follow-up</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">{item.dueOrFollowUpDate}</p>
-                  </div>
-                  <p className="text-sm leading-6 text-slate-700">{item.reason}</p>
-                  <div className="flex flex-col gap-3">
-                    <Link
-                      className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
-                      data-outstanding-open-customer-folder={item.key}
-                      href={`/customers/${item.customerId}`}
-                    >
-                      Open Customer Folder
-                    </Link>
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                       <button
-                        className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                        className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
                         data-payment-action="invoice-sent"
                         onClick={() => handleMockPaymentAction(item, "invoice-sent")}
                         type="button"
@@ -2376,7 +2854,7 @@ export default function MockCustomerDashboardPage() {
                         Mark Invoice Sent
                       </button>
                       <button
-                        className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                        className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
                         data-payment-action="partial-payment"
                         onClick={() => handleMockPaymentAction(item, "partial-payment")}
                         type="button"
@@ -2384,7 +2862,7 @@ export default function MockCustomerDashboardPage() {
                         Record Partial Payment
                       </button>
                       <button
-                        className="min-h-11 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-emerald-600"
+                        className="min-h-10 rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-emerald-600"
                         data-payment-action="paid"
                         onClick={() => handleMockPaymentAction(item, "paid")}
                         type="button"
@@ -2392,7 +2870,7 @@ export default function MockCustomerDashboardPage() {
                         Mark Paid
                       </button>
                       <button
-                        className="min-h-11 rounded-md border border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
+                        className="min-h-10 rounded-md border border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
                         data-payment-action="waived"
                         onClick={() => handleMockPaymentAction(item, "waived")}
                         type="button"
@@ -2402,17 +2880,17 @@ export default function MockCustomerDashboardPage() {
                     </div>
                     <p
                       aria-live="polite"
-                      className="rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
+                      className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
                       data-payment-action-feedback={item.key}
                     >
                       {item.feedback ?? "Mock helper: this row updates local page state only."}
                     </p>
-                  </div>
-                </article>
-              ))
+                  </article>
+                );
+              })
             ) : (
-              <div className="p-5 text-sm text-slate-600" data-outstanding-payments-empty="true">
-                No mock outstanding payment items remain after local actions. Refreshing the page restores the mock data.
+              <div className="p-5 text-sm leading-6 text-slate-600" data-outstanding-payments-no-results="true">
+                No mock customers match this search or filter. No data was removed and no API was called.
               </div>
             )}
           </div>

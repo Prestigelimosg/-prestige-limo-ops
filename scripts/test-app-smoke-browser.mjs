@@ -582,8 +582,42 @@ async function runChromeTest() {
           ),
           outstandingReviewBoundary:
             document.querySelector("[data-outstanding-review-boundary]")?.textContent.trim() || "",
+          outstandingReviewFilterLabels: [
+            ...document.querySelectorAll("[data-outstanding-review-filter]"),
+          ].map((button) => button.textContent.trim()),
+          outstandingReviewNoResultsVisible: Boolean(
+            document.querySelector("[data-outstanding-payments-no-results]"),
+          ),
+          outstandingReviewPageSizeOptions: [
+            ...document.querySelectorAll("[data-outstanding-review-page-size] option"),
+          ].map((option) => option.textContent.trim()),
+          outstandingReviewPreviousDisabled: Boolean(
+            document.querySelector("[data-outstanding-review-previous]")?.disabled,
+          ),
+          outstandingReviewNextDisabled: Boolean(
+            document.querySelector("[data-outstanding-review-next]")?.disabled,
+          ),
+          outstandingReviewSearchVisible: (() => {
+            const input = document.querySelector("[data-outstanding-review-search]");
+            const rect = input?.getBoundingClientRect();
+            return Boolean(rect && rect.width > 0 && rect.height >= 40);
+          })(),
+          outstandingReviewShowing:
+            document.querySelector("[data-outstanding-review-showing]")?.textContent.trim() || "",
+          outstandingReviewSortOptions: [
+            ...document.querySelectorAll("[data-outstanding-review-sort] option"),
+          ].map((option) => option.textContent.trim()),
+          outstandingReviewSummaryCards: [
+            ...document.querySelectorAll("[data-outstanding-review-summary-card]"),
+          ].map((card) => ({
+            label: card.getAttribute("data-outstanding-review-summary-card") || "",
+            text: card.textContent.trim(),
+          })),
           outstandingRows: [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) => ({
             actions: [...row.querySelectorAll("[data-payment-action]")].map((button) => button.textContent.trim()),
+            detailButtons: [...row.querySelectorAll("[data-outstanding-review-detail-toggle]")].map((button) =>
+              button.textContent.trim(),
+            ),
             href: row.querySelector("[data-outstanding-open-customer-folder]")?.getAttribute("href") || "",
             id: row.getAttribute("data-outstanding-payment-row"),
             text: row.innerText,
@@ -1255,27 +1289,84 @@ async function runChromeTest() {
         "Expected local-only mock boundary in outstanding payments review",
       );
       assert.deepEqual(
+        dashboardState.outstandingReviewSummaryCards.map((card) => card.label),
+        ["Total outstanding", "Overdue amount", "Due soon", "Needs follow-up"],
+        "Expected compact outstanding review summary cards",
+      );
+      assert.equal(
+        dashboardState.outstandingReviewSearchVisible,
+        true,
+        "Expected outstanding review search control to be visible",
+      );
+      assert.deepEqual(
+        dashboardState.outstandingReviewFilterLabels,
+        ["All", "Overdue", "Due soon", "Partial / pending", "Needs follow-up"],
+        "Expected outstanding review filter controls",
+      );
+      assert.deepEqual(
+        dashboardState.outstandingReviewSortOptions,
+        ["Highest amount first", "Oldest overdue first", "Customer A-Z", "Last follow-up"],
+        "Expected outstanding review sort options",
+      );
+      assert.deepEqual(
+        dashboardState.outstandingReviewPageSizeOptions,
+        ["10 customers", "25 customers"],
+        "Expected outstanding review page size options",
+      );
+      assert.equal(
+        dashboardState.outstandingReviewShowing,
+        "Showing 1-5 of 5 customers",
+        "Expected outstanding review limited-list showing count",
+      );
+      assert.equal(
+        dashboardState.outstandingRows.length <= 10,
+        true,
+        "Expected outstanding review not to render more rows than the default page size",
+      );
+      assert.equal(
+        dashboardState.outstandingReviewPreviousDisabled,
+        true,
+        "Expected outstanding review previous button to be disabled on the first page",
+      );
+      assert.equal(
+        dashboardState.outstandingReviewNextDisabled,
+        true,
+        "Expected outstanding review next button to be disabled when the first page contains all mock rows",
+      );
+      assert.equal(
+        dashboardState.outstandingReviewNoResultsVisible,
+        false,
+        "Expected outstanding review no-results state to stay hidden before filtering",
+      );
+      assert.deepEqual(
         dashboardState.outstandingRows.map((row) => row.id),
         [
-          "ubs:UBS-0003",
-          "ubs:UBS-0004",
-          "ritz-carlton:RITZ-0003",
-          "ritz-carlton:RITZ-0004",
           "vip-customer:VIP-0003",
+          "ubs:UBS-0004",
+          "ubs:UBS-0003",
+          "ritz-carlton:RITZ-0004",
+          "ritz-carlton:RITZ-0003",
         ],
-        "Expected outstanding payment review to include unpaid, overdue, partial, invoice-sent, and monthly account rows",
+        "Expected outstanding payment review to start highest amount first",
       );
       assert.deepEqual(
         dashboardState.outstandingRows.map((row) => row.href),
         [
-          "/customers/ubs",
-          "/customers/ubs",
-          "/customers/ritz-carlton",
-          "/customers/ritz-carlton",
           "/customers/vip-customer",
+          "/customers/ubs",
+          "/customers/ubs",
+          "/customers/ritz-carlton",
+          "/customers/ritz-carlton",
         ],
         "Expected every outstanding review row to link to its customer folder",
       );
+      for (const row of dashboardState.outstandingRows) {
+        assert.deepEqual(
+          row.detailButtons,
+          ["View details — Mock Only"],
+          `Expected mock detail control on ${row.id}`,
+        );
+      }
       assert.deepEqual(
         dashboardState.outstandingPaidInvoiceMentions,
         [],
@@ -1581,6 +1672,273 @@ async function runChromeTest() {
         })()`);
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
+
+      await evaluate(`(() => {
+        const input = document.querySelector("[data-outstanding-review-search]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter.call(input, "ritz");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`);
+      const outstandingSearchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rows = [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) => ({
+              id: row.getAttribute("data-outstanding-payment-row"),
+              text: row.innerText,
+            }));
+
+            if (rows.length !== 2 || rows.some((row) => !row.id?.includes("ritz-carlton"))) {
+              return false;
+            }
+
+            return {
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              noResultsVisible: Boolean(document.querySelector("[data-outstanding-payments-no-results]")),
+              rows,
+              showing: document.querySelector("[data-outstanding-review-showing]")?.textContent.trim() || "",
+            };
+          })()`),
+        10000,
+        "outstanding payment review search filter",
+      );
+      assert.equal(
+        outstandingSearchState.showing,
+        "Showing 1-2 of 2 customers",
+        "Expected outstanding review search to update the showing count",
+      );
+      assert.equal(
+        outstandingSearchState.noResultsVisible,
+        false,
+        "Expected matching outstanding review search not to show the no-results state",
+      );
+      assert.deepEqual(
+        outstandingSearchState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected outstanding review search not to call payment, bank, notification, calendar, or Supabase APIs",
+      );
+
+      await evaluate(`(() => {
+        const input = document.querySelector("[data-outstanding-review-search]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector("[data-outstanding-review-filter='due-soon']")?.click();
+      })()`);
+      const outstandingDueSoonState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rows = [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) =>
+              row.getAttribute("data-outstanding-payment-row"),
+            );
+
+            if (rows.length !== 3 || !rows.includes("vip-customer:VIP-0003")) {
+              return false;
+            }
+
+            return {
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              rows,
+              showing: document.querySelector("[data-outstanding-review-showing]")?.textContent.trim() || "",
+            };
+          })()`),
+        10000,
+        "outstanding payment review due soon filter",
+      );
+      assert.deepEqual(
+        outstandingDueSoonState.rows,
+        ["vip-customer:VIP-0003", "ubs:UBS-0004", "ritz-carlton:RITZ-0004"],
+        "Expected due soon filter to show due-today and upcoming mock balances only",
+      );
+      assert.equal(
+        outstandingDueSoonState.showing,
+        "Showing 1-3 of 3 customers",
+        "Expected due soon filter to update the showing count",
+      );
+      assert.deepEqual(
+        outstandingDueSoonState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected outstanding due-soon filter not to call payment, bank, notification, calendar, or Supabase APIs",
+      );
+
+      await evaluate(`document.querySelector("[data-outstanding-review-filter='overdue']")?.click()`);
+      const outstandingOverdueState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rows = [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) =>
+              row.getAttribute("data-outstanding-payment-row"),
+            );
+
+            if (rows.length !== 1 || rows[0] !== "ubs:UBS-0003") {
+              return false;
+            }
+
+            return {
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              rows,
+              showing: document.querySelector("[data-outstanding-review-showing]")?.textContent.trim() || "",
+            };
+          })()`),
+        10000,
+        "outstanding payment review overdue filter",
+      );
+      assert.equal(
+        outstandingOverdueState.showing,
+        "Showing 1-1 of 1 customers",
+        "Expected overdue filter to update the showing count",
+      );
+      assert.deepEqual(
+        outstandingOverdueState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected outstanding overdue filter not to call payment, bank, notification, calendar, or Supabase APIs",
+      );
+
+      await evaluate(`(() => {
+        document.querySelector("[data-outstanding-review-filter='all']")?.click();
+        const sort = document.querySelector("[data-outstanding-review-sort]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+        setter.call(sort, "customer-az");
+        sort.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`);
+      const outstandingSortState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rows = [...document.querySelectorAll("[data-outstanding-payment-row]")].map((row) =>
+              row.getAttribute("data-outstanding-payment-row"),
+            );
+
+            if (rows[0] !== "vip-customer:VIP-0003") {
+              return false;
+            }
+
+            return {
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              rows,
+            };
+          })()`),
+        10000,
+        "outstanding payment review customer sort",
+      );
+      assert.deepEqual(
+        outstandingSortState.rows,
+        [
+          "vip-customer:VIP-0003",
+          "ritz-carlton:RITZ-0003",
+          "ritz-carlton:RITZ-0004",
+          "ubs:UBS-0003",
+          "ubs:UBS-0004",
+        ],
+        "Expected customer A-Z sort to reorder the compact outstanding review list",
+      );
+      assert.deepEqual(
+        outstandingSortState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected outstanding sort not to call payment, bank, notification, calendar, or Supabase APIs",
+      );
+
+      await evaluate(`(() => {
+        const sort = document.querySelector("[data-outstanding-review-sort]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+        setter.call(sort, "highest-amount");
+        sort.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`);
+      const outstandingDetailClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-outstanding-review-detail-toggle='ubs:UBS-0003']");
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(outstandingDetailClicked, true, "Expected outstanding mock detail button to be clickable");
+      const outstandingDetailState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const detail = document.querySelector("[data-outstanding-review-detail='ubs:UBS-0003']");
+
+            if (!detail) {
+              return false;
+            }
+
+            return {
+              detailText: detail.innerText,
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            };
+          })()`),
+        10000,
+        "outstanding payment review mock detail",
+      );
+      for (const expectedDetailText of [
+        "Mock/local detail only",
+        "Customer folder reminder",
+        "Follow-up note placeholder only",
+        "No invoice, statement, PDF, invoice number, sending, Supabase call, payment API, bank API, notification, or calendar action.",
+      ]) {
+        assert.ok(
+          outstandingDetailState.detailText.includes(expectedDetailText),
+          `Expected outstanding detail text: ${expectedDetailText}`,
+        );
+      }
+      assert.deepEqual(
+        outstandingDetailState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected outstanding detail view not to call payment, bank, notification, calendar, or Supabase APIs",
+      );
+
+      await evaluate(`(() => {
+        const input = document.querySelector("[data-outstanding-review-search]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter.call(input, "no matching customer");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`);
+      const outstandingNoResultsState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const noResults = document.querySelector("[data-outstanding-payments-no-results]");
+
+            if (!noResults) {
+              return false;
+            }
+
+            return {
+              integrationCalls: window.__customerPaymentIntegrationCalls || [],
+              noResultsText: noResults.innerText,
+              rowCount: document.querySelectorAll("[data-outstanding-payment-row]").length,
+            };
+          })()`),
+        10000,
+        "outstanding payment review no-results state",
+      );
+      assert.equal(outstandingNoResultsState.rowCount, 0, "Expected no-result search to hide visible rows only");
+      assert.equal(
+        outstandingNoResultsState.noResultsText.includes("No data was removed and no API was called."),
+        true,
+        "Expected outstanding no-results message to confirm data/API protection",
+      );
+      assert.deepEqual(
+        outstandingNoResultsState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected outstanding no-results search not to call payment, bank, notification, calendar, or Supabase APIs",
+      );
+
+      await evaluate(`(() => {
+        const input = document.querySelector("[data-outstanding-review-search]");
+        const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        inputSetter.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector("[data-outstanding-review-filter='all']")?.click();
+        const sort = document.querySelector("[data-outstanding-review-sort]");
+        const selectSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+        selectSetter.call(sort, "highest-amount");
+        sort.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`);
+      await waitForCondition(
+        () =>
+          evaluate(`document.querySelector("[data-outstanding-payment-row]")?.getAttribute("data-outstanding-payment-row") === "vip-customer:VIP-0003"`),
+        10000,
+        "outstanding payment review reset after controls",
+      );
 
       const clickRegularCustomerDraftInvoicePreview = async (description) => {
         const clicked = await evaluate(`(() => {

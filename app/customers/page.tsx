@@ -1503,6 +1503,74 @@ export default function MockCustomerDashboardPage() {
             </div>
 
             <div
+              className="mt-4 rounded-md border border-sky-200 bg-sky-50 p-4"
+              data-regular-customer-saved-visibility-section="true"
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-800">
+                    Internal staff-only / planning placeholder
+                  </p>
+                  <h4
+                    className="mt-2 text-base font-bold text-sky-950"
+                    data-regular-customer-saved-visibility-heading="true"
+                  >
+                    Future Saved Booking Visibility — Mock Only
+                  </h4>
+                  <p
+                    className="mt-1 max-w-4xl text-sm font-semibold leading-6 text-sky-950"
+                    data-regular-customer-saved-visibility-boundary="true"
+                  >
+                    Mock/local only. No booking saved, no customer folder linked, no Supabase call, no invoice number,
+                    no payment/bank action, no notification/calendar action, and no audit record.
+                  </p>
+                </div>
+                <p className="rounded-md border border-sky-300 bg-white px-3 py-2 text-sm font-bold text-sky-950">
+                  Read-only placeholder. No action is available here.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  [
+                    "Customer folder",
+                    "Future approved saves will appear in the selected customer folder. Nothing is linked here now.",
+                  ],
+                  [
+                    "Monthly billing review",
+                    "Saved regular bookings will become eligible for monthly billing review later. Current rows still reset on refresh.",
+                  ],
+                  [
+                    "Future saved booking list",
+                    "This area marks where saved booking visibility will live after save/linking approval. It does not add or remove local rows.",
+                  ],
+                  [
+                    "Future edit/amend/cancel",
+                    "Later edit/amend/cancel workflow will use saved booking ids only. Mock row controls remain guidance only.",
+                  ],
+                ].map(([label, description]) => (
+                  <div
+                    className="rounded-md border border-sky-200 bg-white p-3 text-sm leading-6 text-slate-700"
+                    data-regular-customer-saved-visibility-note={label}
+                    key={label}
+                  >
+                    <p className="font-bold text-slate-950">{label}</p>
+                    <p className="mt-1">{description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p
+                className="mt-4 rounded-md border border-sky-200 bg-white px-3 py-2 text-sm font-semibold leading-6 text-sky-950"
+                data-regular-customer-saved-visibility-local-row-note="true"
+              >
+                {regularCustomerBookingListItems.length > 0
+                  ? `Future saved booking will appear here after real save is approved. ${regularCustomerBookingListItems.length} local mock monthly billing row${regularCustomerBookingListItems.length === 1 ? " is" : "s are"} present on this page, but none is saved, linked, audited, invoiced, paid, synced, sent, or written to Supabase.`
+                  : "Future saved booking will appear here after real save is approved. No saved booking visibility data exists now, and this placeholder does not save, link, audit, invoice, pay, sync, send, or call Supabase."}
+              </p>
+            </div>
+
+            <div
               className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-4"
               data-regular-customer-draft-invoice-section="true"
             >

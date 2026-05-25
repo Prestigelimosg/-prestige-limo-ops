@@ -658,6 +658,27 @@ async function runChromeTest() {
             const rect = button?.getBoundingClientRect();
             return Boolean(rect && rect.width > 0 && rect.height >= 40);
           })(),
+          regularSavedVisibilityBoundary:
+            document.querySelector("[data-regular-customer-saved-visibility-boundary]")?.textContent.trim() || "",
+          regularSavedVisibilityButtons: [
+            ...document.querySelectorAll("[data-regular-customer-saved-visibility-section] button"),
+          ].map((button) => button.textContent.trim()),
+          regularSavedVisibilityHeading:
+            document.querySelector("[data-regular-customer-saved-visibility-heading]")?.textContent.trim() || "",
+          regularSavedVisibilityLocalRowNote:
+            document.querySelector("[data-regular-customer-saved-visibility-local-row-note]")?.textContent.trim() ||
+            "",
+          regularSavedVisibilityNotes: [
+            ...document.querySelectorAll("[data-regular-customer-saved-visibility-note]"),
+          ].map((note) => ({
+            label: note.getAttribute("data-regular-customer-saved-visibility-note") || "",
+            text: note.textContent.trim(),
+          })),
+          regularSavedVisibilityText:
+            document.querySelector("[data-regular-customer-saved-visibility-section]")?.innerText || "",
+          regularSavedVisibilityVisible: Boolean(
+            document.querySelector("[data-regular-customer-saved-visibility-section]"),
+          ),
           regularBookingFields: [
             "customerId",
             "booker",
@@ -881,6 +902,69 @@ async function runChromeTest() {
         dashboardState.regularMockSaveFeedbackTone,
         "info",
         "Expected mock Save Regular Booking helper to start as info",
+      );
+      assert.equal(
+        dashboardState.regularSavedVisibilityVisible,
+        true,
+        "Expected future saved booking visibility placeholder to be visible",
+      );
+      assert.equal(
+        dashboardState.regularSavedVisibilityHeading,
+        "Future Saved Booking Visibility — Mock Only",
+        "Expected future saved booking visibility placeholder heading",
+      );
+      for (const expectedSavedVisibilityBoundaryText of [
+        "Mock/local only.",
+        "No booking saved",
+        "no customer folder linked",
+        "no Supabase call",
+        "no invoice number",
+        "no payment/bank action",
+        "no notification/calendar action",
+        "no audit record",
+      ]) {
+        assert.equal(
+          dashboardState.regularSavedVisibilityBoundary.includes(expectedSavedVisibilityBoundaryText),
+          true,
+          `Expected future saved booking visibility boundary text: ${expectedSavedVisibilityBoundaryText}`,
+        );
+      }
+      assert.deepEqual(
+        dashboardState.regularSavedVisibilityNotes.map((note) => note.label),
+        ["Customer folder", "Monthly billing review", "Future saved booking list", "Future edit/amend/cancel"],
+        "Expected future saved booking visibility placeholder notes",
+      );
+      for (const expectedSavedVisibilityText of [
+        "Future approved saves will appear in the selected customer folder",
+        "Saved regular bookings will become eligible for monthly billing review later",
+        "does not add or remove local rows",
+        "Later edit/amend/cancel workflow will use saved booking ids only",
+      ]) {
+        assert.equal(
+          dashboardState.regularSavedVisibilityText.includes(expectedSavedVisibilityText),
+          true,
+          `Expected future saved booking visibility text: ${expectedSavedVisibilityText}`,
+        );
+      }
+      assert.deepEqual(
+        dashboardState.regularSavedVisibilityButtons,
+        [],
+        "Expected future saved booking visibility placeholder to have no action buttons",
+      );
+      assert.equal(
+        dashboardState.regularSavedVisibilityLocalRowNote.includes("No saved booking visibility data exists now"),
+        true,
+        "Expected future saved booking visibility placeholder to start without saved data",
+      );
+      assert.equal(
+        dashboardState.regularSavedVisibilityLocalRowNote.includes("does not save, link, audit, invoice"),
+        true,
+        "Expected future saved booking visibility placeholder to stay passive",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(dashboardState.regularSavedVisibilityText),
+        false,
+        "Expected future saved booking visibility placeholder not to create an invoice number",
       );
       assert.equal(
         dashboardState.regularBookingRequiredFieldCount,
@@ -1469,6 +1553,24 @@ async function runChromeTest() {
           };
         })()`);
 
+      const readRegularCustomerSavedVisibilityState = () =>
+        evaluate(`(() => {
+          const section = document.querySelector("[data-regular-customer-saved-visibility-section]");
+
+          return {
+            buttons: [...document.querySelectorAll("[data-regular-customer-saved-visibility-section] button")].map(
+              (button) => button.textContent.trim(),
+            ),
+            integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            localRowNote:
+              document.querySelector("[data-regular-customer-saved-visibility-local-row-note]")?.textContent.trim() ||
+              "",
+            rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+            text: section?.innerText || "",
+            visible: Boolean(section),
+          };
+        })()`);
+
       const readRegularCustomerDraftInvoiceState = () =>
         evaluate(`(() => {
           const button = document.querySelector("[data-regular-customer-draft-invoice-create]");
@@ -1702,6 +1804,34 @@ async function runChromeTest() {
         [],
         "Expected invalid mock save not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      const invalidSavedVisibilityState = await readRegularCustomerSavedVisibilityState();
+      assert.equal(
+        invalidSavedVisibilityState.visible,
+        true,
+        "Expected future saved booking visibility placeholder to remain visible after invalid mock save",
+      );
+      assert.equal(
+        invalidSavedVisibilityState.rowCount,
+        0,
+        "Expected future saved booking visibility placeholder not to add rows after invalid mock save",
+      );
+      assert.deepEqual(
+        invalidSavedVisibilityState.buttons,
+        [],
+        "Expected future saved booking visibility placeholder to remain read-only after invalid mock save",
+      );
+      assert.equal(
+        invalidSavedVisibilityState.localRowNote.includes("No saved booking visibility data exists now"),
+        true,
+        "Expected future saved booking visibility placeholder not to pretend invalid mock save created saved data",
+      );
+      assert.deepEqual(
+        invalidSavedVisibilityState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected future saved booking visibility placeholder not to call Supabase, payment, bank, notification, or calendar APIs after invalid mock save",
+      );
 
       const regularBookingInvalidClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-booking-submit]");
@@ -1876,6 +2006,32 @@ async function runChromeTest() {
         [],
         "Expected valid mock save not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      const validSavedVisibilityState = await readRegularCustomerSavedVisibilityState();
+      assert.equal(
+        validSavedVisibilityState.rowCount,
+        0,
+        "Expected future saved booking visibility placeholder not to add rows after valid mock save",
+      );
+      assert.deepEqual(
+        validSavedVisibilityState.buttons,
+        [],
+        "Expected future saved booking visibility placeholder to have no save/link action after valid mock save",
+      );
+      assert.equal(
+        validSavedVisibilityState.localRowNote.includes("No saved booking visibility data exists now"),
+        true,
+        "Expected future saved booking visibility placeholder not to show saved data after valid mock save",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(validSavedVisibilityState.text),
+        false,
+        "Expected future saved booking visibility placeholder not to create an invoice number after valid mock save",
+      );
+      assert.deepEqual(
+        validSavedVisibilityState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected future saved booking visibility placeholder not to call Supabase, payment, bank, notification, or calendar APIs after valid mock save",
+      );
 
       const regularBookingClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-booking-submit]");
@@ -2027,6 +2183,46 @@ async function runChromeTest() {
         (await readRegularCustomerBookingListState()).countText,
         "Showing 1 of 1 local mock row.",
         "Expected regular customer booking list count after first valid submit",
+      );
+      const savedVisibilityWithOneLocalRowState = await readRegularCustomerSavedVisibilityState();
+      assert.equal(
+        savedVisibilityWithOneLocalRowState.rowCount,
+        1,
+        "Expected future saved booking visibility placeholder to observe one local row without creating it",
+      );
+      assert.equal(
+        savedVisibilityWithOneLocalRowState.localRowNote.includes(
+          "1 local mock monthly billing row is present on this page",
+        ),
+        true,
+        "Expected future saved booking visibility placeholder to explain the local row is still mock-only",
+      );
+      for (const expectedSavedVisibilityAfterRowText of [
+        "Future saved booking will appear here after real save is approved",
+        "none is saved, linked, audited, invoiced, paid, synced, sent, or written to Supabase",
+      ]) {
+        assert.equal(
+          savedVisibilityWithOneLocalRowState.localRowNote.includes(expectedSavedVisibilityAfterRowText),
+          true,
+          `Expected future saved booking visibility local-row note: ${expectedSavedVisibilityAfterRowText}`,
+        );
+      }
+      assert.deepEqual(
+        savedVisibilityWithOneLocalRowState.buttons,
+        [],
+        "Expected future saved booking visibility placeholder not to expose actions after a local row exists",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(savedVisibilityWithOneLocalRowState.text),
+        false,
+        "Expected future saved booking visibility placeholder not to create an invoice number after a local row exists",
+      );
+      assert.deepEqual(
+        savedVisibilityWithOneLocalRowState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected future saved booking visibility placeholder not to call Supabase, payment, bank, notification, or calendar APIs after a local row exists",
       );
 
       for (const [field, value] of Object.entries(secondRegularCustomerBookingFields)) {

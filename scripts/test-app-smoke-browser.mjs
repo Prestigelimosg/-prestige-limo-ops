@@ -5097,6 +5097,7 @@ async function runChromeTest() {
         const lowerText = text.toLowerCase();
         const search = document.querySelector("[data-customer-portal-search]");
         const searchRect = search?.getBoundingClientRect();
+        const activeSection = document.querySelector("[data-customer-portal-section][data-active='true']");
         const rows = [...document.querySelectorAll("[data-customer-portal-row]")];
         const firstRowRect = rows[0]?.getBoundingClientRect();
         const activeFilter = document.querySelector("[data-customer-portal-filter][data-active='true']");
@@ -5105,8 +5106,23 @@ async function runChromeTest() {
         const feedbackRow = feedback?.closest("[data-customer-portal-row]");
         const feedbackRect = feedback?.getBoundingClientRect();
         const feedbackRowRect = feedbackRow?.getBoundingClientRect();
+        const requestForm = document.querySelector("[data-customer-portal-request-form]");
+        const requestFeedback = document.querySelector("[data-customer-portal-request-feedback]");
+        const pickupHour = document.querySelector("[data-customer-portal-pickup-hour]");
+        const pickupMinute = document.querySelector("[data-customer-portal-pickup-minute]");
+        const requestFieldState = (field) => {
+          const control = document.querySelector(\`[data-customer-portal-request-field="\${field}"]\`);
+          const rect = control?.getBoundingClientRect();
+
+          return {
+            required: Boolean(control?.required),
+            value: control?.value || "",
+            visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
+          };
+        };
 
         return {
+          activeSection: activeSection?.textContent.trim() || "",
           activeFilter: activeFilter?.textContent.trim() || "",
           detailId: detail?.getAttribute("data-customer-portal-detail") || "",
           detailText: detail?.innerText || "",
@@ -5122,6 +5138,8 @@ async function runChromeTest() {
             "mock",
             "supabase",
             "billing",
+            "invoice",
+            "statement",
             "outstanding payment",
             "payment follow-up",
             "driver payout",
@@ -5130,7 +5148,48 @@ async function runChromeTest() {
             "invoice controls",
             "statement controls",
             "staff notes",
+            "staff-only",
+            "developer",
           ].filter((value) => lowerText.includes(value)),
+          form: {
+            feedbackText: requestFeedback?.textContent.trim() || "",
+            fieldState: {
+              companyName: requestFieldState("companyName"),
+              contactNo: requestFieldState("contactNo"),
+              emailAddress: requestFieldState("emailAddress"),
+              passengerName: requestFieldState("passengerName"),
+              pickupDate: requestFieldState("pickupDate"),
+              pickupTime: {
+                control: pickupHour && pickupMinute ? "selects" : "missing",
+                required: Boolean(pickupHour?.required && pickupMinute?.required),
+                value: pickupHour?.value ? \`\${pickupHour.value}:\${pickupMinute?.value || "00"}\` : "",
+                visible: Boolean(
+                  pickupHour?.getBoundingClientRect().height >= 40 &&
+                    pickupMinute?.getBoundingClientRect().height >= 40,
+                ),
+              },
+              flightNumber: requestFieldState("flightNumber"),
+              pickupLocation: requestFieldState("pickupLocation"),
+              dropoffLocation: requestFieldState("dropoffLocation"),
+              serviceType: requestFieldState("serviceType"),
+              vehicleType: requestFieldState("vehicleType"),
+              passengerCount: requestFieldState("passengerCount"),
+              luggage: requestFieldState("luggage"),
+              extraStops: requestFieldState("extraStops"),
+              specialRequest: requestFieldState("specialRequest"),
+            },
+            nativePickupTimeInputCount: document.querySelectorAll("[data-customer-portal-request-form] input[type='time']").length,
+            pickupMinuteOptions: pickupMinute
+              ? [...pickupMinute.options].filter((option) => option.value).map((option) => option.textContent.trim())
+              : [],
+            serviceOptionLabels: [...document.querySelectorAll("[data-customer-portal-request-field='serviceType'] option")]
+              .map((option) => option.textContent.trim()),
+            submitVisible: Boolean(document.querySelector("[data-customer-portal-submit-request]")),
+            vehicleOptionLabels: [...document.querySelectorAll("[data-customer-portal-request-field='vehicleType'] option")]
+              .map((option) => option.textContent.trim())
+              .filter((label) => label !== "To confirm"),
+            visible: Boolean(requestForm),
+          },
           integrationCalls: window.__customerPortalIntegrationCalls || [],
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
           rowCount: rows.length,
@@ -5144,6 +5203,8 @@ async function runChromeTest() {
           searchBeforeRows:
             searchRect && firstRowRect ? searchRect.top < firstRowRect.top : false,
           searchVisible: Boolean(searchRect && searchRect.width > 0 && searchRect.height >= 40),
+          sectionLabels: [...document.querySelectorAll("[data-customer-portal-section]")]
+            .map((button) => button.textContent.trim()),
           showingText: document.querySelector("[data-customer-portal-showing]")?.textContent.trim() || "",
           text,
         };
@@ -5165,6 +5226,73 @@ async function runChromeTest() {
         return input.value;
       })()`);
       assert.equal(actualValue, value, "Expected customer portal search to accept test value");
+    };
+
+    const clickCustomerPortalSection = async (section) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-section="${section}"]`)});
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected customer portal ${section} section to be clickable`);
+    };
+
+    const setCustomerPortalRequestField = async (field, value) => {
+      const actualValue = await evaluate(`(() => {
+        const control = document.querySelector(${JSON.stringify(`[data-customer-portal-request-field="${field}"]`)});
+
+        if (!control) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, ${JSON.stringify(value)});
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return control.value;
+      })()`);
+      assert.equal(actualValue, value, `Expected customer portal request field ${field} to accept test value`);
+    };
+
+    const setCustomerPortalPickupTime = async (hour, minute) => {
+      const actualValue = await evaluate(`(() => {
+        const hourSelect = document.querySelector("[data-customer-portal-pickup-hour]");
+        const minuteSelect = document.querySelector("[data-customer-portal-pickup-minute]");
+
+        if (!hourSelect || !minuteSelect) {
+          return null;
+        }
+
+        hourSelect.value = ${JSON.stringify(hour)};
+        hourSelect.dispatchEvent(new Event("input", { bubbles: true }));
+        hourSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        minuteSelect.value = ${JSON.stringify(minute)};
+        minuteSelect.dispatchEvent(new Event("input", { bubbles: true }));
+        minuteSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return \`\${hourSelect.value}:\${minuteSelect.value}\`;
+      })()`);
+      assert.equal(actualValue, `${hour}:${minute}`, "Expected customer portal pickup time selects to accept test value");
+    };
+
+    const submitCustomerPortalBookingRequest = async () => {
+      const submitted = await evaluate(`(() => {
+        const button = document.querySelector("[data-customer-portal-submit-request]");
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(submitted, true, "Expected customer portal booking request submit to be clickable");
     };
 
     const clickCustomerPortalFilter = async (filter) => {
@@ -5228,6 +5356,11 @@ async function runChromeTest() {
       assert.equal(initialState.rowCount, 10, "Expected /my-bookings to show at most 10 rows by default");
       assert.equal(initialState.showingText, "Showing 10 of 12 bookings", "Expected /my-bookings showing count");
       assert.deepEqual(
+        initialState.sectionLabels,
+        ["New Booking Request", "Upcoming", "Completed", "Cancelled"],
+        "Expected /my-bookings to expose the customer portal sections",
+      );
+      assert.deepEqual(
         initialState.rows.filter((row) => ["Completed", "Cancelled"].includes(row.status)).map((row) => row.status),
         [],
         "Expected Upcoming filter to hide completed and cancelled bookings",
@@ -5239,6 +5372,150 @@ async function runChromeTest() {
       );
       assert.equal(/[A-Z]{2,}-\d{3,}/.test(initialState.text), false, "Expected /my-bookings not to create invoice-style numbers");
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
+
+      await clickCustomerPortalSection("New Booking Request");
+      const requestFormState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.form.visible ? candidateState : false;
+        },
+        10000,
+        "customer portal booking request form",
+      );
+      assert.equal(requestFormState.activeSection, "New Booking Request", "Expected /my-bookings request form tab");
+      assert.equal(requestFormState.form.submitVisible, true, "Expected customer portal request submit button");
+      assert.equal(requestFormState.form.nativePickupTimeInputCount, 0, "Expected /my-bookings pickup time not to use native type=time");
+      assert.equal(requestFormState.form.fieldState.pickupTime.control, "selects", "Expected visible pickup hour/minute selects");
+      assert.deepEqual(
+        requestFormState.form.pickupMinuteOptions,
+        ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"],
+        "Expected /my-bookings pickup minute options to be five-minute choices",
+      );
+      for (const unavailableMinute of ["01", "02", "03", "04", "06", "07", "08", "09"]) {
+        assert.equal(
+          requestFormState.form.pickupMinuteOptions.includes(unavailableMinute),
+          false,
+          `Expected /my-bookings minute option ${unavailableMinute} not to be selectable`,
+        );
+      }
+      assert.deepEqual(
+        Object.fromEntries(
+          Object.entries(requestFormState.form.fieldState).map(([field, state]) => [field, state.required]),
+        ),
+        {
+          companyName: false,
+          contactNo: true,
+          emailAddress: false,
+          passengerName: true,
+          pickupDate: true,
+          pickupTime: true,
+          flightNumber: false,
+          pickupLocation: false,
+          dropoffLocation: false,
+          serviceType: false,
+          vehicleType: false,
+          passengerCount: false,
+          luggage: false,
+          extraStops: false,
+          specialRequest: false,
+        },
+        "Expected /my-bookings request form required/optional fields",
+      );
+      assert.deepEqual(
+        requestFormState.form.serviceOptionLabels,
+        [
+          "Airport Arrival",
+          "Airport Departure",
+          "Point-to-Point Transfer",
+          "Hourly / Disposal",
+          "Event / VIP Movement",
+          "Other / To Confirm",
+        ],
+        "Expected /my-bookings customer-facing service options",
+      );
+      assert.deepEqual(
+        requestFormState.form.vehicleOptionLabels,
+        [
+          "Alphard / Vellfire",
+          "Mercedes Viano / V-Class",
+          "Hi-roof Minibus",
+          "Mercedes E-Class",
+          "Mercedes S-Class",
+        ],
+        "Expected /my-bookings customer-facing vehicle options",
+      );
+      for (const hiddenInternalCode of ["DEP", "MNG", "TRF", "DSP", "AVF", "VVV", "Combi"]) {
+        assert.equal(
+          requestFormState.text.includes(hiddenInternalCode),
+          false,
+          `Expected /my-bookings not to show internal code ${hiddenInternalCode}`,
+        );
+      }
+
+      await submitCustomerPortalBookingRequest();
+      const invalidRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.form.feedbackText.includes("Please complete contact no.") ? candidateState : false;
+        },
+        10000,
+        "customer portal invalid booking request feedback",
+      );
+      assert.deepEqual(
+        invalidRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected invalid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setCustomerPortalRequestField("contactNo", "+65 9000 0123");
+      await setCustomerPortalRequestField("passengerName", "Portal Test Passenger");
+      await setCustomerPortalRequestField("pickupDate", "2026-06-15");
+      await setCustomerPortalPickupTime("10", "05");
+      await submitCustomerPortalBookingRequest();
+      const validRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.form.feedbackText.includes("Booking request received for review") ? candidateState : false;
+        },
+        10000,
+        "customer portal valid booking request feedback",
+      );
+      assert.equal(
+        validRequestState.form.fieldState.pickupTime.value,
+        "10:05",
+        "Expected selecting hour and minute to create HH:mm pickup time",
+      );
+      assert.deepEqual(
+        validRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected valid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assert.equal(/[A-Z]{2,}-\d{3,}/.test(validRequestState.text), false, "Expected /my-bookings request not to create invoice-style numbers");
+
+      await submitCustomerPortalBookingRequest();
+      const repeatedRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.form.feedbackText.includes("Booking request received for review") ? candidateState : false;
+        },
+        10000,
+        "customer portal same-date same-time booking request",
+      );
+      assert.deepEqual(
+        repeatedRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected repeated same-date/same-time /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await clickCustomerPortalFilter("Upcoming");
+      await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.activeFilter === "Upcoming" && candidateState.rowCount === 10 ? candidateState : false;
+        },
+        10000,
+        "customer portal returned to Upcoming bookings",
+      );
 
       await clickCustomerPortalDetail("booking-001");
       const detailState = await waitForCondition(

@@ -272,9 +272,16 @@ export default function CustomerBookingPage() {
                     name="pickupTime"
                     onChange={(event) => updateField("pickupTime", event.target.value)}
                     required
+                    step={300}
                     type="time"
                     value={form.pickupTime}
                   />
+                  <span
+                    className="mt-2 block text-xs font-medium leading-5 text-slate-600"
+                    data-customer-booking-time-step-note="true"
+                  >
+                    Pickup time is selected in 5-minute intervals. Booking is not confirmed until staff replies.
+                  </span>
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">

@@ -4636,6 +4636,7 @@ async function runChromeTest() {
               {
                 label: input?.closest("label")?.innerText.trim() || "",
                 required: Boolean(input?.required),
+                step: input?.getAttribute("step") || "",
                 value: input?.value || "",
                 visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
               },
@@ -4663,6 +4664,16 @@ async function runChromeTest() {
             "payment follow-up",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
+          sameTimeBlockingText: [
+            "already booked",
+            "same date",
+            "same time",
+            "time conflict",
+            "time slot unavailable",
+            "pickup time unavailable",
+            "fully booked",
+          ].filter((value) => lowerText.includes(value)),
+          timeStepNote: document.querySelector("[data-customer-booking-time-step-note]")?.textContent.trim() || "",
           missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
             field.textContent.trim(),
           ),
@@ -4750,6 +4761,12 @@ async function runChromeTest() {
       assert.equal(initialState.fieldState.passengerName.required, true, "Expected passenger name to be required");
       assert.equal(initialState.fieldState.pickupDate.required, true, "Expected pickup date to be required");
       assert.equal(initialState.fieldState.pickupTime.required, true, "Expected pickup time to be required");
+      assert.equal(initialState.fieldState.pickupTime.step, "300", "Expected pickup time to use 5-minute steps");
+      assert.equal(
+        initialState.timeStepNote,
+        "Pickup time is selected in 5-minute intervals. Booking is not confirmed until staff replies.",
+        "Expected customer-safe pickup time interval note",
+      );
       assert.equal(initialState.fieldState.pickupLocation.required, false, "Expected pickup location to be optional");
       assert.equal(initialState.fieldState.dropoffLocation.required, false, "Expected drop-off location to be optional");
       assert.equal(initialState.fieldState.vehicleType.required, false, "Expected vehicle type to be optional");
@@ -4893,6 +4910,29 @@ async function runChromeTest() {
         [],
         "Expected valid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assert.deepEqual(
+        validState.sameTimeBlockingText,
+        [],
+        "Expected valid /book submit not to show same-date or same-time blocking",
+      );
+
+      await clickCustomerBookingSubmit("second valid customer booking request for same pickup date/time");
+      const sameTimeRepeatState = await readCustomerBookingPageState();
+      assert.equal(
+        sameTimeRepeatState.feedbackText,
+        "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+        "Expected same-date/same-time /book submit to remain a staff-reviewed request",
+      );
+      assert.deepEqual(
+        sameTimeRepeatState.sameTimeBlockingText,
+        [],
+        "Expected /book not to block repeated requests for the same pickup date and time",
+      );
+      assert.deepEqual(
+        sameTimeRepeatState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected repeated same-date/same-time /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
 
       await setCustomerBookingViewportAndLoad(mobileViewport);
       const mobileState = await readCustomerBookingPageState();
@@ -4925,6 +4965,8 @@ async function runChromeTest() {
           Object.entries(initialState.fieldState).map(([field, state]) => [field, state.required]),
         ),
         route: "/book",
+        pickupTimeStep: initialState.fieldState.pickupTime.step,
+        timeStepNote: initialState.timeStepNote,
         serviceOptions: initialState.serviceOptionLabels,
         vehicleOptions: initialState.vehicleOptionLabels,
       };

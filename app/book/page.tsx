@@ -20,6 +20,23 @@ const vehicleOptions = [
   "Mercedes S-Class",
 ];
 
+const pickupHourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+
+const pickupMinuteOptions = [
+  "00",
+  "05",
+  "10",
+  "15",
+  "20",
+  "25",
+  "30",
+  "35",
+  "40",
+  "45",
+  "50",
+  "55",
+];
+
 type BookingRequestForm = {
   companyName: string;
   contactNo: string;
@@ -106,6 +123,15 @@ function feedbackClass(tone: Feedback["tone"]) {
   return "border-sky-200 bg-sky-50 text-sky-950";
 }
 
+function splitPickupTime(value: string) {
+  const [hour = "", minute = ""] = value.split(":");
+
+  return {
+    hour: pickupHourOptions.includes(hour) ? hour : "",
+    minute: pickupMinuteOptions.includes(minute) ? minute : "",
+  };
+}
+
 export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
@@ -117,6 +143,20 @@ export default function CustomerBookingPage() {
   function updateField(field: keyof BookingRequestForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
     setMissingFields((current) => current.filter((item) => item !== field));
+  }
+
+  function updatePickupTimePart(part: "hour" | "minute", value: string) {
+    setForm((currentForm) => {
+      const current = splitPickupTime(currentForm.pickupTime);
+      const nextHour = part === "hour" ? value : current.hour;
+      const nextMinute = part === "minute" ? value : current.minute || "00";
+
+      return {
+        ...currentForm,
+        pickupTime: nextHour ? `${nextHour}:${nextMinute || "00"}` : "",
+      };
+    });
+    setMissingFields((current) => current.filter((item) => item !== "pickupTime"));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -142,6 +182,8 @@ export default function CustomerBookingPage() {
   function isMissing(field: keyof BookingRequestForm) {
     return missingFields.includes(field);
   }
+
+  const pickupTimeParts = splitPickupTime(form.pickupTime);
 
   return (
     <main
@@ -263,26 +305,61 @@ export default function CustomerBookingPage() {
                   />
                 </label>
 
-                <label className="text-sm font-semibold text-slate-800">
-                  Pickup time *
+                <fieldset
+                  aria-invalid={isMissing("pickupTime")}
+                  className="min-w-0 text-sm font-semibold text-slate-800"
+                  data-customer-booking-field="pickupTime"
+                  data-customer-booking-time-control="selects"
+                  data-required="true"
+                  data-step="300"
+                  data-value={form.pickupTime}
+                >
+                  <legend>Pickup time *</legend>
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <label className="min-w-0 text-xs font-semibold text-slate-700">
+                      Hour
+                      <select
+                        aria-label="Pickup hour"
+                        aria-invalid={isMissing("pickupTime")}
+                        className={fieldClass(isMissing("pickupTime"))}
+                        data-customer-booking-time-part="hour"
+                        onChange={(event) => updatePickupTimePart("hour", event.target.value)}
+                        required
+                        value={pickupTimeParts.hour}
+                      >
+                        <option value="">HH</option>
+                        {pickupHourOptions.map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="min-w-0 text-xs font-semibold text-slate-700">
+                      Minute
+                      <select
+                        aria-label="Pickup minute"
+                        className={fieldClass(isMissing("pickupTime"))}
+                        data-customer-booking-time-part="minute"
+                        onChange={(event) => updatePickupTimePart("minute", event.target.value)}
+                        value={pickupTimeParts.minute || "00"}
+                      >
+                        {pickupMinuteOptions.map((minute) => (
+                          <option key={minute} value={minute}>
+                            {minute}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                   <input
-                    aria-invalid={isMissing("pickupTime")}
-                    className={fieldClass(isMissing("pickupTime"))}
-                    data-customer-booking-field="pickupTime"
+                    data-customer-booking-time-value="true"
                     name="pickupTime"
-                    onChange={(event) => updateField("pickupTime", event.target.value)}
-                    required
-                    step={300}
-                    type="time"
+                    readOnly
+                    type="hidden"
                     value={form.pickupTime}
                   />
-                  <span
-                    className="mt-2 block text-xs font-medium leading-5 text-slate-600"
-                    data-customer-booking-time-step-note="true"
-                  >
-                    Pickup time is selected in 5-minute intervals. Booking is not confirmed until staff replies.
-                  </span>
-                </label>
+                </fieldset>
 
                 <label className="text-sm font-semibold text-slate-800">
                   Pickup location

@@ -4572,6 +4572,28 @@ async function runChromeTest() {
 
     const setCustomerBookingField = async (field, value) => {
       const actualValue = await evaluate(`(() => {
+        if (${JSON.stringify(field)} === "pickupTime") {
+          const [hour, minute] = ${JSON.stringify(value)}.split(":");
+          const hourSelect = document.querySelector("[data-customer-booking-time-part='hour']");
+          const minuteSelect = document.querySelector("[data-customer-booking-time-part='minute']");
+
+          if (!hourSelect || !minuteSelect || !hour || !minute) {
+            return null;
+          }
+
+          const setControlValue = (control, nextValue) => {
+            const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+            descriptor?.set?.call(control, nextValue);
+            control.dispatchEvent(new Event("input", { bubbles: true }));
+            control.dispatchEvent(new Event("change", { bubbles: true }));
+          };
+
+          setControlValue(hourSelect, hour);
+          setControlValue(minuteSelect, minute);
+
+          return \`\${hourSelect.value}:\${minuteSelect.value}\`;
+        }
+
         const input = document.querySelector(${JSON.stringify(`[data-customer-booking-field="${field}"]`)});
 
         if (!input) {
@@ -4629,6 +4651,23 @@ async function runChromeTest() {
             "extraStops",
             "specialRequest",
           ].map((field) => {
+            if (field === "pickupTime") {
+              const control = document.querySelector("[data-customer-booking-field='pickupTime']");
+              const valueInput = document.querySelector("[data-customer-booking-time-value]");
+              const rect = control?.getBoundingClientRect();
+              return [
+                field,
+                {
+                  control: control?.getAttribute("data-customer-booking-time-control") || "",
+                  label: control?.querySelector("legend")?.innerText.trim() || "",
+                  required: control?.getAttribute("data-required") === "true",
+                  step: control?.getAttribute("data-step") || "",
+                  value: control?.getAttribute("data-value") || valueInput?.value || "",
+                  visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
+                },
+              ];
+            }
+
             const input = document.querySelector("[data-customer-booking-field='" + field + "']");
             const rect = input?.getBoundingClientRect();
             return [
@@ -4674,6 +4713,12 @@ async function runChromeTest() {
             "fully booked",
           ].filter((value) => lowerText.includes(value)),
           timeStepNote: document.querySelector("[data-customer-booking-time-step-note]")?.textContent.trim() || "",
+          nativePickupTimeInputCount: document.querySelectorAll(
+            "input[type='time'][name='pickupTime'], input[type='time'][data-customer-booking-field='pickupTime']",
+          ).length,
+          pickupMinuteOptions: [
+            ...document.querySelectorAll("[data-customer-booking-time-part='minute'] option"),
+          ].map((option) => option.value),
           missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
             field.textContent.trim(),
           ),
@@ -4761,12 +4806,37 @@ async function runChromeTest() {
       assert.equal(initialState.fieldState.passengerName.required, true, "Expected passenger name to be required");
       assert.equal(initialState.fieldState.pickupDate.required, true, "Expected pickup date to be required");
       assert.equal(initialState.fieldState.pickupTime.required, true, "Expected pickup time to be required");
+      assert.equal(
+        initialState.fieldState.pickupTime.control,
+        "selects",
+        "Expected pickup time to use visible hour/minute selects",
+      );
       assert.equal(initialState.fieldState.pickupTime.step, "300", "Expected pickup time to use 5-minute steps");
       assert.equal(
-        initialState.timeStepNote,
-        "Pickup time is selected in 5-minute intervals. Booking is not confirmed until staff replies.",
-        "Expected customer-safe pickup time interval note",
+        initialState.nativePickupTimeInputCount,
+        0,
+        "Expected /book pickup time not to use a native unrestricted minute picker",
       );
+      assert.deepEqual(
+        initialState.pickupMinuteOptions,
+        ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"],
+        "Expected /book pickup minute choices to be visible 5-minute options only",
+      );
+      assert.deepEqual(
+        initialState.pickupMinuteOptions.filter((minute) =>
+          ["01", "02", "03", "04", "06", "07", "08", "09"].includes(minute),
+        ),
+        [],
+        "Expected /book pickup minute choices not to include one-minute options",
+      );
+      assert.equal(
+        initialState.text.includes(
+          "Pickup time is selected in 5-minute intervals. Booking is not confirmed until staff replies.",
+        ),
+        false,
+        "Expected /book not to show the removed pickup time helper sentence",
+      );
+      assert.equal(initialState.timeStepNote, "", "Expected /book pickup time helper sentence element to be removed");
       assert.equal(initialState.fieldState.pickupLocation.required, false, "Expected pickup location to be optional");
       assert.equal(initialState.fieldState.dropoffLocation.required, false, "Expected drop-off location to be optional");
       assert.equal(initialState.fieldState.vehicleType.required, false, "Expected vehicle type to be optional");
@@ -4878,6 +4948,7 @@ async function runChromeTest() {
       await setCustomerBookingField("pickupDate", "2026-05-29");
       await setCustomerBookingField("pickupTime", "09:30");
       const requiredOnlyState = await readCustomerBookingPageState();
+      assert.equal(requiredOnlyState.fieldState.pickupTime.value, "09:30", "Expected hour/minute selects to set pickupTime");
       assert.equal(requiredOnlyState.fieldState.pickupLocation.value, "", "Expected pickup location to remain optional");
       assert.equal(requiredOnlyState.fieldState.dropoffLocation.value, "", "Expected drop-off location to remain optional");
       assert.equal(requiredOnlyState.fieldState.vehicleType.value, "", "Expected vehicle type to remain optional");
@@ -4965,8 +5036,10 @@ async function runChromeTest() {
           Object.entries(initialState.fieldState).map(([field, state]) => [field, state.required]),
         ),
         route: "/book",
+        pickupTimeControl: initialState.fieldState.pickupTime.control,
         pickupTimeStep: initialState.fieldState.pickupTime.step,
-        timeStepNote: initialState.timeStepNote,
+        nativePickupTimeInputCount: initialState.nativePickupTimeInputCount,
+        pickupMinuteOptions: initialState.pickupMinuteOptions,
         serviceOptions: initialState.serviceOptionLabels,
         vehicleOptions: initialState.vehicleOptionLabels,
       };

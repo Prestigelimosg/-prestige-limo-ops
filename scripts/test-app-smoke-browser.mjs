@@ -1338,6 +1338,21 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
+      const clickRegularCustomerMockRowAction = async (rowIndex, action, description) => {
+        const clicked = await evaluate(`(() => {
+          const row = document.querySelectorAll("[data-regular-customer-booking-list-row]")[${rowIndex}];
+          const button = row?.querySelector(${JSON.stringify(`[data-regular-customer-booking-list-action="${action}"]`)});
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
       const setRegularCustomerBookingField = async (field, value) => {
         const actualValue = await evaluate(`(() => {
           const input = document.querySelector(${JSON.stringify(`[data-regular-booking-field="${field}"]`)});
@@ -1437,10 +1452,40 @@ async function runChromeTest() {
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
             listText: list?.innerText || "",
             rows: [...document.querySelectorAll("[data-regular-customer-booking-list-row]")].map((row) => ({
+              actionBoundary:
+                row.querySelector("[data-regular-customer-booking-list-action-boundary]")?.textContent.trim() || "",
+              actionFeedback:
+                row.querySelector("[data-regular-customer-booking-list-action-feedback]")?.textContent.trim() || "",
+              actionFeedbackKind:
+                row.querySelector("[data-regular-customer-booking-list-action-feedback]")?.getAttribute(
+                  "data-regular-customer-booking-list-action-feedback-kind",
+                ) || "",
+              actions: [...row.querySelectorAll("[data-regular-customer-booking-list-action]")].map((button) =>
+                button.textContent.trim(),
+              ),
+              billingStatus:
+                row.querySelector("[data-regular-customer-booking-list-billing-status]")?.textContent.trim() || "",
+              distanceFromActiveAction: (() => {
+                const feedback = row.querySelector("[data-regular-customer-booking-list-action-feedback]");
+                const activeAction =
+                  feedback?.getAttribute("data-regular-customer-booking-list-action-feedback-kind") || "";
+                const button = activeAction
+                  ? row.querySelector("[data-regular-customer-booking-list-action='" + activeAction + "']")
+                  : null;
+                const buttonRect = button?.getBoundingClientRect();
+                const feedbackRect = feedback?.getBoundingClientRect();
+
+                return buttonRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - buttonRect.bottom)) : 999;
+              })(),
               folderLink:
                 row.querySelector("[data-regular-customer-booking-list-folder-link]")?.getAttribute("href") || "",
+              id: row.getAttribute("data-regular-customer-booking-list-row") || "",
+              invoiceNumber:
+                row.querySelector("[data-regular-customer-booking-list-invoice-number]")?.textContent.trim() || "",
               noSaveBoundary:
                 row.querySelector("[data-regular-customer-booking-list-no-save-boundary]")?.textContent.trim() || "",
+              passengerText:
+                row.querySelector("[data-regular-customer-booking-list-passenger]")?.textContent.trim() || "",
               text: row.innerText,
             })),
           };
@@ -1817,6 +1862,98 @@ async function runChromeTest() {
           regularBookingTwoRowsState.listText.includes(expectedListText),
           true,
           `Expected two-row regular customer list text: ${expectedListText}`,
+        );
+      }
+      assert.deepEqual(
+        regularBookingTwoRowsState.rows.map((row) => row.actions),
+        [
+          ["Edit mock row", "Amend mock row", "Cancel mock row"],
+          ["Edit mock row", "Amend mock row", "Cancel mock row"],
+        ],
+        "Expected each local mock booking row to expose edit/amend/cancel controls",
+      );
+      for (const row of regularBookingTwoRowsState.rows) {
+        for (const expectedActionBoundaryText of [
+          "Mock/local only.",
+          "Internal staff-only.",
+          "Not saved.",
+          "No audit record created yet.",
+          "No invoice, payment, bank, notification, calendar, or Supabase action.",
+        ]) {
+          assert.equal(
+            row.actionBoundary.includes(expectedActionBoundaryText),
+            true,
+            `Expected regular customer row action boundary text: ${expectedActionBoundaryText}`,
+          );
+        }
+        assert.equal(
+          row.actionFeedback.includes("Choose a mock row action"),
+          true,
+          "Expected row action helper to start as local guidance",
+        );
+        assert.equal(row.invoiceNumber, "Not created", "Expected row action controls not to create invoice numbers");
+      }
+
+      const mockRowActionExpectations = [
+        {
+          action: "edit",
+          messageText: ["edit workflow is planned but not active yet", "Row data was not changed"],
+        },
+        {
+          action: "amend",
+          messageText: ["amend workflow is planned but not active yet", "reason and old/new value review"],
+        },
+        {
+          action: "cancel",
+          messageText: ["cancel workflow is planned but not active yet", "not removed", "billing review"],
+        },
+      ];
+
+      for (const { action, messageText } of mockRowActionExpectations) {
+        await clickRegularCustomerMockRowAction(0, action, `regular customer ${action} mock row`);
+        const rowActionState = await waitForCondition(
+          async () => {
+            const candidateState = await readRegularCustomerBookingListState();
+            return candidateState.rows[0]?.actionFeedbackKind === action ? candidateState : false;
+          },
+          10000,
+          `regular customer ${action} mock row local feedback`,
+        );
+        const activeRow = rowActionState.rows[0];
+
+        assert.equal(rowActionState.rows.length, 2, `Expected ${action} mock row not to remove list rows`);
+        assert.equal(
+          rowActionState.countText,
+          "Showing 2 of 2 local mock rows.",
+          `Expected ${action} mock row not to change the local list count`,
+        );
+        assert.equal(
+          activeRow.passengerText.includes("Browser Filter Passenger"),
+          true,
+          `Expected ${action} mock row not to change the passenger row data`,
+        );
+        assert.equal(
+          activeRow.billingStatus,
+          "2026-06 / unbilled / draft",
+          `Expected ${action} mock row not to change billing status`,
+        );
+        assert.equal(activeRow.invoiceNumber, "Not created", `Expected ${action} mock row not to create an invoice number`);
+        assert.equal(
+          activeRow.distanceFromActiveAction < 180,
+          true,
+          `Expected ${action} mock row feedback near the clicked row control`,
+        );
+        for (const expectedMessageText of messageText) {
+          assert.equal(
+            activeRow.actionFeedback.includes(expectedMessageText),
+            true,
+            `Expected ${action} mock row feedback text: ${expectedMessageText}`,
+          );
+        }
+        assert.deepEqual(
+          rowActionState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+          [],
+          `Expected ${action} mock row not to call Supabase, payment, bank, notification, or calendar APIs`,
         );
       }
 

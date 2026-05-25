@@ -150,6 +150,13 @@ type RegularCustomerBookingListItem = RegularCustomerBookingPreview & {
   id: string;
 };
 
+type RegularCustomerBookingListAction = "amend" | "cancel" | "edit";
+
+type RegularCustomerBookingListActionFeedback = {
+  action: RegularCustomerBookingListAction;
+  message: string;
+};
+
 type RegularCustomerBookingListFilters = {
   billingMonth: string;
   billingStatus: string;
@@ -335,6 +342,9 @@ export default function MockCustomerDashboardPage() {
   const [regularCustomerBookingListFilterFeedback, setRegularCustomerBookingListFilterFeedback] = useState(
     "Mock/local list filters only affect rows on this page. Nothing is saved or sent.",
   );
+  const [regularCustomerBookingListActionFeedback, setRegularCustomerBookingListActionFeedback] = useState<
+    Record<string, RegularCustomerBookingListActionFeedback>
+  >({});
   const [regularCustomerDraftInvoicePreview, setRegularCustomerDraftInvoicePreview] =
     useState<RegularCustomerDraftInvoicePreview | null>(null);
   const [regularCustomerDraftInvoiceClearControlVisible, setRegularCustomerDraftInvoiceClearControlVisible] =
@@ -547,6 +557,28 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerDraftInvoiceFeedback(
       "Mock draft invoice preview cleared locally. The local monthly billing list was not changed.",
     );
+  }
+
+  function handleRegularCustomerBookingListAction(
+    item: RegularCustomerBookingListItem,
+    action: RegularCustomerBookingListAction,
+  ) {
+    const actionMessages: Record<RegularCustomerBookingListAction, string> = {
+      amend:
+        `${item.passengerName} amend workflow is planned but not active yet. Future amendments will require a reason and old/new value review. This local mock row was not changed, saved, audited, invoiced, paid, sent, synced, or written to Supabase.`,
+      cancel:
+        `${item.passengerName} cancel workflow is planned but not active yet. Future cancellation will require a reason and billing review. This local mock row was not removed, marked cancelled, saved, audited, invoiced, paid, sent, synced, or written to Supabase.`,
+      edit:
+        `${item.passengerName} edit workflow is planned but not active yet. This click only shows local staff guidance. Row data was not changed, saved, audited, invoiced, paid, sent, synced, or written to Supabase.`,
+    };
+
+    setRegularCustomerBookingListActionFeedback((currentFeedback) => ({
+      ...currentFeedback,
+      [item.id]: {
+        action,
+        message: actionMessages[action],
+      },
+    }));
   }
 
   function handleRegularCustomerBookingSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1639,7 +1671,10 @@ export default function MockCustomerDashboardPage() {
             {regularCustomerBookingListItems.length > 0 ? (
               <div className="mt-4 grid gap-3">
                 {filteredRegularCustomerBookingListItems.length > 0 ? (
-                  filteredRegularCustomerBookingListItems.map((item) => (
+                  filteredRegularCustomerBookingListItems.map((item) => {
+                    const rowActionFeedback = regularCustomerBookingListActionFeedback[item.id];
+
+                    return (
                     <article
                       className="rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 shadow-sm"
                       data-regular-customer-booking-list-row={item.id}
@@ -1648,7 +1683,10 @@ export default function MockCustomerDashboardPage() {
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
                           <h4 className="text-base font-bold text-slate-950">{item.customerName}</h4>
-                          <p className="mt-1 text-slate-600">
+                          <p
+                            className="mt-1 text-slate-600"
+                            data-regular-customer-booking-list-passenger={item.id}
+                          >
                             {item.passengerName} / {item.pickupDate} {item.pickupTime}
                           </p>
                         </div>
@@ -1676,7 +1714,10 @@ export default function MockCustomerDashboardPage() {
                         </div>
                         <div>
                           <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Billing</dt>
-                          <dd className="mt-1 text-slate-950">
+                          <dd
+                            className="mt-1 text-slate-950"
+                            data-regular-customer-booking-list-billing-status={item.id}
+                          >
                             {item.billingMonth} / {item.billingStatus}
                           </dd>
                         </div>
@@ -1696,7 +1737,12 @@ export default function MockCustomerDashboardPage() {
                           <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                             Invoice number
                           </dt>
-                          <dd className="mt-1 font-semibold text-slate-950">Not created</dd>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-booking-list-invoice-number={item.id}
+                          >
+                            Not created
+                          </dd>
                         </div>
                         <div>
                           <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -1705,6 +1751,55 @@ export default function MockCustomerDashboardPage() {
                           <dd className="mt-1 text-slate-950">{item.createdAtLabel}</dd>
                         </div>
                       </dl>
+
+                      <div
+                        className="mt-4 border-t border-slate-200 pt-4"
+                        data-regular-customer-booking-list-action-controls={item.id}
+                      >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                              Internal staff-only / mock-local controls
+                            </p>
+                            <p
+                              className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-slate-600"
+                              data-regular-customer-booking-list-action-boundary={item.id}
+                            >
+                              Mock/local only. Internal staff-only. Not saved. No audit record created yet. No
+                              invoice, payment, bank, notification, calendar, or Supabase action.
+                            </p>
+                          </div>
+                          <div className="grid w-full gap-2 sm:grid-cols-3 lg:w-auto">
+                            {(
+                              [
+                                ["edit", "Edit mock row"],
+                                ["amend", "Amend mock row"],
+                                ["cancel", "Cancel mock row"],
+                              ] as const
+                            ).map(([action, label]) => (
+                              <button
+                                className="min-h-11 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-white"
+                                data-regular-customer-booking-list-action={action}
+                                key={action}
+                                onClick={() => handleRegularCustomerBookingListAction(item, action)}
+                                type="button"
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <p
+                          aria-live="polite"
+                          className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold leading-6 text-slate-700"
+                          data-regular-customer-booking-list-action-feedback={item.id}
+                          data-regular-customer-booking-list-action-feedback-kind={rowActionFeedback?.action ?? ""}
+                        >
+                          {rowActionFeedback?.message ??
+                            "Choose a mock row action to preview future edit/amend/cancel guidance. Nothing will be saved, removed, audited, invoiced, paid, synced, sent, or written to Supabase."}
+                        </p>
+                      </div>
 
                       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <p
@@ -1725,7 +1820,8 @@ export default function MockCustomerDashboardPage() {
                         ) : null}
                       </div>
                     </article>
-                  ))
+                    );
+                  })
                 ) : (
                   <div
                     className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600"

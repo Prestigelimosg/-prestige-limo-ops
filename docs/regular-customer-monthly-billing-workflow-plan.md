@@ -122,6 +122,63 @@ Safe behavior:
 - Cancellation should keep the booking in the customer folder history.
 - Reinstating a cancelled booking should require a visible reason/note later.
 
+### Stage 4A-46 Detailed Edit/Amend/Cancel Plan
+
+This section is planning only. It does not approve app behavior changes, schema changes, real saves, invoice generation, statement generation, PDF generation, payment APIs, bank APIs, notification sending, calendar sync, or real audit records.
+
+Edit booking workflow:
+
+- Who can edit: dispatcher/admin staff only. This workflow is internal and not customer-facing.
+- Editable fields later: customer/account link, booker/contact person, passenger name, pickup date, pickup time, flight number, pickup location, drop-off location, route type, vehicle type, passenger count, luggage, extra stops, customer reference / PO number, billing month, billing status, payment method label, and internal note.
+- Staff display: show the current booking, highlight changed fields, and place success/error feedback near the edit controls. After real save is approved, the booking row should show that it was edited, with the changed-by and changed-at details available to staff.
+- Before real save is allowed: owner approval is required for the save route, permissions, validation rules, audit storage, tests, and any schema/migration work. Required fields must still be validated, customer selection must stay deliberate, and existing Save Booking + CRM behavior must remain protected.
+- Monthly billing effect later: unbilled or draft rows should use the latest saved booking values. If a booking is already billed or paid, amount, customer, date, billing month, and cancellation-related edits should require extra staff review before they affect draft monthly billing.
+
+Amend booking workflow:
+
+- Difference from a simple edit: a simple edit is for small corrections before billing, such as spelling or missing details. An amendment is for a meaningful operational or billing change, such as date/time, route, vehicle, customer, billing month, amount-impacting details, or changes after confirmation.
+- Amendment reason later: staff should be required to enter a short reason before saving an amendment.
+- Old vs new display: show old value and new value side by side for each amended field, so staff can review the change before saving.
+- Billing review: amended bookings should be easy to spot before monthly billing is finalized. If the amendment may affect the customer total, the row should stay in review/draft until staff confirms it.
+
+Cancel booking workflow:
+
+- Cancel status: cancellation should mark the booking as cancelled. It should not delete the booking.
+- Cancellation reason: staff should choose or enter a reason, with a note for special cases.
+- Cancellation fee / no-show fee planning only: the future UI may allow a manual fee or no-show fee review, but it must not charge, invoice, create a payment record, or call a bank/payment API automatically.
+- Monthly billing effect later: cancelled bookings should remain visible in customer history and monthly billing review. The billing list should clearly show whether the cancelled row is excluded, included as a cancellation fee, or included as a no-show fee after approved rules are added.
+- No automatic invoice/payment behavior: cancelling a booking must not create an invoice number, real invoice, statement, PDF, payment, refund, sending action, or bank/payment provider call.
+
+Audit protection plan:
+
+- Later implementation should keep a history of who changed what and when.
+- The history should include action type, actor, timestamp, old value, new value, reason/note, and affected booking.
+- For now, no real audit records should be created.
+- Before implementation, add tests proving edits, amendments, cancellations, and reinstatements create the expected audit history only after audit persistence is explicitly approved.
+- Tests should also prove cancelled bookings are not deleted and audit history is not hidden or overwritten.
+
+Safety boundaries for this workflow:
+
+- No real invoice generation.
+- No invoice numbers.
+- No PDF generation.
+- No sending by WhatsApp, email, or SMS.
+- No notification sending.
+- No payment API, Stripe, PayNow, payment provider, or bank API.
+- No calendar sync implementation.
+- No Supabase schema change, migration, db push, or db reset until explicitly approved.
+- Manual bank transfer remains manual-record only.
+- No real customer, payment, or audit records should be created during planning/mock stages.
+
+Future testing plan:
+
+- Add browser smoke tests for edit, amend, cancel, and reinstate UI when implementation is approved.
+- Add regression tests that existing Save Booking + CRM remains protected.
+- Keep parser tests unchanged unless parser behavior is intentionally touched and approved.
+- Keep mobile and no-horizontal-overflow checks in the protected test flow.
+- Add Supabase write tests only after real customer booking save/linking is explicitly approved.
+- Keep tests blocking invoice generation, statement generation, invoice numbers, PDF generation, sending, payment APIs, bank APIs, notification sending, and calendar sync until those items are separately approved.
+
 ## 7. Customer Monthly Billing Booking List Plan
 
 The customer folder should show monthly billing bookings for the selected customer only.

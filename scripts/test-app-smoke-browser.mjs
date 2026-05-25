@@ -30,6 +30,7 @@ const responsiveTabViewports = [
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
 const customerDashboardUrl = new URL("/customers", appUrl).toString();
 const customerBookingUrl = new URL("/book", appUrl).toString();
+const customerPortalUrl = new URL("/my-bookings", appUrl).toString();
 const driverDemoViewports = [
   { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
@@ -5045,6 +5046,321 @@ async function runChromeTest() {
       };
     };
 
+    const setCustomerPortalViewportAndLoad = async (viewport) => {
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: viewport.scale,
+        height: viewport.height,
+        mobile: viewport.mobile,
+        width: viewport.width,
+      });
+
+      const viewportLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url: customerPortalUrl });
+      await viewportLoadEvent;
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector("[data-customer-portal-page]"))`),
+        10000,
+        `${viewport.label} customer portal route`,
+      );
+      await evaluate(`(() => {
+        window.__customerPortalIntegrationCalls = [];
+        const originalFetch = window.__customerPortalOriginalFetch || window.fetch.bind(window);
+        window.__customerPortalOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const target = args[0]?.url || args[0];
+          const method = args[1]?.method || args[0]?.method || "GET";
+          window.__customerPortalIntegrationCalls.push(\`\${method} \${String(target)}\`);
+          return originalFetch(...args);
+        };
+
+        const originalOpen = window.__customerPortalOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__customerPortalOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function patchedCustomerPortalOpen(method, url, ...rest) {
+          window.__customerPortalIntegrationCalls.push(\`\${method} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...rest);
+        };
+
+        if (navigator.sendBeacon && !window.__customerPortalOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__customerPortalOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            window.__customerPortalIntegrationCalls.push(\`BEACON \${String(args[0])}\`);
+            return originalSendBeacon(...args);
+          };
+        }
+      })()`);
+    };
+
+    const readCustomerPortalState = () =>
+      evaluate(`(() => {
+        const text = document.body.innerText;
+        const lowerText = text.toLowerCase();
+        const search = document.querySelector("[data-customer-portal-search]");
+        const searchRect = search?.getBoundingClientRect();
+        const rows = [...document.querySelectorAll("[data-customer-portal-row]")];
+        const firstRowRect = rows[0]?.getBoundingClientRect();
+        const activeFilter = document.querySelector("[data-customer-portal-filter][data-active='true']");
+        const detail = document.querySelector("[data-customer-portal-detail]");
+        const feedback = document.querySelector("[data-customer-portal-feedback]");
+        const feedbackRow = feedback?.closest("[data-customer-portal-row]");
+        const feedbackRect = feedback?.getBoundingClientRect();
+        const feedbackRowRect = feedbackRow?.getBoundingClientRect();
+
+        return {
+          activeFilter: activeFilter?.textContent.trim() || "",
+          detailId: detail?.getAttribute("data-customer-portal-detail") || "",
+          detailText: detail?.innerText || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          feedbackDistanceFromRow:
+            feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
+          feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
+          feedbackText: feedback?.textContent.trim() || "",
+          forbiddenVisibleText: [
+            "admin",
+            "internal",
+            "mock",
+            "supabase",
+            "billing",
+            "outstanding payment",
+            "payment follow-up",
+            "driver payout",
+            "margin",
+            "profit",
+            "invoice controls",
+            "statement controls",
+            "staff notes",
+          ].filter((value) => lowerText.includes(value)),
+          integrationCalls: window.__customerPortalIntegrationCalls || [],
+          resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+          rowCount: rows.length,
+          rowIds: rows.map((row) => row.getAttribute("data-customer-portal-row") || ""),
+          rows: rows.map((row) => ({
+            id: row.getAttribute("data-customer-portal-row") || "",
+            requestButtonCount: row.querySelectorAll("[data-customer-portal-request-change]").length,
+            status: row.getAttribute("data-customer-portal-status") || "",
+            text: row.innerText,
+          })),
+          searchBeforeRows:
+            searchRect && firstRowRect ? searchRect.top < firstRowRect.top : false,
+          searchVisible: Boolean(searchRect && searchRect.width > 0 && searchRect.height >= 40),
+          showingText: document.querySelector("[data-customer-portal-showing]")?.textContent.trim() || "",
+          text,
+        };
+      })()`);
+
+    const setCustomerPortalSearch = async (value) => {
+      const actualValue = await evaluate(`(() => {
+        const input = document.querySelector("[data-customer-portal-search]");
+
+        if (!input) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return input.value;
+      })()`);
+      assert.equal(actualValue, value, "Expected customer portal search to accept test value");
+    };
+
+    const clickCustomerPortalFilter = async (filter) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-filter="${filter}"]`)});
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected customer portal ${filter} filter to be clickable`);
+    };
+
+    const clickCustomerPortalDetail = async (bookingId) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-detail-button="${bookingId}"]`)});
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected customer portal detail button for ${bookingId} to be clickable`);
+    };
+
+    const clickCustomerPortalRequestChange = async (bookingId) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-request-change="${bookingId}"]`)});
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected customer portal request change button for ${bookingId} to be clickable`);
+    };
+
+    const checkCustomerPortalRoute = async () => {
+      const desktopViewport = { height: 900, label: "desktop customer portal", mobile: false, scale: 1, width: 1440 };
+      const mobileViewport = { height: 812, label: "mobile customer portal", mobile: true, scale: 3, width: 375 };
+
+      await setCustomerPortalViewportAndLoad(desktopViewport);
+
+      const initialState = await readCustomerPortalState();
+      assert.equal(initialState.text.includes("My Bookings"), true, "Expected /my-bookings page title");
+      assert.equal(
+        initialState.text.includes("Customers can view booking requests and booking history here after staff confirmation."),
+        true,
+        "Expected /my-bookings customer-safe explanation",
+      );
+      assert.equal(initialState.searchVisible, true, "Expected /my-bookings search input to be visible");
+      assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
+      assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
+      assert.equal(initialState.rowCount, 10, "Expected /my-bookings to show at most 10 rows by default");
+      assert.equal(initialState.showingText, "Showing 10 of 12 bookings", "Expected /my-bookings showing count");
+      assert.deepEqual(
+        initialState.rows.filter((row) => ["Completed", "Cancelled"].includes(row.status)).map((row) => row.status),
+        [],
+        "Expected Upcoming filter to hide completed and cancelled bookings",
+      );
+      assert.deepEqual(
+        initialState.forbiddenVisibleText,
+        [],
+        "Expected /my-bookings not to show internal/admin/mock/Supabase/payment/billing wording",
+      );
+      assert.equal(/[A-Z]{2,}-\d{3,}/.test(initialState.text), false, "Expected /my-bookings not to create invoice-style numbers");
+      assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
+
+      await clickCustomerPortalDetail("booking-001");
+      const detailState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.detailId === "booking-001" ? candidateState : false;
+        },
+        10000,
+        "customer portal expanded detail",
+      );
+      for (const expectedDetail of [
+        "Booking Details",
+        "Pickup date/time",
+        "Pickup location",
+        "Drop-off location",
+        "Type of service",
+        "Vehicle type",
+        "Passenger name",
+        "Flight number",
+        "Special request / note",
+      ]) {
+        assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
+      }
+
+      await clickCustomerPortalRequestChange("booking-001");
+      const changeState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.feedbackText.includes("Change request noted for review") ? candidateState : false;
+        },
+        10000,
+        "customer portal request change feedback",
+      );
+      assert.equal(
+        changeState.feedbackText,
+        "Change request noted for review. Prestige Limo staff will review it before confirmation.",
+        "Expected customer portal change request to stay staff-reviewed",
+      );
+      assert.equal(changeState.feedbackRowId, "booking-001", "Expected request change feedback near the clicked row");
+      assert.equal(
+        changeState.rows.find((row) => row.id === "booking-001")?.text.includes("Alicia Tan"),
+        true,
+        "Expected request change not to change row data",
+      );
+      assert.deepEqual(
+        changeState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected request change not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setCustomerPortalSearch("Sentosa");
+      const searchState = await readCustomerPortalState();
+      assert.equal(searchState.showingText, "Showing 2 of 2 bookings", "Expected /my-bookings search to filter rows");
+      assert.equal(searchState.rowCount, 2, "Expected /my-bookings search to keep compact rows");
+
+      await setCustomerPortalSearch("");
+      await clickCustomerPortalFilter("Completed");
+      const completedState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.activeFilter === "Completed" ? candidateState : false;
+        },
+        10000,
+        "customer portal completed filter",
+      );
+      assert.equal(completedState.showingText, "Showing 2 of 2 bookings", "Expected Completed count");
+      assert.deepEqual(
+        completedState.rows.map((row) => row.status),
+        ["Completed", "Completed"],
+        "Expected Completed filter rows",
+      );
+      assert.equal(
+        completedState.rows.reduce((total, row) => total + row.requestButtonCount, 0),
+        0,
+        "Expected completed bookings to be read-only without Request change buttons",
+      );
+
+      await clickCustomerPortalFilter("Cancelled");
+      const cancelledState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.activeFilter === "Cancelled" ? candidateState : false;
+        },
+        10000,
+        "customer portal cancelled filter",
+      );
+      assert.equal(cancelledState.showingText, "Showing 1 of 1 bookings", "Expected Cancelled count");
+      assert.deepEqual(cancelledState.rows.map((row) => row.status), ["Cancelled"], "Expected Cancelled filter row");
+      assert.equal(
+        cancelledState.rows.reduce((total, row) => total + row.requestButtonCount, 0),
+        0,
+        "Expected cancelled bookings not to show Request change buttons",
+      );
+
+      await setCustomerPortalViewportAndLoad(mobileViewport);
+      const mobileState = await readCustomerPortalState();
+      assert.ok(
+        mobileState.docScrollWidth <= mobileState.docClientWidth + 2,
+        `Expected /my-bookings mobile page not to overflow horizontally: ${mobileState.docScrollWidth} > ${mobileState.docClientWidth}`,
+      );
+      assert.equal(mobileState.searchVisible, true, "Expected /my-bookings search to remain touch-friendly on mobile");
+      assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
+      assert.deepEqual(
+        mobileState.forbiddenVisibleText,
+        [],
+        "Expected /my-bookings mobile view not to show internal/admin/mock/Supabase/payment/billing wording",
+      );
+      assertNoPaymentIntegrationResources(mobileState.resourceCalls, "mobile customer portal page");
+
+      return {
+        activeFilter: initialState.activeFilter,
+        forbiddenVisibleText: initialState.forbiddenVisibleText,
+        mobile: {
+          docClientWidth: mobileState.docClientWidth,
+          docScrollWidth: mobileState.docScrollWidth,
+        },
+        route: "/my-bookings",
+        rowLimit: initialState.rowCount,
+        showingText: initialState.showingText,
+      };
+    };
+
     const setDriverDemoViewportAndLoad = async (viewport) => {
       await client.send("Emulation.setDeviceMetricsOverride", {
         deviceScaleFactor: viewport.scale,
@@ -6269,6 +6585,7 @@ async function runChromeTest() {
     }
     state.customerPayments = await checkCustomerPaymentsRoute();
     state.customerBooking = await checkCustomerBookingRoute();
+    state.customerPortal = await checkCustomerPortalRoute();
     state.driverJobDemo = [];
     for (const viewport of driverDemoViewports) {
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));

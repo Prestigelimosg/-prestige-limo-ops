@@ -321,6 +321,139 @@ Explicit non-goals:
 - No parser change.
 - No real Supabase save in this stage.
 
+### Stage 4A-54 Real Save Data Mapping and Test Contract — Planning Only
+
+This section is planning only. It does not approve app behavior changes, parser changes, schema changes, migrations, Supabase commands, real booking saves, real customer records, payment records, audit records, invoice generation, invoice numbers, statements, PDFs, sending, payment APIs, bank APIs, Stripe, PayNow, notifications, WhatsApp, email, SMS, or calendar sync.
+
+Current state:
+
+- Regular customer save is still mock/local only.
+- Mock Save Confirmation — Not Active is still mock/local only.
+- Future Saved Booking Visibility — Mock Only is passive.
+- No real Supabase save exists for the regular customer form/list.
+- No booking, customer, payment, or audit record is created.
+- No invoice number, statement, PDF, sending, payment, bank, notification, or calendar behavior exists.
+
+Future data mapping goal:
+
+- Define how regular customer form data should map into a future real booking record.
+- Keep invoice generation separate from booking save.
+- Keep payment and bank transfer handling manual-record only.
+- Keep customer folder linking explicit and safe.
+- Avoid changing parser behavior unless a separate parser task is explicitly approved.
+
+Planned source fields from the regular customer form:
+
+- Selected customer/account id: the existing customer account chosen by staff.
+- Booker/contact person: the person or team requesting the ride.
+- Passenger name: the traveler or lead guest for the booking.
+- Pickup date: the service date.
+- Pickup time: the staff-entered pickup time.
+- Pickup location: the starting point.
+- Drop-off location: the destination or final stop.
+- Route type: Arrival/MNG, Departure/DEP, Transfer/TRF, Disposal/DSP/hourly, or later approved route type.
+- Vehicle type: the requested vehicle category.
+- Passenger count: the number of passengers.
+- Luggage: luggage notes or count, if supplied.
+- Extra stops: any planned intermediate stops.
+- Flight number if any: flight reference for airport bookings.
+- Customer reference / PO: customer reference, purchase order, or billing note.
+- Billing month: the month used for monthly billing review.
+- Billing status: the planned billing state, normally unbilled/draft at first.
+- Payment method: normally monthly bank transfer manual unless staff choose an approved manual option.
+- Internal staff note: internal operational notes that should not be customer-facing.
+- Source: regular customer form.
+
+Planned derived/internal fields:
+
+- Created timestamp.
+- Updated timestamp.
+- Created by / updated by later if auth exists.
+- Saved booking id after successful save.
+- Customer folder/customer account link.
+- Monthly billing eligibility flag or equivalent.
+- Audit-ready metadata later.
+- Duplicate-save protection token or equivalent later.
+
+Validation contract before future save:
+
+- Customer/account must be selected from known accounts.
+- Passenger name is required.
+- Pickup date is required.
+- Pickup time is required.
+- Pickup location is required.
+- Drop-off location is required unless a later approved route type allows an exception.
+- Route type is required.
+- Vehicle type is required.
+- Billing month is required.
+- Invalid form data must not reach real final confirmation.
+- Invalid form data must not call Supabase.
+- Duplicate double-click must not create two records.
+
+Customer linking contract:
+
+- Link only to an existing selected customer account.
+- Do not auto-create customer accounts in this stage.
+- Do not infer customer account from free text.
+- Keep customer invoice prefix separate from booking save.
+- Do not create an invoice number during booking save.
+
+Future save contract:
+
+- Show a review panel before save.
+- Require intentional confirmation.
+- Create exactly one booking record on successful save.
+- Link the booking to the selected customer.
+- Show local success or error feedback near the save button.
+- Keep the saved booking visible in the customer folder and monthly billing list only after save succeeds.
+- Never create invoice number, payment, bank, notification, calendar, or PDF behavior during save.
+
+Test contract before implementation:
+
+- Invalid form cannot save.
+- Invalid form cannot show final real confirmation.
+- Valid confirmation calls the future save exactly once.
+- Duplicate click creates only one booking.
+- Saved booking links to the selected customer.
+- Invoice number remains Not created.
+- No payment or bank API is called.
+- No notification, calendar, or PDF behavior is added.
+- No real audit record is created until audit implementation is approved.
+- Customer folder and monthly billing visibility appear after successful save.
+- Mock preview and mock confirmation remain protected until replaced by approved real behavior.
+- Mobile and no-horizontal-overflow checks still pass.
+- Parser tests remain unchanged unless parser behavior is touched.
+
+Supabase planning boundaries:
+
+- Do not create migrations now.
+- Do not run Supabase commands.
+- Before implementation, inspect existing booking/customer tables and types.
+- Any schema change must be separately approved.
+- Future implementation must be small and staged:
+  1. Confirm data mapping.
+  2. Add tests first.
+  3. Implement a save API or server action only after approval.
+  4. Protect duplicate save.
+  5. Browser-test saved booking visibility.
+  6. Commit only after checks pass.
+
+Explicit non-goals:
+
+- No real Supabase save in this stage.
+- No migration.
+- No parser change.
+- No real invoice.
+- No invoice number.
+- No statement.
+- No PDF.
+- No sending.
+- No payment or bank API.
+- No notification, WhatsApp, email, or SMS.
+- No calendar sync.
+- No customer auto-create.
+- No real audit record.
+
 ## 6. Edit/Amend/Cancel Workflow Plan
 
 The edit, amend, and cancel workflow must protect booking history.

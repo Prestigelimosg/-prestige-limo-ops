@@ -1,0 +1,436 @@
+"use client";
+
+import type { FormEvent } from "react";
+import { useState } from "react";
+
+const serviceOptions = [
+  "Airport Arrival",
+  "Airport Departure",
+  "Point-to-Point Transfer",
+  "Hourly / Disposal",
+  "Event / VIP Movement",
+  "Other / To Confirm",
+];
+
+const vehicleOptions = [
+  "Alphard / Vellfire",
+  "Mercedes Viano / V-Class",
+  "Hi-roof Minibus",
+  "Mercedes E-Class",
+  "Mercedes S-Class",
+];
+
+type BookingRequestForm = {
+  companyName: string;
+  contactNo: string;
+  emailAddress: string;
+  passengerName: string;
+  pickupDate: string;
+  pickupTime: string;
+  flightNumber: string;
+  pickupLocation: string;
+  dropoffLocation: string;
+  serviceType: string;
+  vehicleType: string;
+  passengerCount: string;
+  luggage: string;
+  extraStops: string;
+  specialRequest: string;
+};
+
+type Feedback = {
+  tone: "info" | "success" | "error";
+  text: string;
+};
+
+const initialForm: BookingRequestForm = {
+  companyName: "",
+  contactNo: "",
+  emailAddress: "",
+  passengerName: "",
+  pickupDate: "",
+  pickupTime: "",
+  flightNumber: "",
+  pickupLocation: "",
+  dropoffLocation: "",
+  serviceType: "Other / To Confirm",
+  vehicleType: "",
+  passengerCount: "",
+  luggage: "",
+  extraStops: "",
+  specialRequest: "",
+};
+
+const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
+  companyName: "Customer / company name",
+  contactNo: "Contact no.",
+  emailAddress: "Email address",
+  passengerName: "Passenger name",
+  pickupDate: "Pickup date",
+  pickupTime: "Pickup time",
+  flightNumber: "Flight number if any",
+  pickupLocation: "Pickup location",
+  dropoffLocation: "Drop-off location",
+  serviceType: "Type of Service",
+  vehicleType: "Vehicle type",
+  passengerCount: "Number of passengers",
+  luggage: "Luggage",
+  extraStops: "Extra stops",
+  specialRequest: "Special request / note",
+};
+
+const requiredFields: Array<keyof BookingRequestForm> = [
+  "contactNo",
+  "passengerName",
+  "pickupDate",
+  "pickupTime",
+];
+
+function fieldClass(hasError = false) {
+  return [
+    "mt-2 min-h-11 w-full rounded-md border bg-white px-3 py-2 font-sans text-base text-slate-950 shadow-sm outline-none transition",
+    "focus:border-sky-500 focus:ring-2 focus:ring-sky-100",
+    hasError ? "border-red-400" : "border-slate-300",
+  ].join(" ");
+}
+
+function feedbackClass(tone: Feedback["tone"]) {
+  if (tone === "success") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
+
+  if (tone === "error") {
+    return "border-red-200 bg-red-50 text-red-900";
+  }
+
+  return "border-sky-200 bg-sky-50 text-sky-950";
+}
+
+export default function CustomerBookingPage() {
+  const [form, setForm] = useState<BookingRequestForm>(initialForm);
+  const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
+  const [feedback, setFeedback] = useState<Feedback>({
+    tone: "info",
+    text: "Send a request and our staff will review the details before confirming availability.",
+  });
+
+  function updateField(field: keyof BookingRequestForm, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+    setMissingFields((current) => current.filter((item) => item !== field));
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const missing = requiredFields.filter((field) => !form[field].trim());
+    if (missing.length > 0) {
+      setMissingFields(missing);
+      setFeedback({
+        tone: "error",
+        text: "Please complete contact no., passenger name, pickup date, and pickup time before submitting your request.",
+      });
+      return;
+    }
+
+    setMissingFields([]);
+    setFeedback({
+      tone: "success",
+      text: "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+    });
+  }
+
+  function isMissing(field: keyof BookingRequestForm) {
+    return missingFields.includes(field);
+  }
+
+  return (
+    <main
+      className="min-h-screen overflow-x-hidden bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8"
+      data-customer-booking-page="true"
+    >
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
+        <header className="rounded-md border border-slate-200 bg-white px-4 py-5 shadow-sm sm:px-6">
+          <p className="text-sm font-semibold uppercase text-slate-600">Prestige Limo SG</p>
+          <h1 className="mt-2 text-3xl font-bold text-slate-950 sm:text-4xl">Booking Request</h1>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">
+            Share the trip details you have now. Your booking is not confirmed until Prestige
+            Limo staff replies.
+          </p>
+        </header>
+
+        <form
+          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
+          data-customer-booking-form="true"
+          noValidate
+          onSubmit={handleSubmit}
+        >
+          <div className="flex flex-col gap-5">
+            <section aria-labelledby="contact-section-title">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-lg font-semibold text-slate-950" id="contact-section-title">
+                  Contact Details
+                </h2>
+                <p className="text-sm text-slate-600">Required fields are marked with *.</p>
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="text-sm font-semibold text-slate-800">
+                  Customer / company name
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="companyName"
+                    name="companyName"
+                    onChange={(event) => updateField("companyName", event.target.value)}
+                    placeholder="Company or family name"
+                    type="text"
+                    value={form.companyName}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Contact no. *
+                  <input
+                    aria-invalid={isMissing("contactNo")}
+                    className={fieldClass(isMissing("contactNo"))}
+                    data-customer-booking-field="contactNo"
+                    name="contactNo"
+                    onChange={(event) => updateField("contactNo", event.target.value)}
+                    placeholder="+65 9000 0000"
+                    required
+                    type="tel"
+                    value={form.contactNo}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                  Email address
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="emailAddress"
+                    name="emailAddress"
+                    onChange={(event) => updateField("emailAddress", event.target.value)}
+                    placeholder="name@example.com"
+                    type="email"
+                    value={form.emailAddress}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section aria-labelledby="trip-section-title">
+              <h2 className="text-lg font-semibold text-slate-950" id="trip-section-title">
+                Trip Details
+              </h2>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="text-sm font-semibold text-slate-800">
+                  Passenger name *
+                  <input
+                    aria-invalid={isMissing("passengerName")}
+                    className={fieldClass(isMissing("passengerName"))}
+                    data-customer-booking-field="passengerName"
+                    name="passengerName"
+                    onChange={(event) => updateField("passengerName", event.target.value)}
+                    placeholder="Passenger name"
+                    required
+                    type="text"
+                    value={form.passengerName}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Flight number if any
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="flightNumber"
+                    name="flightNumber"
+                    onChange={(event) => updateField("flightNumber", event.target.value)}
+                    placeholder="SQ123"
+                    type="text"
+                    value={form.flightNumber}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Pickup date *
+                  <input
+                    aria-invalid={isMissing("pickupDate")}
+                    className={fieldClass(isMissing("pickupDate"))}
+                    data-customer-booking-field="pickupDate"
+                    name="pickupDate"
+                    onChange={(event) => updateField("pickupDate", event.target.value)}
+                    required
+                    type="date"
+                    value={form.pickupDate}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Pickup time *
+                  <input
+                    aria-invalid={isMissing("pickupTime")}
+                    className={fieldClass(isMissing("pickupTime"))}
+                    data-customer-booking-field="pickupTime"
+                    name="pickupTime"
+                    onChange={(event) => updateField("pickupTime", event.target.value)}
+                    required
+                    type="time"
+                    value={form.pickupTime}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Pickup location
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="pickupLocation"
+                    name="pickupLocation"
+                    onChange={(event) => updateField("pickupLocation", event.target.value)}
+                    placeholder="Hotel, airport terminal, home, or office"
+                    type="text"
+                    value={form.pickupLocation}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Drop-off location
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="dropoffLocation"
+                    name="dropoffLocation"
+                    onChange={(event) => updateField("dropoffLocation", event.target.value)}
+                    placeholder="Destination or area"
+                    type="text"
+                    value={form.dropoffLocation}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Type of Service
+                  <select
+                    className={fieldClass()}
+                    data-customer-booking-field="serviceType"
+                    name="serviceType"
+                    onChange={(event) => updateField("serviceType", event.target.value)}
+                    value={form.serviceType}
+                  >
+                    {serviceOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Vehicle type
+                  <select
+                    className={fieldClass()}
+                    data-customer-booking-field="vehicleType"
+                    name="vehicleType"
+                    onChange={(event) => updateField("vehicleType", event.target.value)}
+                    value={form.vehicleType}
+                  >
+                    <option value="">Choose if known</option>
+                    {vehicleOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Number of passengers
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="passengerCount"
+                    min="1"
+                    name="passengerCount"
+                    onChange={(event) => updateField("passengerCount", event.target.value)}
+                    placeholder="1"
+                    type="number"
+                    value={form.passengerCount}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800">
+                  Luggage
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="luggage"
+                    name="luggage"
+                    onChange={(event) => updateField("luggage", event.target.value)}
+                    placeholder="2 large bags, 1 cabin bag"
+                    type="text"
+                    value={form.luggage}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                  Extra stops
+                  <input
+                    className={fieldClass()}
+                    data-customer-booking-field="extraStops"
+                    name="extraStops"
+                    onChange={(event) => updateField("extraStops", event.target.value)}
+                    placeholder="Add stop details if needed"
+                    type="text"
+                    value={form.extraStops}
+                  />
+                </label>
+
+                <label className="text-sm font-semibold text-slate-800 md:col-span-2">
+                  Special request / note
+                  <textarea
+                    className={`${fieldClass()} min-h-28 resize-y`}
+                    data-customer-booking-field="specialRequest"
+                    name="specialRequest"
+                    onChange={(event) => updateField("specialRequest", event.target.value)}
+                    placeholder="Child seat, meet-and-greet, event timing, or other requests"
+                    value={form.specialRequest}
+                  />
+                </label>
+              </div>
+            </section>
+
+            {missingFields.length > 0 ? (
+              <div
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-900"
+                data-customer-booking-missing-fields="true"
+              >
+                <p className="font-semibold">Please complete these required fields:</p>
+                <ul className="mt-2 list-disc pl-5">
+                  {missingFields.map((field) => (
+                    <li data-customer-booking-missing-field={field} key={field}>
+                      {requiredFieldLabels[field]}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
+              <p className="text-sm leading-6 text-slate-600">
+                Calendar confirmation will be handled by staff after your booking is confirmed.
+              </p>
+              <button
+                className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                data-customer-booking-submit="true"
+                type="submit"
+              >
+                Submit Booking Request
+              </button>
+              <div
+                className={`rounded-md border px-3 py-3 text-sm leading-6 ${feedbackClass(feedback.tone)}`}
+                data-customer-booking-feedback="true"
+                data-customer-booking-feedback-tone={feedback.tone}
+                role="status"
+              >
+                {feedback.text}
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </main>
+  );
+}

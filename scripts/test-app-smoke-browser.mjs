@@ -29,6 +29,7 @@ const responsiveTabViewports = [
 ];
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
 const customerDashboardUrl = new URL("/customers", appUrl).toString();
+const customerBookingUrl = new URL("/book", appUrl).toString();
 const driverDemoViewports = [
   { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
@@ -4490,6 +4491,411 @@ async function runChromeTest() {
       };
     };
 
+    const setCustomerBookingViewportAndLoad = async (viewport) => {
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: viewport.scale,
+        height: viewport.height,
+        mobile: viewport.mobile,
+        width: viewport.width,
+      });
+
+      const viewportLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url: customerBookingUrl });
+      await viewportLoadEvent;
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector("[data-customer-booking-page]"))`),
+        10000,
+        `${viewport.label} customer-facing booking route`,
+      );
+      await evaluate(`(() => {
+        window.__customerBookingIntegrationCalls = [];
+        const originalFetch = window.__customerBookingOriginalFetch || window.fetch.bind(window);
+        window.__customerBookingOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const target = args[0]?.url || args[0];
+          const method = args[1]?.method || args[0]?.method || "GET";
+          window.__customerBookingIntegrationCalls.push(\`\${method} \${String(target)}\`);
+          return originalFetch(...args);
+        };
+
+        const originalOpen = window.__customerBookingOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__customerBookingOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function patchedCustomerBookingOpen(method, url, ...rest) {
+          window.__customerBookingIntegrationCalls.push(\`\${method} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...rest);
+        };
+
+        if (navigator.sendBeacon && !window.__customerBookingOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__customerBookingOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            window.__customerBookingIntegrationCalls.push(\`BEACON \${String(args[0])}\`);
+            return originalSendBeacon(...args);
+          };
+        }
+      })()`);
+    };
+
+    const setCustomerBookingField = async (field, value) => {
+      const actualValue = await evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(`[data-customer-booking-field="${field}"]`)});
+
+        if (!input) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return input.value;
+      })()`);
+      assert.equal(actualValue, value, `Expected customer booking field ${field} to accept test value`);
+    };
+
+    const clickCustomerBookingSubmit = async (description) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-customer-booking-submit]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+    };
+
+    const readCustomerBookingPageState = () =>
+      evaluate(`(() => {
+        const text = document.body.innerText;
+        const lowerText = text.toLowerCase();
+        const submit = document.querySelector("[data-customer-booking-submit]");
+        const feedback = document.querySelector("[data-customer-booking-feedback]");
+        const submitRect = submit?.getBoundingClientRect();
+        const feedbackRect = feedback?.getBoundingClientRect();
+
+        const fieldState = Object.fromEntries(
+          [
+            "companyName",
+            "contactNo",
+            "emailAddress",
+            "passengerName",
+            "pickupDate",
+            "pickupTime",
+            "flightNumber",
+            "pickupLocation",
+            "dropoffLocation",
+            "serviceType",
+            "vehicleType",
+            "passengerCount",
+            "luggage",
+            "extraStops",
+            "specialRequest",
+          ].map((field) => {
+            const input = document.querySelector("[data-customer-booking-field='" + field + "']");
+            const rect = input?.getBoundingClientRect();
+            return [
+              field,
+              {
+                label: input?.closest("label")?.innerText.trim() || "",
+                required: Boolean(input?.required),
+                value: input?.value || "",
+                visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
+              },
+            ];
+          }),
+        );
+
+        return {
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          fieldState,
+          feedbackDistanceFromSubmit:
+            submitRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - submitRect.bottom)) : 999,
+          feedbackText: feedback?.textContent.trim() || "",
+          feedbackTone: feedback?.getAttribute("data-customer-booking-feedback-tone") || "",
+          forbiddenVisibleText: [
+            "invoice",
+            "outstanding payment",
+            "billing",
+            "admin",
+            "supabase",
+            "mock",
+            "internal",
+            "statement",
+            "payment follow-up",
+          ].filter((value) => lowerText.includes(value)),
+          integrationCalls: window.__customerBookingIntegrationCalls || [],
+          missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
+            field.textContent.trim(),
+          ),
+          removedInternalControls: [
+            "Customer / account",
+            "Customer reference / PO",
+            "Billing Month",
+            "Billing Status",
+            "Payment Method",
+            "Invoice number",
+            "Internal staff note",
+          ].filter((value) => text.includes(value)),
+          resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+          serviceOptionLabels: [
+            ...document.querySelectorAll("[data-customer-booking-field='serviceType'] option"),
+          ].map((option) => option.textContent.trim()),
+          serviceOptionValues: [
+            ...document.querySelectorAll("[data-customer-booking-field='serviceType'] option"),
+          ].map((option) => option.value),
+          submitVisible: Boolean(submitRect && submitRect.width > 0 && submitRect.height >= 44),
+          text,
+          vehicleOptionLabels: [
+            ...document.querySelectorAll("[data-customer-booking-field='vehicleType'] option"),
+          ].filter((option) => option.value).map((option) => option.textContent.trim()),
+          vehicleOptionValues: [
+            ...document.querySelectorAll("[data-customer-booking-field='vehicleType'] option"),
+          ].filter((option) => option.value).map((option) => option.value),
+        };
+      })()`);
+
+    const checkCustomerBookingRoute = async () => {
+      const desktopViewport = { height: 900, label: "desktop customer booking", mobile: false, scale: 1, width: 1440 };
+      const mobileViewport = { height: 812, label: "mobile customer booking", mobile: true, scale: 3, width: 375 };
+
+      await setCustomerBookingViewportAndLoad(desktopViewport);
+
+      const initialState = await readCustomerBookingPageState();
+      assert.equal(
+        initialState.text.includes("Booking Request"),
+        true,
+        "Expected /book customer-facing booking request heading",
+      );
+      assert.equal(
+        initialState.text.includes("Submit Booking Request"),
+        true,
+        "Expected /book customer-safe submit button",
+      );
+      for (const expectedField of [
+        "Customer / company name",
+        "Contact no.",
+        "Email address",
+        "Passenger name",
+        "Pickup date",
+        "Pickup time",
+        "Flight number if any",
+        "Pickup location",
+        "Drop-off location",
+        "Type of Service",
+        "Vehicle type",
+        "Number of passengers",
+        "Luggage",
+        "Extra stops",
+        "Special request / note",
+      ]) {
+        assert.equal(initialState.text.includes(expectedField), true, `Expected /book field: ${expectedField}`);
+      }
+      assert.deepEqual(
+        Object.entries(initialState.fieldState)
+          .filter(([, state]) => !state.visible)
+          .map(([field]) => field),
+        [],
+        "Expected all customer booking fields to be visible and touch-friendly",
+      );
+      assert.deepEqual(
+        initialState.removedInternalControls,
+        [],
+        "Expected /book not to show internal customer/account, PO, billing, payment, invoice, or staff-note controls",
+      );
+      assert.deepEqual(
+        initialState.forbiddenVisibleText,
+        [],
+        "Expected /book not to show internal/admin/mock/finance wording",
+      );
+      assert.equal(initialState.fieldState.contactNo.required, true, "Expected contact no. to be required");
+      assert.equal(initialState.fieldState.passengerName.required, true, "Expected passenger name to be required");
+      assert.equal(initialState.fieldState.pickupDate.required, true, "Expected pickup date to be required");
+      assert.equal(initialState.fieldState.pickupTime.required, true, "Expected pickup time to be required");
+      assert.equal(initialState.fieldState.pickupLocation.required, false, "Expected pickup location to be optional");
+      assert.equal(initialState.fieldState.dropoffLocation.required, false, "Expected drop-off location to be optional");
+      assert.equal(initialState.fieldState.vehicleType.required, false, "Expected vehicle type to be optional");
+      assert.equal(
+        initialState.fieldState.pickupLocation.label.includes("*") ||
+          initialState.fieldState.dropoffLocation.label.includes("*") ||
+          initialState.fieldState.vehicleType.label.includes("*"),
+        false,
+        "Expected pickup, drop-off, and vehicle labels not to show required stars",
+      );
+      assert.deepEqual(
+        initialState.serviceOptionLabels,
+        [
+          "Airport Arrival",
+          "Airport Departure",
+          "Point-to-Point Transfer",
+          "Hourly / Disposal",
+          "Event / VIP Movement",
+          "Other / To Confirm",
+        ],
+        "Expected customer-facing Type of Service labels on /book",
+      );
+      assert.deepEqual(
+        initialState.serviceOptionValues,
+        [
+          "Airport Arrival",
+          "Airport Departure",
+          "Point-to-Point Transfer",
+          "Hourly / Disposal",
+          "Event / VIP Movement",
+          "Other / To Confirm",
+        ],
+        "Expected customer-facing Type of Service values on /book",
+      );
+      assert.deepEqual(
+        initialState.serviceOptionLabels.filter((label) => ["DEP", "MNG", "TRF", "DSP"].includes(label)),
+        [],
+        "Expected /book not to show internal route codes",
+      );
+      assert.deepEqual(
+        initialState.vehicleOptionLabels,
+        [
+          "Alphard / Vellfire",
+          "Mercedes Viano / V-Class",
+          "Hi-roof Minibus",
+          "Mercedes E-Class",
+          "Mercedes S-Class",
+        ],
+        "Expected customer-facing Vehicle Type labels on /book",
+      );
+      assert.deepEqual(
+        initialState.vehicleOptionValues,
+        [
+          "Alphard / Vellfire",
+          "Mercedes Viano / V-Class",
+          "Hi-roof Minibus",
+          "Mercedes E-Class",
+          "Mercedes S-Class",
+        ],
+        "Expected customer-facing Vehicle Type values on /book",
+      );
+      assert.deepEqual(
+        [...initialState.vehicleOptionLabels, ...initialState.vehicleOptionValues].filter((value) =>
+          ["AVF", "VVV", "Combi"].includes(value),
+        ),
+        [],
+        "Expected /book not to expose internal vehicle codes",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(initialState.text),
+        false,
+        "Expected /book not to create or display an invoice-style number",
+      );
+      assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer booking page load");
+
+      await clickCustomerBookingSubmit("invalid customer booking request");
+      const invalidState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText.includes("Please complete contact no.") ? candidateState : false;
+        },
+        10000,
+        "invalid customer booking request feedback",
+      );
+      assert.equal(invalidState.feedbackTone, "error", "Expected invalid /book submit to show a local error");
+      assert.deepEqual(
+        invalidState.missingFields,
+        ["Contact no.", "Passenger name", "Pickup date", "Pickup time"],
+        "Expected invalid /book submit to list missing required fields only",
+      );
+      assert.equal(
+        invalidState.feedbackDistanceFromSubmit < 160,
+        true,
+        "Expected invalid /book feedback near the submit button",
+      );
+      assert.deepEqual(
+        invalidState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected invalid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(invalidState.text),
+        false,
+        "Expected invalid /book submit not to create an invoice-style number",
+      );
+
+      await setCustomerBookingField("contactNo", "+65 9000 1111");
+      await setCustomerBookingField("passengerName", "Customer Test Passenger");
+      await setCustomerBookingField("pickupDate", "2026-05-29");
+      await setCustomerBookingField("pickupTime", "09:30");
+      const requiredOnlyState = await readCustomerBookingPageState();
+      assert.equal(requiredOnlyState.fieldState.pickupLocation.value, "", "Expected pickup location to remain optional");
+      assert.equal(requiredOnlyState.fieldState.dropoffLocation.value, "", "Expected drop-off location to remain optional");
+      assert.equal(requiredOnlyState.fieldState.vehicleType.value, "", "Expected vehicle type to remain optional");
+
+      await clickCustomerBookingSubmit("valid customer booking request");
+      const validState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText.includes("Booking request received for review")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "valid customer booking request feedback",
+      );
+      assert.equal(validState.feedbackTone, "success", "Expected valid /book submit to show a local success message");
+      assert.equal(
+        validState.feedbackText,
+        "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+        "Expected customer-safe not-confirmed success feedback",
+      );
+      assert.equal(validState.feedbackDistanceFromSubmit < 160, true, "Expected valid /book feedback near the submit button");
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(validState.text),
+        false,
+        "Expected valid /book submit not to create an invoice-style number",
+      );
+      assert.deepEqual(
+        validState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected valid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setCustomerBookingViewportAndLoad(mobileViewport);
+      const mobileState = await readCustomerBookingPageState();
+      assert.ok(
+        mobileState.docScrollWidth <= mobileState.docClientWidth + 2,
+        `Expected /book mobile page not to overflow horizontally: ${mobileState.docScrollWidth} > ${mobileState.docClientWidth}`,
+      );
+      assert.equal(mobileState.submitVisible, true, "Expected /book submit button to remain touch-friendly on mobile");
+      assert.deepEqual(
+        Object.entries(mobileState.fieldState)
+          .filter(([, state]) => !state.visible)
+          .map(([field]) => field),
+        [],
+        "Expected /book mobile fields to remain touch-friendly",
+      );
+      assert.deepEqual(
+        mobileState.forbiddenVisibleText,
+        [],
+        "Expected /book mobile view not to show internal/admin/mock/finance wording",
+      );
+      assertNoPaymentIntegrationResources(mobileState.resourceCalls, "mobile customer booking page");
+
+      return {
+        forbiddenVisibleText: initialState.forbiddenVisibleText,
+        mobile: {
+          docClientWidth: mobileState.docClientWidth,
+          docScrollWidth: mobileState.docScrollWidth,
+        },
+        requiredFields: Object.fromEntries(
+          Object.entries(initialState.fieldState).map(([field, state]) => [field, state.required]),
+        ),
+        route: "/book",
+        serviceOptions: initialState.serviceOptionLabels,
+        vehicleOptions: initialState.vehicleOptionLabels,
+      };
+    };
+
     const setDriverDemoViewportAndLoad = async (viewport) => {
       await client.send("Emulation.setDeviceMetricsOverride", {
         deviceScaleFactor: viewport.scale,
@@ -5713,6 +6119,7 @@ async function runChromeTest() {
       state.responsiveTabs.push(...responsiveStates);
     }
     state.customerPayments = await checkCustomerPaymentsRoute();
+    state.customerBooking = await checkCustomerBookingRoute();
     state.driverJobDemo = [];
     for (const viewport of driverDemoViewports) {
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));

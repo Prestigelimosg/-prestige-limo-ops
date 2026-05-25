@@ -369,9 +369,6 @@ export default function MockCustomerDashboardPage() {
   );
   const [regularCustomerMockSaveReviewFeedbackTone, setRegularCustomerMockSaveReviewFeedbackTone] =
     useState<RegularCustomerBookingFeedbackTone>("info");
-  const [regularCustomerMapSuggestFeedback, setRegularCustomerMapSuggestFeedback] = useState(
-    "Future Google Map address suggestion will appear here. Not active yet: no Google API call, no map billing/cost, and no location saved.",
-  );
   const [regularCustomerParserHelperText, setRegularCustomerParserHelperText] = useState("");
   const [regularCustomerParserHelperFeedback, setRegularCustomerParserHelperFeedback] = useState(
     "Paste free-text booking details here later. Mock/local only: no OpenAI/ChatGPT API call, no Supabase save, and no booking created.",
@@ -628,12 +625,6 @@ export default function MockCustomerDashboardPage() {
     }));
   }
 
-  function handleRegularCustomerMapSuggest() {
-    setRegularCustomerMapSuggestFeedback(
-      "Google Map Suggest is mock/local only. Future address suggestions will appear here; no Google API call, no map billing/cost, and no location saved.",
-    );
-  }
-
   function handleRegularCustomerParserHelper() {
     setRegularCustomerParserHelperFeedback(
       regularCustomerParserHelperText.trim()
@@ -779,9 +770,6 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerMockSaveReviewFeedbackTone("info");
     setRegularCustomerMockSaveReviewFeedback(
       "Valid mock save clicks show a local confirmation review here. No save, link, audit, invoice, payment, bank, notification, calendar, or Supabase action is active.",
-    );
-    setRegularCustomerMapSuggestFeedback(
-      "Future Google Map address suggestion will appear here. Not active yet: no Google API call, no map billing/cost, and no location saved.",
     );
     setRegularCustomerParserHelperText("");
     setRegularCustomerParserHelperFeedback(
@@ -1125,7 +1113,7 @@ export default function MockCustomerDashboardPage() {
                   data-regular-booking-field="pickupLocation"
                   data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("pickupLocation", event.target.value)}
-                  placeholder="Pickup address or airport terminal"
+                  placeholder="Search pickup address — Google Map Suggest mock only"
                   type="text"
                   value={regularCustomerBookingForm.pickupLocation}
                 />
@@ -1139,46 +1127,19 @@ export default function MockCustomerDashboardPage() {
                   data-regular-booking-field="dropoffLocation"
                   data-regular-booking-required="true"
                   onChange={(event) => updateRegularCustomerBookingField("dropoffLocation", event.target.value)}
-                  placeholder="Drop-off address"
+                  placeholder="Search drop-off address — Google Map Suggest mock only"
                   type="text"
                   value={regularCustomerBookingForm.dropoffLocation}
                 />
               </label>
 
-              <div
-                className="rounded-md border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950 md:col-span-2 xl:col-span-3"
-                data-regular-customer-map-suggest-helper="true"
+              <p
+                className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold leading-5 text-sky-950 md:col-span-2 xl:col-span-1"
+                data-regular-customer-map-suggest-hint="true"
               >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-800">
-                      Location helper placeholder
-                    </p>
-                    <h3 className="mt-1 font-bold" data-regular-customer-map-suggest-heading="true">
-                      Google Map Suggest — Mock Only
-                    </h3>
-                    <p className="mt-1 font-semibold" data-regular-customer-map-suggest-boundary="true">
-                      Future Google Map address suggestion will appear here. Not active yet. No Google API call, no map
-                      billing/cost, and no location saved.
-                    </p>
-                  </div>
-                  <button
-                    className="min-h-11 rounded-md border border-sky-900 bg-sky-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
-                    data-regular-customer-map-suggest-button="true"
-                    onClick={handleRegularCustomerMapSuggest}
-                    type="button"
-                  >
-                    Preview Mock Map Suggest
-                  </button>
-                </div>
-                <p
-                  aria-live="polite"
-                  className="mt-3 rounded-md border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-950"
-                  data-regular-customer-map-suggest-feedback="true"
-                >
-                  {regularCustomerMapSuggestFeedback}
-                </p>
-              </div>
+                Google Map Suggest — Mock/local only beside address fields. No Google API call, no map billing/cost,
+                and no location saved.
+              </p>
 
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
                 Type of Service *

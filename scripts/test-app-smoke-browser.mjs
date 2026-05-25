@@ -704,6 +704,7 @@ async function runChromeTest() {
 
             return {
               field,
+              placeholder: input?.getAttribute("placeholder") || "",
               value: input?.value || "",
               visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
             };
@@ -815,15 +816,11 @@ async function runChromeTest() {
           regularBookingVehicleOptionValues: [
             ...document.querySelectorAll("[data-regular-booking-field='vehicleType'] option"),
           ].map((option) => option.value),
-          regularMapSuggestBoundary:
-            document.querySelector("[data-regular-customer-map-suggest-boundary]")?.textContent.trim() || "",
-          regularMapSuggestFeedback:
-            document.querySelector("[data-regular-customer-map-suggest-feedback]")?.textContent.trim() || "",
-          regularMapSuggestHeading:
-            document.querySelector("[data-regular-customer-map-suggest-heading]")?.textContent.trim() || "",
-          regularMapSuggestVisible: Boolean(
+          regularMapSuggestSeparateSectionVisible: Boolean(
             document.querySelector("[data-regular-customer-map-suggest-helper]"),
           ),
+          regularMapSuggestHint:
+            document.querySelector("[data-regular-customer-map-suggest-hint]")?.textContent.trim() || "",
           regularMiniParserBoundary:
             document.querySelector("[data-regular-customer-mini-parser-boundary]")?.textContent.trim() || "",
           regularMiniParserFeedback:
@@ -886,6 +883,16 @@ async function runChromeTest() {
         dashboardState.regularBookingFields.filter((field) => !field.visible).map((field) => field.field),
         [],
         "Expected regular customer booking fields to be touch-visible",
+      );
+      assert.equal(
+        dashboardState.regularBookingFields.find((field) => field.field === "pickupLocation")?.placeholder,
+        "Search pickup address — Google Map Suggest mock only",
+        "Expected pickup placeholder to include Google Map Suggest mock wording",
+      );
+      assert.equal(
+        dashboardState.regularBookingFields.find((field) => field.field === "dropoffLocation")?.placeholder,
+        "Search drop-off address — Google Map Suggest mock only",
+        "Expected drop-off placeholder to include Google Map Suggest mock wording",
       );
       assert.deepEqual(
         dashboardState.regularBookingRouteOptionLabels,
@@ -964,26 +971,21 @@ async function runChromeTest() {
         "Expected customer booking form to show Type of Service",
       );
       assert.equal(
-        dashboardState.regularMapSuggestVisible,
-        true,
-        "Expected Google Map Suggest mock helper to be visible",
-      );
-      assert.equal(
-        dashboardState.regularMapSuggestHeading,
-        "Google Map Suggest — Mock Only",
-        "Expected Google Map Suggest mock helper heading",
+        dashboardState.regularMapSuggestSeparateSectionVisible,
+        false,
+        "Expected separate Google Map Suggest section to be removed from the customer booking form",
       );
       for (const expectedMapText of [
-        "Future Google Map address suggestion will appear here.",
-        "Not active yet.",
+        "Google Map Suggest",
+        "Mock/local only",
         "No Google API call",
         "no map billing/cost",
         "no location saved",
       ]) {
         assert.equal(
-          dashboardState.regularMapSuggestBoundary.includes(expectedMapText),
+          dashboardState.regularMapSuggestHint.includes(expectedMapText),
           true,
-          `Expected Google Map Suggest boundary text: ${expectedMapText}`,
+          `Expected compact Google Map Suggest hint text: ${expectedMapText}`,
         );
       }
       assert.equal(
@@ -1638,20 +1640,6 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
-      const clickRegularCustomerMapSuggest = async (description) => {
-        const clicked = await evaluate(`(() => {
-          const button = document.querySelector("[data-regular-customer-map-suggest-button]");
-
-          if (!button || button.disabled) {
-            return false;
-          }
-
-          button.click();
-          return true;
-        })()`);
-        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
-      };
-
       const setRegularCustomerMiniParserText = async (value) => {
         const actualValue = await evaluate(`(() => {
           const input = document.querySelector("[data-regular-customer-mini-parser-text]");
@@ -1686,21 +1674,14 @@ async function runChromeTest() {
 
       const readRegularCustomerHelperState = () =>
         evaluate(`(() => {
-          const mapButton = document.querySelector("[data-regular-customer-map-suggest-button]");
-          const mapFeedback = document.querySelector("[data-regular-customer-map-suggest-feedback]");
           const parserButton = document.querySelector("[data-regular-customer-mini-parser-button]");
           const parserFeedback = document.querySelector("[data-regular-customer-mini-parser-feedback]");
-          const mapButtonRect = mapButton?.getBoundingClientRect();
-          const mapFeedbackRect = mapFeedback?.getBoundingClientRect();
           const parserButtonRect = parserButton?.getBoundingClientRect();
           const parserFeedbackRect = parserFeedback?.getBoundingClientRect();
 
           return {
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
             listRowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
-            mapDistanceFromButton:
-              mapButtonRect && mapFeedbackRect ? Math.round(Math.abs(mapFeedbackRect.top - mapButtonRect.bottom)) : 999,
-            mapFeedback: mapFeedback?.textContent.trim() || "",
             parserDistanceFromButton:
               parserButtonRect && parserFeedbackRect
                 ? Math.round(Math.abs(parserFeedbackRect.top - parserButtonRect.bottom))
@@ -1975,50 +1956,6 @@ async function runChromeTest() {
         routeType: "Point-to-Point Transfer",
         vehicleType: "E-Class",
       };
-
-      await clickRegularCustomerMapSuggest("Google Map Suggest mock helper");
-      const mapSuggestClickedState = await waitForCondition(
-        async () => {
-          const candidateState = await readRegularCustomerHelperState();
-          return candidateState.mapFeedback.includes("Google Map Suggest is mock/local only")
-            ? candidateState
-            : false;
-        },
-        10000,
-        "Google Map Suggest mock helper feedback",
-      );
-      for (const expectedMapFeedback of [
-        "Google Map Suggest is mock/local only",
-        "no Google API call",
-        "no map billing/cost",
-        "no location saved",
-      ]) {
-        assert.equal(
-          mapSuggestClickedState.mapFeedback.includes(expectedMapFeedback),
-          true,
-          `Expected Google Map Suggest feedback text: ${expectedMapFeedback}`,
-        );
-      }
-      assert.equal(
-        mapSuggestClickedState.mapDistanceFromButton < 180,
-        true,
-        "Expected Google Map Suggest feedback near the clicked control",
-      );
-      assert.equal(
-        mapSuggestClickedState.listRowCount,
-        0,
-        "Expected Google Map Suggest mock helper not to add local booking rows",
-      );
-      assert.equal(
-        mapSuggestClickedState.previewVisible,
-        false,
-        "Expected Google Map Suggest mock helper not to create a booking preview",
-      );
-      assert.deepEqual(
-        mapSuggestClickedState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
-        [],
-        "Expected Google Map Suggest mock helper not to call Google, Supabase, payment, bank, notification, or calendar APIs",
-      );
 
       await setRegularCustomerMiniParserText(
         "SQ333 arrival for Browser Test Passenger, Changi T3 to Raffles Place",

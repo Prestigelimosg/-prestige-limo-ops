@@ -2797,9 +2797,11 @@ async function runChromeTest() {
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
         const target = args[0]?.url || args[0];
-        window.__prestigeFetchCalls.push(String(target));
+        const method = String(args[1]?.method || args[0]?.method || "GET").toUpperCase();
+        const targetText = String(target);
+        window.__prestigeFetchCalls.push(\`\${method} \${targetText}\`);
 
-        if (String(target).includes("/api/ai-parse")) {
+        if (targetText.includes("/api/ai-parse")) {
           await new Promise((resolve) => setTimeout(resolve, 150));
         }
 
@@ -2885,10 +2887,32 @@ async function runChromeTest() {
     assert.match(aiDraftState.bodyText, /Mock response only — review required/);
     assert.equal(aiDraftState.draftIsNearButtonRow, true, "Expected AI draft panel near AI button row");
     assert.equal(aiDraftState.localWarningCount, 0, "Expected empty AI Assist warning to clear after draft");
+    const aiAssistLocalParseCalls = aiDraftState.fetchCalls.filter((call) => call.includes("/api/ai-parse"));
     assert.deepEqual(
-      aiDraftState.fetchCalls,
-      ["/api/ai-parse"],
-      `Expected mock AI Assist to call only local /api/ai-parse, got ${aiDraftState.fetchCalls.join(", ")}`,
+      aiAssistLocalParseCalls,
+      ["POST /api/ai-parse"],
+      `Expected mock AI Assist to call local /api/ai-parse exactly once, got ${aiDraftState.fetchCalls.join(", ")}`,
+    );
+    const aiAssistUnexpectedIntegrationCalls = aiDraftState.fetchCalls.filter((call) => {
+      const [method = "GET", ...urlParts] = call.split(" ");
+      const url = urlParts.join(" ");
+      const isLocalAiParse = url.includes("/api/ai-parse");
+      const isReadOnlySupabaseRequest =
+        ["GET", "HEAD", "OPTIONS"].includes(method) && /\/rest\/v1\//.test(url);
+
+      if (isLocalAiParse || isReadOnlySupabaseRequest) {
+        return false;
+      }
+
+      return (
+        /\/rest\/v1\//.test(url) ||
+        /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|invoice|statement|pdf/i.test(url)
+      );
+    });
+    assert.deepEqual(
+      aiAssistUnexpectedIntegrationCalls,
+      [],
+      `Expected mock AI Assist not to save, send, sync, invoice, or call payment/bank APIs, got ${aiAssistUnexpectedIntegrationCalls.join(", ")}`,
     );
     assert.equal(
       aiDraftState.savedCount,

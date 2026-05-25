@@ -499,7 +499,7 @@ async function runChromeTest() {
     };
 
     const blockedCustomerIntegrationPattern =
-      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i;
+      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i;
 
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
@@ -698,9 +698,6 @@ async function runChromeTest() {
             "extraStops",
             "customerReference",
             "internalNote",
-            "billingMonth",
-            "billingStatus",
-            "paymentMethod",
           ].map((field) => {
             const input = document.querySelector("[data-regular-booking-field='" + field + "']");
             const rect = input?.getBoundingClientRect();
@@ -714,6 +711,8 @@ async function runChromeTest() {
           regularBookingFolderLinkVisible: Boolean(
             document.querySelector("[data-regular-customer-folder-link]"),
           ),
+          regularBookingFormText:
+            document.querySelector("[data-regular-customer-booking-form]")?.innerText || "",
           regularBookingFormVisible: Boolean(document.querySelector("[data-regular-customer-booking-form]")),
           regularBookingListBoundary:
             document.querySelector("[data-regular-customer-booking-list-boundary]")?.textContent.trim() || "",
@@ -787,22 +786,52 @@ async function runChromeTest() {
             "Pickup location",
             "Drop-off location",
             "Flight number if any",
-            "Route type",
+            "Type of Service",
             "Vehicle type",
             "Number of passengers",
             "Luggage",
             "Extra stops",
             "Customer reference / PO number if any",
             "Internal note",
-            "Billing month",
-            "Billing status default",
-            "Payment method default",
           ].filter((label) => text.includes(label)),
           regularBookingRequiredFieldCount: document.querySelectorAll("[data-regular-booking-required='true']").length,
           regularBookingRequiredNote:
             document.querySelector("[data-regular-customer-required-note]")?.textContent.trim() || "",
+          regularBookingRemovedFieldSelectors: ["billingMonth", "billingStatus", "paymentMethod"].filter((field) =>
+            document.querySelector("[data-regular-booking-field='" + field + "']"),
+          ),
+          regularBookingRouteOptionLabels: [
+            ...document.querySelectorAll("[data-regular-booking-field='routeType'] option"),
+          ].map((option) => option.textContent.trim()),
+          regularBookingRouteOptionValues: [
+            ...document.querySelectorAll("[data-regular-booking-field='routeType'] option"),
+          ].map((option) => option.value),
           regularBookingSubmitVisible: Boolean(
             document.querySelector("[data-regular-customer-booking-submit]"),
+          ),
+          regularBookingVehicleOptionLabels: [
+            ...document.querySelectorAll("[data-regular-booking-field='vehicleType'] option"),
+          ].map((option) => option.textContent.trim()),
+          regularBookingVehicleOptionValues: [
+            ...document.querySelectorAll("[data-regular-booking-field='vehicleType'] option"),
+          ].map((option) => option.value),
+          regularMapSuggestBoundary:
+            document.querySelector("[data-regular-customer-map-suggest-boundary]")?.textContent.trim() || "",
+          regularMapSuggestFeedback:
+            document.querySelector("[data-regular-customer-map-suggest-feedback]")?.textContent.trim() || "",
+          regularMapSuggestHeading:
+            document.querySelector("[data-regular-customer-map-suggest-heading]")?.textContent.trim() || "",
+          regularMapSuggestVisible: Boolean(
+            document.querySelector("[data-regular-customer-map-suggest-helper]"),
+          ),
+          regularMiniParserBoundary:
+            document.querySelector("[data-regular-customer-mini-parser-boundary]")?.textContent.trim() || "",
+          regularMiniParserFeedback:
+            document.querySelector("[data-regular-customer-mini-parser-feedback]")?.textContent.trim() || "",
+          regularMiniParserHeading:
+            document.querySelector("[data-regular-customer-mini-parser-heading]")?.textContent.trim() || "",
+          regularMiniParserVisible: Boolean(
+            document.querySelector("[data-regular-customer-mini-parser-helper]"),
           ),
           searchInputVisible: Boolean(searchInput && searchRect.width > 0 && searchRect.height >= 40),
           summaryCards: [...document.querySelectorAll("[data-customer-summary-card]")].map((card) =>
@@ -843,16 +872,13 @@ async function runChromeTest() {
           "Pickup location",
           "Drop-off location",
           "Flight number if any",
-          "Route type",
+          "Type of Service",
           "Vehicle type",
           "Number of passengers",
           "Luggage",
           "Extra stops",
           "Customer reference / PO number if any",
           "Internal note",
-          "Billing month",
-          "Billing status default",
-          "Payment method default",
         ],
         "Expected all regular customer booking fields to be visible",
       );
@@ -861,16 +887,128 @@ async function runChromeTest() {
         [],
         "Expected regular customer booking fields to be touch-visible",
       );
-      assert.equal(
-        dashboardState.regularBookingFields.find((field) => field.field === "billingStatus")?.value,
-        "unbilled / draft",
-        "Expected billing status default to be unbilled / draft",
+      assert.deepEqual(
+        dashboardState.regularBookingRouteOptionLabels,
+        [
+          "Airport Arrival",
+          "Airport Departure",
+          "Point-to-Point Transfer",
+          "Hourly / Disposal",
+          "Event / VIP Movement",
+          "Other / To Confirm",
+        ],
+        "Expected customer-facing Type of Service options",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingRouteOptionValues,
+        [
+          "Airport Arrival",
+          "Airport Departure",
+          "Point-to-Point Transfer",
+          "Hourly / Disposal",
+          "Event / VIP Movement",
+          "Other / To Confirm",
+        ],
+        "Expected Type of Service option values to stay customer-facing in this form",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingRouteOptionLabels.filter((label) =>
+          ["DEP", "MNG", "TRF", "DSP"].includes(label),
+        ),
+        [],
+        "Expected old route codes not to be customer-facing service options",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingVehicleOptionLabels,
+        [
+          "Alphard / Vellfire",
+          "Mercedes Viano / V-Class",
+          "Hi-roof Minibus",
+          "Mercedes E-Class",
+          "Mercedes S-Class",
+        ],
+        "Expected customer-facing Vehicle Type labels",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingVehicleOptionValues,
+        ["AVF", "VVV", "Combi", "E-Class", "S-Class"],
+        "Expected Vehicle Type internal values to be mapped behind customer-facing labels",
+      );
+      assert.deepEqual(
+        dashboardState.regularBookingVehicleOptionLabels.filter((label) =>
+          ["AVF", "VVV", "Combi", "E class", "E-Class", "S class", "S-Class"].includes(label),
+        ),
+        [],
+        "Expected vehicle dropdown labels not to expose internal codes",
+      );
+      for (const removedFormText of [
+        "Route type",
+        "Billing month",
+        "Billing status default",
+        "Payment method default",
+      ]) {
+        assert.equal(
+          dashboardState.regularBookingFormText.includes(removedFormText),
+          false,
+          `Expected customer booking form not to show: ${removedFormText}`,
+        );
+      }
+      assert.deepEqual(
+        dashboardState.regularBookingRemovedFieldSelectors,
+        [],
+        "Expected Billing Month, Billing Status, and Payment Method controls to be removed from the customer booking form",
       );
       assert.equal(
-        dashboardState.regularBookingFields.find((field) => field.field === "paymentMethod")?.value,
-        "monthly bank transfer manual",
-        "Expected payment method default to be monthly bank transfer manual",
+        dashboardState.regularBookingFormText.includes("Type of Service"),
+        true,
+        "Expected customer booking form to show Type of Service",
       );
+      assert.equal(
+        dashboardState.regularMapSuggestVisible,
+        true,
+        "Expected Google Map Suggest mock helper to be visible",
+      );
+      assert.equal(
+        dashboardState.regularMapSuggestHeading,
+        "Google Map Suggest — Mock Only",
+        "Expected Google Map Suggest mock helper heading",
+      );
+      for (const expectedMapText of [
+        "Future Google Map address suggestion will appear here.",
+        "Not active yet.",
+        "No Google API call",
+        "no map billing/cost",
+        "no location saved",
+      ]) {
+        assert.equal(
+          dashboardState.regularMapSuggestBoundary.includes(expectedMapText),
+          true,
+          `Expected Google Map Suggest boundary text: ${expectedMapText}`,
+        );
+      }
+      assert.equal(
+        dashboardState.regularMiniParserVisible,
+        true,
+        "Expected Mini Parser Helper mock helper to be visible",
+      );
+      assert.equal(
+        dashboardState.regularMiniParserHeading,
+        "Mini Parser Helper — Mock Only",
+        "Expected Mini Parser Helper mock heading",
+      );
+      for (const expectedParserText of [
+        "Future AI/parser helper may extract booking details.",
+        "Not active yet.",
+        "No OpenAI/ChatGPT API call",
+        "no Supabase save",
+        "no booking created",
+      ]) {
+        assert.equal(
+          dashboardState.regularMiniParserBoundary.includes(expectedParserText),
+          true,
+          `Expected Mini Parser Helper boundary text: ${expectedParserText}`,
+        );
+      }
       assert.equal(
         dashboardState.regularBookingFeedback,
         "Mock/local form foundation only. Submit creates a local preview beside this button.",
@@ -976,8 +1114,8 @@ async function runChromeTest() {
       );
       assert.equal(
         dashboardState.regularBookingRequiredFieldCount,
-        10,
-        "Expected ten regular customer booking fields to be marked required",
+        9,
+        "Expected nine regular customer booking fields to be marked required",
       );
       assert.equal(
         dashboardState.regularBookingRequiredNote,
@@ -1500,6 +1638,78 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
+      const clickRegularCustomerMapSuggest = async (description) => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-map-suggest-button]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
+      const setRegularCustomerMiniParserText = async (value) => {
+        const actualValue = await evaluate(`(() => {
+          const input = document.querySelector("[data-regular-customer-mini-parser-text]");
+
+          if (!input) {
+            return null;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+          descriptor?.set?.call(input, ${JSON.stringify(value)});
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+
+          return input.value;
+        })()`);
+        assert.equal(actualValue, value, "Expected Mini Parser Helper text area to accept local test text");
+      };
+
+      const clickRegularCustomerMiniParserHelper = async (description) => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-mini-parser-button]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
+      const readRegularCustomerHelperState = () =>
+        evaluate(`(() => {
+          const mapButton = document.querySelector("[data-regular-customer-map-suggest-button]");
+          const mapFeedback = document.querySelector("[data-regular-customer-map-suggest-feedback]");
+          const parserButton = document.querySelector("[data-regular-customer-mini-parser-button]");
+          const parserFeedback = document.querySelector("[data-regular-customer-mini-parser-feedback]");
+          const mapButtonRect = mapButton?.getBoundingClientRect();
+          const mapFeedbackRect = mapFeedback?.getBoundingClientRect();
+          const parserButtonRect = parserButton?.getBoundingClientRect();
+          const parserFeedbackRect = parserFeedback?.getBoundingClientRect();
+
+          return {
+            integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            listRowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+            mapDistanceFromButton:
+              mapButtonRect && mapFeedbackRect ? Math.round(Math.abs(mapFeedbackRect.top - mapButtonRect.bottom)) : 999,
+            mapFeedback: mapFeedback?.textContent.trim() || "",
+            parserDistanceFromButton:
+              parserButtonRect && parserFeedbackRect
+                ? Math.round(Math.abs(parserFeedbackRect.top - parserButtonRect.bottom))
+                : 999,
+            parserFeedback: parserFeedback?.textContent.trim() || "",
+            previewVisible: Boolean(document.querySelector("[data-regular-customer-booking-preview]")),
+          };
+        })()`);
+
       const clickRegularCustomerMockRowAction = async (rowIndex, action, description) => {
         const clicked = await evaluate(`(() => {
           const row = document.querySelectorAll("[data-regular-customer-booking-list-row]")[${rowIndex}];
@@ -1576,7 +1786,6 @@ async function runChromeTest() {
                 "pickupLocation",
                 "dropoffLocation",
                 "vehicleType",
-                "billingMonth",
               ].map((field) => [
                 field,
                 document.querySelector("[data-regular-booking-field='" + field + "']")?.value || "",
@@ -1733,7 +1942,6 @@ async function runChromeTest() {
         })()`);
 
       const regularCustomerBookingFields = {
-        billingMonth: "2026-05",
         booker: "Browser Test Booker",
         customerId: "ubs",
         customerReference: "PO MAY TEST",
@@ -1747,12 +1955,11 @@ async function runChromeTest() {
         pickupDate: "2026-05-28",
         pickupLocation: "Changi Airport T3",
         pickupTime: "1530hrs",
-        routeType: "MNG",
+        routeType: "Airport Arrival",
         vehicleType: "AVF",
       };
       const secondRegularCustomerBookingFields = {
         ...regularCustomerBookingFields,
-        billingMonth: "2026-06",
         booker: "Browser Filter Booker",
         customerId: "ritz-carlton",
         customerReference: "PO JUN TEST",
@@ -1765,9 +1972,100 @@ async function runChromeTest() {
         pickupDate: "2026-06-03",
         pickupLocation: "Ritz Carlton",
         pickupTime: "0900hrs",
-        routeType: "TRF",
-        vehicleType: "E class",
+        routeType: "Point-to-Point Transfer",
+        vehicleType: "E-Class",
       };
+
+      await clickRegularCustomerMapSuggest("Google Map Suggest mock helper");
+      const mapSuggestClickedState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerHelperState();
+          return candidateState.mapFeedback.includes("Google Map Suggest is mock/local only")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "Google Map Suggest mock helper feedback",
+      );
+      for (const expectedMapFeedback of [
+        "Google Map Suggest is mock/local only",
+        "no Google API call",
+        "no map billing/cost",
+        "no location saved",
+      ]) {
+        assert.equal(
+          mapSuggestClickedState.mapFeedback.includes(expectedMapFeedback),
+          true,
+          `Expected Google Map Suggest feedback text: ${expectedMapFeedback}`,
+        );
+      }
+      assert.equal(
+        mapSuggestClickedState.mapDistanceFromButton < 180,
+        true,
+        "Expected Google Map Suggest feedback near the clicked control",
+      );
+      assert.equal(
+        mapSuggestClickedState.listRowCount,
+        0,
+        "Expected Google Map Suggest mock helper not to add local booking rows",
+      );
+      assert.equal(
+        mapSuggestClickedState.previewVisible,
+        false,
+        "Expected Google Map Suggest mock helper not to create a booking preview",
+      );
+      assert.deepEqual(
+        mapSuggestClickedState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected Google Map Suggest mock helper not to call Google, Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setRegularCustomerMiniParserText(
+        "SQ333 arrival for Browser Test Passenger, Changi T3 to Raffles Place",
+      );
+      await clickRegularCustomerMiniParserHelper("Mini Parser Helper mock helper");
+      const miniParserClickedState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerHelperState();
+          return candidateState.parserFeedback.includes("Mini Parser Helper checked this local text only")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "Mini Parser Helper mock feedback",
+      );
+      for (const expectedParserFeedback of [
+        "Mini Parser Helper checked this local text only",
+        "no OpenAI/ChatGPT API call",
+        "no Supabase save",
+        "no booking created",
+      ]) {
+        assert.equal(
+          miniParserClickedState.parserFeedback.includes(expectedParserFeedback),
+          true,
+          `Expected Mini Parser Helper feedback text: ${expectedParserFeedback}`,
+        );
+      }
+      assert.equal(
+        miniParserClickedState.parserDistanceFromButton < 180,
+        true,
+        "Expected Mini Parser Helper feedback near the clicked control",
+      );
+      assert.equal(
+        miniParserClickedState.listRowCount,
+        0,
+        "Expected Mini Parser Helper mock helper not to add local booking rows",
+      );
+      assert.equal(
+        miniParserClickedState.previewVisible,
+        false,
+        "Expected Mini Parser Helper mock helper not to create a booking preview",
+      );
+      assert.deepEqual(
+        miniParserClickedState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected Mini Parser Helper mock helper not to call OpenAI, ChatGPT, Supabase, payment, bank, notification, or calendar APIs",
+      );
 
       await clickRegularCustomerDraftInvoicePreview("empty regular customer draft invoice preview");
       const regularDraftNoRowsState = await waitForCondition(
@@ -2115,7 +2413,7 @@ async function runChromeTest() {
           passengerName: "Browser Test Passenger",
           pickupDateTime: "2026-05-28 / 1530hrs",
           pickupLocation: "Changi Airport T3",
-          vehicleType: "AVF",
+          vehicleType: "Alphard / Vellfire",
         },
         "Expected mock save confirmation review to summarize the future save review fields",
       );
@@ -2372,7 +2670,7 @@ async function runChromeTest() {
         "Browser Test Passenger",
         "Changi Airport T3",
         "Raffles Place",
-        "MNG / AVF",
+        "Airport Arrival / Alphard / Vellfire",
         "2026-05 / unbilled / draft",
         "monthly bank transfer manual",
         "PO MAY TEST",
@@ -2673,7 +2971,7 @@ async function runChromeTest() {
         "Browser Filter Passenger",
         "Ritz Carlton",
         "Marina Bay Cruise Centre",
-        "TRF / E class",
+        "Point-to-Point Transfer / Mercedes E-Class",
         "PO JUN TEST",
         "Amount not calculated in this mock preview",
         "No subtotal, GST, discount, or grand total is created",
@@ -2917,8 +3215,6 @@ async function runChromeTest() {
           const draftState = await readRegularCustomerDraftInvoiceState();
           const listState = await readRegularCustomerBookingListState();
           const formState = await evaluate(`(() => ({
-            billingMonth: document.querySelector('[data-regular-booking-field="billingMonth"]')?.value || "",
-            billingStatus: document.querySelector('[data-regular-booking-field="billingStatus"]')?.value || "",
             customerId: document.querySelector('[data-regular-booking-field="customerId"]')?.value || "",
             customerSearch: document.querySelector("[data-customer-search]")?.value || "",
             passengerName: document.querySelector('[data-regular-booking-field="passengerName"]')?.value || "",
@@ -3021,8 +3317,6 @@ async function runChromeTest() {
       assert.deepEqual(
         regularDraftClearedState.formState,
         {
-          billingMonth: "2026-06",
-          billingStatus: "unbilled / draft",
           customerId: "ritz-carlton",
           customerSearch: "",
           passengerName: "Browser Filter Passenger",

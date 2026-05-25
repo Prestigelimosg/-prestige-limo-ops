@@ -21,13 +21,21 @@ const summaryCards = [
 const maxCustomerSearchResults = 8;
 
 const regularCustomerRouteTypeOptions = [
-  { label: "Arrival / MNG", value: "MNG" },
-  { label: "Departure / DEP", value: "DEP" },
-  { label: "Transfer / TRF", value: "TRF" },
-  { label: "Disposal / DSP / hourly", value: "DSP" },
+  "Airport Arrival",
+  "Airport Departure",
+  "Point-to-Point Transfer",
+  "Hourly / Disposal",
+  "Event / VIP Movement",
+  "Other / To Confirm",
 ];
 
-const regularCustomerVehicleTypeOptions = ["AVF", "VVV", "Combi", "E class", "S class"];
+const regularCustomerVehicleTypeOptions = [
+  { label: "Alphard / Vellfire", value: "AVF" },
+  { label: "Mercedes Viano / V-Class", value: "VVV" },
+  { label: "Hi-roof Minibus", value: "Combi" },
+  { label: "Mercedes E-Class", value: "E-Class" },
+  { label: "Mercedes S-Class", value: "S-Class" },
+];
 
 const regularCustomerBillingStatusFilterOptions = [
   "unbilled / draft",
@@ -53,7 +61,7 @@ const initialRegularCustomerBookingForm = {
   pickupDate: "",
   pickupLocation: "",
   pickupTime: "",
-  routeType: "MNG",
+  routeType: "Airport Arrival",
   vehicleType: "AVF",
 };
 
@@ -202,10 +210,19 @@ const regularCustomerRequiredFields: Array<{
   { field: "pickupTime", label: "Pickup time" },
   { field: "pickupLocation", label: "Pickup location" },
   { field: "dropoffLocation", label: "Drop-off location" },
-  { field: "routeType", label: "Route type" },
+  { field: "routeType", label: "Type of Service" },
   { field: "vehicleType", label: "Vehicle type" },
-  { field: "billingMonth", label: "Billing month" },
 ];
+
+function getRegularCustomerVehicleTypeLabel(vehicleType: string) {
+  return (
+    regularCustomerVehicleTypeOptions.find((option) => option.value === vehicleType)?.label ?? vehicleType
+  );
+}
+
+function getRegularCustomerBillingMonth(form: RegularCustomerBookingForm) {
+  return /^\d{4}-\d{2}/.test(form.pickupDate) ? form.pickupDate.slice(0, 7) : form.billingMonth;
+}
 
 function getMissingRegularCustomerRequiredFields(form: RegularCustomerBookingForm) {
   return regularCustomerRequiredFields.filter(({ field }) => !form[field].trim());
@@ -352,6 +369,13 @@ export default function MockCustomerDashboardPage() {
   );
   const [regularCustomerMockSaveReviewFeedbackTone, setRegularCustomerMockSaveReviewFeedbackTone] =
     useState<RegularCustomerBookingFeedbackTone>("info");
+  const [regularCustomerMapSuggestFeedback, setRegularCustomerMapSuggestFeedback] = useState(
+    "Future Google Map address suggestion will appear here. Not active yet: no Google API call, no map billing/cost, and no location saved.",
+  );
+  const [regularCustomerParserHelperText, setRegularCustomerParserHelperText] = useState("");
+  const [regularCustomerParserHelperFeedback, setRegularCustomerParserHelperFeedback] = useState(
+    "Paste free-text booking details here later. Mock/local only: no OpenAI/ChatGPT API call, no Supabase save, and no booking created.",
+  );
   const [regularCustomerBookingMissingFields, setRegularCustomerBookingMissingFields] = useState<
     Array<keyof RegularCustomerBookingForm>
   >([]);
@@ -604,6 +628,20 @@ export default function MockCustomerDashboardPage() {
     }));
   }
 
+  function handleRegularCustomerMapSuggest() {
+    setRegularCustomerMapSuggestFeedback(
+      "Google Map Suggest is mock/local only. Future address suggestions will appear here; no Google API call, no map billing/cost, and no location saved.",
+    );
+  }
+
+  function handleRegularCustomerParserHelper() {
+    setRegularCustomerParserHelperFeedback(
+      regularCustomerParserHelperText.trim()
+        ? "Mini Parser Helper checked this local text only. Future AI/parser helper may extract booking details; no OpenAI/ChatGPT API call, no Supabase save, and no booking created."
+        : "Paste booking details first. Mini Parser Helper is not active yet; no OpenAI/ChatGPT API call, no Supabase save, and no booking created.",
+    );
+  }
+
   function handleRegularCustomerMockSave() {
     const missingFields = getMissingRegularCustomerRequiredFields(regularCustomerBookingForm);
 
@@ -628,7 +666,7 @@ export default function MockCustomerDashboardPage() {
 
     setRegularCustomerBookingMissingFields([]);
     setRegularCustomerMockSaveReview({
-      billingMonth: regularCustomerBookingForm.billingMonth,
+      billingMonth: getRegularCustomerBillingMonth(regularCustomerBookingForm),
       customerName,
       dropoffLocation: regularCustomerBookingForm.dropoffLocation,
       passengerName: regularCustomerBookingForm.passengerName,
@@ -686,8 +724,12 @@ export default function MockCustomerDashboardPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const nextBookingPreview = {
+    const normalizedRegularCustomerBookingForm = {
       ...regularCustomerBookingForm,
+      billingMonth: getRegularCustomerBillingMonth(regularCustomerBookingForm),
+    };
+    const nextBookingPreview = {
+      ...normalizedRegularCustomerBookingForm,
       customerFolderHref,
       customerName,
       createdAtLabel,
@@ -737,6 +779,13 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerMockSaveReviewFeedbackTone("info");
     setRegularCustomerMockSaveReviewFeedback(
       "Valid mock save clicks show a local confirmation review here. No save, link, audit, invoice, payment, bank, notification, calendar, or Supabase action is active.",
+    );
+    setRegularCustomerMapSuggestFeedback(
+      "Future Google Map address suggestion will appear here. Not active yet: no Google API call, no map billing/cost, and no location saved.",
+    );
+    setRegularCustomerParserHelperText("");
+    setRegularCustomerParserHelperFeedback(
+      "Paste free-text booking details here later. Mock/local only: no OpenAI/ChatGPT API call, no Supabase save, and no booking created.",
     );
     setRegularCustomerBookingClearFeedbackTone("success");
     setRegularCustomerBookingClearFeedback(
@@ -1096,8 +1145,43 @@ export default function MockCustomerDashboardPage() {
                 />
               </label>
 
+              <div
+                className="rounded-md border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950 md:col-span-2 xl:col-span-3"
+                data-regular-customer-map-suggest-helper="true"
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-800">
+                      Location helper placeholder
+                    </p>
+                    <h3 className="mt-1 font-bold" data-regular-customer-map-suggest-heading="true">
+                      Google Map Suggest — Mock Only
+                    </h3>
+                    <p className="mt-1 font-semibold" data-regular-customer-map-suggest-boundary="true">
+                      Future Google Map address suggestion will appear here. Not active yet. No Google API call, no map
+                      billing/cost, and no location saved.
+                    </p>
+                  </div>
+                  <button
+                    className="min-h-11 rounded-md border border-sky-900 bg-sky-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
+                    data-regular-customer-map-suggest-button="true"
+                    onClick={handleRegularCustomerMapSuggest}
+                    type="button"
+                  >
+                    Preview Mock Map Suggest
+                  </button>
+                </div>
+                <p
+                  aria-live="polite"
+                  className="mt-3 rounded-md border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-950"
+                  data-regular-customer-map-suggest-feedback="true"
+                >
+                  {regularCustomerMapSuggestFeedback}
+                </p>
+              </div>
+
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Route type *
+                Type of Service *
                 <select
                   aria-invalid={isRegularCustomerBookingFieldMissing("routeType")}
                   className={regularCustomerBookingFieldClass("routeType")}
@@ -1107,8 +1191,8 @@ export default function MockCustomerDashboardPage() {
                   value={regularCustomerBookingForm.routeType}
                 >
                   {regularCustomerRouteTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                    <option key={option} value={option}>
+                      {option}
                     </option>
                   ))}
                 </select>
@@ -1124,9 +1208,9 @@ export default function MockCustomerDashboardPage() {
                   onChange={(event) => updateRegularCustomerBookingField("vehicleType", event.target.value)}
                   value={regularCustomerBookingForm.vehicleType}
                 >
-                  {regularCustomerVehicleTypeOptions.map((vehicleType) => (
-                    <option key={vehicleType} value={vehicleType}>
-                      {vehicleType}
+                  {regularCustomerVehicleTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -1180,41 +1264,50 @@ export default function MockCustomerDashboardPage() {
                 />
               </label>
 
-              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Billing month *
-                <input
-                  aria-invalid={isRegularCustomerBookingFieldMissing("billingMonth")}
-                  className={regularCustomerBookingFieldClass("billingMonth")}
-                  data-regular-booking-field="billingMonth"
-                  data-regular-booking-required="true"
-                  onChange={(event) => updateRegularCustomerBookingField("billingMonth", event.target.value)}
-                  placeholder="2026-05"
-                  type="text"
-                  value={regularCustomerBookingForm.billingMonth}
-                />
-              </label>
-
-              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Billing status default
-                <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                  data-regular-booking-field="billingStatus"
-                  readOnly
-                  type="text"
-                  value={regularCustomerBookingForm.billingStatus}
-                />
-              </label>
-
-              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
-                Payment method default
-                <input
-                  className="min-h-11 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                  data-regular-booking-field="paymentMethod"
-                  readOnly
-                  type="text"
-                  value={regularCustomerBookingForm.paymentMethod}
-                />
-              </label>
+              <div
+                className="rounded-md border border-teal-200 bg-teal-50 p-4 text-sm leading-6 text-teal-950 md:col-span-2 xl:col-span-3"
+                data-regular-customer-mini-parser-helper="true"
+              >
+                <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-start">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-800">
+                      Free-text helper placeholder
+                    </p>
+                    <h3 className="mt-1 font-bold" data-regular-customer-mini-parser-heading="true">
+                      Mini Parser Helper — Mock Only
+                    </h3>
+                    <p className="mt-1 font-semibold" data-regular-customer-mini-parser-boundary="true">
+                      Future AI/parser helper may extract booking details. Not active yet. No OpenAI/ChatGPT API call,
+                      no Supabase save, and no booking created.
+                    </p>
+                  </div>
+                  <button
+                    className="min-h-11 rounded-md border border-teal-900 bg-teal-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-teal-800"
+                    data-regular-customer-mini-parser-button="true"
+                    onClick={handleRegularCustomerParserHelper}
+                    type="button"
+                  >
+                    Preview Mock Parser Help
+                  </button>
+                </div>
+                <label className="mt-3 flex flex-col gap-1 text-sm font-semibold text-teal-950">
+                  Paste booking details for future parser review
+                  <textarea
+                    className="min-h-24 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-teal-700"
+                    data-regular-customer-mini-parser-text="true"
+                    onChange={(event) => setRegularCustomerParserHelperText(event.target.value)}
+                    placeholder="Future helper only. Paste booking text here for local UI preview."
+                    value={regularCustomerParserHelperText}
+                  />
+                </label>
+                <p
+                  aria-live="polite"
+                  className="mt-3 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-semibold text-teal-950"
+                  data-regular-customer-mini-parser-feedback="true"
+                >
+                  {regularCustomerParserHelperFeedback}
+                </p>
+              </div>
 
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-3">
                 Internal note
@@ -1352,7 +1445,7 @@ export default function MockCustomerDashboardPage() {
                             className="mt-1 font-semibold text-slate-950"
                             data-regular-customer-mock-save-review-summary="vehicleType"
                           >
-                            {regularCustomerMockSaveReview.vehicleType}
+                            {getRegularCustomerVehicleTypeLabel(regularCustomerMockSaveReview.vehicleType)}
                           </dd>
                         </div>
                         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
@@ -1529,7 +1622,7 @@ export default function MockCustomerDashboardPage() {
                   </p>
                   <p>
                     Type/vehicle: {regularCustomerBookingPreview.routeType} /{" "}
-                    {regularCustomerBookingPreview.vehicleType}
+                    {getRegularCustomerVehicleTypeLabel(regularCustomerBookingPreview.vehicleType)}
                   </p>
                   <p>
                     Pax/luggage/stops: {regularCustomerBookingPreview.passengerCount || "1"} pax /{" "}
@@ -1911,7 +2004,8 @@ export default function MockCustomerDashboardPage() {
                           <div>
                             <h6 className="font-bold text-slate-950">{item.passengerName}</h6>
                             <p className="mt-1 text-slate-600">
-                              {item.pickupDate} {item.pickupTime} / {item.routeType} / {item.vehicleType}
+                              {item.pickupDate} {item.pickupTime} / {item.routeType} /{" "}
+                              {getRegularCustomerVehicleTypeLabel(item.vehicleType)}
                             </p>
                           </div>
                           <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
@@ -2032,7 +2126,7 @@ export default function MockCustomerDashboardPage() {
                             Route / vehicle
                           </dt>
                           <dd className="mt-1 text-slate-950">
-                            {item.routeType} / {item.vehicleType}
+                            {item.routeType} / {getRegularCustomerVehicleTypeLabel(item.vehicleType)}
                           </dd>
                         </div>
                         <div>

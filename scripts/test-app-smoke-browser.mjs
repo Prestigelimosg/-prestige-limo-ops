@@ -653,6 +653,9 @@ async function runChromeTest() {
             document.querySelector("[data-regular-customer-mock-save-feedback]")?.getAttribute(
               "data-regular-customer-mock-save-feedback-tone",
             ) || "",
+          regularMockSaveReviewVisible: Boolean(
+            document.querySelector("[data-regular-customer-mock-save-review]"),
+          ),
           regularMockSaveVisible: (() => {
             const button = document.querySelector("[data-regular-customer-mock-save]");
             const rect = button?.getBoundingClientRect();
@@ -902,6 +905,11 @@ async function runChromeTest() {
         dashboardState.regularMockSaveFeedbackTone,
         "info",
         "Expected mock Save Regular Booking helper to start as info",
+      );
+      assert.equal(
+        dashboardState.regularMockSaveReviewVisible,
+        false,
+        "Expected mock save confirmation review to stay hidden before a valid mock save click",
       );
       assert.equal(
         dashboardState.regularSavedVisibilityVisible,
@@ -1476,6 +1484,22 @@ async function runChromeTest() {
         assert.equal(clicked, true, `Expected ${description} button to be clickable`);
       };
 
+      const clickRegularCustomerMockSaveReviewButton = async (action, description) => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector(${JSON.stringify(
+            `[data-regular-customer-mock-save-review-${action}]`,
+          )});
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
       const clickRegularCustomerMockRowAction = async (rowIndex, action, description) => {
         const clicked = await evaluate(`(() => {
           const row = document.querySelectorAll("[data-regular-customer-booking-list-row]")[${rowIndex}];
@@ -1533,6 +1557,7 @@ async function runChromeTest() {
         evaluate(`(() => {
           const button = document.querySelector("[data-regular-customer-mock-save]");
           const feedback = document.querySelector("[data-regular-customer-mock-save-feedback]");
+          const review = document.querySelector("[data-regular-customer-mock-save-review]");
           const buttonRect = button?.getBoundingClientRect();
           const feedbackRect = feedback?.getBoundingClientRect();
 
@@ -1542,6 +1567,21 @@ async function runChromeTest() {
             emptyPreview: Boolean(document.querySelector("[data-regular-customer-booking-empty-preview]")),
             feedback: feedback?.textContent.trim() || "",
             feedbackTone: feedback?.getAttribute("data-regular-customer-mock-save-feedback-tone") || "",
+            formValues: Object.fromEntries(
+              [
+                "customerId",
+                "passengerName",
+                "pickupDate",
+                "pickupTime",
+                "pickupLocation",
+                "dropoffLocation",
+                "vehicleType",
+                "billingMonth",
+              ].map((field) => [
+                field,
+                document.querySelector("[data-regular-booking-field='" + field + "']")?.value || "",
+              ]),
+            ),
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
             listRowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
             listText:
@@ -1550,6 +1590,27 @@ async function runChromeTest() {
               (field) => field.textContent.trim(),
             ),
             previewVisible: Boolean(document.querySelector("[data-regular-customer-booking-preview]")),
+            reviewBoundary:
+              document.querySelector("[data-regular-customer-mock-save-review-boundary]")?.textContent.trim() || "",
+            reviewButtons: [...document.querySelectorAll("[data-regular-customer-mock-save-review] button")].map(
+              (button) => button.textContent.trim(),
+            ),
+            reviewFeedback:
+              document.querySelector("[data-regular-customer-mock-save-review-feedback]")?.textContent.trim() || "",
+            reviewFeedbackTone:
+              document.querySelector("[data-regular-customer-mock-save-review-feedback]")?.getAttribute(
+                "data-regular-customer-mock-save-review-feedback-tone",
+              ) || "",
+            reviewHeading:
+              document.querySelector("[data-regular-customer-mock-save-review-heading]")?.textContent.trim() || "",
+            reviewSummary: [
+              ...document.querySelectorAll("[data-regular-customer-mock-save-review-summary]"),
+            ].map((item) => ({
+              field: item.getAttribute("data-regular-customer-mock-save-review-summary") || "",
+              value: item.textContent.trim(),
+            })),
+            reviewText: review?.innerText || "",
+            reviewVisible: Boolean(review),
           };
         })()`);
 
@@ -1790,6 +1851,11 @@ async function runChromeTest() {
         "Expected invalid mock save not to show a regular customer preview",
       );
       assert.equal(
+        invalidMockSaveState.reviewVisible,
+        false,
+        "Expected invalid mock save not to show the mock confirmation review",
+      );
+      assert.equal(
         invalidMockSaveState.listRowCount,
         0,
         "Expected invalid mock save not to add a local monthly billing row",
@@ -2005,6 +2071,166 @@ async function runChromeTest() {
         validMockSaveState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
         "Expected valid mock save not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assert.equal(
+        validMockSaveState.reviewVisible,
+        true,
+        "Expected valid mock save to show the mock confirmation review",
+      );
+      assert.equal(
+        validMockSaveState.reviewHeading,
+        "Mock Save Confirmation — Not Active",
+        "Expected mock save confirmation review heading",
+      );
+      for (const expectedReviewBoundaryText of [
+        "Mock/local only.",
+        "No booking saved",
+        "no customer folder linked",
+        "no Supabase call",
+        "no invoice number",
+        "no audit record",
+        "no payment/bank action",
+        "no notification/calendar action",
+      ]) {
+        assert.equal(
+          validMockSaveState.reviewBoundary.includes(expectedReviewBoundaryText),
+          true,
+          `Expected mock save confirmation boundary text: ${expectedReviewBoundaryText}`,
+        );
+      }
+      assert.deepEqual(
+        validMockSaveState.reviewButtons,
+        ["Confirm Mock Save Review", "Dismiss Mock Review"],
+        "Expected mock save confirmation review controls",
+      );
+      const validMockSaveReviewSummary = Object.fromEntries(
+        validMockSaveState.reviewSummary.map((item) => [item.field, item.value]),
+      );
+      assert.deepEqual(
+        validMockSaveReviewSummary,
+        {
+          billingMonth: "2026-05",
+          customerName: "UBS",
+          dropoffLocation: "Raffles Place",
+          passengerName: "Browser Test Passenger",
+          pickupDateTime: "2026-05-28 / 1530hrs",
+          pickupLocation: "Changi Airport T3",
+          vehicleType: "AVF",
+        },
+        "Expected mock save confirmation review to summarize the future save review fields",
+      );
+      for (const expectedReviewText of [
+        "Mock/local only",
+        "No booking saved",
+        "no customer folder linked",
+        "no Supabase call",
+        "no invoice number",
+        "no audit record",
+        "no payment/bank action",
+        "no notification/calendar action",
+      ]) {
+        assert.equal(
+          validMockSaveState.reviewText.includes(expectedReviewText),
+          true,
+          `Expected mock save confirmation review text: ${expectedReviewText}`,
+        );
+      }
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(validMockSaveState.reviewText),
+        false,
+        "Expected mock save confirmation review not to create an invoice number",
+      );
+
+      await clickRegularCustomerMockSaveReviewButton("confirm", "confirm mock save review");
+      const confirmedMockSaveReviewState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerMockSaveState();
+          return candidateState.reviewFeedback.includes("Future real save will require business approval")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer confirm mock save review local feedback",
+      );
+      assert.equal(
+        confirmedMockSaveReviewState.reviewVisible,
+        true,
+        "Expected confirming mock save review to keep the review panel visible",
+      );
+      assert.equal(
+        confirmedMockSaveReviewState.reviewFeedbackTone,
+        "success",
+        "Expected confirming mock save review to show success feedback near the panel",
+      );
+      for (const expectedConfirmText of [
+        "Supabase implementation",
+        "No save happened now",
+        "no booking was saved",
+        "no customer folder was linked",
+        "no local row was added or removed",
+        "no row data changed",
+        "no invoice number or audit record was created",
+        "no Supabase, payment, bank, notification, or calendar call was made",
+      ]) {
+        assert.equal(
+          confirmedMockSaveReviewState.reviewFeedback.includes(expectedConfirmText),
+          true,
+          `Expected confirm mock save review feedback text: ${expectedConfirmText}`,
+        );
+      }
+      assert.equal(
+        confirmedMockSaveReviewState.listRowCount,
+        0,
+        "Expected confirming mock save review not to add a local monthly billing row",
+      );
+      assert.equal(
+        confirmedMockSaveReviewState.emptyPreview,
+        true,
+        "Expected confirming mock save review not to create a mock preview",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(confirmedMockSaveReviewState.reviewFeedback),
+        false,
+        "Expected confirming mock save review not to allocate an invoice number",
+      );
+      assert.deepEqual(
+        confirmedMockSaveReviewState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected confirming mock save review not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await clickRegularCustomerMockSaveReviewButton("dismiss", "dismiss mock save review");
+      const dismissedMockSaveReviewState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerMockSaveState();
+          return !candidateState.reviewVisible ? candidateState : false;
+        },
+        10000,
+        "regular customer dismiss mock save review",
+      );
+      assert.equal(
+        dismissedMockSaveReviewState.listRowCount,
+        0,
+        "Expected dismissing mock save review not to add a local monthly billing row",
+      );
+      assert.equal(
+        dismissedMockSaveReviewState.formValues.passengerName,
+        "Browser Test Passenger",
+        "Expected dismissing mock save review not to change form data",
+      );
+      assert.equal(
+        dismissedMockSaveReviewState.formValues.customerId,
+        "ubs",
+        "Expected dismissing mock save review not to change selected customer",
+      );
+      assert.deepEqual(
+        dismissedMockSaveReviewState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected dismissing mock save review not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       const validSavedVisibilityState = await readRegularCustomerSavedVisibilityState();
       assert.equal(

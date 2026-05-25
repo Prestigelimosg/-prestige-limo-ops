@@ -174,6 +174,17 @@ type RegularCustomerDraftInvoicePreview = {
 
 type RegularCustomerBookingFeedbackTone = "error" | "info" | "success";
 
+type RegularCustomerMockSaveReview = {
+  billingMonth: string;
+  customerName: string;
+  dropoffLocation: string;
+  passengerName: string;
+  pickupDate: string;
+  pickupLocation: string;
+  pickupTime: string;
+  vehicleType: string;
+};
+
 const initialRegularCustomerBookingListFilters: RegularCustomerBookingListFilters = {
   billingMonth: "",
   billingStatus: "",
@@ -333,6 +344,13 @@ export default function MockCustomerDashboardPage() {
     "Future real save placeholder only. Mock/local only: no booking save, customer folder link write, Supabase call, invoice number, payment/bank action, notification, or calendar action.",
   );
   const [regularCustomerMockSaveFeedbackTone, setRegularCustomerMockSaveFeedbackTone] =
+    useState<RegularCustomerBookingFeedbackTone>("info");
+  const [regularCustomerMockSaveReview, setRegularCustomerMockSaveReview] =
+    useState<RegularCustomerMockSaveReview | null>(null);
+  const [regularCustomerMockSaveReviewFeedback, setRegularCustomerMockSaveReviewFeedback] = useState(
+    "Valid mock save clicks show a local confirmation review here. No save, link, audit, invoice, payment, bank, notification, calendar, or Supabase action is active.",
+  );
+  const [regularCustomerMockSaveReviewFeedbackTone, setRegularCustomerMockSaveReviewFeedbackTone] =
     useState<RegularCustomerBookingFeedbackTone>("info");
   const [regularCustomerBookingMissingFields, setRegularCustomerBookingMissingFields] = useState<
     Array<keyof RegularCustomerBookingForm>
@@ -591,6 +609,11 @@ export default function MockCustomerDashboardPage() {
 
     if (missingFields.length > 0) {
       setRegularCustomerBookingMissingFields(missingFields.map(({ field }) => field));
+      setRegularCustomerMockSaveReview(null);
+      setRegularCustomerMockSaveReviewFeedbackTone("info");
+      setRegularCustomerMockSaveReviewFeedback(
+        "Mock confirmation review stays hidden until required fields are present. No booking was saved or linked.",
+      );
       setRegularCustomerMockSaveFeedbackTone("error");
       setRegularCustomerMockSaveFeedback(
         `Real Save Regular Booking is not active yet. Future real save would check required fields first: ${missingFields
@@ -604,9 +627,38 @@ export default function MockCustomerDashboardPage() {
     const customerName = customer?.companyName ?? "Selected customer";
 
     setRegularCustomerBookingMissingFields([]);
+    setRegularCustomerMockSaveReview({
+      billingMonth: regularCustomerBookingForm.billingMonth,
+      customerName,
+      dropoffLocation: regularCustomerBookingForm.dropoffLocation,
+      passengerName: regularCustomerBookingForm.passengerName,
+      pickupDate: regularCustomerBookingForm.pickupDate,
+      pickupLocation: regularCustomerBookingForm.pickupLocation,
+      pickupTime: regularCustomerBookingForm.pickupTime,
+      vehicleType: regularCustomerBookingForm.vehicleType,
+    });
+    setRegularCustomerMockSaveReviewFeedbackTone("info");
+    setRegularCustomerMockSaveReviewFeedback(
+      "Mock confirmation review opened locally. Review details only: no booking was saved, no customer folder was linked, no invoice number or audit record was created, and no Supabase, payment, bank, notification, or calendar call was made.",
+    );
     setRegularCustomerMockSaveFeedbackTone("success");
     setRegularCustomerMockSaveFeedback(
       `${customerName} Save Regular Booking placeholder clicked. Future real save will require staff confirmation and separate Supabase approval. No booking was saved, no customer folder was linked, no local row was added, no row data changed, no invoice number or audit record was created, and no payment, bank, notification, calendar, or Supabase call was made.`,
+    );
+  }
+
+  function handleRegularCustomerMockSaveReviewConfirm() {
+    setRegularCustomerMockSaveReviewFeedbackTone("success");
+    setRegularCustomerMockSaveReviewFeedback(
+      "Future real save will require business approval and Supabase implementation before it can run. No save happened now: no booking was saved, no customer folder was linked, no local row was added or removed, no row data changed, no invoice number or audit record was created, and no Supabase, payment, bank, notification, or calendar call was made.",
+    );
+  }
+
+  function handleRegularCustomerMockSaveReviewDismiss() {
+    setRegularCustomerMockSaveReview(null);
+    setRegularCustomerMockSaveReviewFeedbackTone("info");
+    setRegularCustomerMockSaveReviewFeedback(
+      "Mock save review dismissed locally. No booking was saved, no customer folder was linked, and no row data changed.",
     );
   }
 
@@ -680,6 +732,11 @@ export default function MockCustomerDashboardPage() {
     setRegularCustomerMockSaveFeedbackTone("info");
     setRegularCustomerMockSaveFeedback(
       "Future real save placeholder only. Mock/local only: no booking save, customer folder link write, Supabase call, invoice number, payment/bank action, notification, or calendar action.",
+    );
+    setRegularCustomerMockSaveReview(null);
+    setRegularCustomerMockSaveReviewFeedbackTone("info");
+    setRegularCustomerMockSaveReviewFeedback(
+      "Valid mock save clicks show a local confirmation review here. No save, link, audit, invoice, payment, bank, notification, calendar, or Supabase action is active.",
     );
     setRegularCustomerBookingClearFeedbackTone("success");
     setRegularCustomerBookingClearFeedback(
@@ -1236,6 +1293,130 @@ export default function MockCustomerDashboardPage() {
                   >
                     {regularCustomerMockSaveFeedback}
                   </p>
+                  {regularCustomerMockSaveReview ? (
+                    <article
+                      className="mt-4 rounded-md border border-amber-300 bg-white p-4 text-sm leading-6 text-slate-700"
+                      data-regular-customer-mock-save-review="true"
+                    >
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
+                        Mock confirmation step
+                      </p>
+                      <h4
+                        className="mt-2 text-sm font-bold text-slate-950"
+                        data-regular-customer-mock-save-review-heading="true"
+                      >
+                        Mock Save Confirmation — Not Active
+                      </h4>
+                      <p
+                        className="mt-2 rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 font-semibold text-amber-950"
+                        data-regular-customer-mock-save-review-boundary="true"
+                      >
+                        Mock/local only. No booking saved, no customer folder linked, no Supabase call, no invoice
+                        number, no audit record, no payment/bank action, and no notification/calendar action.
+                      </p>
+
+                      <dl
+                        className="mt-3 grid gap-2 sm:grid-cols-2"
+                        data-regular-customer-mock-save-review-summary-list="true"
+                      >
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                          <dt className="text-xs font-bold uppercase text-slate-500">Customer/account</dt>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-mock-save-review-summary="customerName"
+                          >
+                            {regularCustomerMockSaveReview.customerName}
+                          </dd>
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                          <dt className="text-xs font-bold uppercase text-slate-500">Passenger name</dt>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-mock-save-review-summary="passengerName"
+                          >
+                            {regularCustomerMockSaveReview.passengerName}
+                          </dd>
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                          <dt className="text-xs font-bold uppercase text-slate-500">Pickup date/time</dt>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-mock-save-review-summary="pickupDateTime"
+                          >
+                            {regularCustomerMockSaveReview.pickupDate} / {regularCustomerMockSaveReview.pickupTime}
+                          </dd>
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                          <dt className="text-xs font-bold uppercase text-slate-500">Vehicle type</dt>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-mock-save-review-summary="vehicleType"
+                          >
+                            {regularCustomerMockSaveReview.vehicleType}
+                          </dd>
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                          <dt className="text-xs font-bold uppercase text-slate-500">Pickup location</dt>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-mock-save-review-summary="pickupLocation"
+                          >
+                            {regularCustomerMockSaveReview.pickupLocation}
+                          </dd>
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                          <dt className="text-xs font-bold uppercase text-slate-500">Drop-off location</dt>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-mock-save-review-summary="dropoffLocation"
+                          >
+                            {regularCustomerMockSaveReview.dropoffLocation}
+                          </dd>
+                        </div>
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 sm:col-span-2">
+                          <dt className="text-xs font-bold uppercase text-slate-500">Billing month</dt>
+                          <dd
+                            className="mt-1 font-semibold text-slate-950"
+                            data-regular-customer-mock-save-review-summary="billingMonth"
+                          >
+                            {regularCustomerMockSaveReview.billingMonth}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <button
+                          className="min-h-11 rounded-md border border-amber-900 bg-amber-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-800"
+                          data-regular-customer-mock-save-review-confirm="true"
+                          onClick={handleRegularCustomerMockSaveReviewConfirm}
+                          type="button"
+                        >
+                          Confirm Mock Save Review
+                        </button>
+                        <button
+                          className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-50"
+                          data-regular-customer-mock-save-review-dismiss="true"
+                          onClick={handleRegularCustomerMockSaveReviewDismiss}
+                          type="button"
+                        >
+                          Dismiss Mock Review
+                        </button>
+                      </div>
+
+                      <p
+                        aria-live="polite"
+                        className={`mt-3 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+                          regularCustomerMockSaveReviewFeedbackTone,
+                        )}`}
+                        data-regular-customer-mock-save-review-feedback="true"
+                        data-regular-customer-mock-save-review-feedback-tone={
+                          regularCustomerMockSaveReviewFeedbackTone
+                        }
+                      >
+                        {regularCustomerMockSaveReviewFeedback}
+                      </p>
+                    </article>
+                  ) : null}
                 </div>
               </div>
             </div>

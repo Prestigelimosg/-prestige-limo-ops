@@ -88,6 +88,121 @@ Important boundary:
 - Linking to a customer folder is not the same as creating a real payment record unless the future schema and route are explicitly approved.
 - Bank transfer should remain a manual-record payment method only.
 
+### Stage 4A-48 Real Save/Linking Plan — Planning Only
+
+This section is planning only. It does not approve app behavior changes, schema changes, migrations, Supabase commands, real booking saves, real customer records, payment records, audit records, invoice generation, invoice numbers, statements, PDFs, sending, payment APIs, bank APIs, Stripe, PayNow, notifications, WhatsApp, email, SMS, or calendar sync.
+
+Current state:
+
+- The regular customer form and monthly billing list on `/customers` are still mock/local only.
+- Local rows reset on page refresh.
+- Draft invoice preview is mock/local only.
+- Edit, amend, and cancel row controls are mock/local only.
+- No Supabase write exists for this regular customer form/list yet.
+
+Future real save goal:
+
+- Allow staff to save a regular customer booking into the real booking system later.
+- Link the saved booking to the selected customer folder.
+- Keep monthly billing grouping clear by customer and billing month.
+- Keep invoice number creation separate from booking save/linking.
+- Keep payment and bank transfer handling manual-record only.
+
+Data that must be saved later, subject to approved schema/data mapping:
+
+- Customer/account id.
+- Booker/contact person.
+- Passenger name.
+- Pickup date.
+- Pickup time.
+- Pickup location.
+- Drop-off location.
+- Route type.
+- Vehicle type.
+- Passenger count.
+- Luggage.
+- Extra stops.
+- Flight number, if any.
+- Customer reference / PO.
+- Billing month.
+- Billing status.
+- Payment method.
+- Internal staff note.
+- Source: regular customer form.
+- Created by / updated by, later if auth exists.
+
+Customer linking rules:
+
+- Only link to an existing known customer account when staff select it.
+- Do not auto-create a real customer account without separate approval.
+- Do not infer the customer folder from free text during this stage.
+- Customer invoice prefix should stay stable and customer-specific later.
+- No invoice number should be created during booking save.
+
+Save behavior safety plan:
+
+- Future implementation should have a clear Save Regular Booking button, separate from mock preview.
+- Show staff a confirmation before the first real save.
+- Show success or error feedback near the save button.
+- Prevent duplicate save from double-clicking.
+- Keep mock preview and real save visibly different.
+- Show the saved booking in the customer folder and monthly billing list only after save succeeds.
+
+Audit and edit/amend/cancel relation:
+
+- Real save must prepare for future audit history.
+- For now, no real audit record should be created.
+- Later edit, amend, and cancel should operate on saved booking ids only.
+- Mock row controls should not pretend to edit real bookings.
+
+Monthly billing relation:
+
+- Saved regular bookings should become eligible for monthly billing review.
+- Billing status should start as unbilled/draft unless staff explicitly change it later.
+- Cancelled, no-show, and fee behavior should be reviewed before invoice preview.
+- No invoice number, real invoice, PDF, statement, or sending should happen during save/linking.
+
+Supabase planning only:
+
+- Do not create migrations now.
+- Before implementation, inspect existing booking/customer tables and types.
+- Any schema change must be separately approved.
+- Do not run Supabase db push or Supabase db reset.
+- Prefer small staged implementation:
+  1. Plan schema/data mapping.
+  2. Add tests.
+  3. Implement a save API or server action only after approval.
+  4. Protect duplicate save and error handling.
+  5. Browser-test customer folder visibility.
+
+Required tests before future implementation:
+
+- Parser tests remain unchanged unless parser behavior is touched.
+- Regular customer form validation still works.
+- Mock preview still works.
+- Real save button cannot save an invalid booking.
+- Successful save creates exactly one booking record.
+- Saved booking links to the correct customer.
+- No invoice number is created.
+- No payment or bank API is called.
+- No notification, calendar, or PDF behavior is added.
+- Duplicate click does not create a duplicate booking.
+- Customer folder shows the saved booking correctly.
+- Mobile and no-horizontal-overflow checks still pass.
+
+Explicit non-goals:
+
+- No real invoice generation.
+- No invoice numbers.
+- No statement or PDF generation.
+- No sending.
+- No payment API, bank API, Stripe, or PayNow.
+- No notification, WhatsApp, email, or SMS sending.
+- No calendar sync.
+- No customer auto-create.
+- No migration without separate approval.
+- No parser change.
+
 ## 6. Edit/Amend/Cancel Workflow Plan
 
 The edit, amend, and cancel workflow must protect booking history.

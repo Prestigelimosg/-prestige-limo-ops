@@ -1272,8 +1272,15 @@ export default function MockCustomerDashboardPage() {
                 notification, or Supabase write is used.
               </p>
             </div>
-            <div className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-              Clean mock dashboard for finding customer folders and reviewing outstanding balances.
+            <div
+              className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 shadow-sm"
+              data-customer-internal-staff-notice="true"
+            >
+              <p className="font-bold">Internal Staff Dashboard — Not Customer-Facing</p>
+              <p className="mt-1">
+                Use /book for customer booking requests. This page contains dispatcher, billing, payment
+                review, and staff-only planning tools.
+              </p>
             </div>
           </div>
         </header>

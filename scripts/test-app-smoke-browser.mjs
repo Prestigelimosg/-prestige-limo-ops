@@ -569,7 +569,13 @@ async function runChromeTest() {
         const text = document.body.innerText;
         const searchInput = document.querySelector("[data-customer-search]");
         const searchRect = searchInput?.getBoundingClientRect();
+        const internalStaffNotice = document.querySelector("[data-customer-internal-staff-notice]");
+        const internalStaffNoticeRect = internalStaffNotice?.getBoundingClientRect();
         return {
+          customerInternalStaffNotice: internalStaffNotice?.textContent.trim() || "",
+          customerInternalStaffNoticeVisible: Boolean(
+            internalStaffNoticeRect && internalStaffNoticeRect.width > 0 && internalStaffNoticeRect.height > 0,
+          ),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
@@ -883,6 +889,21 @@ async function runChromeTest() {
       assert.equal(dashboardState.helperVisible, true, "Expected search helper before results");
       assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
+      assert.equal(
+        dashboardState.customerInternalStaffNoticeVisible,
+        true,
+        "Expected /customers internal staff-only notice to be visible",
+      );
+      assert.equal(
+        dashboardState.customerInternalStaffNotice.includes("Internal Staff Dashboard — Not Customer-Facing"),
+        true,
+        "Expected /customers internal staff-only notice heading",
+      );
+      assert.equal(
+        dashboardState.customerInternalStaffNotice.includes("Use /book for customer booking requests."),
+        true,
+        "Expected /customers notice to point customers to /book",
+      );
       assert.equal(
         dashboardState.regularBookingFormVisible,
         true,
@@ -4442,6 +4463,9 @@ async function runChromeTest() {
               docClientWidth: document.documentElement.clientWidth,
               docScrollWidth: document.documentElement.scrollWidth,
               helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
+              internalStaffNotice:
+                document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
+              internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
               rowCount: document.querySelectorAll("[data-customer-row]").length,
             };
           })()`),
@@ -4450,6 +4474,16 @@ async function runChromeTest() {
       );
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
+      assert.equal(
+        mobileDashboardState.internalStaffNoticeVisible,
+        true,
+        "Expected mobile /customers internal staff-only notice to be visible",
+      );
+      assert.equal(
+        mobileDashboardState.internalStaffNotice.includes("Use /book for customer booking requests."),
+        true,
+        "Expected mobile /customers internal staff-only notice to mention /book",
+      );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
         `Expected mobile customer dashboard not to overflow horizontally: ${mobileDashboardState.docScrollWidth} > ${mobileDashboardState.docClientWidth}`,

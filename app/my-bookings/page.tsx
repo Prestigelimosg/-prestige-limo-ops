@@ -78,9 +78,38 @@ const pickupMinuteOptions = [
 ];
 
 const visibleBookingLimit = 10;
+const portalCurrentMonthKey = "2026-05";
+const portalCurrentMonthLabel = "May 2026";
+
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
 const bookingFilters: BookingFilter[] = ["Upcoming", "Completed", "Cancelled"];
 const portalSections: PortalSection[] = ["New Booking Request", ...bookingFilters];
+
+const initialBookingPages: Record<BookingFilter, number> = {
+  Cancelled: 1,
+  Completed: 1,
+  Upcoming: 1,
+};
+
+const initialSelectedBookingMonths: Record<BookingFilter, string> = {
+  Cancelled: "",
+  Completed: "",
+  Upcoming: "",
+};
 
 const initialBookingRequestForm: BookingRequestForm = {
   companyName: "",
@@ -105,6 +134,137 @@ const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [
   "passengerName",
   "pickupDate",
   "pickupTime",
+];
+
+const samplePickupLocations = [
+  "Raffles Singapore",
+  "Marina Bay Sands",
+  "The St. Regis Singapore",
+  "Changi Airport T1",
+  "Four Seasons Hotel Singapore",
+  "Capella Singapore",
+];
+
+const sampleDropoffLocations = [
+  "Changi Airport T3",
+  "Mandarin Oriental Singapore",
+  "Singapore Expo",
+  "Fullerton Hotel",
+  "Gardens by the Bay",
+  "Pan Pacific Singapore",
+];
+
+const sampleServices = [
+  "Airport Arrival",
+  "Airport Departure",
+  "Point-to-Point Transfer",
+  "Hourly / Disposal",
+  "Event / VIP Movement",
+  "Other / To Confirm",
+];
+
+const sampleVehicles = [
+  "Alphard / Vellfire",
+  "Mercedes Viano / V-Class",
+  "Hi-roof Minibus",
+  "Mercedes E-Class",
+  "Mercedes S-Class",
+];
+
+function buildSampleBooking({
+  day,
+  id,
+  month,
+  passengerPrefix,
+  status,
+  year,
+}: {
+  day: number;
+  id: string;
+  month: string;
+  passengerPrefix: string;
+  status: BookingStatus;
+  year: number;
+}): CustomerPortalBooking {
+  const sequence = Number(id.replace(/\D/g, "").slice(-2)) || day;
+  const hour = String(8 + (sequence % 10)).padStart(2, "0");
+  const minute = pickupMinuteOptions[sequence % pickupMinuteOptions.length];
+
+  return {
+    dropoffLocation: sampleDropoffLocations[sequence % sampleDropoffLocations.length],
+    id,
+    passengerName: `${passengerPrefix} ${sequence}`,
+    pickupDateTime: `${day} ${month} ${year}, ${hour}:${minute}`,
+    pickupLocation: samplePickupLocations[sequence % samplePickupLocations.length],
+    serviceType: sampleServices[sequence % sampleServices.length],
+    specialRequest: "No extra request.",
+    status,
+    vehicleType: sampleVehicles[sequence % sampleVehicles.length],
+  };
+}
+
+const additionalCompletedCurrentMonthBookings = Array.from({ length: 11 }, (_, index) =>
+  buildSampleBooking({
+    day: 15 - index,
+    id: `booking-completed-may-${String(index + 1).padStart(2, "0")}`,
+    month: "May",
+    passengerPrefix: "Completed Guest",
+    status: "Completed",
+    year: 2026,
+  }),
+);
+
+const additionalCancelledCurrentMonthBookings = Array.from({ length: 11 }, (_, index) =>
+  buildSampleBooking({
+    day: 19 - index,
+    id: `booking-cancelled-may-${String(index + 1).padStart(2, "0")}`,
+    month: "May",
+    passengerPrefix: "Cancelled Guest",
+    status: "Cancelled",
+    year: 2026,
+  }),
+);
+
+const pastCompletedMonthBookings = [
+  ...Array.from({ length: 11 }, (_, index) =>
+    buildSampleBooking({
+      day: 22 - index,
+      id: `booking-completed-march-${String(index + 1).padStart(2, "0")}`,
+      month: "March",
+      passengerPrefix: "March Guest",
+      status: "Completed",
+      year: 2026,
+    }),
+  ),
+  buildSampleBooking({
+    day: 18,
+    id: "booking-completed-february-01",
+    month: "February",
+    passengerPrefix: "February Guest",
+    status: "Completed",
+    year: 2026,
+  }),
+];
+
+const pastCancelledMonthBookings = [
+  ...Array.from({ length: 11 }, (_, index) =>
+    buildSampleBooking({
+      day: 24 - index,
+      id: `booking-cancelled-april-${String(index + 1).padStart(2, "0")}`,
+      month: "April",
+      passengerPrefix: "April Guest",
+      status: "Cancelled",
+      year: 2026,
+    }),
+  ),
+  buildSampleBooking({
+    day: 12,
+    id: "booking-cancelled-january-01",
+    month: "January",
+    passengerPrefix: "January Guest",
+    status: "Cancelled",
+    year: 2026,
+  }),
 ];
 
 const bookings: CustomerPortalBooking[] = [
@@ -266,6 +426,10 @@ const bookings: CustomerPortalBooking[] = [
     status: "Cancelled",
     vehicleType: "Mercedes Viano / V-Class",
   },
+  ...additionalCompletedCurrentMonthBookings,
+  ...additionalCancelledCurrentMonthBookings,
+  ...pastCompletedMonthBookings,
+  ...pastCancelledMonthBookings,
 ];
 
 function rowMatchesFilter(booking: CustomerPortalBooking, filter: BookingFilter) {
@@ -282,6 +446,28 @@ function rowMatchesFilter(booking: CustomerPortalBooking, filter: BookingFilter)
 
 function normalize(value: string) {
   return value.trim().toLowerCase();
+}
+
+function getBookingMonthInfo(booking: CustomerPortalBooking) {
+  const [dateText = ""] = booking.pickupDateTime.split(",");
+  const [dayText = "", monthText = "", yearText = ""] = dateText.trim().split(" ");
+  const monthIndex = monthNames.indexOf(monthText);
+  const year = Number(yearText);
+  const day = Number(dayText);
+
+  if (monthIndex < 0 || !Number.isFinite(year) || !Number.isFinite(day)) {
+    return {
+      key: "",
+      label: "Date to confirm",
+      sortValue: 0,
+    };
+  }
+
+  return {
+    key: `${yearText}-${String(monthIndex + 1).padStart(2, "0")}`,
+    label: `${monthText} ${yearText}`,
+    sortValue: Date.UTC(year, monthIndex, day),
+  };
 }
 
 function fieldClass(hasError = false) {
@@ -318,6 +504,9 @@ export default function CustomerPortalPage() {
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
+  const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
+  const [selectedBookingMonths, setSelectedBookingMonths] =
+    useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
   const [bookingRequestForm, setBookingRequestForm] = useState<BookingRequestForm>(initialBookingRequestForm);
   const [missingBookingRequestFields, setMissingBookingRequestFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingRequestFeedback, setBookingRequestFeedback] = useState<BookingRequestFeedback>({
@@ -326,6 +515,7 @@ export default function CustomerPortalPage() {
   });
 
   const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
+  const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
 
   const filteredBookings = useMemo(() => {
     const query = normalize(searchQuery);
@@ -355,12 +545,89 @@ export default function CustomerPortalPage() {
     });
   }, [activeFilter, searchQuery]);
 
-  const visibleBookings = filteredBookings.slice(0, visibleBookingLimit);
+  const pastMonthOptions = useMemo(() => {
+    if (activeFilter === "Upcoming") {
+      return [];
+    }
+
+    const months = new Map<string, { key: string; label: string; sortValue: number }>();
+
+    filteredBookings.forEach((booking) => {
+      const monthInfo = getBookingMonthInfo(booking);
+
+      if (monthInfo.key && monthInfo.key !== portalCurrentMonthKey) {
+        months.set(monthInfo.key, monthInfo);
+      }
+    });
+
+    return [...months.values()].sort((left, right) => right.key.localeCompare(left.key));
+  }, [activeFilter, filteredBookings]);
+
+  const scopedBookings = useMemo(() => {
+    if (activeFilter === "Upcoming") {
+      return filteredBookings;
+    }
+
+    const monthKey = selectedBookingMonth || portalCurrentMonthKey;
+
+    return filteredBookings.filter((booking) => getBookingMonthInfo(booking).key === monthKey);
+  }, [activeFilter, filteredBookings, selectedBookingMonth]);
+
+  const totalBookingPages = Math.max(1, Math.ceil(scopedBookings.length / visibleBookingLimit));
+  const currentBookingPage = Math.min(bookingPages[activeFilter] || 1, totalBookingPages);
+  const firstVisibleBookingIndex = (currentBookingPage - 1) * visibleBookingLimit;
+  const visibleBookings = scopedBookings.slice(firstVisibleBookingIndex, firstVisibleBookingIndex + visibleBookingLimit);
+  const showingStart = scopedBookings.length === 0 ? 0 : firstVisibleBookingIndex + 1;
+  const showingEnd = firstVisibleBookingIndex + visibleBookings.length;
+  const selectedMonthOption = pastMonthOptions.find((month) => month.key === selectedBookingMonth);
+  const activeMonthLabel = (() => {
+    if (activeFilter === "Upcoming") {
+      return "";
+    }
+
+    if (selectedBookingMonth) {
+      return selectedMonthOption?.label || selectedBookingMonth;
+    }
+
+    return portalCurrentMonthLabel;
+  })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
 
   function handleSectionChange(section: PortalSection) {
+    const nextFilter: BookingFilter = section === "New Booking Request" ? "Upcoming" : section;
+
     setActiveSection(section);
+    setExpandedBookingId("");
+    setChangeFeedback({});
+    setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
+    setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
+  }
+
+  function handleSearchChange(value: string) {
+    setSearchQuery(value);
+    setExpandedBookingId("");
+    setChangeFeedback({});
+    setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
+  }
+
+  function handleMonthSelect(monthKey: string) {
+    setSelectedBookingMonths((current) => ({ ...current, [activeFilter]: monthKey }));
+    setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
+    setExpandedBookingId("");
+    setChangeFeedback({});
+  }
+
+  function handlePageChange(direction: "next" | "previous") {
+    setBookingPages((current) => {
+      const currentPage = Math.min(current[activeFilter] || 1, totalBookingPages);
+      const nextPage = direction === "next" ? currentPage + 1 : currentPage - 1;
+
+      return {
+        ...current,
+        [activeFilter]: Math.min(Math.max(nextPage, 1), totalBookingPages),
+      };
+    });
     setExpandedBookingId("");
     setChangeFeedback({});
   }
@@ -760,16 +1027,97 @@ export default function CustomerPortalPage() {
                     className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-950 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                     data-customer-portal-search="true"
                     id="customer-portal-search"
-                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onChange={(event) => handleSearchChange(event.target.value)}
                     placeholder="Search passenger, pickup, drop-off, flight, service"
                     type="search"
                     value={searchQuery}
                   />
                 </div>
 
-                <p className="text-sm font-semibold text-slate-700" data-customer-portal-showing="true">
-                  Showing {visibleBookings.length} of {filteredBookings.length} bookings
-                </p>
+                {activeFilter !== "Upcoming" ? (
+                  <div
+                    className="rounded-md border border-slate-200 bg-slate-50 p-3"
+                    data-customer-portal-month-groups="true"
+                  >
+                    <p className="text-sm font-semibold text-slate-800">Select month</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        className={[
+                          "min-h-10 rounded-md border px-3 py-2 text-sm font-semibold transition",
+                          selectedBookingMonth
+                            ? "border-slate-300 bg-white text-slate-800 hover:border-slate-500"
+                            : "border-slate-950 bg-slate-950 text-white",
+                        ].join(" ")}
+                        data-active={selectedBookingMonth ? "false" : "true"}
+                        data-customer-portal-current-month="true"
+                        onClick={() => handleMonthSelect("")}
+                        type="button"
+                      >
+                        {portalCurrentMonthLabel}
+                      </button>
+
+                      {pastMonthOptions.map((month) => {
+                        const isSelected = selectedBookingMonth === month.key;
+
+                        return (
+                          <button
+                            className={[
+                              "min-h-10 rounded-md border px-3 py-2 text-sm font-semibold transition",
+                              isSelected
+                                ? "border-slate-950 bg-slate-950 text-white"
+                                : "border-slate-300 bg-white text-slate-800 hover:border-slate-500",
+                            ].join(" ")}
+                            data-active={isSelected ? "true" : "false"}
+                            data-customer-portal-month-button={month.key}
+                            key={month.key}
+                            onClick={() => handleMonthSelect(month.key)}
+                            type="button"
+                          >
+                            {month.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-semibold text-slate-700">
+                    {activeMonthLabel ? (
+                      <p className="mb-1 text-slate-600" data-customer-portal-active-month="true">
+                        {activeMonthLabel}
+                      </p>
+                    ) : null}
+                    <p data-customer-portal-showing="true">
+                      {scopedBookings.length === 0
+                        ? "Showing 0 of 0 bookings"
+                        : `Showing ${showingStart}-${showingEnd} of ${scopedBookings.length} bookings`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2" data-customer-portal-pagination="true">
+                    <button
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      data-customer-portal-prev="true"
+                      disabled={currentBookingPage <= 1}
+                      onClick={() => handlePageChange("previous")}
+                      type="button"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm font-semibold text-slate-700" data-customer-portal-page-summary="true">
+                      Page {currentBookingPage} of {totalBookingPages}
+                    </span>
+                    <button
+                      className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      data-customer-portal-next="true"
+                      disabled={currentBookingPage >= totalBookingPages}
+                      onClick={() => handlePageChange("next")}
+                      type="button"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
 

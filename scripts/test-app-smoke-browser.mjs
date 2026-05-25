@@ -5110,6 +5110,9 @@ async function runChromeTest() {
         const requestFeedback = document.querySelector("[data-customer-portal-request-feedback]");
         const pickupHour = document.querySelector("[data-customer-portal-pickup-hour]");
         const pickupMinute = document.querySelector("[data-customer-portal-pickup-minute]");
+        const previousPageButton = document.querySelector("[data-customer-portal-prev]");
+        const nextPageButton = document.querySelector("[data-customer-portal-next]");
+        const monthButtons = [...document.querySelectorAll("[data-customer-portal-month-button]")];
         const requestFieldState = (field) => {
           const control = document.querySelector(\`[data-customer-portal-request-field="\${field}"]\`);
           const rect = control?.getBoundingClientRect();
@@ -5191,6 +5194,15 @@ async function runChromeTest() {
             visible: Boolean(requestForm),
           },
           integrationCalls: window.__customerPortalIntegrationCalls || [],
+          monthGroupsVisible: Boolean(document.querySelector("[data-customer-portal-month-groups]")),
+          monthLabels: monthButtons.map((button) => button.textContent.trim()),
+          monthKeys: monthButtons.map((button) => button.getAttribute("data-customer-portal-month-button") || ""),
+          pageSummary: document.querySelector("[data-customer-portal-page-summary]")?.textContent.trim() || "",
+          pagination: {
+            nextDisabled: Boolean(nextPageButton?.disabled),
+            previousDisabled: Boolean(previousPageButton?.disabled),
+            visible: Boolean(document.querySelector("[data-customer-portal-pagination]")),
+          },
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
           rowCount: rows.length,
           rowIds: rows.map((row) => row.getAttribute("data-customer-portal-row") || ""),
@@ -5309,6 +5321,35 @@ async function runChromeTest() {
       assert.equal(clicked, true, `Expected customer portal ${filter} filter to be clickable`);
     };
 
+    const clickCustomerPortalPageButton = async (direction) => {
+      const selector = direction === "next" ? "[data-customer-portal-next]" : "[data-customer-portal-prev]";
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(selector)});
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected customer portal ${direction} page button to be clickable`);
+    };
+
+    const clickCustomerPortalMonth = async (monthKey) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-month-button="${monthKey}"]`)});
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected customer portal month ${monthKey} to be clickable`);
+    };
+
     const clickCustomerPortalDetail = async (bookingId) => {
       const clicked = await evaluate(`(() => {
         const button = document.querySelector(${JSON.stringify(`[data-customer-portal-detail-button="${bookingId}"]`)});
@@ -5354,7 +5395,11 @@ async function runChromeTest() {
       assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
       assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
       assert.equal(initialState.rowCount, 10, "Expected /my-bookings to show at most 10 rows by default");
-      assert.equal(initialState.showingText, "Showing 10 of 12 bookings", "Expected /my-bookings showing count");
+      assert.equal(initialState.showingText, "Showing 1-10 of 12 bookings", "Expected /my-bookings showing count");
+      assert.equal(initialState.pageSummary, "Page 1 of 2", "Expected /my-bookings first page summary");
+      assert.equal(initialState.pagination.visible, true, "Expected /my-bookings pagination controls");
+      assert.equal(initialState.pagination.previousDisabled, true, "Expected first page previous control to be disabled");
+      assert.equal(initialState.pagination.nextDisabled, false, "Expected first page next control to be enabled");
       assert.deepEqual(
         initialState.sectionLabels,
         ["New Booking Request", "Upcoming", "Completed", "Cancelled"],
@@ -5372,6 +5417,30 @@ async function runChromeTest() {
       );
       assert.equal(/[A-Z]{2,}-\d{3,}/.test(initialState.text), false, "Expected /my-bookings not to create invoice-style numbers");
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
+
+      await clickCustomerPortalPageButton("next");
+      const upcomingPageTwoState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 11-12 of 12 bookings" ? candidateState : false;
+        },
+        10000,
+        "customer portal Upcoming page two",
+      );
+      assert.equal(upcomingPageTwoState.rowCount, 2, "Expected Upcoming page two to show remaining compact rows");
+      assert.equal(upcomingPageTwoState.pageSummary, "Page 2 of 2", "Expected Upcoming page two summary");
+      assert.equal(upcomingPageTwoState.pagination.previousDisabled, false, "Expected page two previous control to be enabled");
+      assert.equal(upcomingPageTwoState.pagination.nextDisabled, true, "Expected page two next control to be disabled");
+
+      await clickCustomerPortalPageButton("previous");
+      await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 1-10 of 12 bookings" ? candidateState : false;
+        },
+        10000,
+        "customer portal Upcoming page one",
+      );
 
       await clickCustomerPortalSection("New Booking Request");
       const requestFormState = await waitForCondition(
@@ -5568,7 +5637,7 @@ async function runChromeTest() {
 
       await setCustomerPortalSearch("Sentosa");
       const searchState = await readCustomerPortalState();
-      assert.equal(searchState.showingText, "Showing 2 of 2 bookings", "Expected /my-bookings search to filter rows");
+      assert.equal(searchState.showingText, "Showing 1-2 of 2 bookings", "Expected /my-bookings search to filter rows");
       assert.equal(searchState.rowCount, 2, "Expected /my-bookings search to keep compact rows");
 
       await setCustomerPortalSearch("");
@@ -5576,15 +5645,26 @@ async function runChromeTest() {
       const completedState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.activeFilter === "Completed" ? candidateState : false;
+          return candidateState.activeFilter === "Completed" && candidateState.showingText === "Showing 1-10 of 13 bookings"
+            ? candidateState
+            : false;
         },
         10000,
         "customer portal completed filter",
       );
-      assert.equal(completedState.showingText, "Showing 2 of 2 bookings", "Expected Completed count");
+      assert.equal(completedState.monthGroupsVisible, true, "Expected Completed bookings to expose compact month rows");
       assert.deepEqual(
-        completedState.rows.map((row) => row.status),
-        ["Completed", "Completed"],
+        completedState.monthKeys,
+        ["2026-03", "2026-02"],
+        "Expected Completed past months to be grouped as compact rows",
+      );
+      assert.equal(completedState.showingText, "Showing 1-10 of 13 bookings", "Expected current-month Completed page count");
+      assert.equal(completedState.pageSummary, "Page 1 of 2", "Expected current-month Completed first page summary");
+      assert.equal(completedState.pagination.previousDisabled, true, "Expected Completed first page previous to be disabled");
+      assert.equal(completedState.pagination.nextDisabled, false, "Expected Completed first page next to be enabled");
+      assert.deepEqual(
+        [...new Set(completedState.rows.map((row) => row.status))],
+        ["Completed"],
         "Expected Completed filter rows",
       );
       assert.equal(
@@ -5593,21 +5673,108 @@ async function runChromeTest() {
         "Expected completed bookings to be read-only without Request change buttons",
       );
 
+      await clickCustomerPortalPageButton("next");
+      const completedPageTwoState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 11-13 of 13 bookings" ? candidateState : false;
+        },
+        10000,
+        "customer portal current-month Completed page two",
+      );
+      assert.equal(completedPageTwoState.rowCount, 3, "Expected Completed page two to avoid a long list");
+      assert.equal(completedPageTwoState.pagination.nextDisabled, true, "Expected Completed page two next to be disabled");
+
+      await clickCustomerPortalMonth("2026-03");
+      const completedPastMonthState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 1-10 of 11 bookings" &&
+            candidateState.rowIds.every((id) => id.includes("completed-march"))
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal March completed bookings",
+      );
+      assert.equal(completedPastMonthState.rowCount, 10, "Expected selected Completed month to stay capped at 10 rows");
+      assert.equal(completedPastMonthState.pageSummary, "Page 1 of 2", "Expected selected Completed month page summary");
+      assert.deepEqual(
+        [...new Set(completedPastMonthState.rows.map((row) => row.status))],
+        ["Completed"],
+        "Expected selected Completed month rows only",
+      );
+
+      await clickCustomerPortalPageButton("next");
+      const completedPastMonthPageTwoState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 11-11 of 11 bookings" ? candidateState : false;
+        },
+        10000,
+        "customer portal March completed page two",
+      );
+      assert.equal(completedPastMonthPageTwoState.rowCount, 1, "Expected selected Completed month page two to show the final row");
+
       await clickCustomerPortalFilter("Cancelled");
       const cancelledState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.activeFilter === "Cancelled" ? candidateState : false;
+          return candidateState.activeFilter === "Cancelled" && candidateState.showingText === "Showing 1-10 of 12 bookings"
+            ? candidateState
+            : false;
         },
         10000,
         "customer portal cancelled filter",
       );
-      assert.equal(cancelledState.showingText, "Showing 1 of 1 bookings", "Expected Cancelled count");
-      assert.deepEqual(cancelledState.rows.map((row) => row.status), ["Cancelled"], "Expected Cancelled filter row");
+      assert.equal(cancelledState.monthGroupsVisible, true, "Expected Cancelled bookings to expose compact month rows");
+      assert.deepEqual(
+        cancelledState.monthKeys,
+        ["2026-04", "2026-01"],
+        "Expected Cancelled past months to be grouped as compact rows",
+      );
+      assert.equal(cancelledState.showingText, "Showing 1-10 of 12 bookings", "Expected current-month Cancelled page count");
+      assert.equal(cancelledState.pageSummary, "Page 1 of 2", "Expected current-month Cancelled first page summary");
+      assert.deepEqual(
+        [...new Set(cancelledState.rows.map((row) => row.status))],
+        ["Cancelled"],
+        "Expected Cancelled filter rows",
+      );
       assert.equal(
         cancelledState.rows.reduce((total, row) => total + row.requestButtonCount, 0),
         0,
         "Expected cancelled bookings not to show Request change buttons",
+      );
+
+      await clickCustomerPortalPageButton("next");
+      const cancelledPageTwoState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 11-12 of 12 bookings" ? candidateState : false;
+        },
+        10000,
+        "customer portal current-month Cancelled page two",
+      );
+      assert.equal(cancelledPageTwoState.rowCount, 2, "Expected Cancelled page two to avoid a long list");
+      assert.equal(cancelledPageTwoState.pagination.nextDisabled, true, "Expected Cancelled page two next to be disabled");
+
+      await clickCustomerPortalMonth("2026-04");
+      const cancelledPastMonthState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 1-10 of 11 bookings" &&
+            candidateState.rowIds.every((id) => id.includes("cancelled-april"))
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal April cancelled bookings",
+      );
+      assert.equal(cancelledPastMonthState.rowCount, 10, "Expected selected Cancelled month to stay capped at 10 rows");
+      assert.deepEqual(
+        [...new Set(cancelledPastMonthState.rows.map((row) => row.status))],
+        ["Cancelled"],
+        "Expected selected Cancelled month rows only",
       );
 
       await setCustomerPortalViewportAndLoad(mobileViewport);

@@ -203,6 +203,124 @@ Explicit non-goals:
 - No migration without separate approval.
 - No parser change.
 
+### Stage 4A-52 Real Save Confirmation/Approval Plan — Planning Only
+
+This section is planning only. It does not approve app behavior changes, schema changes, migrations, Supabase commands, real booking saves, real customer records, payment records, audit records, invoice generation, invoice numbers, statements, PDFs, sending, payment APIs, bank APIs, Stripe, PayNow, notifications, WhatsApp, email, SMS, or calendar sync.
+
+Current state:
+
+- Save Regular Booking is still mock/local only.
+- Mock Save Confirmation — Not Active is still mock/local only.
+- No booking is saved.
+- No customer folder is linked.
+- No Supabase write exists for the regular customer form/list.
+- No invoice number, audit record, payment, notification, calendar, statement, or PDF is created.
+
+Future real confirmation goal:
+
+- Staff should review all important booking details before a real save is allowed.
+- Real save must require a clear confirmation step.
+- Confirmation must be separate from the mock booking preview and mock invoice preview.
+- Confirmation must not create invoice numbers.
+- Confirmation must not trigger payment, bank, notification, calendar, statement, or PDF behavior.
+
+Staff review checklist before future real save:
+
+- Selected customer/account.
+- Booker/contact person.
+- Passenger name.
+- Pickup date.
+- Pickup time.
+- Pickup location.
+- Drop-off location.
+- Route type.
+- Vehicle type.
+- Passenger count.
+- Luggage.
+- Extra stops.
+- Flight number, if any.
+- Customer reference / PO.
+- Billing month.
+- Billing status.
+- Payment method.
+- Internal staff note.
+
+Approval rules:
+
+- Staff must see a clear Review before save panel before any future real save.
+- Staff must confirm intentionally before a real save runs.
+- Invalid bookings must never reach final confirmation.
+- Real save must not happen silently.
+- Duplicate double-click save must be blocked.
+- If saving fails, show a clear local error near the save button.
+- If saving succeeds, show a clear local success message near the save button.
+
+Customer linking rules:
+
+- Only link to an existing selected customer account.
+- Do not auto-create real customer accounts without separate approval.
+- Do not infer customer folder from free text at this stage.
+- Customer invoice prefix should stay stable and customer-specific later.
+- No invoice number should be created during booking save.
+
+Audit planning:
+
+- Later real save should prepare for audit history.
+- Audit should record who saved, what was saved, and when.
+- For now, no real audit records should be created.
+- Future edit, amend, and cancel workflows should operate only on saved booking ids.
+
+Monthly billing relation:
+
+- Saved regular bookings should become eligible for monthly billing review.
+- Billing status should start as unbilled/draft unless staff explicitly change it later.
+- Cancelled, no-show, and fee behavior should be reviewed before invoice preview.
+- No real invoice, invoice number, statement, PDF, or sending should happen during save confirmation.
+
+Supabase planning only:
+
+- Do not create migrations now.
+- Before implementation, inspect existing booking/customer tables and types.
+- Any schema change must be separately approved.
+- Do not run Supabase db push or Supabase db reset.
+- Future implementation should be staged:
+  1. Confirm data mapping.
+  2. Add tests first.
+  3. Implement a save API or server action only after approval.
+  4. Protect duplicate save.
+  5. Handle save success and error safely.
+  6. Browser-test saved booking visibility in the customer folder and monthly billing list.
+
+Required tests before future implementation:
+
+- Parser tests remain unchanged unless parser behavior is touched.
+- Regular customer form validation still works.
+- Mock preview still works.
+- Mock confirmation remains mock until real implementation is explicitly approved.
+- Invalid booking cannot reach real confirmation.
+- Successful real save creates exactly one booking record.
+- Duplicate click does not create a duplicate booking.
+- Saved booking links to the correct customer.
+- No invoice number is created.
+- No payment or bank API is called.
+- No notification, calendar, or PDF behavior is added.
+- Customer folder shows the saved booking correctly.
+- Mobile and no-horizontal-overflow checks still pass.
+
+Explicit non-goals:
+
+- No real invoice generation.
+- No invoice numbers.
+- No statement or PDF generation.
+- No sending.
+- No payment API, bank API, Stripe, or PayNow.
+- No notification, WhatsApp, email, or SMS sending.
+- No calendar sync.
+- No customer auto-create.
+- No migration without separate approval.
+- No parser change.
+- No real Supabase save in this stage.
+
 ## 6. Edit/Amend/Cancel Workflow Plan
 
 The edit, amend, and cancel workflow must protect booking history.

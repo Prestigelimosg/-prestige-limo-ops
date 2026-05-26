@@ -6296,10 +6296,12 @@ async function runChromeTest() {
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
             .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
           dispatcherExceptionText: [
+            "cancel current driver assignment",
             "cancel driver assignment",
             "cancel assignment",
             "replacement driver",
             "replacement car",
+            "reassign replacement driver",
             "reassign driver",
             "car breakdown",
             "driver missed job",
@@ -6716,6 +6718,7 @@ async function runChromeTest() {
       );
       await evaluate(`(() => {
         window.__driverDemoFetchCalls = [];
+        const blockedDriverDemoUrlPattern = /supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/upload|api\\/storage|api\\/file|api\\/driver-upload|api\\/driver-file|api\\/driver-exception|api\\/driver-replacement|api\\/driver-reassign|api\\/driver-assignment|api\\/driver-cancel|api\\/cancel-driver|api\\/reassign-driver|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
         const originalFetch = window.__driverDemoOriginalFetch || window.fetch.bind(window);
         window.__driverDemoOriginalFetch = originalFetch;
         window.fetch = (...args) => {
@@ -6725,9 +6728,9 @@ async function runChromeTest() {
 
           window.__driverDemoFetchCalls.push(\`\${method} \${url}\`);
 
-          if (url.includes("/rest/v1/drivers")) {
+          if (blockedDriverDemoUrlPattern.test(url)) {
             return Promise.resolve(
-              new Response(JSON.stringify({ message: "Driver demo must not access Driver Database from the browser" }), {
+              new Response(JSON.stringify({ message: "Driver demo smoke test blocked a forbidden integration call" }), {
                 status: 500,
                 headers: { "content-type": "application/json" },
               }),
@@ -6788,13 +6791,20 @@ async function runChromeTest() {
           buttons,
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
+          dispatcherExceptionButtons: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-action]")]
+            .map((button) => button.textContent.trim()),
+          dispatcherExceptionMessages: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-message]")]
+            .map((message) => message.textContent.trim()),
+          dispatcherExceptionSection: document.querySelector("[data-driver-demo-dispatcher-exception]")?.innerText || "",
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
             .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
           dispatcherExceptionText: [
+            "cancel current driver assignment",
             "cancel driver assignment",
             "cancel assignment",
             "replacement driver",
             "replacement car",
+            "reassign replacement driver",
             "reassign driver",
             "car breakdown",
             "driver missed job",
@@ -6845,8 +6855,45 @@ async function runChromeTest() {
       assert.deepEqual(initialState.fileInputs, [], `${viewport.label}: expected no real file/photo upload inputs on driver demo`);
       assert.deepEqual(
         initialState.dispatcherExceptionText,
-        [],
-        `${viewport.label}: expected dispatcher cancel/replacement workflow to remain absent and future staff-controlled on driver demo`,
+        [
+          "cancel current driver assignment",
+          "replacement driver",
+          "replacement car",
+          "reassign replacement driver",
+          "car breakdown",
+          "driver missed job",
+          "late driver",
+        ],
+        `${viewport.label}: expected demo-only dispatcher exception placeholder text`,
+      );
+      assert.equal(
+        initialState.dispatcherExceptionSection.includes("Dispatcher Exception / Replacement — Mock Only"),
+        true,
+        `${viewport.label}: expected dispatcher exception placeholder heading`,
+      );
+      assert.equal(
+        initialState.dispatcherExceptionSection.includes("Staff/demo placeholder only. Not shown on the secure public driver token page."),
+        true,
+        `${viewport.label}: expected staff/demo-only dispatcher exception boundary`,
+      );
+      assert.equal(
+        initialState.dispatcherExceptionSection.includes("Mock/local only"),
+        true,
+        `${viewport.label}: expected mock/local dispatcher exception wording`,
+      );
+      assert.equal(
+        initialState.dispatcherExceptionSection.includes("No real cancel/reassign API"),
+        true,
+        `${viewport.label}: expected no real cancel/reassign API wording`,
+      );
+      assert.deepEqual(
+        initialState.dispatcherExceptionButtons,
+        [
+          "Cancel current driver assignment — Mock Only",
+          "Replacement driver/car details — Mock Only",
+          "Reassign replacement driver later — Future staff-controlled workflow",
+        ],
+        `${viewport.label}: expected demo-only dispatcher exception buttons`,
       );
       assert.deepEqual(
         ["Driver name", "Mobile number", "Car plate", "Vehicle model", "PayNow number"].filter(
@@ -6878,6 +6925,9 @@ async function runChromeTest() {
           "Acknowledge Latest ETA",
           "Parse Driver Details",
           "Save",
+          "Cancel current driver assignment — Mock Only",
+          "Replacement driver/car details — Mock Only",
+          "Reassign replacement driver later — Future staff-controlled workflow",
           "OTW",
           "OTS",
           "POB",
@@ -6996,6 +7046,72 @@ async function runChromeTest() {
         initialState.activityLogLabels,
         [],
         `${viewport.label}: expected empty driver activity log before successful actions`,
+      );
+
+      const clickDispatcherExceptionPlaceholder = async (actionKey, expectedMessage, description) => {
+        const beforeFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+        const beforeLogLabels = await evaluate(
+          `[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`,
+        );
+        await clickDriverDemoButton(
+          `[data-driver-demo-dispatcher-exception-action="${actionKey}"]`,
+          `${viewport.label} ${description}`,
+        );
+        const exceptionState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const actionKey = ${JSON.stringify(actionKey)};
+              const expectedMessage = ${JSON.stringify(expectedMessage)};
+              const button = document.querySelector(\`[data-driver-demo-dispatcher-exception-action="\${actionKey}"]\`);
+              const message = document.querySelector(\`[data-driver-demo-dispatcher-exception-message="\${actionKey}"]\`);
+              const section = document.querySelector("[data-driver-demo-dispatcher-exception]");
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+
+              return section?.innerText.includes("Staff/demo placeholder only.") &&
+                section?.innerText.includes("Mock/local only") &&
+                section?.innerText.includes("No real cancel/reassign API") &&
+                message?.textContent.trim() === expectedMessage
+                ? {
+                    currentStatus: document.querySelector("[data-driver-demo-current-status]")?.textContent.trim() || "",
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    fetchCount: (window.__driverDemoFetchCalls || []).length,
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} ${description} local feedback`,
+        );
+
+        assert.equal(exceptionState.currentStatus, "Assigned");
+        assert.equal(exceptionState.fetchCount, beforeFetchCount);
+        assert.deepEqual(
+          await evaluate(`[...document.querySelectorAll("[data-driver-demo-activity-log-label]")].map((item) => item.textContent.trim())`),
+          beforeLogLabels,
+          `${viewport.label}: expected ${description} not to alter the driver activity log`,
+        );
+        assert.equal(
+          exceptionState.distance <= 16,
+          true,
+          `${viewport.label}: expected ${description} feedback close to clicked control`,
+        );
+      };
+
+      await clickDispatcherExceptionPlaceholder(
+        "cancel-assignment",
+        "Mock cancel note recorded locally. No real driver assignment was cancelled and no cancel API was called.",
+        "Cancel current driver assignment mock placeholder",
+      );
+      await clickDispatcherExceptionPlaceholder(
+        "replacement-details",
+        "Mock replacement details note recorded locally. No replacement car or driver details were saved to any live system.",
+        "Replacement driver/car details mock placeholder",
+      );
+      await clickDispatcherExceptionPlaceholder(
+        "reassign-later",
+        "Future reassign placeholder acknowledged locally. No reassign API or dispatch change was called.",
+        "Reassign replacement driver later mock placeholder",
       );
 
       const preAcknowledgementFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
@@ -7899,6 +8015,7 @@ async function runChromeTest() {
         buttons: initialState.buttonLabels,
         docClientWidth: initialState.docClientWidth,
         docScrollWidth: initialState.docScrollWidth,
+        dispatcherExceptionButtons: initialState.dispatcherExceptionButtons,
         inputs: initialState.inputs.map((input) => ({
           label: input.label.split("\\n")[0],
           type: input.type,

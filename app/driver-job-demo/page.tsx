@@ -19,6 +19,10 @@ type ParseFeedback = {
   text: string;
 };
 
+type TargetedFeedback = ParseFeedback & {
+  target: string;
+};
+
 type ParsedDriverDetails = Partial<DriverDetails> & {
   paymentDetailsDetected: boolean;
 };
@@ -47,6 +51,27 @@ const statusOptions = [
   { label: "OTS", message: "Status updated: OTS", value: "OTS" },
   { label: "POB", message: "Status updated: POB", value: "POB" },
   { label: "Job Completed", message: "Status updated: Completed", value: "Job Completed" },
+];
+
+const dispatcherExceptionActions = [
+  {
+    feedback:
+      "Mock cancel note recorded locally. No real driver assignment was cancelled and no cancel API was called.",
+    key: "cancel-assignment",
+    label: "Cancel current driver assignment — Mock Only",
+  },
+  {
+    feedback:
+      "Mock replacement details note recorded locally. No replacement car or driver details were saved to any live system.",
+    key: "replacement-details",
+    label: "Replacement driver/car details — Mock Only",
+  },
+  {
+    feedback:
+      "Future reassign placeholder acknowledged locally. No reassign API or dispatch change was called.",
+    key: "reassign-later",
+    label: "Reassign replacement driver later — Future staff-controlled workflow",
+  },
 ];
 
 const bankDetailsPattern = /\b(bank|account|acct)\b/i;
@@ -281,6 +306,7 @@ export default function DriverJobDemoPage() {
   const [mockLatestEtaFeedback, setMockLatestEtaFeedback] = useState<ParseFeedback | null>(null);
   const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
   const [mockOtsPhotoProofFeedback, setMockOtsPhotoProofFeedback] = useState<ParseFeedback | null>(null);
+  const [dispatcherExceptionFeedback, setDispatcherExceptionFeedback] = useState<TargetedFeedback | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [status, setStatus] = useState("Assigned");
   const [statusMessage, setStatusMessage] = useState("");
@@ -463,6 +489,14 @@ export default function DriverJobDemoPage() {
       "Mock OTS photo proof added",
       "Mock/local OTS photo proof was added. No file upload, camera, or storage was used.",
     );
+  }
+
+  function markDispatcherExceptionPlaceholder(action: (typeof dispatcherExceptionActions)[number]) {
+    setDispatcherExceptionFeedback({
+      target: action.key,
+      text: action.feedback,
+      tone: "success",
+    });
   }
 
   function acknowledgeJob() {
@@ -665,6 +699,51 @@ export default function DriverJobDemoPage() {
             <p className="font-semibold text-slate-800" data-driver-demo-workflow-summary-mock-only="true">
               Mock only. No real message was sent.
             </p>
+          </div>
+        </section>
+
+        <section
+          className="space-y-3"
+          aria-labelledby="driver-demo-dispatcher-exception-heading"
+          data-driver-demo-dispatcher-exception="true"
+        >
+          <h2 id="driver-demo-dispatcher-exception-heading" className="text-base font-semibold text-slate-900">
+            Dispatcher Exception / Replacement — Mock Only
+          </h2>
+          <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+            <p
+              className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+              data-driver-demo-dispatcher-exception-mock-only="true"
+            >
+              Staff/demo placeholder only. Not shown on the secure public driver token page.
+            </p>
+            <p className="text-sm font-medium text-slate-600">
+              Mock/local only for car breakdown, driver missed job, late driver, replacement car, and
+              replacement driver planning. No real cancel/reassign API, Supabase write, notification, or
+              dispatch change runs from this demo.
+            </p>
+            <div className="grid gap-3">
+              {dispatcherExceptionActions.map((action) => (
+                <div className="space-y-2" key={action.key}>
+                  <button
+                    className="min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-900 transition active:bg-slate-100"
+                    data-driver-demo-dispatcher-exception-action={action.key}
+                    onClick={() => markDispatcherExceptionPlaceholder(action)}
+                    type="button"
+                  >
+                    {action.label}
+                  </button>
+                  {dispatcherExceptionFeedback?.target === action.key ? (
+                    <p
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(dispatcherExceptionFeedback.tone)}`}
+                      data-driver-demo-dispatcher-exception-message={action.key}
+                    >
+                      {dispatcherExceptionFeedback.text}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 

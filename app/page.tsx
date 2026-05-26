@@ -340,6 +340,19 @@ type DriverProfileDraft = {
   payoutRules: DriverPayoutRules;
 };
 
+type ReplacementDriverDraft = {
+  driverName: string;
+  driverContact: string;
+  carPlate: string;
+  vehicleModel: string;
+  reason: string;
+  note: string;
+};
+
+type ReplacementDriverFeedback = Message & {
+  action: string;
+};
+
 const initialRateOverrideDraft: RateOverrideDraft = {
   companyName: "",
   bossName: "",
@@ -361,6 +374,36 @@ const initialDriverProfileDraft: DriverProfileDraft = {
   airportPermitNotes: "",
   payoutRules: {},
 };
+
+const initialReplacementDriverDraft: ReplacementDriverDraft = {
+  driverName: "",
+  driverContact: "",
+  carPlate: "",
+  vehicleModel: "",
+  reason: "breakdown",
+  note: "",
+};
+
+const replacementDriverActions = [
+  {
+    feedback:
+      "Mock replacement details saved locally only. No booking, driver assignment, dispatch, Supabase row, or notification was updated.",
+    key: "save",
+    label: "Save Replacement Details — Mock Only",
+  },
+  {
+    feedback:
+      "Mock cancellation note recorded locally only. The current driver assignment was not cancelled in any live system.",
+    key: "cancel",
+    label: "Mark Current Driver Cancelled — Mock Only",
+  },
+  {
+    feedback:
+      "Future staff reassign placeholder acknowledged locally only. No reassign API, dispatch update, or Supabase write was called.",
+    key: "reassign",
+    label: "Reassign Replacement Later — Future Staff Workflow",
+  },
+];
 
 const rateBookingTypes: Array<keyof Required<RateRules>> = ["MNG", "DEP", "TRF", "DSP"];
 
@@ -2262,6 +2305,10 @@ export default function Home() {
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
+  const [replacementDriverDraft, setReplacementDriverDraft] =
+    useState<ReplacementDriverDraft>(initialReplacementDriverDraft);
+  const [replacementDriverFeedback, setReplacementDriverFeedback] =
+    useState<ReplacementDriverFeedback | null>(null);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
   const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
@@ -5206,6 +5253,21 @@ export default function Home() {
     });
   }
 
+  function updateReplacementDriverDraft(field: keyof ReplacementDriverDraft, value: string) {
+    setReplacementDriverDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function markReplacementDriverPlaceholder(action: (typeof replacementDriverActions)[number]) {
+    setReplacementDriverFeedback({
+      action: action.key,
+      text: action.feedback,
+      tone: "success",
+    });
+  }
+
   async function copyDraftDriverDispatch() {
     await copyDispatchCopy("driverDispatch");
   }
@@ -7199,6 +7261,118 @@ export default function Home() {
                 >
                   Apply Driver to Draft
                 </button>
+              </div>
+              <div
+                className="mt-4 border-t border-sky-200 pt-4"
+                data-admin-replacement-placeholder="true"
+              >
+                <div className="mb-3 flex flex-col gap-1">
+                  <h4 className="text-sm font-semibold text-sky-950">
+                    Replacement Car / Driver — Mock Only
+                  </h4>
+                  <p
+                    className="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    data-admin-replacement-boundary="true"
+                  >
+                    Mock/local only. Does not update the real booking, driver assignment, dispatch,
+                    Supabase, or customer/driver notifications.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">
+                      Replacement driver name
+                    </span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-admin-replacement-field="driverName"
+                      onChange={(event) => updateReplacementDriverDraft("driverName", event.target.value)}
+                      placeholder="Replacement driver"
+                      value={replacementDriverDraft.driverName}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">
+                      Replacement driver contact
+                    </span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-admin-replacement-field="driverContact"
+                      onChange={(event) => updateReplacementDriverDraft("driverContact", event.target.value)}
+                      placeholder="Phone / WhatsApp"
+                      type="tel"
+                      value={replacementDriverDraft.driverContact}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Replacement car plate</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-admin-replacement-field="carPlate"
+                      onChange={(event) => updateReplacementDriverDraft("carPlate", event.target.value)}
+                      placeholder="Plate"
+                      value={replacementDriverDraft.carPlate}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">
+                      Replacement vehicle model
+                    </span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-admin-replacement-field="vehicleModel"
+                      onChange={(event) => updateReplacementDriverDraft("vehicleModel", event.target.value)}
+                      placeholder="Vehicle model"
+                      value={replacementDriverDraft.vehicleModel}
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Reason</span>
+                    <select
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-admin-replacement-field="reason"
+                      onChange={(event) => updateReplacementDriverDraft("reason", event.target.value)}
+                      value={replacementDriverDraft.reason}
+                    >
+                      <option value="breakdown">Breakdown</option>
+                      <option value="late-driver">Late driver</option>
+                      <option value="missed-job">Missed job</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Optional note</span>
+                    <input
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                      data-admin-replacement-field="note"
+                      onChange={(event) => updateReplacementDriverDraft("note", event.target.value)}
+                      placeholder="Local note only"
+                      value={replacementDriverDraft.note}
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                  {replacementDriverActions.map((action) => (
+                    <div className="space-y-2" key={action.key}>
+                      <button
+                        className="min-h-10 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
+                        data-admin-replacement-action={action.key}
+                        onClick={() => markReplacementDriverPlaceholder(action)}
+                        type="button"
+                      >
+                        {action.label}
+                      </button>
+                      {replacementDriverFeedback?.action === action.key ? (
+                        <p
+                          className={`rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(replacementDriverFeedback.tone)}`}
+                          data-admin-replacement-feedback={action.key}
+                        >
+                          {replacementDriverFeedback.text}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

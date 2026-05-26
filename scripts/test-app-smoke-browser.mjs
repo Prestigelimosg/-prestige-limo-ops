@@ -52,6 +52,7 @@ const requiredVisibleText = [
   "Route Extras & Child Seat",
   "Job Card Preview",
   "Driver Dispatch",
+  "Replacement Car / Driver — Mock Only",
   "Load Bookings",
   "No completed bookings loaded yet.",
   "Operations Dashboard",
@@ -492,6 +493,205 @@ async function runChromeTest() {
       }
 
       return tabStates;
+    };
+
+    const checkAdminReplacementPlaceholder = async () => {
+      await setViewportAndReload({
+        height: 900,
+        label: "desktop admin replacement",
+        mobile: false,
+        scale: 1,
+        width: 1440,
+      });
+      await clickTab("Dispatch");
+      await evaluate(`(() => {
+        window.__adminReplacementIntegrationCalls = [];
+        const originalFetch = window.__adminReplacementOriginalFetch || window.fetch.bind(window);
+        window.__adminReplacementOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const [target, options = {}] = args;
+          const method = options?.method || "GET";
+          window.__adminReplacementIntegrationCalls.push(\`\${method} \${String(target)}\`);
+          return originalFetch(...args);
+        };
+
+        const originalOpen = window.__adminReplacementOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__adminReplacementOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function(method, url, ...args) {
+          window.__adminReplacementIntegrationCalls.push(\`\${method || "GET"} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...args);
+        };
+
+        if (navigator.sendBeacon && !window.__adminReplacementOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__adminReplacementOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            window.__adminReplacementIntegrationCalls.push(\`BEACON \${String(args[0])}\`);
+            return originalSendBeacon(...args);
+          };
+        }
+      })()`);
+
+      const initialState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const section = document.querySelector("[data-admin-replacement-placeholder]");
+            if (!section) {
+              return false;
+            }
+
+            const rect = section.getBoundingClientRect();
+            const fields = [...document.querySelectorAll("[data-admin-replacement-field]")].map((field) => ({
+              field: field.getAttribute("data-admin-replacement-field") || "",
+              label: field.closest("label")?.querySelector("span")?.textContent.trim() || "",
+              type: field.getAttribute("type") || field.tagName.toLowerCase(),
+              visible: field.getBoundingClientRect().height >= 40,
+            }));
+            const reasonOptions = [...document.querySelectorAll("[data-admin-replacement-field='reason'] option")].map(
+              (option) => option.textContent.trim(),
+            );
+            const actions = [...document.querySelectorAll("[data-admin-replacement-action]")].map((button) => ({
+              action: button.getAttribute("data-admin-replacement-action") || "",
+              label: button.textContent.trim(),
+              visible: button.getBoundingClientRect().height >= 40,
+            }));
+
+            return {
+              boundary: document.querySelector("[data-admin-replacement-boundary]")?.textContent.trim() || "",
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              fields,
+              fileInputs: [...section.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
+                .map((input) => input.outerHTML),
+              headingVisible: section.innerText.includes("Replacement Car / Driver — Mock Only"),
+              reasonOptions,
+              actions,
+              visible: rect.width > 0 && rect.height > 0,
+            };
+          })()`),
+        10000,
+        "admin replacement placeholder",
+      );
+
+      assert.equal(initialState.visible, true, "Expected admin replacement placeholder to be visible");
+      assert.equal(initialState.headingVisible, true, "Expected admin replacement placeholder heading");
+      assert.equal(
+        initialState.boundary,
+        "Mock/local only. Does not update the real booking, driver assignment, dispatch, Supabase, or customer/driver notifications.",
+        "Expected mock/local replacement boundary",
+      );
+      assert.deepEqual(
+        initialState.fields.map((field) => field.label),
+        [
+          "Replacement driver name",
+          "Replacement driver contact",
+          "Replacement car plate",
+          "Replacement vehicle model",
+          "Reason",
+          "Optional note",
+        ],
+        "Expected replacement placeholder fields",
+      );
+      assert.deepEqual(
+        initialState.fields.filter((field) => !field.visible).map((field) => field.field),
+        [],
+        "Expected replacement placeholder fields to be touch-visible",
+      );
+      assert.deepEqual(
+        initialState.reasonOptions,
+        ["Breakdown", "Late driver", "Missed job", "Other"],
+        "Expected replacement reason options",
+      );
+      assert.deepEqual(
+        initialState.actions.map((action) => action.label),
+        [
+          "Save Replacement Details — Mock Only",
+          "Mark Current Driver Cancelled — Mock Only",
+          "Reassign Replacement Later — Future Staff Workflow",
+        ],
+        "Expected replacement mock actions",
+      );
+      assert.deepEqual(
+        initialState.actions.filter((action) => !action.visible).map((action) => action.action),
+        [],
+        "Expected replacement mock actions to be touch-visible",
+      );
+      assert.deepEqual(initialState.fileInputs, [], "Expected no real file/photo upload in admin replacement placeholder");
+      assert.equal(
+        initialState.docScrollWidth <= initialState.docClientWidth + 2,
+        true,
+        "Expected admin replacement placeholder not to create horizontal overflow",
+      );
+
+      const clickReplacementAction = async (actionKey, expectedMessage, description) => {
+        const beforeCallCount = await evaluate(`(window.__adminReplacementIntegrationCalls || []).length`);
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector(${JSON.stringify(`[data-admin-replacement-action="${actionKey}"]`)});
+          if (!button) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+
+        const actionState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const actionKey = ${JSON.stringify(actionKey)};
+              const expectedMessage = ${JSON.stringify(expectedMessage)};
+              const button = document.querySelector(\`[data-admin-replacement-action="\${actionKey}"]\`);
+              const message = document.querySelector(\`[data-admin-replacement-feedback="\${actionKey}"]\`);
+              const buttonRect = button?.getBoundingClientRect();
+              const messageRect = message?.getBoundingClientRect();
+
+              return message?.textContent.trim() === expectedMessage
+                ? {
+                    callCount: (window.__adminReplacementIntegrationCalls || []).length,
+                    distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                    visibleMessages: [...document.querySelectorAll("[data-admin-replacement-feedback]")]
+                      .map((feedback) => feedback.getAttribute("data-admin-replacement-feedback")),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${description} local feedback`,
+        );
+
+        assert.equal(
+          actionState.callCount,
+          beforeCallCount,
+          `${description}: expected no fetch, XHR, beacon, cancel, reassign, update, Supabase, or notification call`,
+        );
+        assert.equal(actionState.distance <= 16, true, `${description}: expected feedback near clicked control`);
+        assert.deepEqual(
+          actionState.visibleMessages,
+          [actionKey],
+          `${description}: expected only the clicked control feedback to be visible`,
+        );
+      };
+
+      await clickReplacementAction(
+        "save",
+        "Mock replacement details saved locally only. No booking, driver assignment, dispatch, Supabase row, or notification was updated.",
+        "Save Replacement Details mock action",
+      );
+      await clickReplacementAction(
+        "cancel",
+        "Mock cancellation note recorded locally only. The current driver assignment was not cancelled in any live system.",
+        "Mark Current Driver Cancelled mock action",
+      );
+      await clickReplacementAction(
+        "reassign",
+        "Future staff reassign placeholder acknowledged locally only. No reassign API, dispatch update, or Supabase write was called.",
+        "Reassign Replacement Later mock action",
+      );
+
+      return {
+        actions: initialState.actions.map((action) => action.label),
+        fields: initialState.fields.map((field) => field.label),
+      };
     };
 
     const setCustomerViewportAndLoad = async (url, viewport) => {
@@ -4711,6 +4911,10 @@ async function runChromeTest() {
             "internal",
             "statement",
             "payment follow-up",
+            "replacement car",
+            "replacement driver",
+            "reassign replacement",
+            "current driver cancelled",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -5164,6 +5368,10 @@ async function runChromeTest() {
             "staff notes",
             "staff-only",
             "developer",
+            "replacement car",
+            "replacement driver",
+            "reassign replacement",
+            "current driver cancelled",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -8053,6 +8261,7 @@ async function runChromeTest() {
       errors: await evaluate("window.__prestigeErrors || []"),
       visibleText: visibleSnapshots.join("\n\n"),
     };
+    state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {
       const responsiveStates = await checkResponsiveTabs(viewport);

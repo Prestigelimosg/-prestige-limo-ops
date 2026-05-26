@@ -405,6 +405,102 @@ const replacementDriverActions = [
   },
 ];
 
+const telegramAlertPreviewSafetyText =
+  "Mock/local only. Does not send Telegram, WhatsApp, SMS, or email. Does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
+
+const telegramAlertPreviewTemplates = [
+  {
+    key: "assignment",
+    label: "New driver job assignment",
+    messageLines: [
+      "Job MOCK-JOB-042: New assignment ready for review.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+  {
+    key: "acknowledgement",
+    label: "Driver acknowledgement reminder",
+    messageLines: [
+      "Job MOCK-JOB-042: Please acknowledge this assignment in Prestige Limo Ops.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+  {
+    key: "one-hour",
+    label: "1-hour before pickup reminder",
+    messageLines: [
+      "Job MOCK-JOB-042: Pickup is in about 1 hour.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+  {
+    key: "otw",
+    label: "OTW reminder",
+    messageLines: [
+      "Job MOCK-JOB-042: Please update OTW in the secure job link when you are on the way.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+  {
+    key: "ots",
+    label: "OTS reminder",
+    messageLines: [
+      "Job MOCK-JOB-042: Please update OTS in the secure job link once you are on the spot.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+  {
+    key: "pob",
+    label: "POB reminder",
+    messageLines: [
+      "Job MOCK-JOB-042: Please update POB in the secure job link after passenger on board.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+  {
+    key: "completed",
+    label: "Job Completed reminder",
+    messageLines: [
+      "Job MOCK-JOB-042: Please mark Job Completed in the secure job link after drop-off.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+  {
+    key: "replacement",
+    label: "Dispatcher replacement alert",
+    messageLines: [
+      "Job MOCK-JOB-042: Dispatcher replacement review needed.",
+      "Pickup: 27 May 2026, 1530hrs.",
+      "Location: Changi Airport T3 Arrival Pickup.",
+      "Type: MNG / Arrival.",
+      "Open secure job link: [secure job link placeholder].",
+    ],
+  },
+] as const;
+
+type TelegramAlertPreviewType = (typeof telegramAlertPreviewTemplates)[number]["key"];
+
 const rateBookingTypes: Array<keyof Required<RateRules>> = ["MNG", "DEP", "TRF", "DSP"];
 
 const rateLabels: Record<keyof Required<RateRules>, string> = {
@@ -2309,6 +2405,10 @@ export default function Home() {
     useState<ReplacementDriverDraft>(initialReplacementDriverDraft);
   const [replacementDriverFeedback, setReplacementDriverFeedback] =
     useState<ReplacementDriverFeedback | null>(null);
+  const [telegramAlertPreviewType, setTelegramAlertPreviewType] =
+    useState<TelegramAlertPreviewType>("assignment");
+  const [telegramAlertPreviewFeedback, setTelegramAlertPreviewFeedback] =
+    useState<Message | null>(null);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
   const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
@@ -2359,6 +2459,17 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  const telegramAlertPreviewTemplate = useMemo(
+    () =>
+      telegramAlertPreviewTemplates.find((template) => template.key === telegramAlertPreviewType) ||
+      telegramAlertPreviewTemplates[0],
+    [telegramAlertPreviewType],
+  );
+  const telegramAlertPreviewMessage = useMemo(
+    () => telegramAlertPreviewTemplate.messageLines.join("\n"),
+    [telegramAlertPreviewTemplate],
+  );
 
   const route = useMemo(() => {
     const pickup = clean(booking.pickup);
@@ -5268,6 +5379,18 @@ export default function Home() {
     });
   }
 
+  function updateTelegramAlertPreviewType(value: TelegramAlertPreviewType) {
+    setTelegramAlertPreviewType(value);
+    setTelegramAlertPreviewFeedback(null);
+  }
+
+  function generateTelegramAlertMockPreview() {
+    setTelegramAlertPreviewFeedback({
+      text: "Mock only — no Telegram message sent.",
+      tone: "success",
+    });
+  }
+
   async function copyDraftDriverDispatch() {
     await copyDispatchCopy("driverDispatch");
   }
@@ -7372,6 +7495,79 @@ export default function Home() {
                       ) : null}
                     </div>
                   ))}
+                </div>
+              </div>
+              <div
+                className="mt-4 border-t border-sky-200 pt-4"
+                data-telegram-alert-preview="true"
+              >
+                <div className="mb-3 flex flex-col gap-1">
+                  <h4
+                    className="text-sm font-semibold text-sky-950"
+                    data-telegram-alert-title="true"
+                  >
+                    Telegram Alert Preview — Mock Only
+                  </h4>
+                  <p
+                    className="rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    data-telegram-alert-boundary="true"
+                  >
+                    {telegramAlertPreviewSafetyText}
+                  </p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,18rem)_1fr]">
+                  <div className="space-y-3">
+                    <label>
+                      <span className="mb-1 block text-sm font-medium text-slate-700">Preview type</span>
+                      <select
+                        className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                        data-telegram-alert-type="true"
+                        onChange={(event) =>
+                          updateTelegramAlertPreviewType(event.target.value as TelegramAlertPreviewType)
+                        }
+                        value={telegramAlertPreviewType}
+                      >
+                        {telegramAlertPreviewTemplates.map((template) => (
+                          <option key={template.key} value={template.key}>
+                            {template.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="space-y-2">
+                      <button
+                        className="min-h-10 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
+                        data-telegram-alert-generate="true"
+                        onClick={generateTelegramAlertMockPreview}
+                        type="button"
+                      >
+                        Generate Mock Preview
+                      </button>
+                      {telegramAlertPreviewFeedback ? (
+                        <p
+                          className={`rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(telegramAlertPreviewFeedback.tone)}`}
+                          data-telegram-alert-feedback="true"
+                        >
+                          {telegramAlertPreviewFeedback.text}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-sky-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Preview wording</p>
+                    <p
+                      className="mt-1 text-sm font-semibold text-sky-950"
+                      data-telegram-alert-selected-label="true"
+                    >
+                      {telegramAlertPreviewTemplate.label}
+                    </p>
+                    <pre
+                      className="mt-2 whitespace-pre-wrap rounded-md bg-slate-950 p-3 font-mono text-xs leading-5 text-white"
+                      data-telegram-alert-message="true"
+                    >
+                      {telegramAlertPreviewMessage}
+                    </pre>
+                  </div>
                 </div>
               </div>
             </div>

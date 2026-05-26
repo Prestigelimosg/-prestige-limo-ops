@@ -62,12 +62,14 @@ const replacementControlLabels = [
 ];
 const telegramBlockedUrlPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
-const telegramBoundaryBrowserExpression = String.raw`(() => {
+const telegramBoundaryBrowserExpression = String.raw`(async () => {
   const telegramUrlPattern =
     /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
   const telegramTokenPattern = /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/g;
   const activeTelegramControlPattern =
     /\b(?:send|create|connect|enable|start|trigger|test|preview)\s+(?:telegram|driver alert)|telegram\s+(?:bot|alert|notification|send|preview|webhook|getupdates|sendmessage|control|button)/i;
+  const telegramPreviewUiPattern =
+    /telegram\s+alert\s+preview|telegram\s+mock(?:\/log)?(?:-only)?\s+preview|mock(?:\/log)?(?:-only)?\s+telegram\s+(?:alert\s+)?preview|telegram\s+(?:send|test|preview)\b|(?:send|test|preview)\s+telegram\b/i;
   const readStorage = (storage) => {
     const values = [];
     try {
@@ -79,6 +81,20 @@ const telegramBoundaryBrowserExpression = String.raw`(() => {
       values.push("storage-read-error:" + (error?.message || String(error)));
     }
     return values;
+  };
+  const readIndexedDbNames = async () => {
+    try {
+      if (!globalThis.indexedDB?.databases) {
+        return [];
+      }
+
+      const databases = await globalThis.indexedDB.databases();
+      return databases.map((database) =>
+        [database?.name || "", String(database?.version || "")].join(":"),
+      );
+    } catch (error) {
+      return ["indexeddb-read-error:" + (error?.message || String(error))];
+    }
   };
   const visibleText = document.body.innerText || "";
   const resourceUrls = performance.getEntriesByType("resource").map((entry) => entry.name || "");
@@ -103,6 +119,10 @@ const telegramBoundaryBrowserExpression = String.raw`(() => {
     .filter(Boolean);
   const localStorageValues = readStorage(localStorage);
   const sessionStorageValues = readStorage(sessionStorage);
+  const cookieValues = document.cookie
+    ? document.cookie.split(";").map((value) => value.trim())
+    : [];
+  const indexedDbValues = await readIndexedDbNames();
   const combinedText = [
     visibleText,
     ...resourceUrls,
@@ -110,12 +130,20 @@ const telegramBoundaryBrowserExpression = String.raw`(() => {
     ...controls,
     ...localStorageValues,
     ...sessionStorageValues,
+    ...cookieValues,
+    ...indexedDbValues,
   ].join("\n");
 
   return {
     activeTelegramControls: controls.filter((value) => activeTelegramControlPattern.test(value)),
+    telegramCookieLeaks: cookieValues.filter((value) => telegramUrlPattern.test(value)),
     telegramControlMentions: controls.filter((value) => /telegram/i.test(value)),
+    telegramIndexedDbLeaks: indexedDbValues.filter((value) => telegramUrlPattern.test(value)),
     telegramLocalStorageLeaks: localStorageValues.filter((value) => telegramUrlPattern.test(value)),
+    telegramPreviewControls: controls.filter((value) => telegramPreviewUiPattern.test(value)),
+    telegramPreviewUiMentions: telegramPreviewUiPattern.test(visibleText)
+      ? ["Telegram preview UI"]
+      : [],
     telegramResourceUrls: resourceUrls.filter((value) => telegramUrlPattern.test(value)),
     telegramScriptLeaks: scriptTexts.filter((value) => telegramUrlPattern.test(value)),
     telegramSessionStorageLeaks: sessionStorageValues.filter((value) =>
@@ -464,14 +492,34 @@ async function runChromeTest() {
         `${state.context}: expected no Telegram values in sessionStorage`,
       );
       assert.deepEqual(
+        state.telegramCookieLeaks,
+        [],
+        `${state.context}: expected no Telegram values in cookies`,
+      );
+      assert.deepEqual(
+        state.telegramIndexedDbLeaks,
+        [],
+        `${state.context}: expected no Telegram values in IndexedDB names`,
+      );
+      assert.deepEqual(
         state.telegramVisibleMentions,
         [],
         `${state.context}: expected no active Telegram UI text before preview stage`,
       );
       assert.deepEqual(
+        state.telegramPreviewUiMentions,
+        [],
+        `${state.context}: expected no Telegram preview UI before mock preview stage`,
+      );
+      assert.deepEqual(
         state.telegramControlMentions,
         [],
         `${state.context}: expected no Telegram controls before preview stage`,
+      );
+      assert.deepEqual(
+        state.telegramPreviewControls,
+        [],
+        `${state.context}: expected no Telegram preview/send/test controls before mock preview stage`,
       );
       assert.deepEqual(
         state.activeTelegramControls,
@@ -493,6 +541,8 @@ async function runChromeTest() {
       telegramBoundarySnapshots.push({
         activeTelegramControls: state.activeTelegramControls.length,
         context,
+        previewControls: state.telegramPreviewControls.length,
+        previewMentions: state.telegramPreviewUiMentions.length,
         networkRequests: state.telegramNetworkRequests.length,
         resourceUrls: state.telegramResourceUrls.length,
         tokenLeaks: state.telegramTokenLeaks.length,

@@ -3,6 +3,13 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  normalizeConsoleMessages,
+  normalizeErrorMessage,
+  sleep,
+  waitForChildExit,
+  waitForCondition,
+} from "./browser-test-helpers.mjs";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const browserName = (process.env.BROWSER || "chrome").toLowerCase();
@@ -74,47 +81,6 @@ const mobileLoadedBookingFixture = {
     traveler_name: "MOBILE USABILITY TRAVELER",
   },
 };
-
-function sleep(timeoutMs) {
-  return new Promise((resolve) => setTimeout(resolve, timeoutMs));
-}
-
-function waitForChildExit(childProcess, timeoutMs = 5000) {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      resolve(undefined);
-    }, timeoutMs);
-
-    childProcess.once("exit", () => {
-      clearTimeout(timeout);
-      resolve(undefined);
-    });
-  });
-}
-
-function normalizeErrorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function normalizeConsoleMessages(values) {
-  return values.map(String).join(" ");
-}
-
-async function waitForCondition(check, timeoutMs = 10000, description = "browser condition") {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    const value = await check();
-
-    if (value) {
-      return value;
-    }
-
-    await sleep(100);
-  }
-
-  throw new Error(`Timed out waiting for ${description}`);
-}
 
 function createChromeClient(webSocketUrl) {
   const socket = new WebSocket(webSocketUrl);

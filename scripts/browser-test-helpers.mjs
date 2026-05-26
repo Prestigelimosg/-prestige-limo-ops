@@ -180,3 +180,9 @@ export async function waitForChromePageTarget(port, timeoutMs = 10000) {
     `Chrome page target on port ${port}`,
   );
 }
+
+export async function navigateWithLoadEvent(client, url) {
+  const loadEvent = client.once("Page.loadEventFired");
+  await client.send("Page.navigate", { url });
+  await loadEvent;
+}

@@ -6,6 +6,7 @@ import path from "node:path";
 import { mockDriverJobTokens } from "../lib/driver-job-link-mock-store.ts";
 import {
   createChromeClient,
+  navigateWithLoadEvent,
   normalizeConsoleMessages,
   normalizeErrorMessage,
   waitForChildExit,
@@ -210,9 +211,7 @@ async function runChromeTest() {
       }))()`);
 
     const navigateToDriverJob = async (token, expectedText) => {
-      const loadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url: driverJobUrl(token) });
-      await loadEvent;
+      await navigateWithLoadEvent(client, driverJobUrl(token));
 
       await waitForCondition(
         () => evaluate(`document.body?.innerText.includes(${JSON.stringify(expectedText)})`),

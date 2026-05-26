@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createChromeClient,
+  navigateWithLoadEvent,
   normalizeConsoleMessages,
   normalizeErrorMessage,
   waitForChildExit,
@@ -221,9 +222,7 @@ async function runChromeTest() {
     };
 
     const navigate = async (url, expectedText) => {
-      const loadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url });
-      await loadEvent;
+      await navigateWithLoadEvent(client, url);
       await waitForCondition(
         () => evaluate(`document.body?.innerText.includes(${JSON.stringify(expectedText)})`),
         10000,

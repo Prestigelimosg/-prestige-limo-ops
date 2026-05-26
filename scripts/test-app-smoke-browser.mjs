@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createChromeClient,
+  navigateWithLoadEvent,
   normalizeConsoleMessages,
   normalizeErrorMessage,
   waitForChildExit,
@@ -329,9 +330,7 @@ async function runChromeTest() {
     await client.send("Page.enable");
     await client.send("Network.enable");
 
-    const loadEvent = client.once("Page.loadEventFired");
-    await client.send("Page.navigate", { url: appUrl });
-    await loadEvent;
+    await navigateWithLoadEvent(client, appUrl);
 
     const evaluate = async (expression) => {
       const result = await client.send("Runtime.evaluate", {
@@ -526,9 +525,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      const viewportLoadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url: appUrl });
-      await viewportLoadEvent;
+      await navigateWithLoadEvent(client, appUrl);
       await waitForTabs();
     };
 
@@ -1186,9 +1183,7 @@ async function runChromeTest() {
       );
 
       const checkNoReplacementLeakOnRoute = async ({ expectedText, routeName, url }) => {
-        const routeLoadEvent = client.once("Page.loadEventFired");
-        await client.send("Page.navigate", { url });
-        await routeLoadEvent;
+        await navigateWithLoadEvent(client, url);
         await waitForCondition(
           () => evaluate(`document.body.innerText.includes(${JSON.stringify(expectedText)})`),
           10000,
@@ -1268,9 +1263,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      const viewportLoadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url });
-      await viewportLoadEvent;
+      await navigateWithLoadEvent(client, url);
     };
 
     const checkAdminTelegramAlertPreview = async () => {
@@ -5728,9 +5721,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      const viewportLoadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url: customerBookingUrl });
-      await viewportLoadEvent;
+      await navigateWithLoadEvent(client, customerBookingUrl);
       await waitForCondition(
         () => evaluate(`Boolean(document.querySelector("[data-customer-booking-page]"))`),
         10000,
@@ -6254,9 +6245,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      const viewportLoadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url: customerPortalUrl });
-      await viewportLoadEvent;
+      await navigateWithLoadEvent(client, customerPortalUrl);
       await waitForCondition(
         () => evaluate(`Boolean(document.querySelector("[data-customer-portal-page]"))`),
         10000,
@@ -7351,9 +7340,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      const viewportLoadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url: driverJobWorkflowUrl });
-      await viewportLoadEvent;
+      await navigateWithLoadEvent(client, driverJobWorkflowUrl);
       await waitForCondition(
         () => evaluate(`document.body.innerText.includes("Mock Workflow Pickup")`),
         10000,
@@ -7906,9 +7893,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      const viewportLoadEvent = client.once("Page.loadEventFired");
-      await client.send("Page.navigate", { url: driverDemoUrl });
-      await viewportLoadEvent;
+      await navigateWithLoadEvent(client, driverDemoUrl);
       await waitForCondition(
         () => evaluate(`document.body.innerText.includes("Prestige Limo Driver Job")`),
         10000,

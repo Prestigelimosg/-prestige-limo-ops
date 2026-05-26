@@ -62,6 +62,8 @@ const replacementControlLabels = [
 ];
 const telegramBlockedUrlPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
+const telegramPreviewBlockedCallPattern =
+  /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications(?:\/|$)|\/api\/driver-alerts(?:\/|$)|notification[-_/ ]?logs?|getUpdates|sendMessage|\/rest\/v1\/|supabase\.co|\/storage\/v1\/|twilio|sendgrid|mailgun|postmark|api\/sms|api\/email|api\/whatsapp|whatsapp|sms|email/i;
 const telegramAlertPreviewTitle = "Telegram Alert Preview — Mock Only";
 const telegramAlertPreviewSafetyText =
   "Mock/local only. Does not send Telegram, WhatsApp, SMS, or email. Does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
@@ -1530,9 +1532,125 @@ async function runChromeTest() {
             /Telegram Alert Preview|MOCK-JOB-042|secure job link placeholder|Mock only — no Telegram message sent/i;
 
           return {
+            cookieLeaks: (document.cookie ? document.cookie.split(";").map((value) => value.trim()) : []).filter(
+              (value) => previewPattern.test(value),
+            ),
+            indexedDbLeaks: (await readIndexedDbNames()).filter((value) => previewPattern.test(value)),
+            localStorageLeaks: readStorage(localStorage).filter((value) => previewPattern.test(value)),
+            sessionStorageLeaks: readStorage(sessionStorage).filter((value) => previewPattern.test(value)),
             storageLeaks: values.filter((value) => previewPattern.test(value)),
           };
         })()`);
+      const installPreviewNetworkGuard = () =>
+        evaluate(`(() => {
+          window.__telegramPreviewIntegrationCalls = [];
+
+          const record = (kind, method, target) => {
+            window.__telegramPreviewIntegrationCalls.push(
+              [kind, method || "", String(target || "")].filter(Boolean).join(" "),
+            );
+          };
+
+          if (!window.__telegramPreviewOriginalFetch) {
+            window.__telegramPreviewOriginalFetch = window.fetch.bind(window);
+            window.fetch = (...args) => {
+              const request = args[0];
+              const method = args[1]?.method || request?.method || "GET";
+              const target = typeof request === "string" ? request : request?.url || request;
+              record("FETCH", method, target);
+              return window.__telegramPreviewOriginalFetch(...args);
+            };
+          }
+
+          if (!window.__telegramPreviewOriginalXHROpen) {
+            window.__telegramPreviewOriginalXHROpen = window.XMLHttpRequest.prototype.open;
+            window.XMLHttpRequest.prototype.open = function patchedTelegramPreviewOpen(method, url, ...rest) {
+              record("XHR", method || "GET", url);
+              return window.__telegramPreviewOriginalXHROpen.call(this, method, url, ...rest);
+            };
+          }
+
+          if (navigator.sendBeacon && !window.__telegramPreviewOriginalSendBeacon) {
+            window.__telegramPreviewOriginalSendBeacon = navigator.sendBeacon.bind(navigator);
+            navigator.sendBeacon = (...args) => {
+              record("BEACON", "POST", args[0]);
+              return window.__telegramPreviewOriginalSendBeacon(...args);
+            };
+          }
+
+          if (window.WebSocket && !window.__telegramPreviewOriginalWebSocket) {
+            const OriginalWebSocket = window.WebSocket;
+            window.__telegramPreviewOriginalWebSocket = OriginalWebSocket;
+            window.WebSocket = function TelegramPreviewWebSocket(url, protocols) {
+              record("WEBSOCKET", "OPEN", url);
+              return protocols === undefined
+                ? new OriginalWebSocket(url)
+                : new OriginalWebSocket(url, protocols);
+            };
+            window.WebSocket.prototype = OriginalWebSocket.prototype;
+            Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+          }
+
+          return true;
+        })()`);
+      const readPreviewNetworkState = () =>
+        evaluate(`(() => {
+          const blockedPattern =
+            /api\\.telegram\\.org|telegram\\.org|(?:^|[/:.])t\\.me(?:[/:?]|$)|\\/telegram\\b|\\/api\\/telegram\\b|\\/api\\/notifications(?:\\/|$)|\\/api\\/driver-alerts(?:\\/|$)|notification[-_/ ]?logs?|getUpdates|sendMessage|\\/rest\\/v1\\/|supabase\\.co|\\/storage\\/v1\\/|twilio|sendgrid|mailgun|postmark|api\\/sms|api\\/email|api\\/whatsapp|whatsapp|sms|email/i;
+          const calls = window.__telegramPreviewIntegrationCalls || [];
+
+          return {
+            blockedCalls: calls.filter((call) => blockedPattern.test(call)),
+            calls,
+          };
+        })()`);
+      const assertNoPreviewStorage = async (description) => {
+        const storageState = await readPreviewStorageState();
+
+        assert.deepEqual(
+          storageState.localStorageLeaks,
+          [],
+          `${description}: expected Telegram mock preview content not to persist in localStorage`,
+        );
+        assert.deepEqual(
+          storageState.sessionStorageLeaks,
+          [],
+          `${description}: expected Telegram mock preview content not to persist in sessionStorage`,
+        );
+        assert.deepEqual(
+          storageState.indexedDbLeaks,
+          [],
+          `${description}: expected Telegram mock preview content not to persist in IndexedDB names`,
+        );
+        assert.deepEqual(
+          storageState.cookieLeaks,
+          [],
+          `${description}: expected Telegram mock preview content not to persist in cookies`,
+        );
+        assert.deepEqual(
+          storageState.storageLeaks,
+          [],
+          `${description}: expected Telegram mock preview content not to persist in browser storage`,
+        );
+
+        return storageState;
+      };
+      const assertNoPreviewIntegrationCalls = async (description) => {
+        const networkState = await readPreviewNetworkState();
+
+        assert.deepEqual(
+          networkState.calls,
+          [],
+          `${description}: expected Telegram mock preview not to call fetch, XHR, sendBeacon, or WebSocket`,
+        );
+        assert.deepEqual(
+          networkState.blockedCalls,
+          [],
+          `${description}: expected no Telegram, notification, driver-alert, Supabase, or provider calls`,
+        );
+
+        return networkState;
+      };
 
       const initialState = await readPreviewState();
       assert.equal(initialState.visible, true, "Expected admin Telegram mock preview to be visible");
@@ -1569,29 +1687,80 @@ async function runChromeTest() {
       await checkTelegramBoundary("admin Telegram alert preview initial", {
         allowMockPreviewUi: true,
       });
+      const previewBrowserRequestStartIndex = networkRequestUrls.length;
+      const assertNoPreviewBrowserRequests = (description) => {
+        const blockedRequests = networkRequestUrls
+          .slice(previewBrowserRequestStartIndex)
+          .filter((url) => telegramPreviewBlockedCallPattern.test(url));
 
-      await evaluate(`(() => {
-        const select = document.querySelector("[data-telegram-alert-type]");
-        if (!select) {
-          return false;
-        }
+        assert.deepEqual(
+          blockedRequests,
+          [],
+          `${description}: expected no Telegram, notification, driver-alert, Supabase, or provider browser requests`,
+        );
+      };
 
-        select.value = "otw";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
-      })()`);
-      await waitForCondition(
-        () =>
-          evaluate(
-            `document.querySelector("[data-telegram-alert-selected-label]")?.textContent.trim() === "OTW reminder"`,
-          ),
-        10000,
-        "Telegram mock preview type change",
-      );
-      const updatedState = await readPreviewState();
-      assert.equal(updatedState.selectedLabel, "OTW reminder", "Expected selected Telegram preview type to update");
-      assert.equal(updatedState.message.includes("OTW"), true, "Expected OTW preview wording");
-      assert.equal(updatedState.feedback, "", "Expected no feedback before local mock preview action");
+      await installPreviewNetworkGuard();
+      await assertNoPreviewStorage("initial Telegram mock preview");
+      await assertNoPreviewIntegrationCalls("initial Telegram mock preview");
+
+      const previewTypeChecks = [
+        { label: "Driver acknowledgement reminder", messageText: "acknowledge", value: "acknowledgement" },
+        { label: "1-hour before pickup reminder", messageText: "1 hour", value: "one-hour" },
+        { label: "OTW reminder", messageText: "OTW", value: "otw" },
+        { label: "OTS reminder", messageText: "OTS", value: "ots" },
+        { label: "POB reminder", messageText: "POB", value: "pob" },
+        { label: "Job Completed reminder", messageText: "Job Completed", value: "completed" },
+        { label: "Dispatcher replacement alert", messageText: "replacement", value: "replacement" },
+      ];
+
+      let updatedState = initialState;
+      for (const previewType of previewTypeChecks) {
+        await evaluate(`(() => {
+          const select = document.querySelector("[data-telegram-alert-type]");
+          if (!select) {
+            return false;
+          }
+
+          select.value = ${JSON.stringify(previewType.value)};
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        })()`);
+        await waitForCondition(
+          () =>
+            evaluate(
+              `document.querySelector("[data-telegram-alert-selected-label]")?.textContent.trim() === ${JSON.stringify(previewType.label)}`,
+            ),
+          10000,
+          `Telegram mock preview type change: ${previewType.label}`,
+        );
+        updatedState = await readPreviewState();
+        assert.equal(
+          updatedState.selectedLabel,
+          previewType.label,
+          `Expected selected Telegram preview type to update to ${previewType.label}`,
+        );
+        assert.equal(
+          updatedState.message.includes(previewType.messageText),
+          true,
+          `Expected ${previewType.label} preview wording`,
+        );
+        assert.equal(
+          updatedState.message.includes("MOCK-JOB-042"),
+          true,
+          `Expected ${previewType.label} to keep mock job reference`,
+        );
+        assert.equal(
+          updatedState.message.includes("[secure job link placeholder]"),
+          true,
+          `Expected ${previewType.label} to keep secure job link placeholder`,
+        );
+        assert.equal(updatedState.message.includes("Payout"), false, "Expected no payout/pricing in preview");
+        assert.equal(updatedState.feedback, "", "Expected type changes to keep feedback local and reset");
+        await assertNoPreviewStorage(`Telegram mock preview type ${previewType.label}`);
+        await assertNoPreviewIntegrationCalls(`Telegram mock preview type ${previewType.label}`);
+        assertNoPreviewBrowserRequests(`Telegram mock preview type ${previewType.label}`);
+      }
 
       await evaluate(`document.querySelector("[data-telegram-alert-generate]")?.click()`);
       const feedback = await waitForCondition(
@@ -1610,13 +1779,60 @@ async function runChromeTest() {
         [],
         "Expected no Telegram send/test/getUpdates/sendMessage controls after generate",
       );
-      const storageState = await readPreviewStorageState();
-      assert.deepEqual(
-        storageState.storageLeaks,
-        [],
-        "Expected Telegram mock preview content not to persist in browser storage",
-      );
+      await assertNoPreviewStorage("Telegram mock preview after generate");
+      await assertNoPreviewIntegrationCalls("Telegram mock preview after generate");
+      assertNoPreviewBrowserRequests("Telegram mock preview after generate");
       await checkTelegramBoundary("admin Telegram alert preview after generate", {
+        allowMockPreviewUi: true,
+      });
+
+      const reloadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.reload", { ignoreCache: true });
+      await reloadEvent;
+      await waitForTabs();
+      await clickTab("Dispatch");
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector("[data-telegram-alert-preview]"))`),
+        10000,
+        "admin Telegram mock preview after reload",
+      );
+      const postReloadState = await readPreviewState();
+      assert.equal(
+        postReloadState.selectedLabel,
+        "New driver job assignment",
+        "Expected Telegram mock preview selected type to reset after reload",
+      );
+      assert.equal(postReloadState.feedback, "", "Expected Telegram mock preview feedback to reset after reload");
+      await assertNoPreviewStorage("Telegram mock preview after reload");
+      assertNoPreviewBrowserRequests("Telegram mock preview after reload");
+      await checkTelegramBoundary("admin Telegram alert preview after reload", {
+        allowMockPreviewUi: true,
+      });
+
+      await setCustomerViewportAndLoad(customerBookingUrl, desktopViewport);
+      await checkTelegramBoundary("Telegram mock preview persistence check /book navigation");
+      await setCustomerViewportAndLoad(appUrl, desktopViewport);
+      await waitForTabs();
+      await clickTab("Dispatch");
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector("[data-telegram-alert-preview]"))`),
+        10000,
+        "admin Telegram mock preview after navigation away and back",
+      );
+      const postNavigationState = await readPreviewState();
+      assert.equal(
+        postNavigationState.selectedLabel,
+        "New driver job assignment",
+        "Expected Telegram mock preview selected type to reset after navigation away and back",
+      );
+      assert.equal(
+        postNavigationState.feedback,
+        "",
+        "Expected Telegram mock preview feedback to reset after navigation away and back",
+      );
+      await assertNoPreviewStorage("Telegram mock preview after navigation away and back");
+      assertNoPreviewBrowserRequests("Telegram mock preview after navigation away and back");
+      await checkTelegramBoundary("admin Telegram alert preview after navigation away and back", {
         allowMockPreviewUi: true,
       });
 
@@ -1625,6 +1841,15 @@ async function runChromeTest() {
         boundary: postGenerateState.boundary,
         feedback,
         options: postGenerateState.options,
+        persistence: {
+          blockedBrowserRequests: networkRequestUrls
+            .slice(previewBrowserRequestStartIndex)
+            .filter((url) => telegramPreviewBlockedCallPattern.test(url)).length,
+          postNavigationFeedback: postNavigationState.feedback,
+          postNavigationSelectedLabel: postNavigationState.selectedLabel,
+          postReloadFeedback: postReloadState.feedback,
+          postReloadSelectedLabel: postReloadState.selectedLabel,
+        },
         selectedLabel: postGenerateState.selectedLabel,
         title: postGenerateState.title,
       };

@@ -34,6 +34,20 @@ const driverJobWorkflowApiUrl = new URL(`/api/driver-job/${driverJobWorkflowToke
 const customerDashboardUrl = new URL("/customers", appUrl).toString();
 const customerBookingUrl = new URL("/book", appUrl).toString();
 const customerPortalUrl = new URL("/my-bookings", appUrl).toString();
+const replacementLeakSentinels = {
+  carPlate: "SXX9999Z-DO-NOT-LEAK",
+  driverContact: "+65 9000 0000 DO NOT LEAK",
+  driverName: "TEST REPLACEMENT DRIVER DO NOT LEAK",
+  note: "TEST REPLACEMENT NOTE DO NOT LEAK",
+  vehicleModel: "TEST REPLACEMENT MODEL DO NOT LEAK",
+};
+const replacementLeakSentinelValues = Object.values(replacementLeakSentinels);
+const replacementControlLabels = [
+  "Replacement Car / Driver — Mock Only",
+  "Save Replacement Details — Mock Only",
+  "Mark Current Driver Cancelled — Mock Only",
+  "Reassign Replacement Later — Future Staff Workflow",
+];
 const driverJobViewports = [
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
@@ -623,6 +637,41 @@ async function runChromeTest() {
         "Expected admin replacement placeholder not to create horizontal overflow",
       );
 
+      const filledState = await evaluate(`(() => {
+        const values = ${JSON.stringify(replacementLeakSentinels)};
+        for (const [field, value] of Object.entries(values)) {
+          const input = document.querySelector(\`[data-admin-replacement-field="\${field}"]\`);
+          if (!input) {
+            return { missingField: field };
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+          descriptor?.set?.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        const reason = document.querySelector("[data-admin-replacement-field='reason']");
+        if (reason) {
+          const descriptor = Object.getOwnPropertyDescriptor(reason.constructor.prototype, "value");
+          descriptor?.set?.call(reason, "other");
+          reason.dispatchEvent(new Event("input", { bubbles: true }));
+          reason.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        return Object.fromEntries(
+          Object.keys(values).map((field) => [
+            field,
+            document.querySelector(\`[data-admin-replacement-field="\${field}"]\`)?.value || "",
+          ]),
+        );
+      })()`);
+      assert.deepEqual(
+        filledState,
+        replacementLeakSentinels,
+        "Expected replacement leak sentinel values to stay in the admin mock fields",
+      );
+
       const clickReplacementAction = async (actionKey, expectedMessage, description) => {
         const beforeCallCount = await evaluate(`(window.__adminReplacementIntegrationCalls || []).length`);
         const clicked = await evaluate(`(() => {
@@ -688,9 +737,132 @@ async function runChromeTest() {
         "Reassign Replacement Later mock action",
       );
 
+      const adminLeakState = await evaluate(`(() => {
+        const sentinels = ${JSON.stringify(replacementLeakSentinelValues)};
+        const section = document.querySelector("[data-admin-replacement-placeholder]");
+        const bodyClone = document.body.cloneNode(true);
+        bodyClone.querySelector("[data-admin-replacement-placeholder]")?.remove();
+        const outsideText = bodyClone.innerText || "";
+        const outsideControlValues = [...document.querySelectorAll("input, textarea, select")]
+          .filter((control) => !section?.contains(control))
+          .map((control) => control.value || control.textContent || "");
+        const previewTextByTarget = {
+          customerCopy: document.querySelector("[data-copy-preview='customerCopy']")?.innerText || "",
+          driverDispatch: document.querySelector("[data-copy-preview='driverDispatch']")?.innerText || "",
+          jobCard: document.querySelector("[data-copy-preview='jobCard']")?.innerText || "",
+        };
+
+        return {
+          outsideControlValueLeaks: sentinels.filter((sentinel) =>
+            outsideControlValues.some((value) => value.includes(sentinel)),
+          ),
+          outsideTextLeaks: sentinels.filter((sentinel) => outsideText.includes(sentinel)),
+          previewLeaks: Object.fromEntries(
+            Object.entries(previewTextByTarget).map(([target, text]) => [
+              target,
+              sentinels.filter((sentinel) => text.includes(sentinel)),
+            ]),
+          ),
+        };
+      })()`);
+      assert.deepEqual(
+        adminLeakState.previewLeaks.customerCopy,
+        [],
+        "Expected replacement sentinel values not to leak into customer copy",
+      );
+      assert.deepEqual(
+        adminLeakState.previewLeaks.driverDispatch,
+        [],
+        "Expected replacement sentinel values not to leak into driver dispatch copy",
+      );
+      assert.deepEqual(
+        adminLeakState.previewLeaks.jobCard,
+        [],
+        "Expected replacement sentinel values not to leak into WhatsApp/job-card copy",
+      );
+      assert.deepEqual(
+        adminLeakState.outsideTextLeaks,
+        [],
+        "Expected replacement sentinel values not to leak into visible admin page text outside the mock section",
+      );
+      assert.deepEqual(
+        adminLeakState.outsideControlValueLeaks,
+        [],
+        "Expected replacement sentinel values not to leak into controls outside the admin mock section",
+      );
+
+      const checkNoReplacementLeakOnRoute = async ({ expectedText, routeName, url }) => {
+        const routeLoadEvent = client.once("Page.loadEventFired");
+        await client.send("Page.navigate", { url });
+        await routeLoadEvent;
+        await waitForCondition(
+          () => evaluate(`document.body.innerText.includes(${JSON.stringify(expectedText)})`),
+          10000,
+          `${routeName} leak-check route`,
+        );
+        const routeState = await evaluate(`(() => {
+          const sentinels = ${JSON.stringify(replacementLeakSentinelValues)};
+          const replacementControls = ${JSON.stringify(replacementControlLabels)};
+          const text = document.body.innerText || "";
+          const controlValues = [...document.querySelectorAll("input, textarea, select")]
+            .map((control) => control.value || control.textContent || "");
+
+          return {
+            replacementControlText: replacementControls.filter((label) => text.includes(label)),
+            replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
+            sentinelControlValueLeaks: sentinels.filter((sentinel) =>
+              controlValues.some((value) => value.includes(sentinel)),
+            ),
+            sentinelTextLeaks: sentinels.filter((sentinel) => text.includes(sentinel)),
+          };
+        })()`);
+
+        assert.equal(
+          routeState.replacementPlaceholderVisible,
+          false,
+          `${routeName}: expected no admin replacement placeholder`,
+        );
+        assert.deepEqual(
+          routeState.replacementControlText,
+          [],
+          `${routeName}: expected no replacement mock controls`,
+        );
+        assert.deepEqual(
+          routeState.sentinelTextLeaks,
+          [],
+          `${routeName}: expected no visible replacement sentinel leaks`,
+        );
+        assert.deepEqual(
+          routeState.sentinelControlValueLeaks,
+          [],
+          `${routeName}: expected no replacement sentinel leaks in form controls`,
+        );
+
+        return routeName;
+      };
+
+      const leakProtectedRoutes = [
+        await checkNoReplacementLeakOnRoute({
+          expectedText: "Prestige Limo Driver Job",
+          routeName: "public driver token page",
+          url: driverJobWorkflowUrl,
+        }),
+        await checkNoReplacementLeakOnRoute({
+          expectedText: "Booking Request",
+          routeName: "/book",
+          url: customerBookingUrl,
+        }),
+        await checkNoReplacementLeakOnRoute({
+          expectedText: "My Bookings",
+          routeName: "/my-bookings",
+          url: customerPortalUrl,
+        }),
+      ];
+
       return {
         actions: initialState.actions.map((action) => action.label),
         fields: initialState.fields.map((field) => field.label),
+        leakProtectedRoutes,
       };
     };
 

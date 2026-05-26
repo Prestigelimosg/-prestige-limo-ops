@@ -510,7 +510,7 @@ async function runChromeTest() {
     const blockedCustomerIntegrationPattern =
       /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i;
     const blockedDriverJobIntegrationPattern =
-      /supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
+      /supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/upload|api\/storage|api\/file|api\/driver-upload|api\/driver-file|api\/driver-exception|api\/driver-replacement|api\/driver-reassign|api\/driver-assignment|api\/driver-cancel|api\/cancel-driver|api\/reassign-driver|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
 
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
@@ -6163,7 +6163,7 @@ async function runChromeTest() {
         `${viewport.label} driver job link route`,
       );
       await evaluate(`(() => {
-        const blockedDriverJobUrlPattern = /supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
+        const blockedDriverJobUrlPattern = /supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/upload|api\\/storage|api\\/file|api\\/driver-upload|api\\/driver-file|api\\/driver-exception|api\\/driver-replacement|api\\/driver-reassign|api\\/driver-assignment|api\\/driver-cancel|api\\/cancel-driver|api\\/reassign-driver|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
         window.__driverJobFetchCalls = [];
         window.__driverJobNetworkCalls = [];
         const originalFetch = window.__driverJobOriginalFetch || window.fetch.bind(window);
@@ -6295,6 +6295,16 @@ async function runChromeTest() {
           docScrollWidth: doc.scrollWidth,
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
             .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
+          dispatcherExceptionText: [
+            "cancel driver assignment",
+            "cancel assignment",
+            "replacement driver",
+            "replacement car",
+            "reassign driver",
+            "car breakdown",
+            "driver missed job",
+            "late driver",
+          ].filter((value) => lowerText.includes(value)),
           forbiddenText: [
             "pricing",
             "payout",
@@ -6342,6 +6352,11 @@ async function runChromeTest() {
         `${viewport.label}: expected no pricing, payout, CRM, invoice, payment, bank, or admin text on driver job link`,
       );
       assert.deepEqual(initialState.fileInputs, [], `${viewport.label}: expected no real file/photo upload inputs`);
+      assert.deepEqual(
+        initialState.dispatcherExceptionText,
+        [],
+        `${viewport.label}: expected dispatcher cancel/replacement workflow to remain absent and future staff-controlled`,
+      );
       assert.equal(initialState.payNowFieldPresent, true, `${viewport.label}: expected local PayNow number field`);
       assert.deepEqual(
         [
@@ -6773,6 +6788,18 @@ async function runChromeTest() {
           buttons,
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
+          fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
+            .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
+          dispatcherExceptionText: [
+            "cancel driver assignment",
+            "cancel assignment",
+            "replacement driver",
+            "replacement car",
+            "reassign driver",
+            "car breakdown",
+            "driver missed job",
+            "late driver",
+          ].filter((value) => lowerText.includes(value)),
           forbiddenText: [
             "pricing",
             "payout",
@@ -6814,6 +6841,12 @@ async function runChromeTest() {
         initialState.forbiddenText,
         [],
         `${viewport.label}: expected no pricing, payout, CRM, or admin text on driver demo`,
+      );
+      assert.deepEqual(initialState.fileInputs, [], `${viewport.label}: expected no real file/photo upload inputs on driver demo`);
+      assert.deepEqual(
+        initialState.dispatcherExceptionText,
+        [],
+        `${viewport.label}: expected dispatcher cancel/replacement workflow to remain absent and future staff-controlled on driver demo`,
       );
       assert.deepEqual(
         ["Driver name", "Mobile number", "Car plate", "Vehicle model", "PayNow number"].filter(

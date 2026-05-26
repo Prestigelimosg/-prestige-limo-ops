@@ -243,14 +243,16 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?live-location/i, "Driver pages must not add live location endpoints.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:ots-photo|photo-proof)/i, "Driver pages must not add photo upload endpoints.");
+  assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:upload|storage|file)/i, "Driver pages must not add upload, storage, or file APIs.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:flight|eta|reminder|notification|notify|sms|whatsapp)/i, "Driver pages must not add flight or notification endpoints.");
+  assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:cancel|reassign|replacement|exception|breakdown|missed|late-driver)/i, "Driver pages must not add dispatcher exception APIs.");
   assert.doesNotMatch(source, /aviationstack|flightaware|flightstats|flightradar|opensky|aeroapi/i, "Driver pages must not add real flight API integrations.");
   assert.doesNotMatch(source, /twilio|messagebird|vonage|nexmo|api\.whatsapp\.com|wa\.me|whatsapp\.send|sendWhatsApp|sendWhatsapp|sendSms|sendSMS|sms\.send/i, "Driver pages must not add WhatsApp/SMS integrations.");
   assert.doesNotMatch(source, /\b(?:Notification|PushManager|serviceWorker|showNotification|sendNotification)\b/, "Driver pages must not add notification APIs.");
   assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
   assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
   assert.doesNotMatch(source, /type=["']file["']|capture=|accept=["'][^"']*image/i, "Driver pages must not add file or camera inputs.");
-  assert.doesNotMatch(source, /new FormData|URL\.createObjectURL|supabase\.storage|storage\.from/i, "Driver pages must not add upload/storage plumbing.");
+  assert.doesNotMatch(source, /new FormData|URL\.createObjectURL|supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not add upload/storage plumbing.");
 }
 
 async function runChromeTest() {
@@ -349,9 +351,21 @@ async function runChromeTest() {
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
+        fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
+          .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
         visibleText: document.body?.innerText || "",
+        dispatcherExceptionText: [
+          "cancel driver assignment",
+          "cancel assignment",
+          "replacement driver",
+          "replacement car",
+          "reassign driver",
+          "car breakdown",
+          "driver missed job",
+          "late driver",
+        ].filter((value) => (document.body?.innerText || "").toLowerCase().includes(value)),
         workflowSummaryRows: Object.fromEntries(
           [...document.querySelectorAll("[data-driver-job-workflow-summary-row]")].map((row) => [
             row.getAttribute("data-driver-job-workflow-summary-row"),
@@ -1179,6 +1193,12 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Live Location"));
     assert.ok(validState.visibleText.includes("Mock/local only. No phone location is captured or sent."));
     assert.ok(validState.visibleText.includes("Activate Mock Live Location"));
+    assert.deepEqual(validState.fileInputs, [], "Public driver job page must not expose real file/photo inputs.");
+    assert.deepEqual(
+      validState.dispatcherExceptionText,
+      [],
+      "Public driver job page must keep dispatcher cancel/replacement workflow absent and future/staff-controlled.",
+    );
     assert.ok(validState.visibleText.includes("Mock Driver Reminder"));
     assert.ok(validState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"));
     assert.ok(validState.visibleText.includes("Mock/local only. Dispatcher-facing workflow checklist for this mock driver page."));
@@ -1371,6 +1391,12 @@ async function runChromeTest() {
       },
       10000,
       "Arrival mock OTS photo proof section",
+    );
+    assert.deepEqual(arrivalOtsState.fileInputs, [], "Mock OTS proof must not expose real file/photo inputs.");
+    assert.deepEqual(
+      arrivalOtsState.dispatcherExceptionText,
+      [],
+      "Arrival public driver page must keep dispatcher exception workflow absent and future/staff-controlled.",
     );
     assertNoSensitiveText(arrivalOtsState);
     await clickMissingProofPob();

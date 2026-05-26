@@ -60,6 +60,71 @@ const replacementControlLabels = [
   "Mark Current Driver Cancelled — Mock Only",
   "Reassign Replacement Later — Future Staff Workflow",
 ];
+const telegramBlockedUrlPattern =
+  /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
+const telegramBoundaryBrowserExpression = String.raw`(() => {
+  const telegramUrlPattern =
+    /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
+  const telegramTokenPattern = /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/g;
+  const activeTelegramControlPattern =
+    /\b(?:send|create|connect|enable|start|trigger|test|preview)\s+(?:telegram|driver alert)|telegram\s+(?:bot|alert|notification|send|preview|webhook|getupdates|sendmessage|control|button)/i;
+  const readStorage = (storage) => {
+    const values = [];
+    try {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index) || "";
+        values.push(key + "=" + (storage.getItem(key) || ""));
+      }
+    } catch (error) {
+      values.push("storage-read-error:" + (error?.message || String(error)));
+    }
+    return values;
+  };
+  const visibleText = document.body.innerText || "";
+  const resourceUrls = performance.getEntriesByType("resource").map((entry) => entry.name || "");
+  const scriptTexts = [...document.scripts].map(
+    (script) => (script.src || "") + "\n" + (script.textContent || ""),
+  );
+  const controls = [
+    ...document.querySelectorAll("button,a,[role='button'],input,textarea,select,label"),
+  ]
+    .map((element) =>
+      [
+        element.textContent || "",
+        element.getAttribute("aria-label") || "",
+        element.getAttribute("placeholder") || "",
+        element.getAttribute("name") || "",
+        element.getAttribute("href") || "",
+        "value" in element ? element.value || "" : "",
+      ]
+        .join(" ")
+        .trim(),
+    )
+    .filter(Boolean);
+  const localStorageValues = readStorage(localStorage);
+  const sessionStorageValues = readStorage(sessionStorage);
+  const combinedText = [
+    visibleText,
+    ...resourceUrls,
+    ...scriptTexts,
+    ...controls,
+    ...localStorageValues,
+    ...sessionStorageValues,
+  ].join("\n");
+
+  return {
+    activeTelegramControls: controls.filter((value) => activeTelegramControlPattern.test(value)),
+    telegramControlMentions: controls.filter((value) => /telegram/i.test(value)),
+    telegramLocalStorageLeaks: localStorageValues.filter((value) => telegramUrlPattern.test(value)),
+    telegramResourceUrls: resourceUrls.filter((value) => telegramUrlPattern.test(value)),
+    telegramScriptLeaks: scriptTexts.filter((value) => telegramUrlPattern.test(value)),
+    telegramSessionStorageLeaks: sessionStorageValues.filter((value) =>
+      telegramUrlPattern.test(value),
+    ),
+    telegramTokenLeaks: combinedText.match(telegramTokenPattern) || [],
+    telegramVisibleMentions: /telegram/i.test(visibleText) ? ["Telegram"] : [],
+  };
+})()`;
 const driverJobViewports = [
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
@@ -316,6 +381,7 @@ async function runChromeTest() {
 
   let stderr = "";
   let client = null;
+  const networkRequestUrls = [];
 
   chrome.stderr.on("data", (chunk) => {
     stderr += chunk.toString();
@@ -340,9 +406,16 @@ async function runChromeTest() {
         browserConsoleErrors.push(normalizeConsoleMessages(args.map((value) => value?.value ?? value?.description ?? "")));
       }
     });
+    client.on("Network.requestWillBeSent", ({ request }) => {
+      const requestUrl = request?.url || "";
+      if (requestUrl) {
+        networkRequestUrls.push(requestUrl);
+      }
+    });
 
     await client.send("Runtime.enable");
     await client.send("Page.enable");
+    await client.send("Network.enable");
 
     const loadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: appUrl });
@@ -356,6 +429,77 @@ async function runChromeTest() {
       });
 
       return result.result?.value;
+    };
+
+    const telegramBoundarySnapshots = [];
+    const assertNoTelegramBoundaryState = (state) => {
+      assert.deepEqual(
+        state.telegramNetworkRequests,
+        [],
+        `${state.context}: expected no Telegram network requests`,
+      );
+      assert.deepEqual(
+        state.telegramResourceUrls,
+        [],
+        `${state.context}: expected no Telegram resource URLs`,
+      );
+      assert.deepEqual(
+        state.telegramScriptLeaks,
+        [],
+        `${state.context}: expected no Telegram script/client bundle references`,
+      );
+      assert.deepEqual(
+        state.telegramTokenLeaks,
+        [],
+        `${state.context}: expected no Telegram bot-token-looking values`,
+      );
+      assert.deepEqual(
+        state.telegramLocalStorageLeaks,
+        [],
+        `${state.context}: expected no Telegram values in localStorage`,
+      );
+      assert.deepEqual(
+        state.telegramSessionStorageLeaks,
+        [],
+        `${state.context}: expected no Telegram values in sessionStorage`,
+      );
+      assert.deepEqual(
+        state.telegramVisibleMentions,
+        [],
+        `${state.context}: expected no active Telegram UI text before preview stage`,
+      );
+      assert.deepEqual(
+        state.telegramControlMentions,
+        [],
+        `${state.context}: expected no Telegram controls before preview stage`,
+      );
+      assert.deepEqual(
+        state.activeTelegramControls,
+        [],
+        `${state.context}: expected no Telegram send/connect/preview controls`,
+      );
+    };
+    const checkTelegramBoundary = async (context) => {
+      const browserState = await evaluate(telegramBoundaryBrowserExpression);
+      const state = {
+        context,
+        ...browserState,
+        telegramNetworkRequests: networkRequestUrls.filter((url) =>
+          telegramBlockedUrlPattern.test(url),
+        ),
+      };
+
+      assertNoTelegramBoundaryState(state);
+      telegramBoundarySnapshots.push({
+        activeTelegramControls: state.activeTelegramControls.length,
+        context,
+        networkRequests: state.telegramNetworkRequests.length,
+        resourceUrls: state.telegramResourceUrls.length,
+        tokenLeaks: state.telegramTokenLeaks.length,
+        visibleMentions: state.telegramVisibleMentions.length,
+      });
+
+      return state;
     };
 
     const clickTab = async (label) => {
@@ -501,6 +645,8 @@ async function runChromeTest() {
             `${viewport.label}: expected Dispatch tab controls visible`,
           );
         }
+
+        await checkTelegramBoundary(`${viewport.label} ${label} admin tab`);
 
         tabStates.push({
           activeTab: tabState.activeTab,
@@ -661,6 +807,7 @@ async function runChromeTest() {
         true,
         "Expected admin replacement placeholder not to create horizontal overflow",
       );
+      await checkTelegramBoundary("admin replacement placeholder");
 
       const fillReplacementFields = async (values) =>
         evaluate(`(() => {
@@ -1155,9 +1302,9 @@ async function runChromeTest() {
     };
 
     const blockedCustomerIntegrationPattern =
-      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i;
+      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|telegram|api\.telegram\.org|getUpdates|sendMessage|supabase|\/rest\/v1\//i;
     const blockedDriverJobIntegrationPattern =
-      /supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/upload|api\/storage|api\/file|api\/driver-upload|api\/driver-file|api\/driver-exception|api\/driver-replacement|api\/driver-reassign|api\/driver-assignment|api\/driver-cancel|api\/cancel-driver|api\/reassign-driver|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
+      /supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/upload|api\/storage|api\/file|api\/driver-upload|api\/driver-file|api\/driver-exception|api\/driver-replacement|api\/driver-reassign|api\/driver-assignment|api\/driver-cancel|api\/cancel-driver|api\/reassign-driver|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/telegram|api\/driver-alerts\/telegram|api\/notifications\/telegram|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|telegram|api\.telegram\.org|getUpdates|sendMessage|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
 
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
@@ -2275,6 +2422,7 @@ async function runChromeTest() {
         assert.ok(dashboardState.text.includes(expectedText), `Expected customer dashboard text: ${expectedText}`);
       }
       assertNoPaymentIntegrationResources(dashboardState.resourceCalls, "customer dashboard");
+      await checkTelegramBoundary("/customers desktop");
 
       await evaluate(`(() => {
         window.__customerPaymentIntegrationCalls = [];
@@ -5145,6 +5293,7 @@ async function runChromeTest() {
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
         `Expected mobile customer dashboard not to overflow horizontally: ${mobileDashboardState.docScrollWidth} > ${mobileDashboardState.docClientWidth}`,
       );
+      await checkTelegramBoundary("/customers mobile");
 
       await setCustomerViewportAndLoad(new URL("/customers/ubs", appUrl).toString(), mobileViewport);
       const mobileFolderState = await waitForCondition(
@@ -5572,6 +5721,7 @@ async function runChromeTest() {
         "Expected /book not to create or display an invoice-style number",
       );
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer booking page load");
+      await checkTelegramBoundary("/book desktop");
 
       await clickCustomerBookingSubmit("invalid customer booking request");
       const invalidState = await waitForCondition(
@@ -5686,6 +5836,7 @@ async function runChromeTest() {
         "Expected /book mobile view not to show internal/admin/mock/finance wording",
       );
       assertNoPaymentIntegrationResources(mobileState.resourceCalls, "mobile customer booking page");
+      await checkTelegramBoundary("/book mobile");
 
       return {
         forbiddenVisibleText: initialState.forbiddenVisibleText,
@@ -6137,6 +6288,7 @@ async function runChromeTest() {
       );
       assert.equal(/[A-Z]{2,}-\d{3,}/.test(initialState.text), false, "Expected /my-bookings not to create invoice-style numbers");
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
+      await checkTelegramBoundary("/my-bookings desktop");
 
       await clickCustomerPortalPageButton("next");
       const upcomingPageTwoState = await waitForCondition(
@@ -6777,6 +6929,7 @@ async function runChromeTest() {
         "Expected /my-bookings mobile view not to show internal/admin/mock/Supabase/payment/billing wording",
       );
       assertNoPaymentIntegrationResources(mobileState.resourceCalls, "mobile customer portal page");
+      await checkTelegramBoundary("/my-bookings mobile");
 
       return {
         activeFilter: initialState.activeFilter,
@@ -7090,6 +7243,7 @@ async function runChromeTest() {
         },
         `${viewport.label} driver job link load`,
       );
+      await checkTelegramBoundary(`${viewport.label} public driver token page`);
 
       const clickBlockedDriverJobStatus = async (label, expectedMessage, expectedStatus) => {
         const beforeNetwork = await readDriverJobNetworkState();
@@ -8665,6 +8819,7 @@ async function runChromeTest() {
         [],
         `${viewport.label}: expected no Supabase/API resources on driver demo route`,
       );
+      await checkTelegramBoundary(`${viewport.label} driver demo page`);
 
       return {
         buttons: initialState.buttonLabels,
@@ -8700,6 +8855,7 @@ async function runChromeTest() {
       buttonLabels.push(
         ...(await evaluate(`[...document.querySelectorAll("button")].map((button) => button.textContent.trim())`)),
       );
+      await checkTelegramBoundary(`${label} admin tab initial sweep`);
     }
 
     const state = {
@@ -8725,6 +8881,8 @@ async function runChromeTest() {
     for (const viewport of driverDemoViewports) {
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));
     }
+    await checkTelegramBoundary("final browser state");
+    state.telegramBoundaries = telegramBoundarySnapshots;
     state.errors = [...browserErrors, ...(state.errors || [])];
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 

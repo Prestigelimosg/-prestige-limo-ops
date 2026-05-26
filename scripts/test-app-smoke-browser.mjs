@@ -28,9 +28,16 @@ const responsiveTabViewports = [
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
+const driverJobWorkflowToken = "mock-driver-job-workflow-order";
+const driverJobWorkflowUrl = new URL(`/driver-job/${driverJobWorkflowToken}`, appUrl).toString();
+const driverJobWorkflowApiUrl = new URL(`/api/driver-job/${driverJobWorkflowToken}`, appUrl).toString();
 const customerDashboardUrl = new URL("/customers", appUrl).toString();
 const customerBookingUrl = new URL("/book", appUrl).toString();
 const customerPortalUrl = new URL("/my-bookings", appUrl).toString();
+const driverJobViewports = [
+  { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
+  { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
+];
 const driverDemoViewports = [
   { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
@@ -502,6 +509,8 @@ async function runChromeTest() {
 
     const blockedCustomerIntegrationPattern =
       /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|supabase|\/rest\/v1\//i;
+    const blockedDriverJobIntegrationPattern =
+      /supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
 
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
@@ -6127,6 +6136,552 @@ async function runChromeTest() {
       };
     };
 
+    const resetDriverJobWorkflowMock = async () => {
+      const response = await fetch(driverJobWorkflowApiUrl, {
+        headers: { "x-prestige-driver-job-mock-reset": "1" },
+      });
+      assert.equal(response.ok, true, "Expected driver job workflow mock reset to succeed");
+      const result = await response.json();
+      assert.equal(result.ok, true, "Expected driver job workflow mock reset payload");
+    };
+
+    const setDriverJobViewportAndLoad = async (viewport) => {
+      await resetDriverJobWorkflowMock();
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: viewport.scale,
+        height: viewport.height,
+        mobile: viewport.mobile,
+        width: viewport.width,
+      });
+
+      const viewportLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url: driverJobWorkflowUrl });
+      await viewportLoadEvent;
+      await waitForCondition(
+        () => evaluate(`document.body.innerText.includes("Mock Workflow Pickup")`),
+        10000,
+        `${viewport.label} driver job link route`,
+      );
+      await evaluate(`(() => {
+        const blockedDriverJobUrlPattern = /supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
+        window.__driverJobFetchCalls = [];
+        window.__driverJobNetworkCalls = [];
+        const originalFetch = window.__driverJobOriginalFetch || window.fetch.bind(window);
+        window.__driverJobOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const target = args[0]?.url || args[0];
+          const method = args[1]?.method || args[0]?.method || "GET";
+          const url = String(target);
+          const call = \`\${method} \${url}\`;
+
+          window.__driverJobFetchCalls.push(call);
+          window.__driverJobNetworkCalls.push(call);
+
+          if (blockedDriverJobUrlPattern.test(url)) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ message: "Driver job smoke test blocked a forbidden integration call" }), {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
+          return originalFetch(...args);
+        };
+
+        const originalOpen = window.__driverJobOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__driverJobOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function patchedDriverJobOpen(method, url, ...rest) {
+          window.__driverJobNetworkCalls.push(\`\${method} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...rest);
+        };
+
+        if (navigator.sendBeacon && !window.__driverJobOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__driverJobOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            const target = String(args[0]);
+            window.__driverJobNetworkCalls.push(\`BEACON \${target}\`);
+            return blockedDriverJobUrlPattern.test(target) ? false : originalSendBeacon(...args);
+          };
+        }
+      })()`);
+    };
+
+    const clickDriverJobButton = async (selector, description) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(selector)});
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+    };
+
+    const setDriverJobField = async (selector, value) => {
+      const actualValue = await evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(selector)});
+
+        if (!input) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return input.value;
+      })()`);
+      assert.equal(actualValue, value, `Expected driver job field ${selector} to accept test value`);
+    };
+
+    const readDriverJobNetworkState = () =>
+      evaluate(`(() => ({
+        fetchCalls: window.__driverJobFetchCalls || [],
+        networkCalls: window.__driverJobNetworkCalls || [],
+        resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+      }))()`);
+
+    const assertNoForbiddenDriverJobNetwork = (networkState, context) => {
+      const calls = [
+        ...networkState.fetchCalls,
+        ...networkState.networkCalls,
+        ...networkState.resourceCalls,
+      ];
+      assert.deepEqual(
+        calls.filter((call) => blockedDriverJobIntegrationPattern.test(call)),
+        [],
+        `${context}: expected no Supabase, notification, WhatsApp, email, SMS, calendar, live-location, flight, file/photo, invoice, PDF, payment, or bank calls`,
+      );
+    };
+
+    const readDriverJobState = () =>
+      evaluate(`(() => {
+        const text = document.body.innerText;
+        const lowerText = text.toLowerCase();
+        const doc = document.documentElement;
+        const body = document.body;
+        const inputs = [...document.querySelectorAll("input")].map((input) => ({
+          height: Math.round(input.getBoundingClientRect().height),
+          inputMode: input.getAttribute("inputmode") || input.inputMode || "",
+          label: input.closest("label")?.innerText.trim() || "",
+          type: input.getAttribute("type") || "",
+          width: Math.round(input.getBoundingClientRect().width),
+        }));
+        const buttons = [...document.querySelectorAll("button")].map((button) => ({
+          height: Math.round(button.getBoundingClientRect().height),
+          text: button.textContent.trim(),
+          width: Math.round(button.getBoundingClientRect().width),
+        }));
+        const workflowSummaryRows = Object.fromEntries(
+          [...document.querySelectorAll("[data-driver-job-workflow-summary-row]")].map((row) => [
+            row.getAttribute("data-driver-job-workflow-summary-row"),
+            row.querySelector("[data-driver-job-workflow-summary-value]")?.textContent.trim() || "",
+          ]),
+        );
+
+        return {
+          adminTabsVisible: document.querySelectorAll("button[role='tab']").length,
+          bodyScrollWidth: body.scrollWidth,
+          buttonLabels: buttons.map((button) => button.text),
+          buttons,
+          currentStatus: document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "",
+          docClientWidth: doc.clientWidth,
+          docScrollWidth: doc.scrollWidth,
+          fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
+            .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
+          forbiddenText: [
+            "pricing",
+            "payout",
+            "crm",
+            "booker email",
+            "internal notes",
+            "driver dispatch",
+            "dispatcher intake",
+            "dashboard",
+            "driver database",
+            "rates",
+            "invoice",
+            "statement",
+            "pdf",
+            "payment",
+            "bank",
+            "paynow",
+          ].filter((value) => lowerText.includes(value)),
+          inputs,
+          payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
+          resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
+          text,
+          workflowSummaryRows,
+        };
+      })()`);
+
+    const checkDriverJobRoute = async (viewport) => {
+      const statusEndpointPath = `/api/driver-job/${driverJobWorkflowToken}/status`;
+      await setDriverJobViewportAndLoad(viewport);
+
+      const initialState = await readDriverJobState();
+      const overflowingWidth = Math.max(initialState.docScrollWidth, initialState.bodyScrollWidth);
+      const smallInputs = initialState.inputs.filter((input) => input.height < 44 || input.width < 220);
+      const smallButtons = initialState.buttons.filter((button) => button.height < 44 || button.width < 96);
+
+      assert.equal(
+        overflowingWidth <= initialState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected driver job link to avoid horizontal document overflow`,
+      );
+      assert.equal(initialState.adminTabsVisible, 0, `${viewport.label}: expected no admin tabs on driver job link`);
+      assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
+      assert.deepEqual(
+        initialState.forbiddenText,
+        [],
+        `${viewport.label}: expected no pricing, payout, CRM, invoice, payment, bank, PayNow, or admin text on driver job link`,
+      );
+      assert.deepEqual(initialState.fileInputs, [], `${viewport.label}: expected no real file/photo upload inputs`);
+      assert.equal(initialState.payNowFieldPresent, false, `${viewport.label}: expected PayNow field to remain future work`);
+      assert.deepEqual(
+        [
+          "Prestige Limo Driver Job",
+          "Job Summary",
+          "Mock Workflow Pickup",
+          "Mock Workflow Dropoff",
+          "Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff",
+          "SQ889",
+          "Mock Workflow Passenger",
+          "Mock Workflow Driver",
+          "Driver Details",
+          "Job Acknowledgement",
+          "Mock Live Location",
+          "Mock Driver Reminder",
+          "Job Status",
+        ].filter((value) => !initialState.text.includes(value)),
+        [],
+        `${viewport.label}: expected readable driver job card details and workflow sections`,
+      );
+      assert.deepEqual(
+        ["Driver name", "Contact", "Car plate", "Vehicle model"].filter(
+          (label) => !initialState.inputs.some((input) => input.label.includes(label)),
+        ),
+        [],
+        `${viewport.label}: expected current driver detail fields`,
+      );
+      assert.deepEqual(
+        initialState.inputs.map((input) => input.type),
+        ["text", "tel", "text", "text"],
+        `${viewport.label}: expected current driver detail input types`,
+      );
+      assert.equal(
+        initialState.inputs.find((input) => input.label.includes("Contact"))?.inputMode,
+        "tel",
+        `${viewport.label}: expected contact field to use telephone input mode`,
+      );
+      assert.deepEqual(smallInputs, [], `${viewport.label}: expected comfortable driver job inputs`);
+      assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver job buttons`);
+      assert.deepEqual(
+        [
+          "Acknowledge Job",
+          "Activate Mock Live Location",
+          "Trigger Mock 1-Hour Reminder",
+          "Save",
+          "OTW",
+          "OTS",
+          "POB",
+          "Job Completed",
+        ].filter((label) => !initialState.buttonLabels.includes(label)),
+        [],
+        `${viewport.label}: expected current driver job workflow controls`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock/local only. No phone location is captured or sent."),
+        true,
+        `${viewport.label}: expected mock live-location boundary text`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent."),
+        true,
+        `${viewport.label}: expected mock notification boundary text`,
+      );
+      assert.equal(
+        initialState.text.includes("Mock only. No real message was sent."),
+        true,
+        `${viewport.label}: expected no-real-message workflow summary`,
+      );
+      assertNoForbiddenDriverJobNetwork(
+        {
+          fetchCalls: [],
+          networkCalls: [],
+          resourceCalls: initialState.resourceCalls,
+        },
+        `${viewport.label} driver job link load`,
+      );
+
+      const clickBlockedDriverJobStatus = async (label, expectedMessage, expectedStatus) => {
+        const beforeNetwork = await readDriverJobNetworkState();
+        await clickDriverJobButton(
+          `[data-driver-job-status="${label}"]`,
+          `${viewport.label} blocked ${label}`,
+        );
+        const blockedState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const label = ${JSON.stringify(label)};
+              const expectedMessage = ${JSON.stringify(expectedMessage)};
+              const message = document.querySelector(\`[data-driver-job-status-message="\${label}"]\`);
+              const currentStatus = document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "";
+
+              return message?.textContent.trim() === expectedMessage && currentStatus === ${JSON.stringify(expectedStatus)}
+                ? {
+                    currentStatus,
+                    fetchCalls: window.__driverJobFetchCalls || [],
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} blocked ${label} status`,
+        );
+        assert.equal(blockedState.currentStatus, expectedStatus);
+        const afterNetwork = await readDriverJobNetworkState();
+        assert.deepEqual(afterNetwork.fetchCalls, beforeNetwork.fetchCalls, `${viewport.label}: expected blocked ${label} to stay local`);
+        assertNoForbiddenDriverJobNetwork(afterNetwork, `${viewport.label} blocked ${label}`);
+      };
+
+      const clickValidDriverJobStatus = async (label, expectedStatus, expectedMessage) => {
+        const beforeNetwork = await readDriverJobNetworkState();
+        await clickDriverJobButton(
+          `[data-driver-job-status="${label}"]`,
+          `${viewport.label} ${label}`,
+        );
+        const statusState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const label = ${JSON.stringify(label)};
+              const expectedStatus = ${JSON.stringify(expectedStatus)};
+              const expectedMessage = ${JSON.stringify(expectedMessage)};
+              const message = document.querySelector(\`[data-driver-job-status-message="\${label}"]\`);
+              const currentStatus = document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "";
+
+              return message?.textContent.trim() === expectedMessage && currentStatus === expectedStatus
+                ? {
+                    currentStatus,
+                    fetchCalls: window.__driverJobFetchCalls || [],
+                    messageText: message.textContent.trim(),
+                  }
+                : false;
+            })()`),
+          10000,
+          `${viewport.label} ${label} status`,
+        );
+        assert.equal(statusState.currentStatus, expectedStatus);
+        const afterNetwork = await readDriverJobNetworkState();
+        const newFetchCalls = afterNetwork.fetchCalls.slice(beforeNetwork.fetchCalls.length);
+        assert.deepEqual(
+          newFetchCalls.filter((call) => !call.includes(statusEndpointPath)),
+          [],
+          `${viewport.label}: expected ${label} to call only the protected driver job status endpoint`,
+        );
+        assert.equal(
+          newFetchCalls.filter((call) => call.includes(statusEndpointPath)).length,
+          1,
+          `${viewport.label}: expected ${label} to call the protected driver job status endpoint once`,
+        );
+        assertNoForbiddenDriverJobNetwork(afterNetwork, `${viewport.label} ${label}`);
+      };
+
+      await clickBlockedDriverJobStatus("OTW", "Acknowledge this job before updating status.", "Assigned");
+
+      await setDriverJobField("[data-driver-job-detail-name]", "Smoke Driver");
+      await setDriverJobField("[data-driver-job-detail-contact]", "+65 9000 2222");
+      await setDriverJobField("[data-driver-job-detail-plate]", "SMK1234Z");
+      await setDriverJobField("[data-driver-job-detail-vehicle-model]", "Mercedes V Class");
+      const beforeSaveNetwork = await readDriverJobNetworkState();
+      await clickDriverJobButton("[data-driver-job-save-details]", `${viewport.label} Save driver details`);
+      const savedDetailsState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const message = document.querySelector("[data-driver-job-details-message]");
+            const savedDetails = document.querySelector("[data-driver-job-saved-details]");
+
+            return message?.textContent.trim() === "Driver details saved locally for this mock driver page." &&
+              savedDetails?.innerText.includes("Smoke Driver") &&
+              savedDetails?.innerText.includes("+65 9000 2222") &&
+              savedDetails?.innerText.includes("SMK1234Z") &&
+              savedDetails?.innerText.includes("Mercedes V Class")
+              ? {
+                  fetchCalls: window.__driverJobFetchCalls || [],
+                  messageText: message.textContent.trim(),
+                  savedDetailsText: savedDetails.innerText,
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} local driver details save`,
+      );
+      assert.deepEqual(
+        savedDetailsState.fetchCalls,
+        beforeSaveNetwork.fetchCalls,
+        `${viewport.label}: expected driver details save to stay mock/local`,
+      );
+
+      const beforeAcknowledgeNetwork = await readDriverJobNetworkState();
+      await clickDriverJobButton("[data-driver-job-acknowledge]", `${viewport.label} Acknowledge Job`);
+      const acknowledgedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const message = document.querySelector("[data-driver-job-acknowledge-message]");
+            const acknowledged = document.querySelector("[data-driver-job-acknowledged-state]");
+            const workflowAcknowledgement = document
+              .querySelector("[data-driver-job-workflow-summary-row='job-acknowledged'] [data-driver-job-workflow-summary-value]")
+              ?.textContent.trim();
+
+            return message?.textContent.trim() === "Job acknowledged locally for this mock driver page." &&
+              acknowledged?.textContent.trim() === "Acknowledged" &&
+              workflowAcknowledgement === "Acknowledged"
+              ? {
+                  fetchCalls: window.__driverJobFetchCalls || [],
+                  messageText: message.textContent.trim(),
+                  stateText: acknowledged.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} local job acknowledgement`,
+      );
+      assert.deepEqual(
+        acknowledgedState.fetchCalls,
+        beforeAcknowledgeNetwork.fetchCalls,
+        `${viewport.label}: expected acknowledgement to stay mock/local`,
+      );
+
+      const beforeLiveLocationNetwork = await readDriverJobNetworkState();
+      await clickDriverJobButton("[data-driver-job-live-location]", `${viewport.label} Activate Mock Live Location`);
+      const liveLocationState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const message = document.querySelector("[data-driver-job-live-location-message]");
+            const state = document.querySelector("[data-driver-job-live-location-state]");
+            const workflowLiveLocation = document
+              .querySelector("[data-driver-job-workflow-summary-row='live-location'] [data-driver-job-workflow-summary-value]")
+              ?.textContent.trim();
+
+            return message?.textContent.trim() ===
+              "Mock live location active locally for this mock driver page. No phone location is captured or sent." &&
+              state?.textContent.trim() === "Mock live location active" &&
+              workflowLiveLocation === "Active"
+              ? {
+                  fetchCalls: window.__driverJobFetchCalls || [],
+                  messageText: message.textContent.trim(),
+                  stateText: state.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} mock live location local activation`,
+      );
+      assert.deepEqual(
+        liveLocationState.fetchCalls,
+        beforeLiveLocationNetwork.fetchCalls,
+        `${viewport.label}: expected mock live-location activation to stay local`,
+      );
+
+      const beforeReminderNetwork = await readDriverJobNetworkState();
+      await clickDriverJobButton("[data-driver-job-reminder]", `${viewport.label} Trigger Mock 1-Hour Reminder`);
+      const reminderState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const message = document.querySelector("[data-driver-job-reminder-message]");
+            const status = document.querySelector("[data-driver-job-reminder-summary-status]");
+            const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
+
+            return message?.textContent.trim() ===
+              "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent." &&
+              status?.textContent.trim() === "Triggered locally" &&
+              dispatcherLog?.innerText.includes("Mock only. No message was sent.")
+              ? {
+                  fetchCalls: window.__driverJobFetchCalls || [],
+                  messageText: message.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} mock reminder local trigger`,
+      );
+      assert.deepEqual(
+        reminderState.fetchCalls,
+        beforeReminderNetwork.fetchCalls,
+        `${viewport.label}: expected mock reminder to stay local`,
+      );
+
+      await clickValidDriverJobStatus("OTW", "OTW", "Status updated to OTW.");
+      await clickBlockedDriverJobStatus("POB", "Update OTS before POB.", "OTW");
+      await clickValidDriverJobStatus("OTS", "OTS", "Status updated to OTS.");
+      await clickBlockedDriverJobStatus("Job Completed", "Update POB before Job Completed.", "OTS");
+      await clickValidDriverJobStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
+      await waitForCondition(
+        () =>
+          evaluate(`document.querySelector("[data-driver-job-live-location-state]")?.textContent.trim() === "Mock live location inactive" &&
+            document.querySelector("[data-driver-job-workflow-summary-row='pob'] [data-driver-job-workflow-summary-value]")?.textContent.trim() === "Done" &&
+            document.querySelector("[data-driver-job-workflow-summary-row='live-location'] [data-driver-job-workflow-summary-value]")?.textContent.trim() === "Inactive"`),
+        10000,
+        `${viewport.label} mock live location ended at POB`,
+      );
+
+      const beforeEndedLiveLocationNetwork = await readDriverJobNetworkState();
+      await clickDriverJobButton("[data-driver-job-live-location]", `${viewport.label} blocked mock live location after POB`);
+      const endedLiveLocationState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const message = document.querySelector("[data-driver-job-live-location-message]");
+            const state = document.querySelector("[data-driver-job-live-location-state]");
+
+            return message?.textContent.trim() === "Mock live location has ended for this job." &&
+              state?.textContent.trim() === "Mock live location inactive"
+              ? {
+                  fetchCalls: window.__driverJobFetchCalls || [],
+                  messageText: message.textContent.trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} mock live location remains ended after POB`,
+      );
+      assert.deepEqual(
+        endedLiveLocationState.fetchCalls,
+        beforeEndedLiveLocationNetwork.fetchCalls,
+        `${viewport.label}: expected ended mock live-location action to stay local`,
+      );
+
+      await clickValidDriverJobStatus("Job Completed", "Job Completed", "Status updated to Job Completed.");
+
+      const finalNetwork = await readDriverJobNetworkState();
+      assertNoForbiddenDriverJobNetwork(finalNetwork, `${viewport.label} completed driver job link workflow`);
+      assert.deepEqual(
+        finalNetwork.fetchCalls.filter((call) => call.includes(statusEndpointPath)).length,
+        4,
+        `${viewport.label}: expected exactly four protected mock status API calls for OTW, OTS, POB, and Job Completed`,
+      );
+
+      return {
+        buttons: initialState.buttonLabels,
+        docClientWidth: initialState.docClientWidth,
+        docScrollWidth: initialState.docScrollWidth,
+        fileInputs: initialState.fileInputs.length,
+        inputs: initialState.inputs.map((input) => ({
+          label: input.label.split("\\n")[0],
+          type: input.type,
+        })),
+        otsPresent: initialState.buttonLabels.includes("OTS"),
+        payNowFieldPresent: initialState.payNowFieldPresent,
+        route: `/driver-job/${driverJobWorkflowToken}`,
+        viewport: viewport.label,
+      };
+    };
+
     const setDriverDemoViewportAndLoad = async (viewport) => {
       await client.send("Emulation.setDeviceMetricsOverride", {
         deviceScaleFactor: viewport.scale,
@@ -7352,6 +7907,10 @@ async function runChromeTest() {
     state.customerPayments = await checkCustomerPaymentsRoute();
     state.customerBooking = await checkCustomerBookingRoute();
     state.customerPortal = await checkCustomerPortalRoute();
+    state.driverJobLink = [];
+    for (const viewport of driverJobViewports) {
+      state.driverJobLink.push(await checkDriverJobRoute(viewport));
+    }
     state.driverJobDemo = [];
     for (const viewport of driverDemoViewports) {
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));

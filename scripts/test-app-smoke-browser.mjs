@@ -42,6 +42,18 @@ const replacementLeakSentinels = {
   vehicleModel: "TEST REPLACEMENT MODEL DO NOT LEAK",
 };
 const replacementLeakSentinelValues = Object.values(replacementLeakSentinels);
+const replacementStorageSentinels = {
+  carPlate: "SYY8888Y-DO-NOT-PERSIST",
+  driverContact: "+65 9111 1111 DO NOT PERSIST",
+  driverName: "TEST STORAGE DRIVER DO NOT PERSIST",
+  note: "TEST STORAGE NOTE DO NOT PERSIST",
+  vehicleModel: "TEST STORAGE MODEL DO NOT PERSIST",
+};
+const replacementStorageSentinelValues = Object.values(replacementStorageSentinels);
+const replacementAllSentinelValues = [
+  ...replacementLeakSentinelValues,
+  ...replacementStorageSentinelValues,
+];
 const replacementControlLabels = [
   "Replacement Car / Driver — Mock Only",
   "Save Replacement Details — Mock Only",
@@ -544,6 +556,19 @@ async function runChromeTest() {
             return originalSendBeacon(...args);
           };
         }
+
+        if (window.WebSocket && !window.__adminReplacementOriginalWebSocket) {
+          const OriginalWebSocket = window.WebSocket;
+          window.__adminReplacementOriginalWebSocket = OriginalWebSocket;
+          window.WebSocket = function AdminReplacementWebSocket(url, protocols) {
+            window.__adminReplacementIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            return protocols === undefined
+              ? new OriginalWebSocket(url)
+              : new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+        }
       })()`);
 
       const initialState = await waitForCondition(
@@ -637,8 +662,9 @@ async function runChromeTest() {
         "Expected admin replacement placeholder not to create horizontal overflow",
       );
 
-      const filledState = await evaluate(`(() => {
-        const values = ${JSON.stringify(replacementLeakSentinels)};
+      const fillReplacementFields = async (values) =>
+        evaluate(`(() => {
+        const values = ${JSON.stringify(values)};
         for (const [field, value] of Object.entries(values)) {
           const input = document.querySelector(\`[data-admin-replacement-field="\${field}"]\`);
           if (!input) {
@@ -666,6 +692,235 @@ async function runChromeTest() {
           ]),
         );
       })()`);
+
+      const readAdminReplacementLeakState = async (sentinelValues) =>
+        evaluate(`(() => {
+        const sentinels = ${JSON.stringify(sentinelValues)};
+        const section = document.querySelector("[data-admin-replacement-placeholder]");
+        const bodyClone = document.body.cloneNode(true);
+        bodyClone.querySelector("[data-admin-replacement-placeholder]")?.remove();
+        const outsideText = bodyClone.innerText || "";
+        const outsideControlValues = [...document.querySelectorAll("input, textarea, select")]
+          .filter((control) => !section?.contains(control))
+          .map((control) => control.value || control.textContent || "");
+        const previewTextByTarget = {
+          customerCopy: document.querySelector("[data-copy-preview='customerCopy']")?.innerText || "",
+          driverDispatch: document.querySelector("[data-copy-preview='driverDispatch']")?.innerText || "",
+          jobCard: document.querySelector("[data-copy-preview='jobCard']")?.innerText || "",
+        };
+
+        return {
+          outsideControlValueLeaks: sentinels.filter((sentinel) =>
+            outsideControlValues.some((value) => value.includes(sentinel)),
+          ),
+          outsideTextLeaks: sentinels.filter((sentinel) => outsideText.includes(sentinel)),
+          previewLeaks: Object.fromEntries(
+            Object.entries(previewTextByTarget).map(([target, text]) => [
+              target,
+              sentinels.filter((sentinel) => text.includes(sentinel)),
+            ]),
+          ),
+        };
+      })()`);
+
+      const assertNoAdminReplacementLeaks = (state, description) => {
+        assert.deepEqual(
+          state.previewLeaks.customerCopy,
+          [],
+          `${description}: expected replacement sentinel values not to leak into customer copy`,
+        );
+        assert.deepEqual(
+          state.previewLeaks.driverDispatch,
+          [],
+          `${description}: expected replacement sentinel values not to leak into driver dispatch copy`,
+        );
+        assert.deepEqual(
+          state.previewLeaks.jobCard,
+          [],
+          `${description}: expected replacement sentinel values not to leak into WhatsApp/job-card copy`,
+        );
+        assert.deepEqual(
+          state.outsideTextLeaks,
+          [],
+          `${description}: expected replacement sentinel values not to leak into visible admin page text outside the mock section`,
+        );
+        assert.deepEqual(
+          state.outsideControlValueLeaks,
+          [],
+          `${description}: expected replacement sentinel values not to leak into controls outside the admin mock section`,
+        );
+      };
+
+      const readReplacementPersistenceState = async (sentinelValues) =>
+        evaluate(`(async () => {
+        const sentinels = ${JSON.stringify(sentinelValues)};
+        const matchingSentinels = (text) => {
+          const value = String(text || "");
+          return sentinels.filter((sentinel) => value.includes(sentinel));
+        };
+        const readStorageLeaks = (storage) => {
+          const rows = [];
+          try {
+            for (let index = 0; index < storage.length; index += 1) {
+              const key = storage.key(index) || "";
+              rows.push(\`\${key}=\${storage.getItem(key) || ""}\`);
+            }
+          } catch (error) {
+            rows.push(\`storage-read-error:\${error?.message || String(error)}\`);
+          }
+          return matchingSentinels(rows.join("\\n"));
+        };
+        const readIndexedDbText = (dbName) =>
+          new Promise((resolve) => {
+            if (!dbName || !window.indexedDB) {
+              resolve("");
+              return;
+            }
+
+            let settled = false;
+            const finish = (value) => {
+              if (!settled) {
+                settled = true;
+                resolve(value);
+              }
+            };
+            const request = indexedDB.open(dbName);
+            const timer = window.setTimeout(() => finish(""), 2000);
+
+            request.onerror = () => {
+              window.clearTimeout(timer);
+              finish("");
+            };
+            request.onblocked = () => {
+              window.clearTimeout(timer);
+              finish("");
+            };
+            request.onsuccess = async () => {
+              const db = request.result;
+              const chunks = [];
+              const readStore = (storeName) =>
+                new Promise((resolveStore) => {
+                  try {
+                    const transaction = db.transaction(storeName, "readonly");
+                    const storeRequest = transaction.objectStore(storeName).getAll();
+                    storeRequest.onerror = () => resolveStore("");
+                    storeRequest.onsuccess = () =>
+                      resolveStore(
+                        (storeRequest.result || [])
+                          .map((item) => {
+                            try {
+                              return JSON.stringify(item) || "";
+                            } catch {
+                              return String(item || "");
+                            }
+                          })
+                          .join("\\n"),
+                      );
+                  } catch {
+                    resolveStore("");
+                  }
+                });
+
+              for (const storeName of [...db.objectStoreNames]) {
+                chunks.push(await readStore(storeName));
+              }
+              db.close();
+              window.clearTimeout(timer);
+              finish(chunks.join("\\n"));
+            };
+          });
+
+        let indexedDbText = "";
+        const indexedDbSupported = Boolean(window.indexedDB);
+        try {
+          const databases = typeof indexedDB.databases === "function" ? await indexedDB.databases() : [];
+          for (const database of databases || []) {
+            indexedDbText += await readIndexedDbText(database.name);
+          }
+        } catch (error) {
+          indexedDbText += \`indexeddb-read-error:\${error?.message || String(error)}\`;
+        }
+
+        return {
+          cookieLeaks: matchingSentinels(document.cookie || ""),
+          indexedDbLeaks: matchingSentinels(indexedDbText),
+          indexedDbSupported,
+          localStorageLeaks: readStorageLeaks(window.localStorage),
+          sessionStorageLeaks: readStorageLeaks(window.sessionStorage),
+        };
+      })()`);
+
+      const assertNoReplacementPersistence = (state, description) => {
+        assert.deepEqual(
+          state.localStorageLeaks,
+          [],
+          `${description}: expected replacement sentinel values not to be written to localStorage`,
+        );
+        assert.deepEqual(
+          state.sessionStorageLeaks,
+          [],
+          `${description}: expected replacement sentinel values not to be written to sessionStorage`,
+        );
+        assert.deepEqual(
+          state.indexedDbLeaks,
+          [],
+          `${description}: expected replacement sentinel values not to be written to IndexedDB`,
+        );
+        assert.deepEqual(
+          state.cookieLeaks,
+          [],
+          `${description}: expected replacement sentinel values not to be written to cookies`,
+        );
+      };
+
+      const checkReplacementFieldsCleared = async (description) => {
+        const resetState = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
+              const section = document.querySelector("[data-admin-replacement-placeholder]");
+              if (!section) {
+                return false;
+              }
+              const fieldValues = Object.fromEntries(
+                ["driverName", "driverContact", "carPlate", "vehicleModel", "note"].map((field) => [
+                  field,
+                  document.querySelector(\`[data-admin-replacement-field="\${field}"]\`)?.value || "",
+                ]),
+              );
+              const reason = document.querySelector("[data-admin-replacement-field='reason']")?.value || "";
+              const allValues = [...Object.values(fieldValues), reason].join("\\n");
+
+              return {
+                fieldValues,
+                reason,
+                sentinelValueLeaks: sentinels.filter((sentinel) => allValues.includes(sentinel)),
+              };
+            })()`),
+          10000,
+          description,
+        );
+
+        assert.deepEqual(
+          resetState.fieldValues,
+          {
+            carPlate: "",
+            driverContact: "",
+            driverName: "",
+            note: "",
+            vehicleModel: "",
+          },
+          `${description}: expected replacement mock text fields to reset`,
+        );
+        assert.equal(resetState.reason, "breakdown", `${description}: expected replacement reason to reset`);
+        assert.deepEqual(
+          resetState.sentinelValueLeaks,
+          [],
+          `${description}: expected replacement sentinel values to be gone`,
+        );
+      };
+
+      const filledState = await fillReplacementFields(replacementLeakSentinels);
       assert.deepEqual(
         filledState,
         replacementLeakSentinels,
@@ -737,58 +992,78 @@ async function runChromeTest() {
         "Reassign Replacement Later mock action",
       );
 
-      const adminLeakState = await evaluate(`(() => {
-        const sentinels = ${JSON.stringify(replacementLeakSentinelValues)};
-        const section = document.querySelector("[data-admin-replacement-placeholder]");
-        const bodyClone = document.body.cloneNode(true);
-        bodyClone.querySelector("[data-admin-replacement-placeholder]")?.remove();
-        const outsideText = bodyClone.innerText || "";
-        const outsideControlValues = [...document.querySelectorAll("input, textarea, select")]
-          .filter((control) => !section?.contains(control))
-          .map((control) => control.value || control.textContent || "");
-        const previewTextByTarget = {
-          customerCopy: document.querySelector("[data-copy-preview='customerCopy']")?.innerText || "",
-          driverDispatch: document.querySelector("[data-copy-preview='driverDispatch']")?.innerText || "",
-          jobCard: document.querySelector("[data-copy-preview='jobCard']")?.innerText || "",
-        };
+      const adminLeakState = await readAdminReplacementLeakState(replacementLeakSentinelValues);
+      assertNoAdminReplacementLeaks(adminLeakState, "replacement leak sentinel values");
 
-        return {
-          outsideControlValueLeaks: sentinels.filter((sentinel) =>
-            outsideControlValues.some((value) => value.includes(sentinel)),
-          ),
-          outsideTextLeaks: sentinels.filter((sentinel) => outsideText.includes(sentinel)),
-          previewLeaks: Object.fromEntries(
-            Object.entries(previewTextByTarget).map(([target, text]) => [
-              target,
-              sentinels.filter((sentinel) => text.includes(sentinel)),
-            ]),
-          ),
-        };
-      })()`);
+      const storageFilledState = await fillReplacementFields(replacementStorageSentinels);
       assert.deepEqual(
-        adminLeakState.previewLeaks.customerCopy,
-        [],
-        "Expected replacement sentinel values not to leak into customer copy",
+        storageFilledState,
+        replacementStorageSentinels,
+        "Expected replacement storage sentinel values to stay in the admin mock fields",
       );
-      assert.deepEqual(
-        adminLeakState.previewLeaks.driverDispatch,
-        [],
-        "Expected replacement sentinel values not to leak into driver dispatch copy",
+
+      await clickReplacementAction(
+        "save",
+        "Mock replacement details saved locally only. No booking, driver assignment, dispatch, Supabase row, or notification was updated.",
+        "Save Replacement Details storage-boundary mock action",
       );
-      assert.deepEqual(
-        adminLeakState.previewLeaks.jobCard,
-        [],
-        "Expected replacement sentinel values not to leak into WhatsApp/job-card copy",
+      await clickReplacementAction(
+        "cancel",
+        "Mock cancellation note recorded locally only. The current driver assignment was not cancelled in any live system.",
+        "Mark Current Driver Cancelled storage-boundary mock action",
       );
-      assert.deepEqual(
-        adminLeakState.outsideTextLeaks,
-        [],
-        "Expected replacement sentinel values not to leak into visible admin page text outside the mock section",
+      await clickReplacementAction(
+        "reassign",
+        "Future staff reassign placeholder acknowledged locally only. No reassign API, dispatch update, or Supabase write was called.",
+        "Reassign Replacement Later storage-boundary mock action",
       );
-      assert.deepEqual(
-        adminLeakState.outsideControlValueLeaks,
-        [],
-        "Expected replacement sentinel values not to leak into controls outside the admin mock section",
+
+      const storagePersistenceState = await readReplacementPersistenceState(replacementStorageSentinelValues);
+      assertNoReplacementPersistence(
+        storagePersistenceState,
+        "replacement storage sentinel values after mock actions",
+      );
+
+      const storageAdminLeakState = await readAdminReplacementLeakState(replacementStorageSentinelValues);
+      assertNoAdminReplacementLeaks(storageAdminLeakState, "replacement storage sentinel values");
+
+      const reloadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.reload", { ignoreCache: true });
+      await reloadEvent;
+      await waitForCondition(
+        () => evaluate(`document.body.innerText.includes("Replacement Car / Driver — Mock Only")`),
+        10000,
+        "admin replacement placeholder after reload",
+      );
+      await checkReplacementFieldsCleared("admin replacement mock fields after reload");
+      const postReloadPersistenceState = await readReplacementPersistenceState(replacementStorageSentinelValues);
+      assertNoReplacementPersistence(
+        postReloadPersistenceState,
+        "replacement storage sentinel values after reload",
+      );
+
+      const awayLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url: customerBookingUrl });
+      await awayLoadEvent;
+      await waitForCondition(
+        () => evaluate(`document.body.innerText.includes("Booking Request")`),
+        10000,
+        "replacement persistence navigation away",
+      );
+
+      const backLoadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.navigate", { url: appUrl });
+      await backLoadEvent;
+      await waitForCondition(
+        () => evaluate(`document.body.innerText.includes("Replacement Car / Driver — Mock Only")`),
+        10000,
+        "replacement persistence navigation back",
+      );
+      await checkReplacementFieldsCleared("admin replacement mock fields after navigation away and back");
+      const postNavigationPersistenceState = await readReplacementPersistenceState(replacementStorageSentinelValues);
+      assertNoReplacementPersistence(
+        postNavigationPersistenceState,
+        "replacement storage sentinel values after navigation away and back",
       );
 
       const checkNoReplacementLeakOnRoute = async ({ expectedText, routeName, url }) => {
@@ -801,7 +1076,7 @@ async function runChromeTest() {
           `${routeName} leak-check route`,
         );
         const routeState = await evaluate(`(() => {
-          const sentinels = ${JSON.stringify(replacementLeakSentinelValues)};
+          const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
           const text = document.body.innerText || "";
           const controlValues = [...document.querySelectorAll("input, textarea, select")]

@@ -9,6 +9,7 @@ import {
 type DriverDetails = {
   name: string;
   mobile: string;
+  payNowNumber: string;
   plate: string;
   vehicleModel: string;
 };
@@ -48,7 +49,8 @@ const statusOptions = [
   { label: "Job Completed", message: "Status updated: Completed", value: "Job Completed" },
 ];
 
-const paymentDetailsPattern = /\b(paynow|pay now|bank|account|acct)\b/i;
+const bankDetailsPattern = /\b(bank|account|acct)\b/i;
+const payNowDetailsPattern = /\b(paynow|pay\s+now)\b/i;
 const vehicleModelPattern =
   /\b(alphard|vellfire|hiace|mercedes|benz|bmw|audi|toyota|honda|hyundai|kia|lexus|estima|camry|viano|voxy|noah|prius|combi|maxi\s?cab|mpv|van|bus|e\s?class|s\s?class)\b/i;
 const isArrivalStyleDemoJob = true;
@@ -66,6 +68,7 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
   return {
     mobile: cleanParsedValue(details.mobile),
     name: cleanParsedValue(details.name),
+    payNowNumber: cleanParsedValue(details.payNowNumber),
     plate: cleanParsedValue(details.plate),
     vehicleModel: cleanParsedValue(details.vehicleModel),
   };
@@ -152,7 +155,7 @@ function driverDetailLines(text: string) {
 }
 
 function isPaymentDetailLine(line: string) {
-  return paymentDetailsPattern.test(line);
+  return payNowDetailsPattern.test(line) || bankDetailsPattern.test(line);
 }
 
 function hasFieldLabel(line: string) {
@@ -209,6 +212,27 @@ function freeformLineValue(lines: string[], predicate: (line: string) => boolean
   return "";
 }
 
+function cleanPayNowNumber(value: string) {
+  return cleanParsedValue(
+    value
+      .replace(/\bpay\s*now\b/gi, " ")
+      .replace(/[()]/g, " ")
+      .replace(/[:=-]/g, " "),
+  );
+}
+
+function payNowNumberValue(text: string, lines: string[]) {
+  const labelledPayNow = lineValue(text, ["paynow", "pay now", "paynow number", "pay now number"]);
+
+  if (labelledPayNow) {
+    return cleanPayNowNumber(labelledPayNow);
+  }
+
+  const payNowLine = lines.find((line) => payNowDetailsPattern.test(line));
+
+  return payNowLine ? cleanPayNowNumber(payNowLine) : "";
+}
+
 function parseDriverDetailsText(text: string): ParsedDriverDetails {
   const lines = driverDetailLines(text);
   const labelledMobile = lineValue(text, ["contact", "mobile", "phone", "tel", "telephone", "hp", "handphone"]);
@@ -220,6 +244,7 @@ function parseDriverDetailsText(text: string): ParsedDriverDetails {
     mobile: labelledMobile || freeformLineValue(lines, isPhoneLikeLine),
     name: labelledName || freeformLineValue(lines, isNameLikeLine),
     paymentDetailsDetected: lines.some(isPaymentDetailLine),
+    payNowNumber: payNowNumberValue(text, lines),
     plate: labelledPlate || freeformLineValue(lines, isSingaporePlateLine),
     vehicleModel: labelledVehicleModel || freeformLineValue(lines, isVehicleModelLine),
   };
@@ -236,6 +261,7 @@ export default function DriverJobDemoPage() {
   const [driverDetails, setDriverDetails] = useState<DriverDetails>({
     name: "",
     mobile: "",
+    payNowNumber: "",
     plate: "",
     vehicleModel: "",
   });
@@ -348,12 +374,14 @@ export default function DriverJobDemoPage() {
     const nextDetails = {
       mobile: parsedDetails.mobile || driverDetails.mobile,
       name: parsedDetails.name || driverDetails.name,
+      payNowNumber: parsedDetails.payNowNumber || driverDetails.payNowNumber,
       plate: parsedDetails.plate || driverDetails.plate,
       vehicleModel: parsedDetails.vehicleModel || driverDetails.vehicleModel,
     };
     const detectedFieldCount = [
       parsedDetails.name,
       parsedDetails.mobile,
+      parsedDetails.payNowNumber,
       parsedDetails.plate,
       parsedDetails.vehicleModel,
     ].filter(Boolean).length;
@@ -401,7 +429,7 @@ export default function DriverJobDemoPage() {
       tone: "success",
       text: "Driver details saved locally for this mock driver page.",
     });
-    addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
+    addActivity("Mock driver details saved", "Driver name/contact/vehicle/PayNow details were saved locally.");
   }
 
   function acknowledgeLatestEta() {
@@ -912,7 +940,7 @@ export default function DriverJobDemoPage() {
                   className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
                   data-driver-demo-payment-helper="true"
                 >
-                  Payment details were detected but not saved in this demo.
+                  PayNow or bank details were detected. PayNow is local driver info only; no payment or bank action is created.
                 </p>
               ) : null}
             </div>
@@ -956,6 +984,17 @@ export default function DriverJobDemoPage() {
                 onChange={(event) => updateDriverDetail("vehicleModel", event.target.value)}
                 type="text"
                 value={driverDetails.vehicleModel}
+              />
+            </label>
+            <label className="block space-y-1 text-sm font-semibold text-slate-700">
+              <span>PayNow number</span>
+              <input
+                className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                data-driver-demo-paynow="true"
+                inputMode="tel"
+                onChange={(event) => updateDriverDetail("payNowNumber", event.target.value)}
+                type="tel"
+                value={driverDetails.payNowNumber}
               />
             </label>
             <div className="space-y-2">

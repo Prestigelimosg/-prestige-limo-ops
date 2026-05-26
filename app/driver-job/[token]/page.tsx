@@ -51,6 +51,7 @@ type ControlFeedback = {
 type DriverDetails = {
   contact: string;
   name: string;
+  payNowNumber: string;
   plate: string;
   vehicleModel: string;
 };
@@ -72,6 +73,7 @@ const statusActions = [
 const emptyDriverDetails: DriverDetails = {
   contact: "",
   name: "",
+  payNowNumber: "",
   plate: "",
   vehicleModel: "",
 };
@@ -107,6 +109,7 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
   return {
     contact: details.contact.trim().replace(/\s+/g, " "),
     name: details.name.trim().replace(/\s+/g, " "),
+    payNowNumber: details.payNowNumber.trim().replace(/\s+/g, " "),
     plate: details.plate.trim().replace(/\s+/g, " "),
     vehicleModel: details.vehicleModel.trim().replace(/\s+/g, " "),
   };
@@ -356,6 +359,7 @@ export default function DriverJobPage() {
         setDriverDetails({
           contact: result.payload.assignedDriver.contact,
           name: result.payload.assignedDriver.name,
+          payNowNumber: "",
           plate: result.payload.assignedDriver.plate,
           vehicleModel: result.payload.assignedDriver.vehicleModel,
         });
@@ -455,10 +459,10 @@ export default function DriverJobPage() {
 
     setDriverDetails(nextDetails);
 
-    if (!nextDetails.name && !nextDetails.contact && !nextDetails.plate) {
+    if (!nextDetails.name && !nextDetails.contact && !nextDetails.plate && !nextDetails.payNowNumber) {
       setDetailsFeedback({
         tone: "error",
-        text: "Enter driver name, contact, or car plate before saving.",
+        text: "Enter driver name, contact, car plate, or PayNow number before saving.",
       });
       setSavedDriverDetails(null);
       return;
@@ -478,7 +482,7 @@ export default function DriverJobPage() {
       tone: "success",
       text: "Driver details saved locally for this mock driver page.",
     });
-    addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
+    addActivity("Mock driver details saved", "Driver name/contact/vehicle/PayNow details were saved locally.");
   }
 
   function acknowledgeLatestEta() {
@@ -1040,6 +1044,17 @@ export default function DriverJobPage() {
                     value={driverDetails.vehicleModel}
                   />
                 </label>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>PayNow number</span>
+                  <input
+                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-detail-paynow="true"
+                    inputMode="tel"
+                    onChange={(event) => updateDriverDetail("payNowNumber", event.target.value)}
+                    type="tel"
+                    value={driverDetails.payNowNumber}
+                  />
+                </label>
                 <div className="space-y-2">
                   <button
                     className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
@@ -1081,6 +1096,10 @@ export default function DriverJobPage() {
                       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
                         <dt className="font-semibold">Vehicle</dt>
                         <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.vehicleModel)}</dd>
+                      </div>
+                      <div className="grid grid-cols-[6.5rem_1fr] gap-2">
+                        <dt className="font-semibold">PayNow</dt>
+                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.payNowNumber)}</dd>
                       </div>
                     </dl>
                   </div>

@@ -6311,7 +6311,6 @@ async function runChromeTest() {
             "pdf",
             "payment",
             "bank",
-            "paynow",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -6340,10 +6339,10 @@ async function runChromeTest() {
       assert.deepEqual(
         initialState.forbiddenText,
         [],
-        `${viewport.label}: expected no pricing, payout, CRM, invoice, payment, bank, PayNow, or admin text on driver job link`,
+        `${viewport.label}: expected no pricing, payout, CRM, invoice, payment, bank, or admin text on driver job link`,
       );
       assert.deepEqual(initialState.fileInputs, [], `${viewport.label}: expected no real file/photo upload inputs`);
-      assert.equal(initialState.payNowFieldPresent, false, `${viewport.label}: expected PayNow field to remain future work`);
+      assert.equal(initialState.payNowFieldPresent, true, `${viewport.label}: expected local PayNow number field`);
       assert.deepEqual(
         [
           "Prestige Limo Driver Job",
@@ -6364,7 +6363,7 @@ async function runChromeTest() {
         `${viewport.label}: expected readable driver job card details and workflow sections`,
       );
       assert.deepEqual(
-        ["Driver name", "Contact", "Car plate", "Vehicle model"].filter(
+        ["Driver name", "Contact", "Car plate", "Vehicle model", "PayNow number"].filter(
           (label) => !initialState.inputs.some((input) => input.label.includes(label)),
         ),
         [],
@@ -6372,7 +6371,7 @@ async function runChromeTest() {
       );
       assert.deepEqual(
         initialState.inputs.map((input) => input.type),
-        ["text", "tel", "text", "text"],
+        ["text", "tel", "text", "text", "tel"],
         `${viewport.label}: expected current driver detail input types`,
       );
       assert.equal(
@@ -6499,6 +6498,7 @@ async function runChromeTest() {
       await setDriverJobField("[data-driver-job-detail-contact]", "+65 9000 2222");
       await setDriverJobField("[data-driver-job-detail-plate]", "SMK1234Z");
       await setDriverJobField("[data-driver-job-detail-vehicle-model]", "Mercedes V Class");
+      await setDriverJobField("[data-driver-job-detail-paynow]", "8123 4567");
       const beforeSaveNetwork = await readDriverJobNetworkState();
       await clickDriverJobButton("[data-driver-job-save-details]", `${viewport.label} Save driver details`);
       const savedDetailsState = await waitForCondition(
@@ -6511,7 +6511,8 @@ async function runChromeTest() {
               savedDetails?.innerText.includes("Smoke Driver") &&
               savedDetails?.innerText.includes("+65 9000 2222") &&
               savedDetails?.innerText.includes("SMK1234Z") &&
-              savedDetails?.innerText.includes("Mercedes V Class")
+              savedDetails?.innerText.includes("Mercedes V Class") &&
+              savedDetails?.innerText.includes("8123 4567")
               ? {
                   fetchCalls: window.__driverJobFetchCalls || [],
                   messageText: message.textContent.trim(),
@@ -6815,7 +6816,7 @@ async function runChromeTest() {
         `${viewport.label}: expected no pricing, payout, CRM, or admin text on driver demo`,
       );
       assert.deepEqual(
-        ["Driver name", "Mobile number", "Car plate", "Vehicle model"].filter(
+        ["Driver name", "Mobile number", "Car plate", "Vehicle model", "PayNow number"].filter(
           (label) => !initialState.inputs.some((input) => input.label.includes(label)),
         ),
         [],
@@ -6823,7 +6824,7 @@ async function runChromeTest() {
       );
       assert.deepEqual(
         initialState.inputs.map((input) => input.type),
-        ["text", "tel", "text", "text"],
+        ["text", "tel", "text", "text", "tel"],
         `${viewport.label}: expected mobile-friendly input types`,
       );
       assert.deepEqual(
@@ -7146,6 +7147,7 @@ async function runChromeTest() {
                 messageText: parseMessage?.textContent.trim() || "",
                 mobile: document.querySelector("[data-driver-demo-mobile]")?.value || "",
                 name: document.querySelector("[data-driver-demo-name]")?.value || "",
+                payNowNumber: document.querySelector("[data-driver-demo-paynow]")?.value || "",
                 plate: document.querySelector("[data-driver-demo-plate]")?.value || "",
                 vehicleModel: document.querySelector("[data-driver-demo-vehicle-model]")?.value || "",
               };
@@ -7153,7 +7155,7 @@ async function runChromeTest() {
               return state.messageText === "Driver details parsed. Please review before saving." &&
                 state.databaseCheckVisible === false &&
                 state.overwritePromptVisible === false &&
-                state.helperText === "Payment details were detected but not saved in this demo."
+                state.helperText === "PayNow or bank details were detected. PayNow is local driver info only; no payment or bank action is created."
                 ? state
                 : false;
             })()`),
@@ -7174,6 +7176,7 @@ async function runChromeTest() {
       const labelledDetailsState = await parseDriverDetailsSample(labelledDriverDetails, "labelled driver details");
       assert.equal(labelledDetailsState.name, "Ah Seng");
       assert.equal(labelledDetailsState.mobile, "91234567");
+      assert.equal(labelledDetailsState.payNowNumber, "81234567");
       assert.equal(labelledDetailsState.plate, "S1234Z");
       assert.equal(labelledDetailsState.vehicleModel, "Toyota Alphard");
       assert.equal(
@@ -7214,6 +7217,7 @@ async function runChromeTest() {
       assert.equal(freeformDetailsState.vehicleModel, "Alphard HS/ Black");
       assert.equal(freeformDetailsState.plate, "SNH4429M");
       assert.equal(freeformDetailsState.mobile.replace(/\D/g, ""), "81895041");
+      assert.equal(freeformDetailsState.payNowNumber.replace(/\D/g, ""), "82008671");
       assert.notEqual(
         freeformDetailsState.mobile.replace(/\D/g, ""),
         "82008671",

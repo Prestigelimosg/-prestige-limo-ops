@@ -459,6 +459,7 @@ async function runChromeTest() {
           ["[data-driver-job-detail-contact]", "+65 9123 4567"],
           ["[data-driver-job-detail-plate]", "SLM1234A"],
           ["[data-driver-job-detail-vehicle-model]", "Toyota Alphard"],
+          ["[data-driver-job-detail-paynow]", "8123 4567"],
         ];
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 
@@ -503,7 +504,8 @@ async function runChromeTest() {
               savedDetails?.innerText.includes("Mock Local Driver A") &&
               savedDetails?.innerText.includes("+65 9123 4567") &&
               savedDetails?.innerText.includes("SLM1234A") &&
-              savedDetails?.innerText.includes("Toyota Alphard")
+              savedDetails?.innerText.includes("Toyota Alphard") &&
+              savedDetails?.innerText.includes("8123 4567")
               ? {
                   distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                   messageText: message.textContent.trim(),
@@ -1229,6 +1231,7 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Contact"));
     assert.ok(validState.visibleText.includes("Car plate"));
     assert.ok(validState.visibleText.includes("Vehicle model"));
+    assert.ok(validState.visibleText.includes("PayNow number"));
     assert.deepEqual(
       validState.buttonLabels.filter((buttonLabel) =>
         ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),

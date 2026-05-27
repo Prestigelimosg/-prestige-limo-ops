@@ -1900,7 +1900,7 @@ export default function MockCustomerDashboardPage() {
           <div className="border-t border-slate-200 p-4 sm:p-5">
             {regularCustomerBookingPreview ? (
               <article
-                className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950"
+                className="min-w-0 break-words rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950"
                 data-regular-customer-booking-preview="true"
               >
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">

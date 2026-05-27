@@ -27,13 +27,28 @@ const browserConsoleErrors = [];
 
 const viewports = [
   { height: 568, label: "small phone 320px", mobile: true, scale: 2, width: 320 },
+  { height: 740, label: "common Android/Samsung/China phone 360px", mobile: true, scale: 3, width: 360 },
   { height: 667, label: "phone 375px", mobile: true, scale: 2, width: 375 },
   { height: 844, label: "phone 390px", mobile: true, scale: 3, width: 390 },
   { height: 915, label: "phone 412px", mobile: true, scale: 2.625, width: 412 },
+  { height: 932, label: "large phone 430px", mobile: true, scale: 3, width: 430 },
   { height: 1024, label: "tablet 768px", mobile: true, scale: 2, width: 768 },
+  { height: 1180, label: "iPad portrait 820px", mobile: true, scale: 2, width: 820 },
+  { height: 1366, label: "tablet landscape 1024px", mobile: false, scale: 1, width: 1024 },
+  { height: 900, label: "desktop 1280px", mobile: false, scale: 1, width: 1280 },
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
 const appTabs = ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"];
+const dispatcherIntakeControlLabels = [
+  "AI Assist Parse (Mock)",
+  "Create Job Card",
+  "Clear Message",
+];
+const responsiveRoutes = [
+  { expectedText: "Booking Request", label: "/book", path: "/book" },
+  { expectedText: "My Bookings", label: "/my-bookings", path: "/my-bookings" },
+  { expectedText: "Customers", label: "/customers", path: "/customers" },
+];
 const tabExpectedText = {
   Bookings: "Load Bookings",
   Completed: "No completed bookings loaded yet.",
@@ -254,13 +269,21 @@ async function runChromeTest() {
 
             return {
               className: String(element.className || "").slice(0, 120),
+              clientWidth: Math.round(element.clientWidth || 0),
+              left: Math.round(rect.left),
               right: Math.round(rect.right),
+              scrollWidth: Math.round(element.scrollWidth || 0),
               tag: element.tagName.toLowerCase(),
               text: (element.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 80),
               width: Math.round(rect.width),
             };
           })
-          .filter((element) => element.right > viewportWidth + 2);
+          .filter(
+            (element) =>
+              element.left < -2 ||
+              element.right > viewportWidth + 2 ||
+              element.scrollWidth > element.clientWidth + 2,
+          );
 
         return {
           bodyScrollWidth: body.scrollWidth,
@@ -282,6 +305,47 @@ async function runChromeTest() {
           width: Math.round(rect.width),
         };
       }))()`);
+
+    const dispatcherIntakeControlState = () =>
+      evaluate(`(() => {
+        const labels = ${JSON.stringify(dispatcherIntakeControlLabels)};
+        const findButton = (label) => [...document.querySelectorAll("button")].find(
+          (candidate) => candidate.textContent.trim() === label,
+        );
+        const row = document.querySelector("[data-dispatcher-intake-action-row='true']");
+        const safety = document.querySelector("[data-ai-assist-gate='true'] label");
+        const aiButton = findButton("AI Assist Parse (Mock)");
+        const safetyRect = safety?.getBoundingClientRect();
+        const aiRect = aiButton?.getBoundingClientRect();
+        const rowRect = row?.getBoundingClientRect();
+
+        return {
+          controls: labels.map((label) => {
+            const button = findButton(label);
+            const rect = button?.getBoundingClientRect();
+            const style = button ? getComputedStyle(button) : null;
+
+            return {
+              exists: Boolean(button),
+              height: Math.round(rect?.height || 0),
+              label,
+              left: Math.round(rect?.left || 0),
+              right: Math.round(rect?.right || 0),
+              text: button?.textContent.trim() || "",
+              visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+              whiteSpace: style?.whiteSpace || "",
+              width: Math.round(rect?.width || 0),
+            };
+          }),
+          rowLeft: Math.round(rowRect?.left || 0),
+          rowRight: Math.round(rowRect?.right || 0),
+          rowVisible: Boolean(rowRect && rowRect.width > 0 && rowRect.height > 0),
+          safetyGap: Math.round((safetyRect?.top || 0) - (aiRect?.bottom || 0)),
+          safetyText: safety?.textContent.replace(/\\s+/g, " ").trim() || "",
+          safetyVisible: Boolean(safetyRect && safetyRect.width > 0 && safetyRect.height > 0),
+          viewportWidth: document.documentElement.clientWidth,
+        };
+      })()`);
 
     const clickButtonByText = async (label, description = label) => {
       const clicked = await evaluate(`(() => {
@@ -319,6 +383,84 @@ async function runChromeTest() {
       );
     };
 
+    const checkDispatcherIntakeControls = async (viewport) => {
+      const state = await dispatcherIntakeControlState();
+
+      assert.equal(state.rowVisible, true, `${viewport.label}: expected Dispatcher Intake action row`);
+      assert.equal(
+        state.rowLeft >= -2 && state.rowRight <= state.viewportWidth + 2,
+        true,
+        `${viewport.label}: expected Dispatcher Intake action row not to overflow, got ${JSON.stringify(state)}`,
+      );
+      assert.equal(
+        state.safetyVisible,
+        true,
+        `${viewport.label}: expected AI safety checkbox/help to stay near AI Assist`,
+      );
+      assert.equal(
+        state.safetyText.includes("Tick the AI safety checkbox to enable AI Assist"),
+        true,
+        `${viewport.label}: expected AI safety help text near AI Assist`,
+      );
+      assert.equal(
+        state.safetyGap >= 0 && state.safetyGap <= 16,
+        true,
+        `${viewport.label}: expected AI safety checkbox/help to stay close to AI Assist, got gap ${state.safetyGap}`,
+      );
+
+      for (const control of state.controls) {
+        assert.equal(
+          control.exists,
+          true,
+          `${viewport.label}: expected Dispatcher Intake ${control.label} control`,
+        );
+        assert.equal(
+          control.visible,
+          true,
+          `${viewport.label}: expected Dispatcher Intake ${control.label} to be visible`,
+        );
+        assert.equal(
+          control.height >= 44 && control.width >= 64,
+          true,
+          `${viewport.label}: expected Dispatcher Intake ${control.label} to be touch-friendly, got ${
+            control.width
+          }x${control.height}`,
+        );
+        assert.equal(
+          control.left >= -2 && control.right <= state.viewportWidth + 2,
+          true,
+          `${viewport.label}: expected Dispatcher Intake ${control.label} not to overflow, got ${JSON.stringify(control)}`,
+        );
+      }
+
+      const clearMessage = state.controls.find((control) => control.label === "Clear Message");
+      assert.equal(
+        clearMessage?.whiteSpace,
+        "nowrap",
+        `${viewport.label}: expected Clear Message label not to wrap awkwardly`,
+      );
+      assert.equal(
+        (clearMessage?.height || 0) <= 56,
+        true,
+        `${viewport.label}: expected Clear Message button not to become tall/misaligned, got ${
+          clearMessage?.height || 0
+        }px`,
+      );
+    };
+
+    const checkResponsiveRouteViewport = async (viewport, route) => {
+      await setViewport(viewport);
+      await navigate(new URL(route.path, appUrl).toString(), route.expectedText);
+      const state = await layoutState();
+
+      assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
+      assert.equal(
+        state.visibleText.includes(route.expectedText),
+        true,
+        `${viewport.label} ${route.label}: expected important section text to remain visible`,
+      );
+    };
+
     const checkMainAppViewport = async (viewport) => {
       await setViewport(viewport);
       await navigate(appUrl, "Prestige Limo Ops Dispatch");
@@ -333,6 +475,10 @@ async function runChromeTest() {
           true,
           `${viewport.label} ${tabLabel}: expected important section text to remain visible`,
         );
+
+        if (tabLabel === "Dispatch") {
+          await checkDispatcherIntakeControls(viewport);
+        }
       }
     };
 
@@ -658,6 +804,9 @@ async function runChromeTest() {
 
     for (const viewport of viewports) {
       await checkMainAppViewport(viewport);
+      for (const route of responsiveRoutes) {
+        await checkResponsiveRouteViewport(viewport, route);
+      }
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
         "Acknowledge Job",
         "Activate Mock Live Location",

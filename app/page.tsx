@@ -6823,10 +6823,13 @@ export default function Home() {
                 />
               </label>
               <div className="mt-3 flex flex-col gap-2" data-ai-assist-controls="true">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                  <div className="flex w-full flex-col gap-2 sm:w-56" data-ai-assist-gate="true">
+                <div
+                  className="grid gap-2 md:grid-cols-[minmax(11rem,1fr)_minmax(11rem,1fr)_minmax(9rem,auto)] md:items-start"
+                  data-dispatcher-intake-action-row="true"
+                >
+                  <div className="flex w-full min-w-0 flex-col gap-2" data-ai-assist-gate="true">
                     <button
-                      className={`h-10 w-full rounded-md border px-3 text-sm font-semibold transition ${
+                      className={`h-12 w-full rounded-md border px-3 py-2 text-sm font-semibold whitespace-nowrap transition ${
                         aiAssistSafetyAccepted
                           ? "border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50"
                           : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -6838,7 +6841,7 @@ export default function Home() {
                       AI Assist Parse (Mock)
                     </button>
                     <label
-                      className="flex h-10 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-3 text-xs font-medium leading-tight text-indigo-950"
+                      className="flex h-12 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-3 py-2 text-xs font-medium leading-tight text-indigo-950"
                     >
                       <input
                         checked={aiAssistSafetyAccepted}
@@ -6867,14 +6870,15 @@ export default function Home() {
                     ) : null}
                   </div>
                   <button
-                    className="h-10 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 sm:w-56"
+                    className="h-12 w-full rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold whitespace-nowrap text-white transition hover:bg-slate-800"
                     onClick={handleParseBookingMessage}
                     type="button"
                   >
                     Create Job Card
                   </button>
                   <button
-                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 sm:w-auto"
+                    className="h-12 w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-w-36"
+                    data-dispatcher-clear-message-button="true"
                     onClick={clearBookingMessageInput}
                     type="button"
                   >

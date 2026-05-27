@@ -562,6 +562,7 @@ export default function MockCustomerDashboardPage() {
   const [regularCustomerBookingListActionFeedback, setRegularCustomerBookingListActionFeedback] = useState<
     Record<string, RegularCustomerBookingListActionFeedback>
   >({});
+  const [regularCustomerBillingDetailPreviewId, setRegularCustomerBillingDetailPreviewId] = useState("");
   const [regularCustomerDraftInvoicePreview, setRegularCustomerDraftInvoicePreview] =
     useState<RegularCustomerDraftInvoicePreview | null>(null);
   const [regularCustomerDraftInvoiceClearControlVisible, setRegularCustomerDraftInvoiceClearControlVisible] =
@@ -935,6 +936,14 @@ export default function MockCustomerDashboardPage() {
         message: actionMessages[action],
       },
     }));
+  }
+
+  function showRegularCustomerBillingDetails(item: RegularCustomerBookingListItem) {
+    setRegularCustomerBillingDetailPreviewId(item.id);
+  }
+
+  function closeRegularCustomerBillingDetails() {
+    setRegularCustomerBillingDetailPreviewId("");
   }
 
   function handleRegularCustomerParserHelper() {
@@ -2370,6 +2379,7 @@ export default function MockCustomerDashboardPage() {
                 {filteredRegularCustomerBookingListItems.length > 0 ? (
                   filteredRegularCustomerBookingListItems.map((item) => {
                     const rowActionFeedback = regularCustomerBookingListActionFeedback[item.id];
+                    const isBillingDetailPreviewOpen = regularCustomerBillingDetailPreviewId === item.id;
 
                     return (
                     <article
@@ -2466,7 +2476,15 @@ export default function MockCustomerDashboardPage() {
                               invoice, payment, bank, notification, calendar, or Supabase action.
                             </p>
                           </div>
-                          <div className="grid w-full gap-2 sm:grid-cols-3 lg:w-auto">
+                          <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto xl:grid-cols-4">
+                            <button
+                              className="min-h-11 rounded-md border border-indigo-900 bg-indigo-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-indigo-800"
+                              data-regular-customer-billing-detail-action={item.id}
+                              onClick={() => showRegularCustomerBillingDetails(item)}
+                              type="button"
+                            >
+                              View Billing Details — Mock Only
+                            </button>
                             {(
                               [
                                 ["edit", "Edit mock row"],
@@ -2496,6 +2514,86 @@ export default function MockCustomerDashboardPage() {
                           {rowActionFeedback?.message ??
                             "Choose a mock row action to preview future edit/amend/cancel guidance. Nothing will be saved, removed, audited, invoiced, paid, synced, sent, or written to Supabase."}
                         </p>
+
+                        {isBillingDetailPreviewOpen ? (
+                          <div
+                            className="mt-3 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-slate-700"
+                            data-regular-customer-billing-detail-preview={item.id}
+                          >
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-800">
+                                  Local read-only panel
+                                </p>
+                                <h5
+                                  className="mt-1 text-base font-bold text-indigo-950"
+                                  data-regular-customer-billing-detail-title={item.id}
+                                >
+                                  Billing Details Preview — Mock Only
+                                </h5>
+                              </div>
+                              <button
+                                className="min-h-11 rounded-md border border-indigo-300 bg-white px-3 py-2 text-sm font-bold text-indigo-950 transition hover:border-indigo-700"
+                                data-regular-customer-billing-detail-dismiss={item.id}
+                                onClick={closeRegularCustomerBillingDetails}
+                                type="button"
+                              >
+                                Close Preview
+                              </button>
+                            </div>
+
+                            <dl className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                              <div>
+                                <dt className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-800">
+                                  Customer
+                                </dt>
+                                <dd className="mt-1 font-semibold text-slate-950">{item.customerName}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-800">
+                                  Booking
+                                </dt>
+                                <dd className="mt-1 font-semibold text-slate-950">
+                                  {item.passengerName} / {item.pickupDate} {item.pickupTime}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-800">
+                                  Billing month
+                                </dt>
+                                <dd className="mt-1 font-semibold text-slate-950">{item.billingMonth}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-800">
+                                  Trip count
+                                </dt>
+                                <dd className="mt-1 font-semibold text-slate-950">1 local mock trip</dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-800">
+                                  Mock amount
+                                </dt>
+                                <dd className="mt-1 font-semibold text-slate-950">Not calculated</dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-bold uppercase tracking-[0.14em] text-indigo-800">
+                                  Status
+                                </dt>
+                                <dd className="mt-1 font-semibold text-slate-950">{item.billingStatus}</dd>
+                              </div>
+                            </dl>
+
+                            <p
+                              className="mt-3 rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm font-semibold leading-6 text-indigo-950"
+                              data-regular-customer-billing-detail-boundary={item.id}
+                            >
+                              This is not an invoice and no payment was requested. Opening or closing this preview
+                              does not create invoice numbers, generate invoices or PDFs, send payment requests, call
+                              network APIs, write browser storage, write Supabase, change row data, add rows, remove
+                              rows, update payment status, or trigger Telegram/notification behavior.
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

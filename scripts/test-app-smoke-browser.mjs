@@ -74,6 +74,10 @@ const replacementControlLabels = [
   "Mark Current Driver Cancelled — Mock Only",
   "Reassign Replacement Later — Future Staff Workflow",
 ];
+const internalBillingDetailControlLabels = [
+  "View Billing Details — Mock Only",
+  "Billing Details Preview — Mock Only",
+];
 const telegramBlockedUrlPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
 const telegramPreviewBlockedCallPattern =
@@ -1181,11 +1185,16 @@ async function runChromeTest() {
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
+          const billingDetailControls = ${JSON.stringify(internalBillingDetailControlLabels)};
           const text = document.body.innerText || "";
           const controlValues = [...document.querySelectorAll("input, textarea, select")]
             .map((control) => control.value || control.textContent || "");
 
           return {
+            billingDetailControlText: billingDetailControls.filter((label) => text.includes(label)),
+            billingDetailPreviewVisible: Boolean(
+              document.querySelector("[data-regular-customer-billing-detail-preview]"),
+            ),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
             sentinelControlValueLeaks: sentinels.filter((sentinel) =>
@@ -1204,6 +1213,16 @@ async function runChromeTest() {
           routeState.replacementControlText,
           [],
           `${routeName}: expected no replacement mock controls`,
+        );
+        assert.equal(
+          routeState.billingDetailPreviewVisible,
+          false,
+          `${routeName}: expected no internal billing detail preview`,
+        );
+        assert.deepEqual(
+          routeState.billingDetailControlText,
+          [],
+          `${routeName}: expected no internal billing detail controls`,
         );
         assert.deepEqual(
           routeState.sentinelTextLeaks,
@@ -3446,6 +3465,11 @@ async function runChromeTest() {
               actions: [...row.querySelectorAll("[data-regular-customer-booking-list-action]")].map((button) =>
                 button.textContent.trim(),
               ),
+              billingDetailButton:
+                row.querySelector("[data-regular-customer-billing-detail-action]")?.textContent.trim() || "",
+              billingDetailPreviewVisible: Boolean(
+                row.querySelector("[data-regular-customer-billing-detail-preview]"),
+              ),
               billingStatus:
                 row.querySelector("[data-regular-customer-booking-list-billing-status]")?.textContent.trim() || "",
               distanceFromActiveAction: (() => {
@@ -3471,6 +3495,103 @@ async function runChromeTest() {
                 row.querySelector("[data-regular-customer-booking-list-passenger]")?.textContent.trim() || "",
               text: row.innerText,
             })),
+          };
+        })()`);
+
+      const clickRegularCustomerBillingDetailPreview = async (rowIndex, description) => {
+        const clicked = await evaluate(`(() => {
+          const row = document.querySelectorAll("[data-regular-customer-booking-list-row]")[${rowIndex}];
+          const button = row?.querySelector("[data-regular-customer-billing-detail-action]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
+      const clickRegularCustomerBillingDetailDismiss = async (rowIndex, description) => {
+        const clicked = await evaluate(`(() => {
+          const row = document.querySelectorAll("[data-regular-customer-booking-list-row]")[${rowIndex}];
+          const button = row?.querySelector("[data-regular-customer-billing-detail-dismiss]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, `Expected ${description} button to be clickable`);
+      };
+
+      const readRegularCustomerBillingDetailState = (rowIndex = 0) =>
+        evaluate(`(async () => {
+          const row = document.querySelectorAll("[data-regular-customer-booking-list-row]")[${rowIndex}];
+          const button = row?.querySelector("[data-regular-customer-billing-detail-action]");
+          const panel = row?.querySelector("[data-regular-customer-billing-detail-preview]");
+          const boundary = row?.querySelector("[data-regular-customer-billing-detail-boundary]");
+          const dismiss = row?.querySelector("[data-regular-customer-billing-detail-dismiss]");
+          const buttonRect = button?.getBoundingClientRect();
+          const panelRect = panel?.getBoundingClientRect();
+          const previewPattern =
+            /Billing Details Preview|View Billing Details|This is not an invoice and no payment was requested|Browser Test Passenger|PO MAY TEST/i;
+          const readStorage = (storage) => {
+            const values = [];
+            try {
+              for (let index = 0; index < storage.length; index += 1) {
+                const key = storage.key(index) || "";
+                values.push(key + "=" + (storage.getItem(key) || ""));
+              }
+            } catch (error) {
+              values.push("storage-read-error:" + (error?.message || String(error)));
+            }
+            return values;
+          };
+          const indexedDbValues = await (async () => {
+            try {
+              if (!globalThis.indexedDB?.databases) {
+                return [];
+              }
+
+              const databases = await globalThis.indexedDB.databases();
+              return databases.map((database) =>
+                [database?.name || "", String(database?.version || "")].join(":"),
+              );
+            } catch (error) {
+              return ["indexeddb-read-error:" + (error?.message || String(error))];
+            }
+          })();
+          const storageValues = [
+            ...readStorage(localStorage),
+            ...readStorage(sessionStorage),
+            ...(document.cookie ? document.cookie.split(";").map((value) => value.trim()) : []),
+            ...indexedDbValues,
+          ];
+
+          return {
+            boundaryText: boundary?.textContent.trim() || "",
+            buttonText: button?.textContent.trim() || "",
+            buttonVisible: Boolean(buttonRect && buttonRect.width > 0 && buttonRect.height >= 40),
+            dismissText: dismiss?.textContent.trim() || "",
+            dismissVisible: Boolean(dismiss),
+            distanceFromButton:
+              buttonRect && panelRect ? Math.round(Math.abs(panelRect.top - buttonRect.bottom)) : 999,
+            integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            invoiceNumber:
+              row?.querySelector("[data-regular-customer-booking-list-invoice-number]")?.textContent.trim() || "",
+            panelText: panel?.innerText || "",
+            panelVisible: Boolean(panel),
+            passengerText:
+              row?.querySelector("[data-regular-customer-booking-list-passenger]")?.textContent.trim() || "",
+            rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+            rowText: row?.innerText || "",
+            storageLeaks: storageValues.filter((value) => previewPattern.test(value)),
+            title:
+              row?.querySelector("[data-regular-customer-billing-detail-title]")?.textContent.trim() || "",
           };
         })()`);
 
@@ -4236,6 +4357,140 @@ async function runChromeTest() {
         ),
         [],
         "Expected future saved booking visibility placeholder not to call Supabase, payment, bank, notification, or calendar APIs after a local row exists",
+      );
+
+      const billingDetailInitialState = await readRegularCustomerBillingDetailState(0);
+      assert.equal(
+        billingDetailInitialState.buttonText,
+        "View Billing Details — Mock Only",
+        "Expected regular customer row to expose the mock billing detail action",
+      );
+      assert.equal(
+        billingDetailInitialState.buttonVisible,
+        true,
+        "Expected regular customer mock billing detail action to be visible and touch-friendly",
+      );
+      assert.equal(
+        billingDetailInitialState.panelVisible,
+        false,
+        "Expected billing detail preview to stay hidden before the row action is clicked",
+      );
+
+      await clickRegularCustomerBillingDetailPreview(0, "regular customer mock billing detail preview");
+      const billingDetailOpenState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBillingDetailState(0);
+          return candidateState.panelVisible ? candidateState : false;
+        },
+        10000,
+        "regular customer mock billing detail preview panel",
+      );
+      assert.equal(
+        billingDetailOpenState.title,
+        "Billing Details Preview — Mock Only",
+        "Expected billing detail panel title",
+      );
+      for (const expectedBillingDetailText of [
+        "UBS",
+        "2026-05",
+        "1 local mock trip",
+        "Not calculated",
+        "unbilled / draft",
+        "This is not an invoice and no payment was requested.",
+        "does not create invoice numbers",
+        "generate invoices or PDFs",
+        "send payment requests",
+        "call network APIs",
+        "write browser storage",
+        "write Supabase",
+        "change row data",
+        "add rows",
+        "remove rows",
+        "update payment status",
+        "trigger Telegram/notification behavior",
+      ]) {
+        assert.equal(
+          billingDetailOpenState.panelText.includes(expectedBillingDetailText),
+          true,
+          `Expected billing detail preview text: ${expectedBillingDetailText}`,
+        );
+      }
+      assert.equal(
+        billingDetailOpenState.distanceFromButton < 240,
+        true,
+        "Expected billing detail preview to appear near the clicked row control",
+      );
+      assert.equal(
+        billingDetailOpenState.dismissText,
+        "Close Preview",
+        "Expected billing detail preview dismiss control",
+      );
+      assert.equal(
+        billingDetailOpenState.rowCount,
+        1,
+        "Expected opening billing detail preview not to add or remove monthly billing rows",
+      );
+      assert.equal(
+        billingDetailOpenState.passengerText,
+        "Browser Test Passenger / 2026-05-28 1530hrs",
+        "Expected opening billing detail preview not to change row passenger/date data",
+      );
+      assert.equal(
+        billingDetailOpenState.invoiceNumber,
+        "Not created",
+        "Expected opening billing detail preview not to create an invoice number",
+      );
+      assert.deepEqual(
+        billingDetailOpenState.integrationCalls,
+        billingDetailInitialState.integrationCalls,
+        "Expected opening billing detail preview not to call network APIs",
+      );
+      assert.deepEqual(
+        billingDetailOpenState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected opening billing detail preview not to call Supabase, payment, bank, notification, invoice, PDF, or calendar APIs",
+      );
+      assert.deepEqual(
+        billingDetailOpenState.storageLeaks,
+        [],
+        "Expected billing detail preview not to persist text or row values to browser storage",
+      );
+
+      await clickRegularCustomerBillingDetailDismiss(0, "regular customer mock billing detail preview dismiss");
+      const billingDetailDismissedState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBillingDetailState(0);
+          return !candidateState.panelVisible ? candidateState : false;
+        },
+        10000,
+        "regular customer mock billing detail preview dismissal",
+      );
+      assert.equal(
+        billingDetailDismissedState.rowCount,
+        1,
+        "Expected dismissing billing detail preview not to add or remove monthly billing rows",
+      );
+      assert.equal(
+        billingDetailDismissedState.passengerText,
+        "Browser Test Passenger / 2026-05-28 1530hrs",
+        "Expected dismissing billing detail preview not to change row passenger/date data",
+      );
+      assert.equal(
+        billingDetailDismissedState.invoiceNumber,
+        "Not created",
+        "Expected dismissing billing detail preview not to create an invoice number",
+      );
+      assert.deepEqual(
+        billingDetailDismissedState.integrationCalls,
+        billingDetailInitialState.integrationCalls,
+        "Expected dismissing billing detail preview not to call network APIs",
+      );
+      assert.deepEqual(
+        billingDetailDismissedState.storageLeaks,
+        [],
+        "Expected dismissing billing detail preview not to persist text or row values to browser storage",
       );
 
       for (const [field, value] of Object.entries(secondRegularCustomerBookingFields)) {
@@ -7493,6 +7748,8 @@ async function runChromeTest() {
             "pdf",
             "payment",
             "bank",
+            "view billing details",
+            "billing details preview",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -7991,6 +8248,8 @@ async function runChromeTest() {
             "dashboard",
             "driver database",
             "rates",
+            "view billing details",
+            "billing details preview",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,

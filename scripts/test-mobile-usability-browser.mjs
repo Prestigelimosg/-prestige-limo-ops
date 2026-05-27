@@ -465,6 +465,155 @@ async function runChromeTest() {
       );
     };
 
+    const checkCustomerBillingDetailPanelAtSmallPhone = async () => {
+      const viewport = viewports[1];
+      const customerDashboardUrl = new URL("/customers", appUrl).toString();
+      await setViewport(viewport);
+      await navigate(customerDashboardUrl, "Regular Customer Monthly Billing List Preview");
+      await waitForSelector(
+        evaluate,
+        "[data-regular-customer-booking-submit]",
+        `${viewport.label} regular customer mock submit`,
+      );
+      await evaluate(`new Promise((resolve) => setTimeout(resolve, 250))`);
+
+      const setRegularCustomerField = async (field, value) => {
+        const actualValue = await evaluate(`(() => {
+          const input = document.querySelector(${JSON.stringify(`[data-regular-booking-field="${field}"]`)});
+
+          if (!input) {
+            return null;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+          descriptor?.set?.call(input, ${JSON.stringify(value)});
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+
+          return input.value;
+        })()`);
+        assert.equal(actualValue, value, `${viewport.label}: expected regular customer ${field} field`);
+      };
+
+      const regularCustomerFields = {
+        booker: "Mobile Billing Booker",
+        customerId: "ubs",
+        dropoffLocation: "Raffles Place",
+        passengerName: "Mobile Billing Passenger",
+        pickupDate: "2026-05-28",
+        pickupLocation: "Changi Airport T3",
+        pickupTime: "1530hrs",
+        routeType: "Airport Arrival",
+        vehicleType: "AVF",
+      };
+
+      for (const [field, value] of Object.entries(regularCustomerFields)) {
+        await setRegularCustomerField(field, value);
+      }
+      await evaluate(`new Promise((resolve) => setTimeout(resolve, 250))`);
+
+      const submitted = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-booking-submit]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(submitted, true, `${viewport.label}: expected regular customer mock submit`);
+      await waitForSelector(
+        evaluate,
+        "[data-regular-customer-billing-detail-action]",
+        `${viewport.label} billing detail action`,
+      );
+
+      const opened = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-billing-detail-action]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(opened, true, `${viewport.label}: expected billing detail action`);
+      await waitForBodyText(
+        evaluate,
+        "Billing Details Preview — Mock Only",
+        `${viewport.label} billing detail preview`,
+      );
+
+      const openLayoutState = await layoutState();
+      assertNoHorizontalOverflow(openLayoutState, `${viewport.label} /customers billing detail preview`);
+
+      const panelState = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-billing-detail-action]");
+        const dismiss = document.querySelector("[data-regular-customer-billing-detail-dismiss]");
+        const panel = document.querySelector("[data-regular-customer-billing-detail-preview]");
+        const buttonRect = button?.getBoundingClientRect();
+        const dismissRect = dismiss?.getBoundingClientRect();
+
+        return {
+          buttonHeight: Math.round(buttonRect?.height || 0),
+          buttonWidth: Math.round(buttonRect?.width || 0),
+          dismissHeight: Math.round(dismissRect?.height || 0),
+          dismissWidth: Math.round(dismissRect?.width || 0),
+          mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
+          panelText: panel?.innerText || "",
+          panelVisible: Boolean(panel),
+          rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+        };
+      })()`);
+
+      assert.equal(panelState.panelVisible, true, `${viewport.label}: expected billing detail panel`);
+      assert.equal(panelState.buttonHeight >= 44, true, `${viewport.label}: expected billing detail button height`);
+      assert.equal(panelState.dismissHeight >= 44, true, `${viewport.label}: expected billing detail dismiss height`);
+      assert.equal(panelState.buttonWidth >= 64, true, `${viewport.label}: expected billing detail button width`);
+      assert.equal(panelState.dismissWidth >= 64, true, `${viewport.label}: expected billing detail dismiss width`);
+      assert.equal(panelState.rowCount, 1, `${viewport.label}: expected one local billing row`);
+      for (const expectedText of [
+        "Mobile Billing Passenger",
+        "Billing Details Preview — Mock Only",
+        "This is not an invoice and no payment was requested.",
+        "write browser storage",
+        "write Supabase",
+      ]) {
+        assert.equal(
+          panelState.panelText.includes(expectedText),
+          true,
+          `${viewport.label}: expected billing detail panel text ${expectedText}`,
+        );
+      }
+      assert.deepEqual(
+        panelState.mutationCalls,
+        [],
+        `${viewport.label}: expected billing detail panel not to make Supabase mutations`,
+      );
+
+      const dismissed = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-billing-detail-dismiss]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(dismissed, true, `${viewport.label}: expected billing detail dismiss`);
+      await waitForCondition(
+        () => evaluate(`!document.querySelector("[data-regular-customer-billing-detail-preview]")`),
+        10000,
+        `${viewport.label} billing detail preview dismissed`,
+      );
+
+      const dismissedLayoutState = await layoutState();
+      assertNoHorizontalOverflow(dismissedLayoutState, `${viewport.label} /customers billing detail dismissed`);
+    };
+
     for (const viewport of viewports) {
       await checkMainAppViewport(viewport);
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
@@ -488,6 +637,7 @@ async function runChromeTest() {
     }
 
     await checkLoadedCopySectionsAtSmallPhone();
+    await checkCustomerBillingDetailPanelAtSmallPhone();
 
     const runtimeState = await evaluate(`(() => ({
       consoleErrors: window.__prestigeConsoleErrors || [],

@@ -78,6 +78,10 @@ const internalBillingDetailControlLabels = [
   "View Billing Details — Mock Only",
   "Billing Details Preview — Mock Only",
 ];
+const internalMonthlyBillingSummaryLabels = [
+  "Monthly Billing Summary — Mock Only",
+  "Mock summary only — no invoice, payment request, or statement was generated.",
+];
 const telegramBlockedUrlPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
 const telegramPreviewBlockedCallPattern =
@@ -1167,6 +1171,22 @@ async function runChromeTest() {
         "Replacement Car / Driver — Mock Only",
         "replacement persistence navigation back",
       );
+      const rootMonthlyBillingSummaryState = await evaluate(`(() => ({
+        labels: ${JSON.stringify(internalMonthlyBillingSummaryLabels)}.filter((label) =>
+          (document.body.innerText || "").includes(label),
+        ),
+        visible: Boolean(document.querySelector("[data-regular-customer-monthly-billing-summary]")),
+      }))()`);
+      assert.equal(
+        rootMonthlyBillingSummaryState.visible,
+        false,
+        "/: expected no internal monthly billing summary",
+      );
+      assert.deepEqual(
+        rootMonthlyBillingSummaryState.labels,
+        [],
+        "/: expected no internal monthly billing summary text",
+      );
       await checkReplacementFieldsCleared("admin replacement mock fields after navigation away and back");
       const postNavigationPersistenceState = await readReplacementPersistenceState(replacementStorageSentinelValues);
       assertNoReplacementPersistence(
@@ -1186,6 +1206,7 @@ async function runChromeTest() {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
           const billingDetailControls = ${JSON.stringify(internalBillingDetailControlLabels)};
+          const monthlyBillingSummaryLabels = ${JSON.stringify(internalMonthlyBillingSummaryLabels)};
           const text = document.body.innerText || "";
           const controlValues = [...document.querySelectorAll("input, textarea, select")]
             .map((control) => control.value || control.textContent || "");
@@ -1194,6 +1215,10 @@ async function runChromeTest() {
             billingDetailControlText: billingDetailControls.filter((label) => text.includes(label)),
             billingDetailPreviewVisible: Boolean(
               document.querySelector("[data-regular-customer-billing-detail-preview]"),
+            ),
+            monthlyBillingSummaryText: monthlyBillingSummaryLabels.filter((label) => text.includes(label)),
+            monthlyBillingSummaryVisible: Boolean(
+              document.querySelector("[data-regular-customer-monthly-billing-summary]"),
             ),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -1223,6 +1248,16 @@ async function runChromeTest() {
           routeState.billingDetailControlText,
           [],
           `${routeName}: expected no internal billing detail controls`,
+        );
+        assert.equal(
+          routeState.monthlyBillingSummaryVisible,
+          false,
+          `${routeName}: expected no internal monthly billing summary`,
+        );
+        assert.deepEqual(
+          routeState.monthlyBillingSummaryText,
+          [],
+          `${routeName}: expected no internal monthly billing summary text`,
         );
         assert.deepEqual(
           routeState.sentinelTextLeaks,
@@ -1688,7 +1723,7 @@ async function runChromeTest() {
     };
 
     const blockedCustomerIntegrationPattern =
-      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|telegram|api\.telegram\.org|getUpdates|sendMessage|supabase|\/rest\/v1\//i;
+      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|telegram|api\.telegram\.org|getUpdates|sendMessage|supabase|\/rest\/v1\//i;
     const blockedDriverJobIntegrationPattern =
       /supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/upload|api\/storage|api\/file|api\/driver-upload|api\/driver-file|api\/driver-exception|api\/driver-replacement|api\/driver-reassign|api\/driver-assignment|api\/driver-cancel|api\/cancel-driver|api\/reassign-driver|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/telegram|api\/driver-alerts\/telegram|api\/notifications\/telegram|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|telegram|api\.telegram\.org|getUpdates|sendMessage|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
 
@@ -1949,6 +1984,23 @@ async function runChromeTest() {
           regularBookingListBoundary:
             document.querySelector("[data-regular-customer-booking-list-boundary]")?.textContent.trim() || "",
           regularBookingListEmpty: Boolean(document.querySelector("[data-regular-customer-booking-list-empty]")),
+          regularMonthlyBillingSummaryAmount:
+            document.querySelector("[data-regular-customer-monthly-billing-summary-amount]")?.textContent.trim() || "",
+          regularMonthlyBillingSummaryBoundary:
+            document.querySelector("[data-regular-customer-monthly-billing-summary-boundary]")?.textContent.trim() || "",
+          regularMonthlyBillingSummaryCount:
+            document.querySelector("[data-regular-customer-monthly-billing-summary-count]")?.textContent.trim() || "",
+          regularMonthlyBillingSummaryMonths:
+            document.querySelector("[data-regular-customer-monthly-billing-summary-months]")?.textContent.trim() || "",
+          regularMonthlyBillingSummaryStatuses:
+            document.querySelector("[data-regular-customer-monthly-billing-summary-statuses]")?.textContent.trim() || "",
+          regularMonthlyBillingSummaryText:
+            document.querySelector("[data-regular-customer-monthly-billing-summary]")?.innerText || "",
+          regularMonthlyBillingSummaryTitle:
+            document.querySelector("[data-regular-customer-monthly-billing-summary-title]")?.textContent.trim() || "",
+          regularMonthlyBillingSummaryVisible: Boolean(
+            document.querySelector("[data-regular-customer-monthly-billing-summary]"),
+          ),
           regularBookingListRows: [...document.querySelectorAll("[data-regular-customer-booking-list-row]")].map(
             (row) => ({
               folderLink:
@@ -2400,6 +2452,56 @@ async function runChromeTest() {
         true,
         "Expected regular customer booking list preview to start empty",
       );
+      assert.equal(
+        dashboardState.regularMonthlyBillingSummaryVisible,
+        true,
+        "Expected regular customer monthly billing summary to be visible",
+      );
+      assert.equal(
+        dashboardState.regularMonthlyBillingSummaryTitle,
+        "Monthly Billing Summary — Mock Only",
+        "Expected regular customer monthly billing summary title",
+      );
+      assert.equal(
+        dashboardState.regularMonthlyBillingSummaryCount,
+        "0 visible of 0 local mock rows",
+        "Expected monthly billing summary to start at zero visible rows",
+      );
+      assert.equal(
+        dashboardState.regularMonthlyBillingSummaryMonths,
+        "No visible billing month",
+        "Expected monthly billing summary to start without a month",
+      );
+      assert.equal(
+        dashboardState.regularMonthlyBillingSummaryStatuses,
+        "No visible status",
+        "Expected monthly billing summary to start without a status",
+      );
+      assert.equal(
+        dashboardState.regularMonthlyBillingSummaryAmount,
+        "Not calculated from mock rows",
+        "Expected monthly billing summary not to calculate mock amounts",
+      );
+      for (const expectedSummaryText of [
+        "Mock summary only — no invoice, payment request, or statement was generated.",
+        "does not create invoice numbers",
+        "generate invoices or PDFs",
+        "send payment requests",
+        "call network APIs",
+        "write browser storage",
+        "write Supabase",
+        "change row data",
+        "add rows",
+        "remove rows",
+        "update payment status",
+        "trigger notification behavior",
+      ]) {
+        assert.equal(
+          dashboardState.regularMonthlyBillingSummaryBoundary.includes(expectedSummaryText),
+          true,
+          `Expected monthly billing summary boundary text: ${expectedSummaryText}`,
+        );
+      }
       assert.equal(
         dashboardState.regularBookingListFiltersVisible,
         true,
@@ -3453,6 +3555,23 @@ async function runChromeTest() {
             })),
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
             listText: list?.innerText || "",
+            summary: {
+              amount:
+                document.querySelector("[data-regular-customer-monthly-billing-summary-amount]")?.textContent.trim() || "",
+              boundary:
+                document.querySelector("[data-regular-customer-monthly-billing-summary-boundary]")?.textContent.trim() || "",
+              count:
+                document.querySelector("[data-regular-customer-monthly-billing-summary-count]")?.textContent.trim() || "",
+              months:
+                document.querySelector("[data-regular-customer-monthly-billing-summary-months]")?.textContent.trim() || "",
+              statuses:
+                document.querySelector("[data-regular-customer-monthly-billing-summary-statuses]")?.textContent.trim() || "",
+              text:
+                document.querySelector("[data-regular-customer-monthly-billing-summary]")?.innerText || "",
+              title:
+                document.querySelector("[data-regular-customer-monthly-billing-summary-title]")?.textContent.trim() || "",
+              visible: Boolean(document.querySelector("[data-regular-customer-monthly-billing-summary]")),
+            },
             rows: [...document.querySelectorAll("[data-regular-customer-booking-list-row]")].map((row) => ({
               actionBoundary:
                 row.querySelector("[data-regular-customer-booking-list-action-boundary]")?.textContent.trim() || "",
@@ -3538,7 +3657,7 @@ async function runChromeTest() {
           const buttonRect = button?.getBoundingClientRect();
           const panelRect = panel?.getBoundingClientRect();
           const previewPattern =
-            /Billing Details Preview|View Billing Details|This is not an invoice and no payment was requested|Browser Test Passenger|PO MAY TEST/i;
+            /Billing Details Preview|View Billing Details|Monthly Billing Summary|Mock summary only|This is not an invoice and no payment was requested|Browser Test Passenger|PO MAY TEST/i;
           const readStorage = (storage) => {
             const values = [];
             try {
@@ -3590,6 +3709,10 @@ async function runChromeTest() {
             rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
             rowText: row?.innerText || "",
             storageLeaks: storageValues.filter((value) => previewPattern.test(value)),
+            summaryCount:
+              document.querySelector("[data-regular-customer-monthly-billing-summary-count]")?.textContent.trim() || "",
+            summaryText:
+              document.querySelector("[data-regular-customer-monthly-billing-summary]")?.innerText || "",
             title:
               row?.querySelector("[data-regular-customer-billing-detail-title]")?.textContent.trim() || "",
           };
@@ -4313,10 +4436,68 @@ async function runChromeTest() {
         "List row only. No save, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record.",
         "Expected regular customer booking list row no-save boundary",
       );
+      const regularBookingListStateAfterFirstRow = await readRegularCustomerBookingListState();
       assert.equal(
-        (await readRegularCustomerBookingListState()).countText,
+        regularBookingListStateAfterFirstRow.countText,
         "Showing 1 of 1 local mock row.",
         "Expected regular customer booking list count after first valid submit",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.summary.visible,
+        true,
+        "Expected monthly billing summary to remain visible after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.summary.title,
+        "Monthly Billing Summary — Mock Only",
+        "Expected monthly billing summary title after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.summary.count,
+        "1 visible of 1 local mock row",
+        "Expected monthly billing summary count after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.summary.months,
+        "2026-05 (1)",
+        "Expected monthly billing summary month after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.summary.statuses,
+        "unbilled / draft (1)",
+        "Expected monthly billing summary status after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.summary.amount,
+        "Not calculated from mock rows",
+        "Expected monthly billing summary not to calculate amount after one local row",
+      );
+      for (const expectedSummaryText of [
+        "Mock summary only — no invoice, payment request, or statement was generated.",
+        "does not create invoice numbers",
+        "generate invoices or PDFs",
+        "send payment requests",
+        "call network APIs",
+        "write browser storage",
+        "write Supabase",
+        "change row data",
+        "add rows",
+        "remove rows",
+        "update payment status",
+        "trigger notification behavior",
+      ]) {
+        assert.equal(
+          regularBookingListStateAfterFirstRow.summary.boundary.includes(expectedSummaryText),
+          true,
+          `Expected monthly billing summary boundary after one row: ${expectedSummaryText}`,
+        );
+      }
+      assert.deepEqual(
+        regularBookingListStateAfterFirstRow.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected monthly billing summary not to call Supabase, payment, bank, notification, invoice, PDF, or calendar APIs",
       );
       const savedVisibilityWithOneLocalRowState = await readRegularCustomerSavedVisibilityState();
       assert.equal(
@@ -4431,6 +4612,16 @@ async function runChromeTest() {
         "Expected opening billing detail preview not to add or remove monthly billing rows",
       );
       assert.equal(
+        billingDetailOpenState.summaryCount,
+        "1 visible of 1 local mock row",
+        "Expected opening billing detail preview not to change monthly billing summary count",
+      );
+      assert.equal(
+        billingDetailOpenState.summaryText.includes("Monthly Billing Summary — Mock Only"),
+        true,
+        "Expected monthly billing summary to remain visible while billing detail preview is open",
+      );
+      assert.equal(
         billingDetailOpenState.passengerText,
         "Browser Test Passenger / 2026-05-28 1530hrs",
         "Expected opening billing detail preview not to change row passenger/date data",
@@ -4471,6 +4662,11 @@ async function runChromeTest() {
         billingDetailDismissedState.rowCount,
         1,
         "Expected dismissing billing detail preview not to add or remove monthly billing rows",
+      );
+      assert.equal(
+        billingDetailDismissedState.summaryCount,
+        "1 visible of 1 local mock row",
+        "Expected dismissing billing detail preview not to change monthly billing summary count",
       );
       assert.equal(
         billingDetailDismissedState.passengerText,
@@ -4521,6 +4717,21 @@ async function runChromeTest() {
         regularBookingTwoRowsState.countText,
         "Showing 2 of 2 local mock rows.",
         "Expected regular customer booking list count after second valid submit",
+      );
+      assert.equal(
+        regularBookingTwoRowsState.summary.count,
+        "2 visible of 2 local mock rows",
+        "Expected monthly billing summary count after two local rows",
+      );
+      assert.equal(
+        regularBookingTwoRowsState.summary.months,
+        "2026-05 (1), 2026-06 (1)",
+        "Expected monthly billing summary month grouping after two local rows",
+      );
+      assert.equal(
+        regularBookingTwoRowsState.summary.statuses,
+        "unbilled / draft (2)",
+        "Expected monthly billing summary status grouping after two local rows",
       );
       for (const expectedListText of [
         "Browser Test Passenger",
@@ -4652,6 +4863,21 @@ async function runChromeTest() {
         "Expected customer filter to show the UBS local row",
       );
       assert.equal(
+        regularBookingCustomerFilterState.summary.count,
+        "1 visible of 2 local mock rows",
+        "Expected monthly billing summary to follow the customer local filter",
+      );
+      assert.equal(
+        regularBookingCustomerFilterState.summary.months,
+        "2026-05 (1)",
+        "Expected monthly billing summary month to follow the customer local filter",
+      );
+      assert.equal(
+        regularBookingCustomerFilterState.summary.statuses,
+        "unbilled / draft (1)",
+        "Expected monthly billing summary status to follow the customer local filter",
+      );
+      assert.equal(
         regularBookingCustomerFilterState.feedback.includes("Local mock filters updated"),
         true,
         "Expected customer filter feedback near local filter controls",
@@ -4681,6 +4907,21 @@ async function runChromeTest() {
         regularBookingMonthFilterState.rows[0].text.includes("Ritz Carlton"),
         true,
         "Expected billing month filter to show the June local row",
+      );
+      assert.equal(
+        regularBookingMonthFilterState.summary.count,
+        "1 visible of 2 local mock rows",
+        "Expected monthly billing summary to follow the billing month local filter",
+      );
+      assert.equal(
+        regularBookingMonthFilterState.summary.months,
+        "2026-06 (1)",
+        "Expected monthly billing summary month to follow the billing month local filter",
+      );
+      assert.equal(
+        regularBookingMonthFilterState.summary.statuses,
+        "unbilled / draft (1)",
+        "Expected monthly billing summary status to follow the billing month local filter",
       );
       assert.deepEqual(
         regularBookingMonthFilterState.integrationCalls.filter((call) =>
@@ -7750,6 +7991,8 @@ async function runChromeTest() {
             "bank",
             "view billing details",
             "billing details preview",
+            "monthly billing summary",
+            "mock summary only",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -8250,6 +8493,8 @@ async function runChromeTest() {
             "rates",
             "view billing details",
             "billing details preview",
+            "monthly billing summary",
+            "mock summary only",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,

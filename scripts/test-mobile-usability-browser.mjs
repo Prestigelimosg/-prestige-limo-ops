@@ -528,6 +528,48 @@ async function runChromeTest() {
         "[data-regular-customer-billing-detail-action]",
         `${viewport.label} billing detail action`,
       );
+      await waitForBodyText(
+        evaluate,
+        "Monthly Billing Summary — Mock Only",
+        `${viewport.label} monthly billing summary`,
+      );
+
+      const summaryLayoutState = await layoutState();
+      assertNoHorizontalOverflow(summaryLayoutState, `${viewport.label} /customers monthly billing summary`);
+
+      const summaryState = await evaluate(`(() => {
+        const summary = document.querySelector("[data-regular-customer-monthly-billing-summary]");
+
+        return {
+          mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
+          rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+          text: summary?.innerText || "",
+          visible: Boolean(summary),
+        };
+      })()`);
+      assert.equal(summaryState.visible, true, `${viewport.label}: expected monthly billing summary`);
+      assert.equal(summaryState.rowCount, 1, `${viewport.label}: expected one local billing row before summary check`);
+      for (const expectedText of [
+        "Monthly Billing Summary — Mock Only",
+        "1 visible of 1 local mock row",
+        "2026-05 (1)",
+        "unbilled / draft (1)",
+        "Not calculated from mock rows",
+        "Mock summary only — no invoice, payment request, or statement was generated.",
+        "write browser storage",
+        "write Supabase",
+      ]) {
+        assert.equal(
+          summaryState.text.includes(expectedText),
+          true,
+          `${viewport.label}: expected monthly billing summary text ${expectedText}`,
+        );
+      }
+      assert.deepEqual(
+        summaryState.mutationCalls,
+        [],
+        `${viewport.label}: expected monthly billing summary not to make Supabase mutations`,
+      );
 
       const opened = await evaluate(`(() => {
         const button = document.querySelector("[data-regular-customer-billing-detail-action]");

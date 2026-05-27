@@ -789,6 +789,40 @@ export default function MockCustomerDashboardPage() {
       }),
     [regularCustomerBookingListFilters, regularCustomerBookingListItems],
   );
+  const regularCustomerMonthlyBillingSummary = useMemo(() => {
+    const monthCounts = new Map<string, number>();
+    const statusCounts = new Map<string, number>();
+
+    for (const item of filteredRegularCustomerBookingListItems) {
+      const billingMonth = item.billingMonth.trim() || "No billing month";
+      const billingStatus = item.billingStatus.trim() || "No billing status";
+
+      monthCounts.set(billingMonth, (monthCounts.get(billingMonth) ?? 0) + 1);
+      statusCounts.set(billingStatus, (statusCounts.get(billingStatus) ?? 0) + 1);
+    }
+
+    const monthEntries = Array.from(monthCounts.entries()).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+    const statusEntries = Array.from(statusCounts.entries()).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+    const monthSummary =
+      monthEntries.length === 0
+        ? "No visible billing month"
+        : monthEntries.map(([month, count]) => `${month} (${count})`).join(", ");
+    const statusSummary =
+      statusEntries.length === 0
+        ? "No visible status"
+        : statusEntries.map(([status, count]) => `${status} (${count})`).join(", ");
+
+    return {
+      monthSummary,
+      statusSummary,
+      totalRowCount: regularCustomerBookingListItems.length,
+      visibleRowCount: filteredRegularCustomerBookingListItems.length,
+    };
+  }, [filteredRegularCustomerBookingListItems, regularCustomerBookingListItems.length]);
 
   function updateRegularCustomerBookingField(field: keyof RegularCustomerBookingForm, value: string) {
     setRegularCustomerBookingForm((currentForm) => ({
@@ -2063,6 +2097,81 @@ export default function MockCustomerDashboardPage() {
                   {regularCustomerBookingListItems.length === 1 ? "" : "s"}.
                 </p>
               </div>
+            </div>
+
+            <div
+              className="mt-4 rounded-md border border-slate-200 bg-white p-4"
+              data-regular-customer-monthly-billing-summary="true"
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                    Internal staff-only / read-only
+                  </p>
+                  <h4
+                    className="mt-2 text-base font-bold text-slate-950"
+                    data-regular-customer-monthly-billing-summary-title="true"
+                  >
+                    Monthly Billing Summary — Mock Only
+                  </h4>
+                </div>
+                <p
+                  className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800"
+                  data-regular-customer-monthly-billing-summary-count="true"
+                >
+                  {regularCustomerMonthlyBillingSummary.visibleRowCount} visible of{" "}
+                  {regularCustomerMonthlyBillingSummary.totalRowCount} local mock row
+                  {regularCustomerMonthlyBillingSummary.totalRowCount === 1 ? "" : "s"}
+                </p>
+              </div>
+
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                    Billing month
+                  </dt>
+                  <dd
+                    className="mt-1 font-semibold text-slate-950"
+                    data-regular-customer-monthly-billing-summary-months="true"
+                  >
+                    {regularCustomerMonthlyBillingSummary.monthSummary}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Status count</dt>
+                  <dd
+                    className="mt-1 font-semibold text-slate-950"
+                    data-regular-customer-monthly-billing-summary-statuses="true"
+                  >
+                    {regularCustomerMonthlyBillingSummary.statusSummary}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                    Mock outstanding
+                  </dt>
+                  <dd
+                    className="mt-1 font-semibold text-slate-950"
+                    data-regular-customer-monthly-billing-summary-amount="true"
+                  >
+                    Not calculated from mock rows
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Scope</dt>
+                  <dd className="mt-1 font-semibold text-slate-950">Current visible local rows only</dd>
+                </div>
+              </dl>
+
+              <p
+                className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold leading-6 text-slate-700"
+                data-regular-customer-monthly-billing-summary-boundary="true"
+              >
+                Mock summary only — no invoice, payment request, or statement was generated. This read-only summary
+                does not create invoice numbers, generate invoices or PDFs, send payment requests, call network APIs,
+                write browser storage, write Supabase, change row data, add rows, remove rows, update payment status,
+                or trigger notification behavior.
+              </p>
             </div>
 
             <div

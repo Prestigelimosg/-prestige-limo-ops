@@ -679,9 +679,104 @@ async function runChromeTest() {
         "Monthly Billing Summary — Mock Only",
         `${viewport.label} monthly billing summary`,
       );
+      await waitForBodyText(
+        evaluate,
+        "Billing Quick Filter — Mock Only",
+        `${viewport.label} billing quick filter`,
+      );
 
       const summaryLayoutState = await layoutState();
       assertNoHorizontalOverflow(summaryLayoutState, `${viewport.label} /customers monthly billing summary`);
+
+      const quickFilterState = await evaluate(`(() => {
+        const section = document.querySelector("[data-regular-customer-billing-quick-filter-section]");
+        const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+        const rect = select?.getBoundingClientRect();
+
+        return {
+          height: Math.round(rect?.height || 0),
+          mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
+          options: [...(select?.querySelectorAll("option") || [])].map((option) => ({
+            label: option.textContent.trim(),
+            value: option.value,
+          })),
+          rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+          text: section?.innerText || "",
+          value: select?.value || "",
+          visible: Boolean(rect && rect.width > 0 && rect.height >= 44),
+          width: Math.round(rect?.width || 0),
+        };
+      })()`);
+      assert.equal(quickFilterState.visible, true, `${viewport.label}: expected billing quick filter touch target`);
+      assert.equal(quickFilterState.width >= 64, true, `${viewport.label}: expected billing quick filter width`);
+      assert.equal(quickFilterState.height >= 44, true, `${viewport.label}: expected billing quick filter height`);
+      assert.equal(quickFilterState.rowCount, 1, `${viewport.label}: expected one local billing row before quick filter check`);
+      assert.deepEqual(
+        quickFilterState.options,
+        [
+          { label: "All mock rows", value: "all" },
+          { label: "Month: 2026-05", value: "month:2026-05" },
+          { label: "Status: unbilled / draft", value: "status:unbilled / draft" },
+        ],
+        `${viewport.label}: expected billing quick filter options from local mock rows`,
+      );
+      for (const expectedText of [
+        "Billing Quick Filter — Mock Only",
+        "Showing 1 of 1 local mock row with All mock rows",
+        "Filter changes only visible mock rows and counts",
+        "no row data is added, removed, saved, or permanently changed",
+        "no invoice, payment request, or statement was generated",
+        "no storage or Supabase write occurs",
+        "no payment, PDF, notification, or network API is called",
+      ]) {
+        assert.equal(
+          quickFilterState.text.includes(expectedText),
+          true,
+          `${viewport.label}: expected billing quick filter text ${expectedText}`,
+        );
+      }
+      assert.deepEqual(
+        quickFilterState.mutationCalls,
+        [],
+        `${viewport.label}: expected billing quick filter not to make Supabase mutations`,
+      );
+
+      const changedQuickFilterState = await evaluate(`(() => {
+        const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+        descriptor?.set?.call(select, "month:2026-05");
+        select.dispatchEvent(new Event("input", { bubbles: true }));
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return {
+          mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
+          rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+          text:
+            document.querySelector("[data-regular-customer-billing-quick-filter-feedback]")?.textContent.trim() ||
+            "",
+          value: select?.value || "",
+        };
+      })()`);
+      assert.equal(
+        changedQuickFilterState.value,
+        "month:2026-05",
+        `${viewport.label}: expected billing quick filter to accept local month`,
+      );
+      assert.equal(
+        changedQuickFilterState.rowCount,
+        1,
+        `${viewport.label}: expected billing quick filter not to add or remove the matching row`,
+      );
+      assert.equal(
+        changedQuickFilterState.text.includes("Showing 1 of 1 local mock row with Month: 2026-05"),
+        true,
+        `${viewport.label}: expected billing quick filter month feedback`,
+      );
+      assert.deepEqual(
+        changedQuickFilterState.mutationCalls,
+        [],
+        `${viewport.label}: expected billing quick filter change not to make Supabase mutations`,
+      );
 
       const summaryState = await evaluate(`(() => {
         const summary = document.querySelector("[data-regular-customer-monthly-billing-summary]");

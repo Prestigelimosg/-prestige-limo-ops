@@ -82,6 +82,10 @@ const internalMonthlyBillingSummaryLabels = [
   "Monthly Billing Summary — Mock Only",
   "Mock summary only — no invoice, payment request, or statement was generated.",
 ];
+const internalBillingQuickFilterLabels = [
+  "Billing Quick Filter — Mock Only",
+  "Mock quick filter only — no invoice, payment request, or statement was generated.",
+];
 const telegramBlockedUrlPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
 const telegramPreviewBlockedCallPattern =
@@ -1172,6 +1176,10 @@ async function runChromeTest() {
         "replacement persistence navigation back",
       );
       const rootMonthlyBillingSummaryState = await evaluate(`(() => ({
+        quickFilterLabels: ${JSON.stringify(internalBillingQuickFilterLabels)}.filter((label) =>
+          (document.body.innerText || "").includes(label),
+        ),
+        quickFilterVisible: Boolean(document.querySelector("[data-regular-customer-billing-quick-filter]")),
         labels: ${JSON.stringify(internalMonthlyBillingSummaryLabels)}.filter((label) =>
           (document.body.innerText || "").includes(label),
         ),
@@ -1186,6 +1194,16 @@ async function runChromeTest() {
         rootMonthlyBillingSummaryState.labels,
         [],
         "/: expected no internal monthly billing summary text",
+      );
+      assert.equal(
+        rootMonthlyBillingSummaryState.quickFilterVisible,
+        false,
+        "/: expected no internal billing quick filter",
+      );
+      assert.deepEqual(
+        rootMonthlyBillingSummaryState.quickFilterLabels,
+        [],
+        "/: expected no internal billing quick filter text",
       );
       await checkReplacementFieldsCleared("admin replacement mock fields after navigation away and back");
       const postNavigationPersistenceState = await readReplacementPersistenceState(replacementStorageSentinelValues);
@@ -1207,6 +1225,7 @@ async function runChromeTest() {
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
           const billingDetailControls = ${JSON.stringify(internalBillingDetailControlLabels)};
           const monthlyBillingSummaryLabels = ${JSON.stringify(internalMonthlyBillingSummaryLabels)};
+          const billingQuickFilterLabels = ${JSON.stringify(internalBillingQuickFilterLabels)};
           const text = document.body.innerText || "";
           const controlValues = [...document.querySelectorAll("input, textarea, select")]
             .map((control) => control.value || control.textContent || "");
@@ -1215,6 +1234,10 @@ async function runChromeTest() {
             billingDetailControlText: billingDetailControls.filter((label) => text.includes(label)),
             billingDetailPreviewVisible: Boolean(
               document.querySelector("[data-regular-customer-billing-detail-preview]"),
+            ),
+            billingQuickFilterText: billingQuickFilterLabels.filter((label) => text.includes(label)),
+            billingQuickFilterVisible: Boolean(
+              document.querySelector("[data-regular-customer-billing-quick-filter]"),
             ),
             monthlyBillingSummaryText: monthlyBillingSummaryLabels.filter((label) => text.includes(label)),
             monthlyBillingSummaryVisible: Boolean(
@@ -1259,6 +1282,16 @@ async function runChromeTest() {
           [],
           `${routeName}: expected no internal monthly billing summary text`,
         );
+        assert.equal(
+          routeState.billingQuickFilterVisible,
+          false,
+          `${routeName}: expected no internal billing quick filter`,
+        );
+        assert.deepEqual(
+          routeState.billingQuickFilterText,
+          [],
+          `${routeName}: expected no internal billing quick filter text`,
+        );
         assert.deepEqual(
           routeState.sentinelTextLeaks,
           [],
@@ -1288,6 +1321,11 @@ async function runChromeTest() {
           expectedText: "My Bookings",
           routeName: "/my-bookings",
           url: customerPortalUrl,
+        }),
+        await checkNoReplacementLeakOnRoute({
+          expectedText: "Demo only",
+          routeName: "/driver-job-demo",
+          url: driverDemoUrl,
         }),
       ];
 
@@ -2030,6 +2068,24 @@ async function runChromeTest() {
           regularBookingListFiltersVisible: Boolean(
             document.querySelector("[data-regular-customer-booking-list-filters]"),
           ),
+          regularBillingQuickFilter: (() => {
+            const section = document.querySelector("[data-regular-customer-billing-quick-filter-section]");
+            const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+            const rect = select?.getBoundingClientRect();
+
+            return {
+              feedback:
+                document.querySelector("[data-regular-customer-billing-quick-filter-feedback]")?.textContent.trim() ||
+                "",
+              options: [...(select?.querySelectorAll("option") || [])].map((option) => ({
+                label: option.textContent.trim(),
+                value: option.value,
+              })),
+              text: section?.innerText || "",
+              value: select?.value || "",
+              visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
+            };
+          })(),
           regularBookingListClearFiltersVisible: Boolean(
             document.querySelector("[data-regular-customer-booking-list-clear-filters]"),
           ),
@@ -2542,6 +2598,39 @@ async function runChromeTest() {
         "Mock/local list filters only affect rows on this page. Nothing is saved or sent.",
         "Expected regular customer booking list local-only filter helper",
       );
+      assert.equal(
+        dashboardState.regularBillingQuickFilter.visible,
+        true,
+        "Expected regular customer billing quick filter to be visible and touch-friendly",
+      );
+      assert.equal(
+        dashboardState.regularBillingQuickFilter.text.includes("Billing Quick Filter — Mock Only"),
+        true,
+        "Expected regular customer billing quick filter label",
+      );
+      assert.deepEqual(
+        dashboardState.regularBillingQuickFilter.options,
+        [{ label: "All mock rows", value: "all" }],
+        "Expected billing quick filter to start with all mock rows before local rows exist",
+      );
+      assert.equal(
+        dashboardState.regularBillingQuickFilter.feedback.includes("Showing 0 of 0 local mock rows"),
+        true,
+        "Expected billing quick filter to start at zero local rows",
+      );
+      for (const expectedQuickFilterBoundaryText of [
+        "Filter changes only visible mock rows and counts",
+        "no row data is added, removed, saved, or permanently changed",
+        "no invoice, payment request, or statement was generated",
+        "no storage or Supabase write occurs",
+        "no payment, PDF, notification, or network API is called",
+      ]) {
+        assert.equal(
+          dashboardState.regularBillingQuickFilter.feedback.includes(expectedQuickFilterBoundaryText),
+          true,
+          `Expected billing quick filter boundary text: ${expectedQuickFilterBoundaryText}`,
+        );
+      }
       assert.deepEqual(
         dashboardState.regularBookingListRows,
         [],
@@ -3417,6 +3506,24 @@ async function runChromeTest() {
         assert.equal(actualValue, value, `Expected regular booking list filter ${filter} to accept test value`);
       };
 
+      const setRegularCustomerBillingQuickFilter = async (value) => {
+        const actualValue = await evaluate(`(() => {
+          const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+
+          if (!select) {
+            return null;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+          descriptor?.set?.call(select, ${JSON.stringify(value)});
+          select.dispatchEvent(new Event("input", { bubbles: true }));
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+
+          return select.value;
+        })()`);
+        assert.equal(actualValue, value, `Expected billing quick filter to accept ${value}`);
+      };
+
       const readRegularCustomerMockSaveState = () =>
         evaluate(`(() => {
           const button = document.querySelector("[data-regular-customer-mock-save]");
@@ -3555,6 +3662,45 @@ async function runChromeTest() {
             })),
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
             listText: list?.innerText || "",
+            quickFilter: (() => {
+              const section = document.querySelector("[data-regular-customer-billing-quick-filter-section]");
+              const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+              const rect = select?.getBoundingClientRect();
+              const quickFilterStoragePattern = new RegExp(
+                "Billing Quick Filter|Month: 2026-05|Month: 2026-06|Status: unbilled / draft",
+                "i",
+              );
+              const readStorage = (storage) => {
+                const values = [];
+                try {
+                  for (let index = 0; index < storage.length; index += 1) {
+                    const key = storage.key(index) || "";
+                    values.push(key + "=" + (storage.getItem(key) || ""));
+                  }
+                } catch (error) {
+                  values.push("storage-read-error:" + (error?.message || String(error)));
+                }
+                return values;
+              };
+
+              return {
+                feedback:
+                  document.querySelector("[data-regular-customer-billing-quick-filter-feedback]")?.textContent.trim() ||
+                  "",
+                options: [...(select?.querySelectorAll("option") || [])].map((option) => ({
+                  label: option.textContent.trim(),
+                  value: option.value,
+                })),
+                text: section?.innerText || "",
+                value: select?.value || "",
+                visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
+                storageLeaks: [
+                  ...readStorage(localStorage),
+                  ...readStorage(sessionStorage),
+                  ...(document.cookie ? document.cookie.split(";").map((value) => value.trim()) : []),
+                ].filter((value) => quickFilterStoragePattern.test(value)),
+              };
+            })(),
             summary: {
               amount:
                 document.querySelector("[data-regular-customer-monthly-billing-summary-amount]")?.textContent.trim() || "",
@@ -4499,6 +4645,41 @@ async function runChromeTest() {
         [],
         "Expected monthly billing summary not to call Supabase, payment, bank, notification, invoice, PDF, or calendar APIs",
       );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.quickFilter.visible,
+        true,
+        "Expected billing quick filter to remain visible after one local row",
+      );
+      assert.deepEqual(
+        regularBookingListStateAfterFirstRow.quickFilter.options,
+        [
+          { label: "All mock rows", value: "all" },
+          { label: "Month: 2026-05", value: "month:2026-05" },
+          { label: "Status: unbilled / draft", value: "status:unbilled / draft" },
+        ],
+        "Expected billing quick filter options to come from the current mock row only",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.quickFilter.feedback.includes(
+          "Showing 1 of 1 local mock row with All mock rows",
+        ),
+        true,
+        "Expected billing quick filter feedback after one local row",
+      );
+      for (const expectedQuickFilterText of [
+        "Billing Quick Filter — Mock Only",
+        "Filter changes only visible mock rows and counts",
+        "no row data is added, removed, saved, or permanently changed",
+        "no invoice, payment request, or statement was generated",
+        "no storage or Supabase write occurs",
+        "no payment, PDF, notification, or network API is called",
+      ]) {
+        assert.equal(
+          regularBookingListStateAfterFirstRow.quickFilter.text.includes(expectedQuickFilterText),
+          true,
+          `Expected billing quick filter text after one row: ${expectedQuickFilterText}`,
+        );
+      }
       const savedVisibilityWithOneLocalRowState = await readRegularCustomerSavedVisibilityState();
       assert.equal(
         savedVisibilityWithOneLocalRowState.rowCount,
@@ -4733,6 +4914,16 @@ async function runChromeTest() {
         "unbilled / draft (2)",
         "Expected monthly billing summary status grouping after two local rows",
       );
+      assert.deepEqual(
+        regularBookingTwoRowsState.quickFilter.options,
+        [
+          { label: "All mock rows", value: "all" },
+          { label: "Month: 2026-05", value: "month:2026-05" },
+          { label: "Month: 2026-06", value: "month:2026-06" },
+          { label: "Status: unbilled / draft", value: "status:unbilled / draft" },
+        ],
+        "Expected billing quick filter to expose only months and statuses already present in mock rows",
+      );
       for (const expectedListText of [
         "Browser Test Passenger",
         "Browser Filter Passenger",
@@ -4779,6 +4970,122 @@ async function runChromeTest() {
         );
         assert.equal(row.invoiceNumber, "Not created", "Expected row action controls not to create invoice numbers");
       }
+
+      await setRegularCustomerBillingQuickFilter("month:2026-05");
+      const regularBookingQuickMonthFilterState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.countText === "Showing 1 of 2 local mock rows." &&
+            candidateState.rows[0]?.text.includes("Browser Test Passenger")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer billing quick month filter",
+      );
+      assert.equal(
+        regularBookingQuickMonthFilterState.quickFilter.value,
+        "month:2026-05",
+        "Expected billing quick month filter value",
+      );
+      assert.equal(
+        regularBookingQuickMonthFilterState.quickFilter.feedback.includes(
+          "Showing 1 of 2 local mock rows with Month: 2026-05",
+        ),
+        true,
+        "Expected billing quick month filter feedback to update visible counts",
+      );
+      assert.equal(
+        regularBookingQuickMonthFilterState.summary.count,
+        "1 visible of 2 local mock rows",
+        "Expected monthly billing summary to follow the quick month filter",
+      );
+      assert.equal(
+        regularBookingQuickMonthFilterState.summary.months,
+        "2026-05 (1)",
+        "Expected quick month filter to show the selected billing month only",
+      );
+      assert.equal(
+        regularBookingQuickMonthFilterState.listText.includes("Browser Filter Passenger"),
+        false,
+        "Expected quick month filter to hide nonmatching visible mock rows only",
+      );
+      assert.deepEqual(
+        regularBookingQuickMonthFilterState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected billing quick month filter not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assert.deepEqual(
+        regularBookingQuickMonthFilterState.quickFilter.storageLeaks,
+        [],
+        "Expected billing quick month filter not to persist quick-filter text in browser storage",
+      );
+
+      await setRegularCustomerBillingQuickFilter("status:unbilled / draft");
+      const regularBookingQuickStatusFilterState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.countText === "Showing 2 of 2 local mock rows." ? candidateState : false;
+        },
+        10000,
+        "regular customer billing quick status filter",
+      );
+      assert.equal(
+        regularBookingQuickStatusFilterState.quickFilter.value,
+        "status:unbilled / draft",
+        "Expected billing quick status filter value",
+      );
+      assert.equal(
+        regularBookingQuickStatusFilterState.quickFilter.feedback.includes(
+          "Showing 2 of 2 local mock rows with Status: unbilled / draft",
+        ),
+        true,
+        "Expected billing quick status filter feedback to update visible counts",
+      );
+      assert.equal(
+        regularBookingQuickStatusFilterState.summary.statuses,
+        "unbilled / draft (2)",
+        "Expected quick status filter to use existing mock row status data",
+      );
+      assert.deepEqual(
+        regularBookingQuickStatusFilterState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected billing quick status filter not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+
+      await setRegularCustomerBillingQuickFilter("all");
+      const regularBookingQuickFilterResetState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.quickFilter.value === "all" &&
+            candidateState.countText === "Showing 2 of 2 local mock rows."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer billing quick filter reset",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetState.rows.map((row) => row.id),
+        regularBookingTwoRowsState.rows.map((row) => row.id),
+        "Expected billing quick filter reset not to add, remove, reorder, save, or permanently change row data",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetState.rows.map((row) => row.invoiceNumber),
+        ["Not created", "Not created"],
+        "Expected billing quick filter not to create invoice numbers",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected billing quick filter reset not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
 
       const mockRowActionExpectations = [
         {

@@ -44,6 +44,8 @@ const regularCustomerBillingStatusFilterOptions = [
   "cancelled",
 ];
 
+const regularCustomerBillingQuickFilterAllValue = "all";
+
 const initialRegularCustomerBookingForm = {
   billingMonth: "2026-05",
   billingStatus: "unbilled / draft",
@@ -562,6 +564,9 @@ export default function MockCustomerDashboardPage() {
   const [regularCustomerBookingListActionFeedback, setRegularCustomerBookingListActionFeedback] = useState<
     Record<string, RegularCustomerBookingListActionFeedback>
   >({});
+  const [regularCustomerBillingQuickFilter, setRegularCustomerBillingQuickFilter] = useState(
+    regularCustomerBillingQuickFilterAllValue,
+  );
   const [regularCustomerBillingDetailPreviewId, setRegularCustomerBillingDetailPreviewId] = useState("");
   const [regularCustomerDraftInvoicePreview, setRegularCustomerDraftInvoicePreview] =
     useState<RegularCustomerDraftInvoicePreview | null>(null);
@@ -771,6 +776,35 @@ export default function MockCustomerDashboardPage() {
       })),
     [mockStatementPreviewFeedback, visibleOutstandingPaymentReviewItems],
   );
+  const regularCustomerBillingQuickFilterOptions = useMemo(() => {
+    const billingMonths = Array.from(
+      new Set(regularCustomerBookingListItems.map((item) => item.billingMonth.trim()).filter(Boolean)),
+    ).sort((left, right) => left.localeCompare(right));
+    const billingStatuses = Array.from(
+      new Set(regularCustomerBookingListItems.map((item) => item.billingStatus.trim()).filter(Boolean)),
+    ).sort((left, right) => left.localeCompare(right));
+
+    return [
+      { label: "All mock rows", value: regularCustomerBillingQuickFilterAllValue },
+      ...billingMonths.map((billingMonth) => ({
+        label: `Month: ${billingMonth}`,
+        value: `month:${billingMonth}`,
+      })),
+      ...billingStatuses.map((billingStatus) => ({
+        label: `Status: ${billingStatus}`,
+        value: `status:${billingStatus}`,
+      })),
+    ];
+  }, [regularCustomerBookingListItems]);
+  const activeRegularCustomerBillingQuickFilter = regularCustomerBillingQuickFilterOptions.some(
+    (option) => option.value === regularCustomerBillingQuickFilter,
+  )
+    ? regularCustomerBillingQuickFilter
+    : regularCustomerBillingQuickFilterAllValue;
+  const activeRegularCustomerBillingQuickFilterLabel =
+    regularCustomerBillingQuickFilterOptions.find(
+      (option) => option.value === activeRegularCustomerBillingQuickFilter,
+    )?.label ?? "All mock rows";
   const filteredRegularCustomerBookingListItems = useMemo(
     () =>
       regularCustomerBookingListItems.filter((item) => {
@@ -784,10 +818,20 @@ export default function MockCustomerDashboardPage() {
         const billingStatusMatches =
           !regularCustomerBookingListFilters.billingStatus ||
           item.billingStatus === regularCustomerBookingListFilters.billingStatus;
+        const quickFilterMatches =
+          activeRegularCustomerBillingQuickFilter === regularCustomerBillingQuickFilterAllValue ||
+          (activeRegularCustomerBillingQuickFilter.startsWith("month:") &&
+            item.billingMonth.trim() === activeRegularCustomerBillingQuickFilter.replace(/^month:/, "")) ||
+          (activeRegularCustomerBillingQuickFilter.startsWith("status:") &&
+            item.billingStatus.trim() === activeRegularCustomerBillingQuickFilter.replace(/^status:/, ""));
 
-        return customerMatches && billingMonthMatches && billingStatusMatches;
+        return customerMatches && billingMonthMatches && billingStatusMatches && quickFilterMatches;
       }),
-    [regularCustomerBookingListFilters, regularCustomerBookingListItems],
+    [
+      activeRegularCustomerBillingQuickFilter,
+      regularCustomerBookingListFilters,
+      regularCustomerBookingListItems,
+    ],
   );
   const regularCustomerMonthlyBillingSummary = useMemo(() => {
     const monthCounts = new Map<string, number>();
@@ -882,6 +926,7 @@ export default function MockCustomerDashboardPage() {
 
   function clearRegularCustomerBookingListFilters() {
     setRegularCustomerBookingListFilters(initialRegularCustomerBookingListFilters);
+    setRegularCustomerBillingQuickFilter(regularCustomerBillingQuickFilterAllValue);
     setRegularCustomerBookingListFilterFeedback(
       "Local mock filters cleared. The list is still page-only and no records were changed.",
     );
@@ -2096,6 +2141,42 @@ export default function MockCustomerDashboardPage() {
                   {regularCustomerBookingListItems.length} local mock row
                   {regularCustomerBookingListItems.length === 1 ? "" : "s"}.
                 </p>
+              </div>
+
+              <div
+                className="mt-3 rounded-md border border-slate-200 bg-white p-3"
+                data-regular-customer-billing-quick-filter-section="true"
+              >
+                <div className="grid gap-3 md:grid-cols-[minmax(0,18rem)_1fr] md:items-start">
+                  <label className="flex min-w-0 flex-col gap-1 text-sm font-semibold text-slate-700">
+                    Billing Quick Filter — Mock Only
+                    <select
+                      className="min-h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
+                      data-regular-customer-billing-quick-filter="true"
+                      onChange={(event) => setRegularCustomerBillingQuickFilter(event.target.value)}
+                      value={activeRegularCustomerBillingQuickFilter}
+                    >
+                      {regularCustomerBillingQuickFilterOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p
+                    aria-live="polite"
+                    className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold leading-6 text-slate-700"
+                    data-regular-customer-billing-quick-filter-feedback="true"
+                  >
+                    Showing {filteredRegularCustomerBookingListItems.length} of{" "}
+                    {regularCustomerBookingListItems.length} local mock row
+                    {regularCustomerBookingListItems.length === 1 ? "" : "s"} with{" "}
+                    {activeRegularCustomerBillingQuickFilterLabel}. Filter changes only visible mock rows and
+                    counts; no row data is added, removed, saved, or permanently changed. Mock quick filter
+                    only — no invoice, payment request, or statement was generated, no storage or Supabase
+                    write occurs, and no payment, PDF, notification, or network API is called.
+                  </p>
+                </div>
               </div>
             </div>
 

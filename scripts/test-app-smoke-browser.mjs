@@ -14,6 +14,7 @@ import {
   waitForBodyText,
   waitForCondition,
   waitForSelector,
+  waitForTabLabels,
 } from "./browser-test-helpers.mjs";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
@@ -505,19 +506,7 @@ async function runChromeTest() {
       );
     };
 
-    const waitForTabs = () =>
-      waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const labels = [...document.querySelectorAll("button[role='tab']")].map(
-              (button) => button.textContent.trim(),
-            );
-
-            return ${JSON.stringify(tabLabels)}.every((label) => labels.includes(label));
-          })()`),
-        10000,
-        "Prestige Limo app tabs",
-      );
+    const waitForTabs = () => waitForTabLabels(evaluate, tabLabels, "Prestige Limo app tabs");
 
     const setViewportAndReload = async (viewport) => {
       await client.send("Emulation.setDeviceMetricsOverride", {

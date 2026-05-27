@@ -59,6 +59,22 @@ export async function waitForSelector(evaluate, selector, description) {
   );
 }
 
+export async function waitForTabLabels(evaluate, labels, description) {
+  return waitForCondition(
+    () =>
+      evaluate(`(() => {
+        const expectedLabels = ${JSON.stringify(labels)};
+        const visibleLabels = [...document.querySelectorAll("button[role='tab']")].map(
+          (button) => button.textContent.trim(),
+        );
+
+        return expectedLabels.every((label) => visibleLabels.includes(label));
+      })()`),
+    10000,
+    description,
+  );
+}
+
 export function createChromeClient(webSocketUrl) {
   const socket = new WebSocket(webSocketUrl);
   let nextId = 0;

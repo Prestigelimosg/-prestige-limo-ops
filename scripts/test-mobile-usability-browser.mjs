@@ -14,6 +14,7 @@ import {
   waitForBodyText,
   waitForCondition,
   waitForSelector,
+  waitForTabLabels,
 } from "./browser-test-helpers.mjs";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
@@ -316,18 +317,7 @@ async function runChromeTest() {
     const checkMainAppViewport = async (viewport) => {
       await setViewport(viewport);
       await navigate(appUrl, "Prestige Limo Ops Dispatch");
-      await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const labels = [...document.querySelectorAll("button[role='tab']")].map(
-              (button) => button.textContent.trim(),
-            );
-
-            return ${JSON.stringify(appTabs)}.every((label) => labels.includes(label));
-          })()`),
-        10000,
-        `${viewport.label} app tabs`,
-      );
+      await waitForTabLabels(evaluate, appTabs, `${viewport.label} app tabs`);
 
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);

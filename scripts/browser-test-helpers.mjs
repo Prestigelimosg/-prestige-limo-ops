@@ -218,3 +218,8 @@ export async function navigateWithLoadEvent(client, url) {
   await client.send("Page.navigate", { url });
   await loadEvent;
 }
+
+export async function navigateAndWaitForBodyText(client, evaluate, url, text, description) {
+  await navigateWithLoadEvent(client, url);
+  await waitForBodyText(evaluate, text, description);
+}

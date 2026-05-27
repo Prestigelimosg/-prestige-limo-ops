@@ -6,13 +6,12 @@ import path from "node:path";
 import { mockDriverJobTokens } from "../lib/driver-job-link-mock-store.ts";
 import {
   createChromeClient,
-  navigateWithLoadEvent,
+  navigateAndWaitForBodyText,
   normalizeConsoleMessages,
   normalizeErrorMessage,
   waitForChildExit,
   waitForChromeDebugPort,
   waitForChromePageTarget,
-  waitForBodyText,
   waitForCondition,
 } from "./browser-test-helpers.mjs";
 
@@ -212,9 +211,13 @@ async function runChromeTest() {
       }))()`);
 
     const navigateToDriverJob = async (token, expectedText) => {
-      await navigateWithLoadEvent(client, driverJobUrl(token));
-
-      await waitForBodyText(evaluate, expectedText, `driver job page text: ${expectedText}`);
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        driverJobUrl(token),
+        expectedText,
+        `driver job page text: ${expectedText}`,
+      );
 
       const state = await pageState();
       state.errors = [...browserErrors, ...(state.errors || [])];

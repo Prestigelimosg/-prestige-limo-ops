@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createChromeClient,
+  navigateAndWaitForBodyText,
   navigateWithLoadEvent,
   normalizeConsoleMessages,
   normalizeErrorMessage,
@@ -1170,8 +1171,13 @@ async function runChromeTest() {
       );
 
       const checkNoReplacementLeakOnRoute = async ({ expectedText, routeName, url }) => {
-        await navigateWithLoadEvent(client, url);
-        await waitForBodyText(evaluate, expectedText, `${routeName} leak-check route`);
+        await navigateAndWaitForBodyText(
+          client,
+          evaluate,
+          url,
+          expectedText,
+          `${routeName} leak-check route`,
+        );
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -7319,9 +7325,10 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      await navigateWithLoadEvent(client, driverJobWorkflowUrl);
-      await waitForBodyText(
+      await navigateAndWaitForBodyText(
+        client,
         evaluate,
+        driverJobWorkflowUrl,
         "Mock Workflow Pickup",
         `${viewport.label} driver job link route`,
       );
@@ -7872,9 +7879,10 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      await navigateWithLoadEvent(client, driverDemoUrl);
-      await waitForBodyText(
+      await navigateAndWaitForBodyText(
+        client,
         evaluate,
+        driverDemoUrl,
         "Prestige Limo Driver Job",
         `${viewport.label} driver job demo route`,
       );

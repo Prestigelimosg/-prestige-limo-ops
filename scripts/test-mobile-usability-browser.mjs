@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createChromeClient,
-  navigateWithLoadEvent,
+  navigateAndWaitForBodyText,
   normalizeConsoleMessages,
   normalizeErrorMessage,
   waitForChildExit,
@@ -225,8 +225,13 @@ async function runChromeTest() {
     };
 
     const navigate = async (url, expectedText) => {
-      await navigateWithLoadEvent(client, url);
-      await waitForBodyText(evaluate, expectedText, `${url} visible text: ${expectedText}`);
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        url,
+        expectedText,
+        `${url} visible text: ${expectedText}`,
+      );
     };
 
     const layoutState = () =>

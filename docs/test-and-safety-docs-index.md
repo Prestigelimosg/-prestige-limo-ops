@@ -1,0 +1,66 @@
+# Test and Safety Docs Index
+
+## Purpose
+
+This index is a docs-only cross-reference for existing Prestige Limo Ops testing, safety, production-readiness, and planning documents. It does not change app behavior, package scripts, parser behavior, Supabase behavior, payment behavior, notification behavior, API behavior, or implementation approval status.
+
+## Current Safety Position
+
+- `test:safe` membership is unchanged.
+- `package.json` scripts are unchanged.
+- `test:browser` remains standalone manual legacy browser coverage and is not claimed as part of `test:safe`.
+- This index does not approve implementation work.
+- Use the linked docs for planning context, safety gates, and ownership boundaries.
+- Implementation still needs separate scoped approval and matching tests.
+
+## Test Coverage And Manual Browser Testing
+
+- [Manual test:browser coverage note](test-browser-manual-coverage-note.md) owns the standalone/manual `test:browser` coverage note, runtime expectations, Safari/cross-browser value, and its relationship to newer safe-suite browser tests.
+
+## Production And Environment Safety
+
+- [Production Environment Checklist](production-environment-checklist.md) owns staging/live rollout safety, environment variable handling, secret handling, and production readiness gates.
+- [Supabase Schema And RLS Review Checklist](supabase-schema-rls-review-checklist.md) owns future Supabase schema, RLS, public-page, service-role, storage, and access-boundary review.
+- [Driver Job Link Production Checklist](driver-job-link-production-checklist.md) owns the production driver-link go/no-go checklist, approval locks, required tests, and disabled-by-default production posture.
+
+## Driver Workflow And Public Driver Link Safety
+
+- [Driver Job Link Production Design](driver-job-link-production-design.md) owns the production driver-link design boundary, safe public projection, token verification expectations, and future table planning.
+- [Driver Job Link Workflow Plan](driver-job-link-workflow-plan.md) owns the driver acknowledgement, driver detail, OTW/OTS/POB/Job Completed, exception, live-location, and testing workflow plan.
+
+## API, Payment, And Provider Planning
+
+- [API Integration Cost, Security, and Rollout Plan](api-integration-cost-security-plan.md) owns broad future API categories, cost/security concerns, rollout staging, and provider-risk framing.
+- [Limo API Integration Plan](limo-api-integration-plan.md) owns the wider provider planning for payments, manual bank transfer, live location, maps, notifications, flight status, storage, monitoring, and related rollout boundaries.
+- [Limo API Provider Decision Shortlist](limo-api-provider-decision-shortlist.md) owns the provider shortlist and owner decision prompts before API implementation.
+- [Stripe Test-Mode Payment-Link Workflow Plan](stripe-test-mode-payment-link-workflow-plan.md) owns future Stripe test-mode payment-link planning, staff review requirements, webhook planning, and payment-link safety boundaries.
+
+## Telegram Planning
+
+- [Telegram Driver Alert Workflow Plan](telegram-driver-alert-workflow-plan.md) owns future Telegram driver/admin alert planning, token handling, recipient mapping, message rules, and mock/log-only-first staging.
+- [Telegram Mock Alert Preview UI Plan](telegram-mock-alert-preview-ui-plan.md) owns future mock/no-send Telegram preview UI boundaries, no-send wording, secret handling, and test expectations.
+
+## Customer, Payment, Billing, And Portal Planning
+
+- [Customer-Facing Booking Page Separation Plan](customer-facing-booking-page-plan.md) owns the separation between `/customers` and future customer-safe booking request pages.
+- [Customer Payments Workflow Design](customer-payments-workflow-design.md) owns internal customer folders, outstanding payments, manual-first collection, invoice prefix, and billing workflow planning.
+- [Customer Payment Owner Decision Answer Sheet](customer-payment-owner-decision-answer-sheet.md) owns owner decision prompts for customer/payment roles, payment updates, invoice numbers, audit rules, and production defaults.
+- [Customer Payment Production Open Decisions](customer-payment-production-open-decisions.md) owns the unresolved decision gates before customer/payment production implementation.
+- [Customer Payment Approved Defaults Summary](customer-payment-approved-defaults-summary.md) owns the approved planning defaults for roles, invoice numbering, audit history, and disabled production behavior.
+- [Customer Payment Schema and RLS Plan](customer-payment-schema-rls-plan.md) owns the initial customer/payment schema and RLS planning shape.
+- [Customer Payment Schema and RLS Proposal](customer-payment-schema-rls-proposal.md) owns the review proposal for future schema, RLS, server-only routes, invoice sequence safety, and audit events.
+- [Customer Payment Final Schema/RLS Proposal](customer-payment-final-schema-rls-proposal.md) owns the final plain-English customer/payment schema, RLS, route, invoice-number, and audit-event proposal.
+- [Customer Payment Supabase Migration Planning](customer-payment-supabase-migration-planning.md) owns future migration planning boundaries without creating or applying migrations.
+- [Regular Customer Monthly Billing Workflow Plan](regular-customer-monthly-billing-workflow-plan.md) owns regular-customer booking, monthly billing, draft invoice preview, and bank-transfer billing workflow planning.
+- [Customer Portal Plan](customer-portal-plan.md) owns future portal separation, customer-safe booking views, auth/security planning, edit/amend requests, and mobile/search-first portal expectations.
+
+## UI And Mobile Safety
+
+- [App-Wide Human-Usage UI Standard](app-wide-ui-human-usage-standard.md) owns the app-wide search-first, compact-row, mobile/no-horizontal-overflow, feedback-placement, and mock/local boundary standards.
+
+## Rules For Future Changes
+
+- No package script changes come from this index; package script changes need separate review.
+- No `test:safe` membership changes come from this index; `test:safe` changes need separate review.
+- No implementation behavior comes from this index.
+- App, parser, Supabase, API, payment, billing, notification, auth, live-location, flight, maps, calendar, invoice, PDF, and customer-facing behavior require separate scoped approval and tests.

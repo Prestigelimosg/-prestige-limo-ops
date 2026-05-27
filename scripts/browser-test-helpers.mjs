@@ -43,6 +43,14 @@ export async function waitForCondition(
   throw new Error(`Timed out waiting for ${description}`);
 }
 
+export async function waitForBodyText(evaluate, text, description) {
+  return waitForCondition(
+    () => evaluate(`(document.body?.innerText || "").includes(${JSON.stringify(text)})`),
+    10000,
+    description,
+  );
+}
+
 export function createChromeClient(webSocketUrl) {
   const socket = new WebSocket(webSocketUrl);
   let nextId = 0;

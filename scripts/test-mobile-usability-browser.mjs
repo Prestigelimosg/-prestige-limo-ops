@@ -11,6 +11,7 @@ import {
   waitForChildExit,
   waitForChromeDebugPort,
   waitForChromePageTarget,
+  waitForBodyText,
   waitForCondition,
 } from "./browser-test-helpers.mjs";
 
@@ -223,11 +224,7 @@ async function runChromeTest() {
 
     const navigate = async (url, expectedText) => {
       await navigateWithLoadEvent(client, url);
-      await waitForCondition(
-        () => evaluate(`document.body?.innerText.includes(${JSON.stringify(expectedText)})`),
-        10000,
-        `${url} visible text: ${expectedText}`,
-      );
+      await waitForBodyText(evaluate, expectedText, `${url} visible text: ${expectedText}`);
     };
 
     const layoutState = () =>
@@ -360,11 +357,7 @@ async function runChromeTest() {
       await navigate(appUrl, "Prestige Limo Ops Dispatch");
       await clickTab("Bookings");
       await clickButtonByText("Load Bookings");
-      await waitForCondition(
-        () => evaluate(`document.body.innerText.includes("MOBILE USABILITY TRAVELER")`),
-        10000,
-        "mock loaded booking",
-      );
+      await waitForBodyText(evaluate, "MOBILE USABILITY TRAVELER", "mock loaded booking");
       await clickButtonByText("Load this booking");
       await waitForCondition(
         () =>

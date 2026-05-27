@@ -11,6 +11,7 @@ import {
   waitForChildExit,
   waitForChromeDebugPort,
   waitForChromePageTarget,
+  waitForBodyText,
   waitForCondition,
 } from "./browser-test-helpers.mjs";
 
@@ -1146,9 +1147,9 @@ async function runChromeTest() {
       const reloadEvent = client.once("Page.loadEventFired");
       await client.send("Page.reload", { ignoreCache: true });
       await reloadEvent;
-      await waitForCondition(
-        () => evaluate(`document.body.innerText.includes("Replacement Car / Driver — Mock Only")`),
-        10000,
+      await waitForBodyText(
+        evaluate,
+        "Replacement Car / Driver — Mock Only",
         "admin replacement placeholder after reload",
       );
       await checkReplacementFieldsCleared("admin replacement mock fields after reload");
@@ -1161,18 +1162,14 @@ async function runChromeTest() {
       const awayLoadEvent = client.once("Page.loadEventFired");
       await client.send("Page.navigate", { url: customerBookingUrl });
       await awayLoadEvent;
-      await waitForCondition(
-        () => evaluate(`document.body.innerText.includes("Booking Request")`),
-        10000,
-        "replacement persistence navigation away",
-      );
+      await waitForBodyText(evaluate, "Booking Request", "replacement persistence navigation away");
 
       const backLoadEvent = client.once("Page.loadEventFired");
       await client.send("Page.navigate", { url: appUrl });
       await backLoadEvent;
-      await waitForCondition(
-        () => evaluate(`document.body.innerText.includes("Replacement Car / Driver — Mock Only")`),
-        10000,
+      await waitForBodyText(
+        evaluate,
+        "Replacement Car / Driver — Mock Only",
         "replacement persistence navigation back",
       );
       await checkReplacementFieldsCleared("admin replacement mock fields after navigation away and back");
@@ -1184,11 +1181,7 @@ async function runChromeTest() {
 
       const checkNoReplacementLeakOnRoute = async ({ expectedText, routeName, url }) => {
         await navigateWithLoadEvent(client, url);
-        await waitForCondition(
-          () => evaluate(`document.body.innerText.includes(${JSON.stringify(expectedText)})`),
-          10000,
-          `${routeName} leak-check route`,
-        );
+        await waitForBodyText(evaluate, expectedText, `${routeName} leak-check route`);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -1745,9 +1738,9 @@ async function runChromeTest() {
       );
 
       await setCustomerViewportAndLoad(customerDashboardUrl, desktopViewport);
-      await waitForCondition(
-        () => evaluate(`document.body.innerText.includes("Mock customer payments dashboard")`),
-        10000,
+      await waitForBodyText(
+        evaluate,
+        "Mock customer payments dashboard",
         "mock customer dashboard route",
       );
 
@@ -7341,9 +7334,9 @@ async function runChromeTest() {
       });
 
       await navigateWithLoadEvent(client, driverJobWorkflowUrl);
-      await waitForCondition(
-        () => evaluate(`document.body.innerText.includes("Mock Workflow Pickup")`),
-        10000,
+      await waitForBodyText(
+        evaluate,
+        "Mock Workflow Pickup",
         `${viewport.label} driver job link route`,
       );
       await evaluate(`(() => {
@@ -7894,9 +7887,9 @@ async function runChromeTest() {
       });
 
       await navigateWithLoadEvent(client, driverDemoUrl);
-      await waitForCondition(
-        () => evaluate(`document.body.innerText.includes("Prestige Limo Driver Job")`),
-        10000,
+      await waitForBodyText(
+        evaluate,
+        "Prestige Limo Driver Job",
         `${viewport.label} driver job demo route`,
       );
       await evaluate(`(() => {

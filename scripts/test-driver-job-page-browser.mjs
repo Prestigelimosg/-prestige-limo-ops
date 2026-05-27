@@ -12,6 +12,7 @@ import {
   waitForChildExit,
   waitForChromeDebugPort,
   waitForChromePageTarget,
+  waitForBodyText,
   waitForCondition,
 } from "./browser-test-helpers.mjs";
 
@@ -213,11 +214,7 @@ async function runChromeTest() {
     const navigateToDriverJob = async (token, expectedText) => {
       await navigateWithLoadEvent(client, driverJobUrl(token));
 
-      await waitForCondition(
-        () => evaluate(`document.body?.innerText.includes(${JSON.stringify(expectedText)})`),
-        10000,
-        `driver job page text: ${expectedText}`,
-      );
+      await waitForBodyText(evaluate, expectedText, `driver job page text: ${expectedText}`);
 
       const state = await pageState();
       state.errors = [...browserErrors, ...(state.errors || [])];

@@ -13,6 +13,7 @@ import {
   waitForChromePageTarget,
   waitForBodyText,
   waitForCondition,
+  waitForSelector,
 } from "./browser-test-helpers.mjs";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
@@ -1265,11 +1266,7 @@ async function runChromeTest() {
       await setCustomerViewportAndLoad(appUrl, desktopViewport);
       await waitForTabs();
       await clickTab("Dispatch");
-      await waitForCondition(
-        () => evaluate(`Boolean(document.querySelector("[data-telegram-alert-preview]"))`),
-        10000,
-        "admin Telegram mock preview",
-      );
+      await waitForSelector(evaluate, "[data-telegram-alert-preview]", "admin Telegram mock preview");
 
       const readPreviewState = () =>
         evaluate(`(() => {
@@ -1612,9 +1609,9 @@ async function runChromeTest() {
       await reloadEvent;
       await waitForTabs();
       await clickTab("Dispatch");
-      await waitForCondition(
-        () => evaluate(`Boolean(document.querySelector("[data-telegram-alert-preview]"))`),
-        10000,
+      await waitForSelector(
+        evaluate,
+        "[data-telegram-alert-preview]",
         "admin Telegram mock preview after reload",
       );
       const postReloadState = await readPreviewState();
@@ -1635,9 +1632,9 @@ async function runChromeTest() {
       await setCustomerViewportAndLoad(appUrl, desktopViewport);
       await waitForTabs();
       await clickTab("Dispatch");
-      await waitForCondition(
-        () => evaluate(`Boolean(document.querySelector("[data-telegram-alert-preview]"))`),
-        10000,
+      await waitForSelector(
+        evaluate,
+        "[data-telegram-alert-preview]",
         "admin Telegram mock preview after navigation away and back",
       );
       const postNavigationState = await readPreviewState();
@@ -5715,9 +5712,9 @@ async function runChromeTest() {
       });
 
       await navigateWithLoadEvent(client, customerBookingUrl);
-      await waitForCondition(
-        () => evaluate(`Boolean(document.querySelector("[data-customer-booking-page]"))`),
-        10000,
+      await waitForSelector(
+        evaluate,
+        "[data-customer-booking-page]",
         `${viewport.label} customer-facing booking route`,
       );
       await evaluate(`(() => {
@@ -6239,9 +6236,9 @@ async function runChromeTest() {
       });
 
       await navigateWithLoadEvent(client, customerPortalUrl);
-      await waitForCondition(
-        () => evaluate(`Boolean(document.querySelector("[data-customer-portal-page]"))`),
-        10000,
+      await waitForSelector(
+        evaluate,
+        "[data-customer-portal-page]",
         `${viewport.label} customer portal route`,
       );
       await evaluate(`(() => {

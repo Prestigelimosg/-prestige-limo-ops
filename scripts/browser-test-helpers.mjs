@@ -51,6 +51,14 @@ export async function waitForBodyText(evaluate, text, description) {
   );
 }
 
+export async function waitForSelector(evaluate, selector, description) {
+  return waitForCondition(
+    () => evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`),
+    10000,
+    description,
+  );
+}
+
 export function createChromeClient(webSocketUrl) {
   const socket = new WebSocket(webSocketUrl);
   let nextId = 0;

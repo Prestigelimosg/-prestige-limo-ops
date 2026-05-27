@@ -13,6 +13,7 @@ import {
   waitForChromePageTarget,
   waitForBodyText,
   waitForCondition,
+  waitForSelector,
 } from "./browser-test-helpers.mjs";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
@@ -416,10 +417,9 @@ async function runChromeTest() {
         })()`);
         assert.equal(editClicked, true, `${viewport.label}: expected ${editTarget} edit button`);
 
-        await waitForCondition(
-          () =>
-            evaluate(`Boolean(document.querySelector(${JSON.stringify(`[data-copy-edit-textarea="${editTarget}"]`)}))`),
-          10000,
+        await waitForSelector(
+          evaluate,
+          `[data-copy-edit-textarea="${editTarget}"]`,
           `${editTarget} edit textarea`,
         );
 

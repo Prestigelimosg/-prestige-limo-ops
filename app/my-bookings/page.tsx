@@ -696,6 +696,23 @@ export default function CustomerPortalPage() {
           <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">
             Customers can view booking requests and booking history here after staff confirmation.
           </p>
+          <div
+            className="mt-4 grid gap-2 text-sm sm:grid-cols-3"
+            data-customer-portal-guidance="true"
+          >
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+              <span className="font-semibold text-slate-950">New request: </span>
+              Send a trip request from this page.
+            </p>
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+              <span className="font-semibold text-slate-950">Check trips: </span>
+              Search upcoming, completed, or cancelled bookings.
+            </p>
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">
+              <span className="font-semibold text-slate-950">Need changes: </span>
+              Request a review before the booking is updated.
+            </p>
+          </div>
         </header>
 
         <nav
@@ -1023,6 +1040,13 @@ export default function CustomerPortalPage() {
                   <label className="text-sm font-semibold text-slate-800" htmlFor="customer-portal-search">
                     Search bookings
                   </label>
+                  <p
+                    className="text-sm leading-6 text-slate-600"
+                    data-customer-portal-search-helper="true"
+                  >
+                    Search by passenger, pickup, drop-off, flight, or service. Use the tabs to
+                    switch between upcoming and past trips.
+                  </p>
                   <input
                     className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-950 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                     data-customer-portal-search="true"

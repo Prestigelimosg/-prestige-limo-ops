@@ -7079,8 +7079,10 @@ async function runChromeTest() {
         const lowerText = text.toLowerCase();
         const submit = document.querySelector("[data-customer-booking-submit]");
         const feedback = document.querySelector("[data-customer-booking-feedback]");
+        const nextSteps = document.querySelector("[data-customer-booking-next-steps]");
         const submitRect = submit?.getBoundingClientRect();
         const feedbackRect = feedback?.getBoundingClientRect();
+        const nextStepsRect = nextSteps?.getBoundingClientRect();
 
         const fieldState = Object.fromEntries(
           [
@@ -7175,6 +7177,14 @@ async function runChromeTest() {
           missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
             field.textContent.trim(),
           ),
+          nextSteps: {
+            height: Math.round(nextStepsRect?.height || 0),
+            items: [...document.querySelectorAll("[data-customer-booking-next-step]")].map((item) =>
+              item.textContent.trim(),
+            ),
+            text: nextSteps?.innerText || "",
+            visible: Boolean(nextStepsRect && nextStepsRect.width > 0 && nextStepsRect.height > 0),
+          },
           removedInternalControls: [
             "Customer / account",
             "Customer reference / PO",
@@ -7218,6 +7228,21 @@ async function runChromeTest() {
         initialState.text.includes("Submit Booking Request"),
         true,
         "Expected /book customer-safe submit button",
+      );
+      assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
+      assert.equal(
+        initialState.nextSteps.height <= 190,
+        true,
+        `Expected /book next-step guidance to stay compact, got ${initialState.nextSteps.height}px`,
+      );
+      assert.deepEqual(
+        initialState.nextSteps.items,
+        [
+          "Step 1: Submit the trip details you know.",
+          "Step 2: Prestige Limo reviews timing and availability.",
+          "Step 3: We reply before the booking is confirmed.",
+        ],
+        "Expected /book customer next-step guidance",
       );
       for (const expectedField of [
         "Customer / company name",
@@ -7466,6 +7491,7 @@ async function runChromeTest() {
         `Expected /book mobile page not to overflow horizontally: ${mobileState.docScrollWidth} > ${mobileState.docClientWidth}`,
       );
       assert.equal(mobileState.submitVisible, true, "Expected /book submit button to remain touch-friendly on mobile");
+      assert.equal(mobileState.nextSteps.visible, true, "Expected /book mobile next-step guidance");
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -7558,6 +7584,8 @@ async function runChromeTest() {
         const feedbackRow = feedback?.closest("[data-customer-portal-row]");
         const feedbackRect = feedback?.getBoundingClientRect();
         const feedbackRowRect = feedbackRow?.getBoundingClientRect();
+        const guidance = document.querySelector("[data-customer-portal-guidance]");
+        const guidanceRect = guidance?.getBoundingClientRect();
         const requestForm = document.querySelector("[data-customer-portal-request-form]");
         const requestFeedback = document.querySelector("[data-customer-portal-request-feedback]");
         const pickupHour = document.querySelector("[data-customer-portal-pickup-hour]");
@@ -7651,6 +7679,11 @@ async function runChromeTest() {
               .filter((label) => label !== "To confirm"),
             visible: Boolean(requestForm),
           },
+          guidance: {
+            height: Math.round(guidanceRect?.height || 0),
+            text: guidance?.innerText || "",
+            visible: Boolean(guidanceRect && guidanceRect.width > 0 && guidanceRect.height > 0),
+          },
           integrationCalls: window.__customerPortalIntegrationCalls || [],
           activeMonthLabel: document.querySelector("[data-customer-portal-active-month]")?.textContent.trim() || "",
           currentMonthActive: currentMonthButton?.getAttribute("data-active") === "true",
@@ -7674,6 +7707,7 @@ async function runChromeTest() {
           })),
           searchBeforeRows:
             searchRect && firstRowRect ? searchRect.top < firstRowRect.top : false,
+          searchHelper: document.querySelector("[data-customer-portal-search-helper]")?.textContent.trim() || "",
           searchVisible: Boolean(searchRect && searchRect.width > 0 && searchRect.height >= 40),
           selectedPastMonthKey: activePastMonthButton?.getAttribute("data-customer-portal-month-button") || "",
           sectionLabels: [...document.querySelectorAll("[data-customer-portal-section]")]
@@ -7903,7 +7937,29 @@ async function runChromeTest() {
         true,
         "Expected /my-bookings customer-safe explanation",
       );
+      assert.equal(initialState.guidance.visible, true, "Expected /my-bookings compact customer guidance");
+      assert.equal(
+        initialState.guidance.height <= 190,
+        true,
+        `Expected /my-bookings guidance to stay compact, got ${initialState.guidance.height}px`,
+      );
+      for (const expectedGuidanceText of [
+        "New request: Send a trip request from this page.",
+        "Check trips: Search upcoming, completed, or cancelled bookings.",
+        "Need changes: Request a review before the booking is updated.",
+      ]) {
+        assert.equal(
+          initialState.guidance.text.includes(expectedGuidanceText),
+          true,
+          `Expected /my-bookings guidance text: ${expectedGuidanceText}`,
+        );
+      }
       assert.equal(initialState.searchVisible, true, "Expected /my-bookings search input to be visible");
+      assert.equal(
+        initialState.searchHelper,
+        "Search by passenger, pickup, drop-off, flight, or service. Use the tabs to switch between upcoming and past trips.",
+        "Expected /my-bookings search guidance near lookup control",
+      );
       assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
       assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
       assert.equal(initialState.rowCount, 10, "Expected /my-bookings to show at most 10 rows by default");
@@ -8562,6 +8618,7 @@ async function runChromeTest() {
         mobileState.docScrollWidth <= mobileState.docClientWidth + 2,
         `Expected /my-bookings mobile page not to overflow horizontally: ${mobileState.docScrollWidth} > ${mobileState.docClientWidth}`,
       );
+      assert.equal(mobileState.guidance.visible, true, "Expected /my-bookings mobile guidance");
       assert.equal(mobileState.searchVisible, true, "Expected /my-bookings search to remain touch-friendly on mobile");
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
       assert.deepEqual(

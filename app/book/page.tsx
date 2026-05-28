@@ -198,6 +198,26 @@ export default function CustomerBookingPage() {
             Share the trip details you have now. Your booking is not confirmed until Prestige
             Limo staff replies.
           </p>
+          <ol
+            aria-label="Booking request next steps"
+            className="mt-4 grid gap-2 text-sm sm:grid-cols-3"
+            data-customer-booking-next-steps="true"
+          >
+            {[
+              "Submit the trip details you know.",
+              "Prestige Limo reviews timing and availability.",
+              "We reply before the booking is confirmed.",
+            ].map((step, index) => (
+              <li
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700"
+                data-customer-booking-next-step={index + 1}
+                key={step}
+              >
+                <span className="font-semibold text-slate-950">Step {index + 1}: </span>
+                {step}
+              </li>
+            ))}
+          </ol>
         </header>
 
         <form
@@ -494,7 +514,7 @@ export default function CustomerBookingPage() {
 
             <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
               <p className="text-sm leading-6 text-slate-600">
-                Calendar confirmation will be handled by staff after your booking is confirmed.
+                After you submit, Prestige Limo will review the request and reply with the next step.
               </p>
               <button
                 className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"

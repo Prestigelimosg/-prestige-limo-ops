@@ -199,6 +199,8 @@ const countryCodeSecondLevelDomains = new Set([
 const ignoredFlightCodes = new Set(["AT", "BY", "IF", "IN", "IS", "NO", "OF", "ON", "OR", "TO"]);
 const flightCodePattern = /\b([A-Z]{2})\s?(\d{1,4})\b/gi;
 const whatsAppSenderLinePattern = /^\[\d[^\]]*\/[^\]]+\]\s+([^:]+):\s*(.+)$/;
+const contactShorthandPatternSource =
+  String.raw`(?:tel\.?|telephone|hp|mobile|mob|phone|contact(?:\s+(?:no\.?|number))?)`;
 
 function clean(value: string | null | undefined) {
   return (value ?? "").trim();
@@ -1059,14 +1061,27 @@ function detectBookerCompanyContext(text: string) {
     .map((line) => clean(line))
     .filter(Boolean);
   const contextCandidates = [
-    ...lines.filter((line) => /\b(?:booked\s+by|booker|this\s+is|here\s+from|from\b.+\bhere)\b/i.test(line)),
+    ...lines.filter((line) => /\b(?:booked\s+by|booker|contact|this\s+is|here\s+from|from\b.+\bhere)\b/i.test(line)),
     ...lines,
     clean(text.replace(/\n+/g, " ")),
   ];
   const contextPatterns = [
-    /\bbooker\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\.|,|$)/i,
-    /\bbooked\s+by\s+([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\.|,|$)/i,
-    /(?:^|,\s*)this\s+is\s+([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\.|,|$)/i,
+    new RegExp(
+      String.raw`\bcontact\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\s+${contactShorthandPatternSource}\b|\.|,|$)`,
+      "i",
+    ),
+    new RegExp(
+      String.raw`\bbooker\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\s+${contactShorthandPatternSource}\b|\.|,|$)`,
+      "i",
+    ),
+    new RegExp(
+      String.raw`\bbooked\s+by\s+([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\s+${contactShorthandPatternSource}\b|\.|,|$)`,
+      "i",
+    ),
+    new RegExp(
+      String.raw`(?:^|,\s*)this\s+is\s+([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\s+${contactShorthandPatternSource}\b|\.|,|$)`,
+      "i",
+    ),
     /(?:^|,\s*)([A-Za-z][A-Za-z.' -]{1,40})\s+here\s*,?\s*from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})(?=\.|,|$)/i,
     /(?:^|,\s*)([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})\s+here(?=\.|,|$)/i,
     /^([A-Za-z][A-Za-z.' -]{1,40})\s+from\s+([A-Za-z][A-Za-z0-9&.' -]{1,50})$/i,
@@ -1082,7 +1097,9 @@ function detectBookerCompanyContext(text: string) {
     }
 
     const booker = cleanDetectedName(match[1]);
-    const company = clean(match[2]).replace(/[|,;.]+$/g, "");
+    const company = clean(match[2])
+      .replace(new RegExp(String.raw`\s+${contactShorthandPatternSource}\b.*$`, "i"), "")
+      .replace(/[|,;.]+$/g, "");
 
     if (
       !looksLikePersonName(booker) ||
@@ -1630,6 +1647,7 @@ function detectPax(text: string) {
 
 function cleanDetectedName(value: string) {
   return clean(value)
+    .replace(new RegExp(String.raw`\s+\b${contactShorthandPatternSource}\b\s*[:=-]?\s*\+?\d[\d\s-]{5,}\d.*$`, "i"), "")
     .replace(/\s+(?:S\$|\$)\d+(?:\.\d{1,2})?(?:\s*\+\s*(?:S\$|\$)\d+(?:\.\d{1,2})?)*\b.*$/i, "")
     .replace(/\s+\b(?:tomorrow|today|from|to|at|pickup|pick\s*up|arriving|landing|flight|transfer)\b.*$/i, "")
     .replace(/^(?:to|from|at|back|him|her|them)\s+/i, "")
@@ -1742,6 +1760,53 @@ function detectUnlabeledPlusContact(text: string) {
   return "";
 }
 
+function extractPhoneContact(value: string) {
+  return firstMatch(value, [
+    new RegExp(String.raw`\b${contactShorthandPatternSource}\b\s*[:=-]?\s*(\+?\d[\d\s-]{5,}\d)\b`, "i"),
+    /(\+?\d[\d\s-]{5,}\d)/,
+  ]);
+}
+
+function normalizeContactValue(value: string) {
+  const phone = extractPhoneContact(value);
+
+  return phone || clean(value);
+}
+
+function detectBookerContactValue(text: string) {
+  const labeledContact = lineValue(text, [
+    "booker contact",
+    "booker whatsapp",
+    "booker phone",
+    "requestor contact",
+    "ctc",
+    "contact",
+    "contact no",
+    "contact no.",
+    "contact number",
+    "hp",
+    "mobile",
+    "mob",
+    "mobile number",
+    "phone",
+    "phone number",
+    "tel",
+    "tel no",
+    "tel. no.",
+    "telephone",
+    "telephone number",
+    "whatsapp",
+  ]);
+
+  if (labeledContact) {
+    return normalizeContactValue(labeledContact);
+  }
+
+  const labeledBooker = lineValue(text, ["booker", "booked by", "requestor", "requested by"]);
+
+  return extractPhoneContact(labeledBooker) ? normalizeContactValue(labeledBooker) : "";
+}
+
 function detectName(text: string, flight: string) {
   const labeledName = lineValue(text, [
     "name",
@@ -1749,6 +1814,7 @@ function detectName(text: string, flight: string) {
     "passenger name",
     "guest",
     "guest name",
+    "pax",
     "pax name",
     "principal",
     "traveller",
@@ -2284,7 +2350,7 @@ function detectBookerValue(text: string, context: { booker: string; company: str
     }
   }
 
-  return labeledBooker || context.booker || detectBookerShorthand(text) || detectNarratedBooker(text);
+  return cleanDetectedName(labeledBooker) || context.booker || detectBookerShorthand(text) || detectNarratedBooker(text);
 }
 
 function detectRoute(text: string, flight = "") {
@@ -2684,25 +2750,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     ...(standbyRouteDetails.standbyUntil ? { standbyUntil: standbyRouteDetails.standbyUntil } : {}),
     bookerContact:
       tripOrganizerDetails.contact ||
-      lineValue(operationalText, [
-        "booker contact",
-        "booker whatsapp",
-        "booker phone",
-        "requestor contact",
-        "ctc",
-        "contact",
-        "contact number",
-        "mobile",
-        "mobile number",
-        "phone",
-        "phone number",
-        "tel",
-        "tel no",
-        "tel. no.",
-        "telephone",
-        "telephone number",
-        "whatsapp",
-      ]) ||
+      detectBookerContactValue(operationalText) ||
       detectUnlabeledPlusContact(operationalText),
     cleanedLines,
   };

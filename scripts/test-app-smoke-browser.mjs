@@ -80,6 +80,8 @@ const internalBillingDetailControlLabels = [
   "Close Billing Details — Mock Only",
 ];
 const internalMonthlyBillingSummaryLabels = [
+  "Mock visible billing summary",
+  "Mock/local only. This strip summarizes currently visible mock monthly billing rows after the local quick filter.",
   "Monthly Billing Summary — Mock Only",
   "Mock summary only — no invoice, payment request, or statement was generated.",
 ];
@@ -1186,7 +1188,11 @@ async function runChromeTest() {
         labels: ${JSON.stringify(internalMonthlyBillingSummaryLabels)}.filter((label) =>
           (document.body.innerText || "").includes(label),
         ),
-        visible: Boolean(document.querySelector("[data-regular-customer-monthly-billing-summary]")),
+        visible: Boolean(
+          document.querySelector(
+            "[data-regular-customer-billing-visible-summary], [data-regular-customer-monthly-billing-summary]",
+          ),
+        ),
       }))()`);
       assert.equal(
         rootMonthlyBillingSummaryState.visible,
@@ -1244,7 +1250,9 @@ async function runChromeTest() {
             ),
             monthlyBillingSummaryText: monthlyBillingSummaryLabels.filter((label) => text.includes(label)),
             monthlyBillingSummaryVisible: Boolean(
-              document.querySelector("[data-regular-customer-monthly-billing-summary]"),
+              document.querySelector(
+                "[data-regular-customer-billing-visible-summary], [data-regular-customer-monthly-billing-summary]",
+              ),
             ),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -3753,6 +3761,69 @@ async function runChromeTest() {
                 ].filter((value) => quickFilterStoragePattern.test(value)),
               };
             })(),
+            visibleSummary: await (async () => {
+              const summary = document.querySelector("[data-regular-customer-billing-visible-summary]");
+              const rect = summary?.getBoundingClientRect();
+              const visibleSummaryStoragePattern = new RegExp(
+                "Mock visible billing summary|visible mock billing rows|No visible billing month|No visible status|All mock rows|No matching mock rows|Month: 2026-05|Month: 2026-06|Status: unbilled / draft",
+                "i",
+              );
+              const readStorage = (storage) => {
+                const values = [];
+                try {
+                  for (let index = 0; index < storage.length; index += 1) {
+                    const key = storage.key(index) || "";
+                    values.push(key + "=" + (storage.getItem(key) || ""));
+                  }
+                } catch (error) {
+                  values.push("storage-read-error:" + (error?.message || String(error)));
+                }
+                return values;
+              };
+              const indexedDbValues = await (async () => {
+                try {
+                  if (!globalThis.indexedDB?.databases) {
+                    return [];
+                  }
+
+                  const databases = await globalThis.indexedDB.databases();
+                  return databases.map((database) =>
+                    [database?.name || "", String(database?.version || "")].join(":"),
+                  );
+                } catch (error) {
+                  return ["indexeddb-read-error:" + (error?.message || String(error))];
+                }
+              })();
+
+              return {
+                boundary:
+                  document.querySelector("[data-regular-customer-billing-visible-summary-boundary]")?.textContent.trim() ||
+                  "",
+                count:
+                  document.querySelector("[data-regular-customer-billing-visible-summary-count]")?.textContent.trim() ||
+                  "",
+                filter:
+                  document.querySelector("[data-regular-customer-billing-visible-summary-filter]")?.textContent.trim() ||
+                  "",
+                months:
+                  document.querySelector("[data-regular-customer-billing-visible-summary-months]")?.textContent.trim() ||
+                  "",
+                statuses:
+                  document.querySelector("[data-regular-customer-billing-visible-summary-statuses]")?.textContent.trim() ||
+                  "",
+                text: summary?.textContent || "",
+                title:
+                  document.querySelector("[data-regular-customer-billing-visible-summary-title]")?.textContent.trim() ||
+                  "",
+                visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+                storageLeaks: [
+                  ...readStorage(localStorage),
+                  ...readStorage(sessionStorage),
+                  ...(document.cookie ? document.cookie.split(";").map((value) => value.trim()) : []),
+                  ...indexedDbValues,
+                ].filter((value) => visibleSummaryStoragePattern.test(value)),
+              };
+            })(),
             summary: {
               amount:
                 document.querySelector("[data-regular-customer-monthly-billing-summary-amount]")?.textContent.trim() || "",
@@ -4700,6 +4771,62 @@ async function runChromeTest() {
         "Expected monthly billing summary not to call Supabase, payment, bank, notification, invoice, PDF, or calendar APIs",
       );
       assert.equal(
+        regularBookingListStateAfterFirstRow.visibleSummary.visible,
+        true,
+        "Expected mock visible billing summary to remain visible after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.visibleSummary.title,
+        "Mock visible billing summary",
+        "Expected mock visible billing summary label",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.visibleSummary.count,
+        "1 visible of 1 local mock row",
+        "Expected mock visible billing summary count after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.visibleSummary.filter,
+        "All mock rows",
+        "Expected mock visible billing summary to show the current quick filter",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.visibleSummary.months,
+        "2026-05 (1)",
+        "Expected mock visible billing summary month after one local row",
+      );
+      assert.equal(
+        regularBookingListStateAfterFirstRow.visibleSummary.statuses,
+        "unbilled / draft (1)",
+        "Expected mock visible billing summary status after one local row",
+      );
+      for (const expectedVisibleSummaryText of [
+        "Mock/local only.",
+        "currently visible mock monthly billing rows after the local quick filter",
+        "does not create invoice numbers",
+        "generate invoices or PDFs",
+        "send payment requests",
+        "call network APIs",
+        "write browser storage",
+        "write Supabase",
+        "permanently change row data",
+        "add rows",
+        "remove rows",
+        "update payment status",
+        "trigger messaging or notification behavior",
+      ]) {
+        assert.equal(
+          regularBookingListStateAfterFirstRow.visibleSummary.boundary.includes(expectedVisibleSummaryText),
+          true,
+          `Expected mock visible billing summary boundary after one row: ${expectedVisibleSummaryText}`,
+        );
+      }
+      assert.deepEqual(
+        regularBookingListStateAfterFirstRow.visibleSummary.storageLeaks,
+        [],
+        "Expected mock visible billing summary not to persist text in browser storage after one row",
+      );
+      assert.equal(
         regularBookingListStateAfterFirstRow.quickFilter.visible,
         true,
         "Expected billing quick filter to remain visible after one local row",
@@ -4969,6 +5096,26 @@ async function runChromeTest() {
         "unbilled / draft (2)",
         "Expected monthly billing summary status grouping after two local rows",
       );
+      assert.equal(
+        regularBookingTwoRowsState.visibleSummary.count,
+        "2 visible of 2 local mock rows",
+        "Expected mock visible billing summary count after two local rows",
+      );
+      assert.equal(
+        regularBookingTwoRowsState.visibleSummary.filter,
+        "All mock rows",
+        "Expected mock visible billing summary to remain on all mock rows after two local rows",
+      );
+      assert.equal(
+        regularBookingTwoRowsState.visibleSummary.months,
+        "2026-05 (1), 2026-06 (1)",
+        "Expected mock visible billing summary month grouping after two local rows",
+      );
+      assert.equal(
+        regularBookingTwoRowsState.visibleSummary.statuses,
+        "unbilled / draft (2)",
+        "Expected mock visible billing summary status grouping after two local rows",
+      );
       assert.deepEqual(
         regularBookingTwoRowsState.quickFilter.options,
         [
@@ -5137,6 +5284,31 @@ async function runChromeTest() {
         "Expected empty quick filter not to show stale billing statuses",
       );
       assert.equal(
+        regularBookingQuickFilterEmptyState.visibleSummary.count,
+        "0 visible of 2 local mock rows",
+        "Expected mock visible billing summary to follow the empty quick filter",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.visibleSummary.filter,
+        "No matching mock rows",
+        "Expected mock visible billing summary to show the empty quick filter label",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.visibleSummary.months,
+        "No visible billing month",
+        "Expected mock visible billing summary not to show stale months",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.visibleSummary.statuses,
+        "No visible status",
+        "Expected mock visible billing summary not to show stale statuses",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.visibleSummary.text.includes("Mock visible billing summary"),
+        true,
+        "Expected mock visible billing summary to remain clearly labeled in the empty state",
+      );
+      assert.equal(
         /[A-Z]{2,}-\d{3,}/.test(regularBookingQuickFilterEmptyState.listText),
         false,
         "Expected empty quick filter not to create an invoice number",
@@ -5152,6 +5324,11 @@ async function runChromeTest() {
         regularBookingQuickFilterEmptyState.quickFilter.storageLeaks,
         [],
         "Expected empty quick filter not to persist quick-filter text in browser storage",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterEmptyState.visibleSummary.storageLeaks,
+        [],
+        "Expected empty quick filter not to persist visible-summary text in browser storage",
       );
 
       await clickRegularCustomerBillingQuickFilterReset();
@@ -5182,6 +5359,16 @@ async function runChromeTest() {
         "Expected reset to all mock rows not to add, remove, reorder, save, or permanently change row data",
       );
       assert.equal(
+        regularBookingQuickFilterResetButtonState.visibleSummary.count,
+        "2 visible of 2 local mock rows",
+        "Expected mock visible billing summary to return to all rows after reset",
+      );
+      assert.equal(
+        regularBookingQuickFilterResetButtonState.visibleSummary.filter,
+        "All mock rows",
+        "Expected mock visible billing summary filter label after reset",
+      );
+      assert.equal(
         regularBookingQuickFilterResetButtonState.billingDetailPreviewCount,
         0,
         "Expected billing quick filter reset not to restore stale mock billing detail panels",
@@ -5207,6 +5394,11 @@ async function runChromeTest() {
         regularBookingQuickFilterResetButtonState.quickFilter.storageLeaks,
         [],
         "Expected reset to all mock rows not to persist quick-filter text in browser storage",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetButtonState.visibleSummary.storageLeaks,
+        [],
+        "Expected reset to all mock rows not to persist visible-summary text in browser storage",
       );
 
       await setRegularCustomerBillingQuickFilter("month:2026-05");
@@ -5244,6 +5436,21 @@ async function runChromeTest() {
         "Expected quick month filter to show the selected billing month only",
       );
       assert.equal(
+        regularBookingQuickMonthFilterState.visibleSummary.count,
+        "1 visible of 2 local mock rows",
+        "Expected mock visible billing summary count to follow the quick month filter",
+      );
+      assert.equal(
+        regularBookingQuickMonthFilterState.visibleSummary.filter,
+        "Month: 2026-05",
+        "Expected mock visible billing summary filter label to follow the quick month filter",
+      );
+      assert.equal(
+        regularBookingQuickMonthFilterState.visibleSummary.months,
+        "2026-05 (1)",
+        "Expected mock visible billing summary month to follow the quick month filter",
+      );
+      assert.equal(
         regularBookingQuickMonthFilterState.listText.includes("Browser Filter Passenger"),
         false,
         "Expected quick month filter to hide nonmatching visible mock rows only",
@@ -5259,6 +5466,11 @@ async function runChromeTest() {
         regularBookingQuickMonthFilterState.quickFilter.storageLeaks,
         [],
         "Expected billing quick month filter not to persist quick-filter text in browser storage",
+      );
+      assert.deepEqual(
+        regularBookingQuickMonthFilterState.visibleSummary.storageLeaks,
+        [],
+        "Expected billing quick month filter not to persist visible-summary text in browser storage",
       );
 
       await setRegularCustomerBillingQuickFilter("status:unbilled / draft");
@@ -5286,6 +5498,21 @@ async function runChromeTest() {
         regularBookingQuickStatusFilterState.summary.statuses,
         "unbilled / draft (2)",
         "Expected quick status filter to use existing mock row status data",
+      );
+      assert.equal(
+        regularBookingQuickStatusFilterState.visibleSummary.count,
+        "2 visible of 2 local mock rows",
+        "Expected mock visible billing summary count to follow the quick status filter",
+      );
+      assert.equal(
+        regularBookingQuickStatusFilterState.visibleSummary.filter,
+        "Status: unbilled / draft",
+        "Expected mock visible billing summary filter label to follow the quick status filter",
+      );
+      assert.equal(
+        regularBookingQuickStatusFilterState.visibleSummary.statuses,
+        "unbilled / draft (2)",
+        "Expected mock visible billing summary status to follow the quick status filter",
       );
       assert.deepEqual(
         regularBookingQuickStatusFilterState.integrationCalls.filter((call) =>
@@ -5316,6 +5543,16 @@ async function runChromeTest() {
         regularBookingQuickFilterResetState.rows.map((row) => row.invoiceNumber),
         ["Not created", "Not created"],
         "Expected billing quick filter not to create invoice numbers",
+      );
+      assert.equal(
+        regularBookingQuickFilterResetState.visibleSummary.count,
+        "2 visible of 2 local mock rows",
+        "Expected mock visible billing summary count after setting quick filter back to all rows",
+      );
+      assert.equal(
+        regularBookingQuickFilterResetState.visibleSummary.filter,
+        "All mock rows",
+        "Expected mock visible billing summary filter label after setting quick filter back to all rows",
       );
       assert.deepEqual(
         regularBookingQuickFilterResetState.integrationCalls.filter((call) =>

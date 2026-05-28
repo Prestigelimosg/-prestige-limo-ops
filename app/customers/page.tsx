@@ -2214,6 +2214,68 @@ export default function MockCustomerDashboardPage() {
                   </div>
                 ) : null}
               </div>
+
+              <div
+                className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700"
+                data-regular-customer-billing-visible-summary="true"
+              >
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <p
+                      className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500"
+                      data-regular-customer-billing-visible-summary-title="true"
+                    >
+                      Mock visible billing summary
+                    </p>
+                    <p
+                      className="mt-1 font-bold text-slate-950"
+                      data-regular-customer-billing-visible-summary-count="true"
+                    >
+                      {regularCustomerMonthlyBillingSummary.visibleRowCount} visible of{" "}
+                      {regularCustomerMonthlyBillingSummary.totalRowCount} local mock row
+                      {regularCustomerMonthlyBillingSummary.totalRowCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Quick filter</p>
+                    <p
+                      className="mt-1 font-semibold text-slate-950"
+                      data-regular-customer-billing-visible-summary-filter="true"
+                    >
+                      {activeRegularCustomerBillingQuickFilterLabel}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                      Billing month
+                    </p>
+                    <p
+                      className="mt-1 font-semibold text-slate-950"
+                      data-regular-customer-billing-visible-summary-months="true"
+                    >
+                      {regularCustomerMonthlyBillingSummary.monthSummary}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Status count</p>
+                    <p
+                      className="mt-1 font-semibold text-slate-950"
+                      data-regular-customer-billing-visible-summary-statuses="true"
+                    >
+                      {regularCustomerMonthlyBillingSummary.statusSummary}
+                    </p>
+                  </div>
+                </div>
+                <p
+                  className="mt-2 text-xs font-semibold leading-5 text-slate-600"
+                  data-regular-customer-billing-visible-summary-boundary="true"
+                >
+                  Mock/local only. This strip summarizes currently visible mock monthly billing rows after the local
+                  quick filter. It does not create invoice numbers, generate invoices or PDFs, send payment requests,
+                  call network APIs, write browser storage, write Supabase, permanently change row data, add rows,
+                  remove rows, update payment status, or trigger messaging or notification behavior.
+                </p>
+              </div>
             </div>
 
             <div

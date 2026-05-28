@@ -565,11 +565,55 @@ async function runChromeTest() {
           rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
           summaryCount:
             document.querySelector("[data-regular-customer-monthly-billing-summary-count]")?.textContent.trim() || "",
+          visibleSummaryCount:
+            document.querySelector("[data-regular-customer-billing-visible-summary-count]")?.textContent.trim() || "",
+          visibleSummaryFilter:
+            document.querySelector("[data-regular-customer-billing-visible-summary-filter]")?.textContent.trim() || "",
+          visibleSummaryMonths:
+            document.querySelector("[data-regular-customer-billing-visible-summary-months]")?.textContent.trim() || "",
+          visibleSummaryStatuses:
+            document.querySelector("[data-regular-customer-billing-visible-summary-statuses]")?.textContent.trim() || "",
+          visibleSummaryText:
+            document.querySelector("[data-regular-customer-billing-visible-summary]")?.textContent || "",
         };
       })()`);
       assert.equal(emptyState.countText, "Showing 0 of 1 local mock row.", `${context}: expected zero visible rows`);
       assert.equal(emptyState.rowCount, 0, `${context}: expected no visible row cards while quick filter is empty`);
       assert.equal(emptyState.summaryCount, "0 visible of 1 local mock row", `${context}: expected summary to follow empty quick filter`);
+      assert.equal(
+        emptyState.visibleSummaryCount,
+        "0 visible of 1 local mock row",
+        `${context}: expected visible summary to follow empty quick filter`,
+      );
+      assert.equal(
+        emptyState.visibleSummaryFilter,
+        "No matching mock rows",
+        `${context}: expected visible summary to show the empty quick filter label`,
+      );
+      assert.equal(
+        emptyState.visibleSummaryMonths,
+        "No visible billing month",
+        `${context}: expected visible summary to handle no visible billing month`,
+      );
+      assert.equal(
+        emptyState.visibleSummaryStatuses,
+        "No visible status",
+        `${context}: expected visible summary to handle no visible status`,
+      );
+      for (const expectedText of [
+        "Mock visible billing summary",
+        "Mock/local only",
+        "currently visible mock monthly billing rows after the local quick filter",
+        "write browser storage",
+        "write Supabase",
+        "trigger messaging or notification behavior",
+      ]) {
+        assert.equal(
+          emptyState.visibleSummaryText.includes(expectedText),
+          true,
+          `${context}: expected visible summary text ${expectedText}`,
+        );
+      }
       assert.equal(
         emptyState.emptyText.includes("No mock billing rows match this quick filter."),
         true,
@@ -600,6 +644,10 @@ async function runChromeTest() {
               emptyVisible: Boolean(document.querySelector("[data-regular-customer-billing-quick-filter-empty]")),
               mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
               rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+              visibleSummaryCount:
+                document.querySelector("[data-regular-customer-billing-visible-summary-count]")?.textContent.trim() || "",
+              visibleSummaryFilter:
+                document.querySelector("[data-regular-customer-billing-visible-summary-filter]")?.textContent.trim() || "",
               value: document.querySelector("[data-regular-customer-billing-quick-filter]")?.value || "",
             };
 
@@ -611,6 +659,16 @@ async function runChromeTest() {
       assert.equal(resetState.value, "all", `${context}: expected reset to return quick filter to all mock rows`);
       assert.equal(resetState.countText, "Showing 1 of 1 local mock row.", `${context}: expected reset to show all local mock rows`);
       assert.equal(resetState.rowCount, 1, `${context}: expected reset not to add or remove rows`);
+      assert.equal(
+        resetState.visibleSummaryCount,
+        "1 visible of 1 local mock row",
+        `${context}: expected visible summary to return to all rows after reset`,
+      );
+      assert.equal(
+        resetState.visibleSummaryFilter,
+        "All mock rows",
+        `${context}: expected visible summary to return to all mock rows after reset`,
+      );
       assert.equal(resetState.emptyVisible, false, `${context}: expected empty state to hide after reset`);
       assert.deepEqual(resetState.mutationCalls, [], `${context}: expected reset not to make Supabase mutations`);
 
@@ -942,7 +1000,7 @@ async function runChromeTest() {
         return {
           mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
           rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
-          text: summary?.innerText || "",
+          text: summary?.textContent || "",
           visible: Boolean(summary),
         };
       })()`);
@@ -968,6 +1026,58 @@ async function runChromeTest() {
         summaryState.mutationCalls,
         [],
         `${viewport.label}: expected monthly billing summary not to make Supabase mutations`,
+      );
+
+      const visibleSummaryState = await evaluate(`(() => {
+        const summary = document.querySelector("[data-regular-customer-billing-visible-summary]");
+        const rect = summary?.getBoundingClientRect();
+
+        return {
+          height: Math.round(rect?.height || 0),
+          mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
+          rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+          text: summary?.textContent || "",
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+          width: Math.round(rect?.width || 0),
+        };
+      })()`);
+      assert.equal(visibleSummaryState.visible, true, `${viewport.label}: expected mock visible billing summary`);
+      assert.equal(
+        visibleSummaryState.rowCount,
+        1,
+        `${viewport.label}: expected one local billing row before visible summary check`,
+      );
+      assert.equal(
+        visibleSummaryState.width > 0 && visibleSummaryState.height > 0,
+        true,
+        `${viewport.label}: expected visible summary to keep stable mobile dimensions`,
+      );
+      for (const expectedText of [
+        "Mock visible billing summary",
+        "1 visible of 1 local mock row",
+        "Month: 2026-05",
+        "2026-05 (1)",
+        "unbilled / draft (1)",
+        "Mock/local only",
+        "write browser storage",
+        "write Supabase",
+        "trigger messaging or notification behavior",
+      ]) {
+        assert.equal(
+          visibleSummaryState.text.includes(expectedText),
+          true,
+          `${viewport.label}: expected mock visible billing summary text ${expectedText}`,
+        );
+      }
+      assert.deepEqual(
+        visibleSummaryState.mutationCalls,
+        [],
+        `${viewport.label}: expected mock visible billing summary not to make Supabase mutations`,
+      );
+      const visibleSummaryLayoutState = await layoutState();
+      assertNoHorizontalOverflow(
+        visibleSummaryLayoutState,
+        `${viewport.label} /customers mock visible billing summary`,
       );
 
       const opened = await evaluate(`(() => {

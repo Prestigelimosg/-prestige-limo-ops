@@ -85,6 +85,8 @@ const internalMonthlyBillingSummaryLabels = [
 const internalBillingQuickFilterLabels = [
   "Billing Quick Filter — Mock Only",
   "Mock quick filter only — no invoice, payment request, or statement was generated.",
+  "No mock billing rows match this quick filter.",
+  "Reset Billing Quick Filter — Mock Only",
 ];
 const telegramBlockedUrlPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
@@ -2071,9 +2073,14 @@ async function runChromeTest() {
           regularBillingQuickFilter: (() => {
             const section = document.querySelector("[data-regular-customer-billing-quick-filter-section]");
             const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+            const emptyState = document.querySelector("[data-regular-customer-billing-quick-filter-empty]");
+            const reset = document.querySelector("[data-regular-customer-billing-quick-filter-reset]");
             const rect = select?.getBoundingClientRect();
+            const resetRect = reset?.getBoundingClientRect();
 
             return {
+              emptyText: emptyState?.textContent.trim() || "",
+              emptyVisible: Boolean(emptyState),
               feedback:
                 document.querySelector("[data-regular-customer-billing-quick-filter-feedback]")?.textContent.trim() ||
                 "",
@@ -2081,6 +2088,8 @@ async function runChromeTest() {
                 label: option.textContent.trim(),
                 value: option.value,
               })),
+              resetText: reset?.textContent.trim() || "",
+              resetVisible: Boolean(resetRect && resetRect.width > 0 && resetRect.height >= 40),
               text: section?.innerText || "",
               value: select?.value || "",
               visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
@@ -2610,7 +2619,10 @@ async function runChromeTest() {
       );
       assert.deepEqual(
         dashboardState.regularBillingQuickFilter.options,
-        [{ label: "All mock rows", value: "all" }],
+        [
+          { label: "All mock rows", value: "all" },
+          { label: "No matching mock rows", value: "mock-no-match" },
+        ],
         "Expected billing quick filter to start with all mock rows before local rows exist",
       );
       assert.equal(
@@ -3524,6 +3536,20 @@ async function runChromeTest() {
         assert.equal(actualValue, value, `Expected billing quick filter to accept ${value}`);
       };
 
+      const clickRegularCustomerBillingQuickFilterReset = async () => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-regular-customer-billing-quick-filter-reset]");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clicked, true, "Expected billing quick filter reset button to be clickable");
+      };
+
       const readRegularCustomerMockSaveState = () =>
         evaluate(`(() => {
           const button = document.querySelector("[data-regular-customer-mock-save]");
@@ -3647,7 +3673,7 @@ async function runChromeTest() {
         })()`);
 
       const readRegularCustomerBookingListState = () =>
-        evaluate(`(() => {
+        evaluate(`(async () => {
           const list = document.querySelector("[data-regular-customer-booking-list-preview]");
 
           return {
@@ -3662,12 +3688,15 @@ async function runChromeTest() {
             })),
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
             listText: list?.innerText || "",
-            quickFilter: (() => {
+            quickFilter: await (async () => {
               const section = document.querySelector("[data-regular-customer-billing-quick-filter-section]");
               const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+              const emptyState = document.querySelector("[data-regular-customer-billing-quick-filter-empty]");
+              const reset = document.querySelector("[data-regular-customer-billing-quick-filter-reset]");
               const rect = select?.getBoundingClientRect();
+              const resetRect = reset?.getBoundingClientRect();
               const quickFilterStoragePattern = new RegExp(
-                "Billing Quick Filter|Month: 2026-05|Month: 2026-06|Status: unbilled / draft",
+                "Billing Quick Filter|No matching mock rows|No mock billing rows match|Reset Billing Quick Filter|Month: 2026-05|Month: 2026-06|Status: unbilled / draft",
                 "i",
               );
               const readStorage = (storage) => {
@@ -3682,8 +3711,24 @@ async function runChromeTest() {
                 }
                 return values;
               };
+              const indexedDbValues = await (async () => {
+                try {
+                  if (!globalThis.indexedDB?.databases) {
+                    return [];
+                  }
+
+                  const databases = await globalThis.indexedDB.databases();
+                  return databases.map((database) =>
+                    [database?.name || "", String(database?.version || "")].join(":"),
+                  );
+                } catch (error) {
+                  return ["indexeddb-read-error:" + (error?.message || String(error))];
+                }
+              })();
 
               return {
+                emptyText: emptyState?.textContent.trim() || "",
+                emptyVisible: Boolean(emptyState),
                 feedback:
                   document.querySelector("[data-regular-customer-billing-quick-filter-feedback]")?.textContent.trim() ||
                   "",
@@ -3691,6 +3736,8 @@ async function runChromeTest() {
                   label: option.textContent.trim(),
                   value: option.value,
                 })),
+                resetText: reset?.textContent.trim() || "",
+                resetVisible: Boolean(resetRect && resetRect.width > 0 && resetRect.height >= 40),
                 text: section?.innerText || "",
                 value: select?.value || "",
                 visible: Boolean(rect && rect.width > 0 && rect.height >= 40),
@@ -3698,6 +3745,7 @@ async function runChromeTest() {
                   ...readStorage(localStorage),
                   ...readStorage(sessionStorage),
                   ...(document.cookie ? document.cookie.split(";").map((value) => value.trim()) : []),
+                  ...indexedDbValues,
                 ].filter((value) => quickFilterStoragePattern.test(value)),
               };
             })(),
@@ -4654,6 +4702,7 @@ async function runChromeTest() {
         regularBookingListStateAfterFirstRow.quickFilter.options,
         [
           { label: "All mock rows", value: "all" },
+          { label: "No matching mock rows", value: "mock-no-match" },
           { label: "Month: 2026-05", value: "month:2026-05" },
           { label: "Status: unbilled / draft", value: "status:unbilled / draft" },
         ],
@@ -4918,6 +4967,7 @@ async function runChromeTest() {
         regularBookingTwoRowsState.quickFilter.options,
         [
           { label: "All mock rows", value: "all" },
+          { label: "No matching mock rows", value: "mock-no-match" },
           { label: "Month: 2026-05", value: "month:2026-05" },
           { label: "Month: 2026-06", value: "month:2026-06" },
           { label: "Status: unbilled / draft", value: "status:unbilled / draft" },
@@ -4970,6 +5020,135 @@ async function runChromeTest() {
         );
         assert.equal(row.invoiceNumber, "Not created", "Expected row action controls not to create invoice numbers");
       }
+
+      await setRegularCustomerBillingQuickFilter("mock-no-match");
+      const regularBookingQuickFilterEmptyState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.quickFilter.value === "mock-no-match" &&
+            candidateState.countText === "Showing 0 of 2 local mock rows."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer billing quick filter empty state",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.quickFilter.feedback.includes(
+          "Showing 0 of 2 local mock rows with No matching mock rows",
+        ),
+        true,
+        "Expected empty quick filter feedback to show zero visible mock rows",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.quickFilter.emptyVisible,
+        true,
+        "Expected billing quick filter empty state to be visible",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.quickFilter.emptyText.includes(
+          "No mock billing rows match this quick filter.",
+        ),
+        true,
+        "Expected billing quick filter empty copy to stay mock/local",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.quickFilter.resetVisible,
+        true,
+        "Expected billing quick filter reset control to be visible and touch-friendly",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.quickFilter.resetText,
+        "Reset Billing Quick Filter — Mock Only",
+        "Expected billing quick filter reset label",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.filterEmpty,
+        true,
+        "Expected monthly billing list to show its local empty state when quick filter has no matches",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.rows.length,
+        0,
+        "Expected quick filter empty state to hide visible mock rows only",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.summary.count,
+        "0 visible of 2 local mock rows",
+        "Expected monthly billing summary to follow the empty quick filter",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.summary.months,
+        "No visible billing month",
+        "Expected empty quick filter not to show stale billing months",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.summary.statuses,
+        "No visible status",
+        "Expected empty quick filter not to show stale billing statuses",
+      );
+      assert.equal(
+        /[A-Z]{2,}-\d{3,}/.test(regularBookingQuickFilterEmptyState.listText),
+        false,
+        "Expected empty quick filter not to create an invoice number",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterEmptyState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected empty quick filter not to call Supabase, payment, bank, invoice, PDF, notification, or calendar APIs",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterEmptyState.quickFilter.storageLeaks,
+        [],
+        "Expected empty quick filter not to persist quick-filter text in browser storage",
+      );
+
+      await clickRegularCustomerBillingQuickFilterReset();
+      const regularBookingQuickFilterResetButtonState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.quickFilter.value === "all" &&
+            candidateState.countText === "Showing 2 of 2 local mock rows."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "regular customer billing quick filter reset button",
+      );
+      assert.equal(
+        regularBookingQuickFilterResetButtonState.quickFilter.emptyVisible,
+        false,
+        "Expected billing quick filter empty state to hide after reset",
+      );
+      assert.equal(
+        regularBookingQuickFilterResetButtonState.quickFilter.resetVisible,
+        false,
+        "Expected billing quick filter reset control to hide after returning to all mock rows",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetButtonState.rows.map((row) => row.id),
+        regularBookingTwoRowsState.rows.map((row) => row.id),
+        "Expected reset to all mock rows not to add, remove, reorder, save, or permanently change row data",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetButtonState.rows.map((row) => row.invoiceNumber),
+        ["Not created", "Not created"],
+        "Expected reset to all mock rows not to create invoice numbers",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetButtonState.integrationCalls.filter((call) =>
+          blockedCustomerIntegrationPattern.test(call),
+        ),
+        [],
+        "Expected reset to all mock rows not to call Supabase, payment, bank, invoice, PDF, notification, or calendar APIs",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetButtonState.quickFilter.storageLeaks,
+        [],
+        "Expected reset to all mock rows not to persist quick-filter text in browser storage",
+      );
 
       await setRegularCustomerBillingQuickFilter("month:2026-05");
       const regularBookingQuickMonthFilterState = await waitForCondition(

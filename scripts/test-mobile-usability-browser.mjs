@@ -461,6 +461,163 @@ async function runChromeTest() {
       );
     };
 
+    const setRegularCustomerField = async (field, value, context) => {
+      const actualValue = await evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(`[data-regular-booking-field="${field}"]`)});
+
+        if (!input) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return input.value;
+      })()`);
+      assert.equal(actualValue, value, `${context}: expected regular customer ${field} field`);
+    };
+
+    const createLocalBillingRow = async (viewport, suffix) => {
+      const context = `${viewport.label} /customers quick-filter empty`;
+      const regularCustomerFields = {
+        booker: `Mobile Billing Booker ${suffix}`,
+        customerId: "ubs",
+        dropoffLocation: "Raffles Place",
+        passengerName: `Mobile Billing Passenger ${suffix}`,
+        pickupDate: "2026-05-28",
+        pickupLocation: "Changi Airport T3",
+        pickupTime: "1530hrs",
+        routeType: "Airport Arrival",
+        vehicleType: "AVF",
+      };
+
+      for (const [field, value] of Object.entries(regularCustomerFields)) {
+        await setRegularCustomerField(field, value, context);
+      }
+
+      const submitted = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-booking-submit]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(submitted, true, `${context}: expected regular customer mock submit`);
+      await waitForSelector(
+        evaluate,
+        "[data-regular-customer-booking-list-row]",
+        `${context} local billing row`,
+      );
+    };
+
+    const checkCustomerBillingQuickFilterEmptyAtViewport = async (viewport) => {
+      const context = `${viewport.label} /customers quick-filter empty`;
+      await waitForSelector(
+        evaluate,
+        "[data-regular-customer-booking-submit]",
+        `${context} regular customer submit`,
+      );
+      await createLocalBillingRow(viewport, viewport.width);
+
+      const selectedNoMatch = await evaluate(`(() => {
+        const select = document.querySelector("[data-regular-customer-billing-quick-filter]");
+
+        if (!select) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+        descriptor?.set?.call(select, "mock-no-match");
+        select.dispatchEvent(new Event("input", { bubbles: true }));
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return select.value;
+      })()`);
+      assert.equal(selectedNoMatch, "mock-no-match", `${context}: expected no-match quick filter option`);
+      await waitForBodyText(
+        evaluate,
+        "No mock billing rows match this quick filter.",
+        `${context} quick filter empty state`,
+      );
+
+      const emptyLayoutState = await layoutState();
+      assertNoHorizontalOverflow(emptyLayoutState, context);
+
+      const emptyState = await evaluate(`(() => {
+        const empty = document.querySelector("[data-regular-customer-billing-quick-filter-empty]");
+        const reset = document.querySelector("[data-regular-customer-billing-quick-filter-reset]");
+        const resetRect = reset?.getBoundingClientRect();
+
+        return {
+          countText:
+            document.querySelector("[data-regular-customer-booking-list-filter-count]")?.textContent.trim() || "",
+          emptyText: empty?.textContent.trim() || "",
+          mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
+          resetHeight: Math.round(resetRect?.height || 0),
+          resetText: reset?.textContent.trim() || "",
+          resetVisible: Boolean(resetRect && resetRect.width > 0 && resetRect.height >= 44),
+          resetWidth: Math.round(resetRect?.width || 0),
+          rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+          summaryCount:
+            document.querySelector("[data-regular-customer-monthly-billing-summary-count]")?.textContent.trim() || "",
+        };
+      })()`);
+      assert.equal(emptyState.countText, "Showing 0 of 1 local mock row.", `${context}: expected zero visible rows`);
+      assert.equal(emptyState.rowCount, 0, `${context}: expected no visible row cards while quick filter is empty`);
+      assert.equal(emptyState.summaryCount, "0 visible of 1 local mock row", `${context}: expected summary to follow empty quick filter`);
+      assert.equal(
+        emptyState.emptyText.includes("No mock billing rows match this quick filter."),
+        true,
+        `${context}: expected compact mock/local empty state copy`,
+      );
+      assert.equal(emptyState.resetText, "Reset Billing Quick Filter — Mock Only", `${context}: expected reset label`);
+      assert.equal(emptyState.resetVisible, true, `${context}: expected reset touch target`);
+      assert.equal(emptyState.resetWidth >= 64, true, `${context}: expected reset width`);
+      assert.equal(emptyState.resetHeight >= 44, true, `${context}: expected reset height`);
+      assert.deepEqual(emptyState.mutationCalls, [], `${context}: expected no Supabase mutations`);
+
+      const resetClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-regular-customer-billing-quick-filter-reset]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(resetClicked, true, `${context}: expected reset button to be clickable`);
+      const resetState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const state = {
+              countText: document.querySelector("[data-regular-customer-booking-list-filter-count]")?.textContent.trim() || "",
+              emptyVisible: Boolean(document.querySelector("[data-regular-customer-billing-quick-filter-empty]")),
+              mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
+              rowCount: document.querySelectorAll("[data-regular-customer-booking-list-row]").length,
+              value: document.querySelector("[data-regular-customer-billing-quick-filter]")?.value || "",
+            };
+
+            return state.value === "all" && state.countText === "Showing 1 of 1 local mock row." ? state : false;
+          })()`),
+        10000,
+        `${context} reset to all mock rows`,
+      );
+      assert.equal(resetState.value, "all", `${context}: expected reset to return quick filter to all mock rows`);
+      assert.equal(resetState.countText, "Showing 1 of 1 local mock row.", `${context}: expected reset to show all local mock rows`);
+      assert.equal(resetState.rowCount, 1, `${context}: expected reset not to add or remove rows`);
+      assert.equal(resetState.emptyVisible, false, `${context}: expected empty state to hide after reset`);
+      assert.deepEqual(resetState.mutationCalls, [], `${context}: expected reset not to make Supabase mutations`);
+
+      const resetLayoutState = await layoutState();
+      assertNoHorizontalOverflow(resetLayoutState, `${context} reset`);
+    };
+
     const checkMainAppViewport = async (viewport) => {
       await setViewport(viewport);
       await navigate(appUrl, "Prestige Limo Ops Dispatch");
@@ -715,6 +872,7 @@ async function runChromeTest() {
         quickFilterState.options,
         [
           { label: "All mock rows", value: "all" },
+          { label: "No matching mock rows", value: "mock-no-match" },
           { label: "Month: 2026-05", value: "month:2026-05" },
           { label: "Status: unbilled / draft", value: "status:unbilled / draft" },
         ],
@@ -901,6 +1059,9 @@ async function runChromeTest() {
       await checkMainAppViewport(viewport);
       for (const route of responsiveRoutes) {
         await checkResponsiveRouteViewport(viewport, route);
+        if (route.path === "/customers") {
+          await checkCustomerBillingQuickFilterEmptyAtViewport(viewport);
+        }
       }
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
         "Acknowledge Job",

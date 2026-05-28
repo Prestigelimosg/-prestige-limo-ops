@@ -45,6 +45,7 @@ const regularCustomerBillingStatusFilterOptions = [
 ];
 
 const regularCustomerBillingQuickFilterAllValue = "all";
+const regularCustomerBillingQuickFilterNoMatchValue = "mock-no-match";
 
 const initialRegularCustomerBookingForm = {
   billingMonth: "2026-05",
@@ -786,6 +787,7 @@ export default function MockCustomerDashboardPage() {
 
     return [
       { label: "All mock rows", value: regularCustomerBillingQuickFilterAllValue },
+      { label: "No matching mock rows", value: regularCustomerBillingQuickFilterNoMatchValue },
       ...billingMonths.map((billingMonth) => ({
         label: `Month: ${billingMonth}`,
         value: `month:${billingMonth}`,
@@ -820,10 +822,12 @@ export default function MockCustomerDashboardPage() {
           item.billingStatus === regularCustomerBookingListFilters.billingStatus;
         const quickFilterMatches =
           activeRegularCustomerBillingQuickFilter === regularCustomerBillingQuickFilterAllValue ||
-          (activeRegularCustomerBillingQuickFilter.startsWith("month:") &&
-            item.billingMonth.trim() === activeRegularCustomerBillingQuickFilter.replace(/^month:/, "")) ||
-          (activeRegularCustomerBillingQuickFilter.startsWith("status:") &&
-            item.billingStatus.trim() === activeRegularCustomerBillingQuickFilter.replace(/^status:/, ""));
+          (activeRegularCustomerBillingQuickFilter !== regularCustomerBillingQuickFilterNoMatchValue &&
+            ((activeRegularCustomerBillingQuickFilter.startsWith("month:") &&
+              item.billingMonth.trim() === activeRegularCustomerBillingQuickFilter.replace(/^month:/, "")) ||
+              (activeRegularCustomerBillingQuickFilter.startsWith("status:") &&
+                item.billingStatus.trim() ===
+                  activeRegularCustomerBillingQuickFilter.replace(/^status:/, ""))));
 
         return customerMatches && billingMonthMatches && billingStatusMatches && quickFilterMatches;
       }),
@@ -867,6 +871,10 @@ export default function MockCustomerDashboardPage() {
       visibleRowCount: filteredRegularCustomerBookingListItems.length,
     };
   }, [filteredRegularCustomerBookingListItems, regularCustomerBookingListItems.length]);
+  const regularCustomerBillingQuickFilterHasNoVisibleRows =
+    regularCustomerBookingListItems.length > 0 &&
+    activeRegularCustomerBillingQuickFilter !== regularCustomerBillingQuickFilterAllValue &&
+    filteredRegularCustomerBookingListItems.length === 0;
 
   function updateRegularCustomerBookingField(field: keyof RegularCustomerBookingForm, value: string) {
     setRegularCustomerBookingForm((currentForm) => ({
@@ -943,6 +951,10 @@ export default function MockCustomerDashboardPage() {
         "Local filters cleared. The monthly billing list was not changed.",
       );
     }
+  }
+
+  function resetRegularCustomerBillingQuickFilter() {
+    setRegularCustomerBillingQuickFilter(regularCustomerBillingQuickFilterAllValue);
   }
 
   function createRegularCustomerDraftInvoicePreview() {
@@ -2177,6 +2189,22 @@ export default function MockCustomerDashboardPage() {
                     write occurs, and no payment, PDF, notification, or network API is called.
                   </p>
                 </div>
+                {regularCustomerBillingQuickFilterHasNoVisibleRows ? (
+                  <div
+                    className="mt-3 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+                    data-regular-customer-billing-quick-filter-empty="true"
+                  >
+                    <p className="font-semibold">No mock billing rows match this quick filter.</p>
+                    <button
+                      className="min-h-11 w-full rounded-md border border-amber-900 bg-white px-4 py-2 text-sm font-bold text-amber-950 transition hover:border-amber-700 sm:w-auto"
+                      data-regular-customer-billing-quick-filter-reset="true"
+                      onClick={resetRegularCustomerBillingQuickFilter}
+                      type="button"
+                    >
+                      Reset Billing Quick Filter — Mock Only
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
 

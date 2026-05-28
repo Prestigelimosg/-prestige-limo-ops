@@ -723,3 +723,127 @@ Required command protection for future work:
 Review this workflow plan first. Do not implement app behavior yet.
 
 The safest next task after owner review is a small protected implementation design for the internal regular customer booking form, or a mock-only form prototype if the owner explicitly approves app behavior work. Calendar sync, real invoice generation, payment API, bank API, notifications, WhatsApp/email/SMS sending, Stripe, and production payment behavior should stay locked until separately approved.
+
+## 15. Stage 4A-155 Mock Billing To Real Billing Transition Checklist
+
+This section is documentation only. It does not approve app behavior, parser behavior, Supabase behavior, migrations, invoice generation, PDF generation, payment links, Stripe, PayNow, bank API behavior, notification sending, customer auth, or storage persistence.
+
+### Current Mock/Local Monthly Billing UI Pieces
+
+The internal `/customers` regular customer monthly billing area currently includes these mock/local pieces:
+
+- Billing quick filter: filters currently visible local mock monthly billing rows by all rows, no-match test state, billing month, or billing status.
+- Empty state/reset: shows compact mock/local empty copy when the quick filter leaves zero visible rows, and resets the local quick filter back to all mock rows.
+- Row detail view: opens one compact inline mock/local detail panel for a selected visible mock billing row, using row data already available on the page.
+- Visible summary: summarizes currently visible mock monthly billing rows after the local quick filter, including visible count, active quick filter, billing month grouping, and status grouping.
+
+### Allowed Mock Behavior Now
+
+These pieces may only:
+
+- Read local mock row data already present on `/customers`.
+- Change page-local visibility, selection, filter state, and mock-only feedback.
+- Show mock/local labels, counts, row details, grouping, and reset affordances.
+- Close stale local detail panels when filters change.
+- Support browser tests for empty state, reset, detail view, visible summary, route isolation, storage safety, and mobile/no-horizontal-overflow.
+
+### Not Allowed Now
+
+These pieces must not:
+
+- Save monthly billing rows.
+- Link real customer billing records.
+- Create or reserve invoice numbers.
+- Generate invoices, statements, PDFs, payment links, or payment requests.
+- Call Stripe, PayNow, bank APIs, payment APIs, maps, calendar, notification, WhatsApp, email, SMS, Telegram, or other network APIs.
+- Write to Supabase, localStorage, sessionStorage, IndexedDB, cookies, files, or browser storage.
+- Permanently change, add, remove, reorder, or mark row data.
+- Change customer payment status.
+- Expose internal mock controls on `/book`, `/my-bookings`, public driver token pages, or driver demo pages.
+
+### Future Real Billing Readiness Gates
+
+Before any future real billing behavior is implemented, all of these must be true:
+
+- A docs/readiness review confirms which stage is approved and which behaviors remain locked.
+- The data model is reviewed against existing booking/customer/payment planning docs.
+- Tests are designed before implementation for success, failure, duplicate action, route isolation, storage safety, mobile layout, and no unintended API calls.
+- Real billing work is split into small phases. A booking save/linking phase must not also issue invoices, generate PDFs, send payment links, or change payment status.
+- Parser reliability remains protected. Unrelated parser changes are forbidden, and parser tests must continue to pass.
+- Protected mock/customer/payment/browser boundaries remain in place and are not weakened.
+- `test:safe` membership and package scripts remain unchanged unless a separate explicit test-safety task approves changes.
+
+### Supabase Save/Linking Gates
+
+Before any real Supabase save or customer billing linking:
+
+- Existing schema, RLS, route boundaries, and customer/payment docs must be reviewed.
+- A data mapping must define booking id, customer id, billing month, billing status, payment method, audit fields, and failure behavior.
+- Any Supabase migration must be separately proposed, reviewed, and explicitly approved before creation or application.
+- No Supabase db push, db reset, or migration application may run during planning or mock UI work.
+- Tests must prove a real save creates exactly the expected record, links only to the selected customer, blocks duplicate saves, handles errors clearly, and does not create invoice numbers, PDFs, payment links, notifications, or payment status changes.
+
+### Invoice Numbering Gates
+
+Before any real invoice number is created:
+
+- Customer invoice prefixes and running numbers must be planned, reviewed, and tested.
+- Uniqueness, immutability, void/cancel handling, sequence gaps, retry behavior, and concurrent issuance must be covered.
+- Booking save/linking must stay separate from invoice issuance.
+- Tests must prove invoice numbers are not created by mock UI, filters, detail panels, visible summaries, draft previews, saves, or resets unless a future approved invoice-issuance action is intentionally run.
+
+### PDF/Invoice Generation Gates
+
+Before any invoice, statement, or PDF generation:
+
+- The owner must approve invoice/statement format, numbering rules, included row rules, tax/GST treatment if any, adjustment rules, and staff review steps.
+- Draft preview and issued invoice must remain separate states.
+- Generated output must be tested for selected customer only, selected billing period only, correct rows, no unrelated customer leakage, and no private driver payout or CRM leakage.
+- Browser tests must prove generation is not triggered by quick filters, empty reset, row detail view, visible summary, or draft preview unless the future approved action explicitly does so.
+
+### Stripe/Payment Link Gates
+
+Before Stripe or payment link behavior:
+
+- Stripe test-mode planning must be approved separately.
+- Payment status mapping, webhook security, idempotency, failure states, secret handling, and production-disabled defaults must be reviewed.
+- Payment links must not be created by monthly billing filters, summaries, row details, draft previews, or booking save/linking.
+- Tests must prove no payment provider, payment link, webhook, or production payment behavior runs unless the approved payment-link action is explicitly used.
+
+### Manual Bank Transfer Rule
+
+Bank wire/transfer remains manual record only. Staff may later record a transfer reference after confirming funds outside the app, but the app must not call a bank API, scrape bank data, auto-reconcile transactions, or mark a customer paid from mock billing UI.
+
+### Customer Payment Status Rule
+
+Customer payment status must not be changed by the mock quick filter, empty state/reset, row detail view, visible summary, or draft preview. Any future payment-status change must be explicit, audited, customer-scoped, tested, and separately approved.
+
+### Not Implemented Yet
+
+- Real monthly billing save.
+- Real customer billing linking.
+- Real invoice numbers.
+- Real invoice/PDF generation.
+- Payment links.
+- Stripe integration.
+- PayNow API.
+- Bank API.
+- Email, WhatsApp, or SMS notifications.
+- Telegram notifications.
+- Customer auth or portal billing permissions.
+- Supabase billing schema or migrations.
+
+### Future Implementation Order
+
+- [ ] Complete docs/readiness review and confirm the exact approved stage.
+- [ ] Review data model, RLS, customer folder boundaries, invoice prefix/running-number rules, and audit expectations.
+- [ ] Propose Supabase migration only after explicit approval; do not apply migrations during planning.
+- [ ] Define the mock-to-real save boundary so booking save/linking cannot issue invoices, generate PDFs, send payment links, or change payment status.
+- [ ] Add or update tests before implementation.
+- [ ] Implement the smallest approved real behavior.
+- [ ] Run parser, lint, build, browser checks, and mobile/no-horizontal-overflow checks before and after.
+- [ ] Confirm protected routes do not expose internal billing controls.
+- [ ] Commit only scoped files.
+- [ ] Run post-commit `npm run test:safe`.
+
+This checklist does not claim the app is production-ready. It documents the locked boundary between the current mock/local `/customers` monthly billing UI and any future real billing implementation.

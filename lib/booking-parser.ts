@@ -199,8 +199,10 @@ const countryCodeSecondLevelDomains = new Set([
 const ignoredFlightCodes = new Set(["AT", "BY", "IF", "IN", "IS", "NO", "OF", "ON", "OR", "TO"]);
 const flightCodePattern = /\b([A-Z]{2})\s?(\d{1,4})\b/gi;
 const whatsAppSenderLinePattern = /^\[\d[^\]]*\/[^\]]+\]\s+([^:]+):\s*(.+)$/;
+const phoneNumberPatternSource = String.raw`\+?\d[\d\s-]{5,}\d`;
 const contactShorthandPatternSource =
-  String.raw`(?:tel\.?|telephone|hp|mobile|mob|phone|contact(?:\s+(?:no\.?|number))?)`;
+  String.raw`(?:tel\.?|telephone|hp|mobile|mob|phone|whats\s*app|whatsapp|contact(?:\s+(?:no\.?|number))?)`;
+const contactSeparatorPatternSource = String.raw`\s*(?:[/,;()-]\s*)?`;
 
 function clean(value: string | null | undefined) {
   return (value ?? "").trim();
@@ -1200,7 +1202,14 @@ function detectNarratedBooker(text: string) {
 
 function detectBookerShorthand(text: string) {
   const booker = cleanDetectedName(firstMatch(text, [
-    /(?:^|\n)\s*booked\s+by\s+([A-Za-z][A-Za-z.' -]{1,40}?)(?=\s+from\b|\s*(?:\n|$))/i,
+    new RegExp(
+      String.raw`(?:^|\n)\s*booker\s+([A-Za-z][A-Za-z.' -]{1,40}?)(?=${contactSeparatorPatternSource}\b${contactShorthandPatternSource}\b|\s+from\b|\s*(?:\n|$))`,
+      "i",
+    ),
+    new RegExp(
+      String.raw`(?:^|\n)\s*booked\s+by\s+([A-Za-z][A-Za-z.' -]{1,40}?)(?=${contactSeparatorPatternSource}\b${contactShorthandPatternSource}\b|\s+from\b|\s*(?:\n|$))`,
+      "i",
+    ),
   ]));
 
   if (/^[A-Z0-9&]{2,}$/.test(booker)) {
@@ -1647,7 +1656,13 @@ function detectPax(text: string) {
 
 function cleanDetectedName(value: string) {
   return clean(value)
-    .replace(new RegExp(String.raw`\s+\b${contactShorthandPatternSource}\b\s*[:=-]?\s*\+?\d[\d\s-]{5,}\d.*$`, "i"), "")
+    .replace(
+      new RegExp(
+        String.raw`${contactSeparatorPatternSource}\b${contactShorthandPatternSource}\b\s*[:=-]?\s*${phoneNumberPatternSource}.*$`,
+        "i",
+      ),
+      "",
+    )
     .replace(/\s+(?:S\$|\$)\d+(?:\.\d{1,2})?(?:\s*\+\s*(?:S\$|\$)\d+(?:\.\d{1,2})?)*\b.*$/i, "")
     .replace(/\s+\b(?:tomorrow|today|from|to|at|pickup|pick\s*up|arriving|landing|flight|transfer)\b.*$/i, "")
     .replace(/^(?:to|from|at|back|him|her|them)\s+/i, "")
@@ -1732,7 +1747,7 @@ function detectTripOrganizerDetails(text: string) {
   const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
   const booker = cleanDetectedName(match?.[1] ?? "");
   const contactText = match?.[2] || match?.[0] || "";
-  const contact = firstMatch(contactText, [/(\+?\d[\d\s-]{6,}\d)/]);
+  const contact = firstMatch(contactText, [new RegExp(String.raw`(${phoneNumberPatternSource})`)]);
 
   return {
     booker,
@@ -1762,8 +1777,8 @@ function detectUnlabeledPlusContact(text: string) {
 
 function extractPhoneContact(value: string) {
   return firstMatch(value, [
-    new RegExp(String.raw`\b${contactShorthandPatternSource}\b\s*[:=-]?\s*(\+?\d[\d\s-]{5,}\d)\b`, "i"),
-    /(\+?\d[\d\s-]{5,}\d)/,
+    new RegExp(String.raw`\b${contactShorthandPatternSource}\b\s*[:=-]?\s*(${phoneNumberPatternSource})\b`, "i"),
+    new RegExp(String.raw`(${phoneNumberPatternSource})`),
   ]);
 }
 
@@ -1802,6 +1817,17 @@ function detectBookerContactValue(text: string) {
     return normalizeContactValue(labeledContact);
   }
 
+  const inlineBookerContact = firstMatch(text, [
+    new RegExp(
+      String.raw`(?:^|\n)\s*(?:booker|booked\s+by|requestor|requested\s+by)\s+[A-Za-z][A-Za-z.' -]{1,40}?${contactSeparatorPatternSource}\b${contactShorthandPatternSource}\b\s*[:=-]?\s*(${phoneNumberPatternSource})\b`,
+      "i",
+    ),
+  ]);
+
+  if (inlineBookerContact) {
+    return inlineBookerContact;
+  }
+
   const labeledBooker = lineValue(text, ["booker", "booked by", "requestor", "requested by"]);
 
   return extractPhoneContact(labeledBooker) ? normalizeContactValue(labeledBooker) : "";
@@ -1834,6 +1860,10 @@ function detectName(text: string, flight: string) {
   const inlineName = firstMatch(text, [
     /\bname\s+is\s+([A-Za-z][A-Za-z.' -]{1,60})/i,
     /\b(?:name|passenger|guest|pax name|principal|traveller|traveler)\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60})/i,
+    new RegExp(
+      String.raw`\b(?:pax|passenger|guest)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=${contactSeparatorPatternSource}\b${contactShorthandPatternSource}\b)`,
+      "i",
+    ),
     /\b(?:pax|passenger|guest)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|,|\.|$)/i,
     /\b(?:for|under)\s+([A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+\d|\s+on\b|\s+at\b|\s+from\b|\s+to\b|\s+date\b|\s+time\b|\s+flight\b|\s+pickup\b|\s+drop\b|\s+airport\b|,|\.|$)/i,
     /^((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60}?)(?=\s+from\b)/i,

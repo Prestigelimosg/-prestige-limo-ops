@@ -2159,6 +2159,233 @@ Vehicle: AVF`) ?? {};
   assert.equal(parsedPhoneContactLabelVariant.name ?? '', '', `${label} should not create passenger name`);
 }
 
+const internationalPhonePunctuationRegressionCases = [
+  {
+    label: 'passenger with +65 spaced phone',
+    input: `Date: today
+Time: 0615
+From: Marina Bay Sands
+To: Changi Airport T3
+Pax Mr Tan / HP +65 9123 4567
+Veh: AVF`,
+    expected: {
+      company: '',
+      date: '2026-05-13',
+      time: '0615hrs',
+      pickup: 'Marina Bay Sands',
+      dropoff: 'Changi Airport T3',
+      vehicle: 'AVF',
+      name: 'Mr Tan',
+      booker: '',
+      bookerContact: '',
+    },
+    blocked: {
+      company: ['+65 9123 4567', '9123 4567', 'Mr Tan / HP +65 9123 4567'],
+      pickup: ['+65 9123 4567', '9123 4567', 'Mr Tan / HP +65 9123 4567'],
+      dropoff: ['+65 9123 4567', '9123 4567', 'Mr Tan / HP +65 9123 4567'],
+      vehicle: ['+65 9123 4567', '9123 4567', 'Mr Tan / HP +65 9123 4567'],
+      booker: ['+65 9123 4567', '9123 4567', 'Mr Tan'],
+      name: ['+65 9123 4567', '9123 4567', 'Mr Tan / HP +65 9123 4567'],
+    },
+  },
+  {
+    label: 'passenger with dashed hp',
+    input: `Date: tomorrow
+Time: 0730hrs
+PU: Changi Airport T2
+DO: Raffles Hotel
+Vehicle: E class
+Pax: Ms Lim HP: 9123-4567`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '0730hrs',
+      pickup: 'Changi Airport T2',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'E-Class',
+      name: 'Ms Lim',
+      booker: '',
+      bookerContact: '',
+    },
+    blocked: {
+      company: ['9123-4567', 'Ms Lim HP: 9123-4567'],
+      pickup: ['9123-4567', 'Ms Lim HP: 9123-4567'],
+      dropoff: ['9123-4567', 'Ms Lim HP: 9123-4567'],
+      vehicle: ['9123-4567', 'Ms Lim HP: 9123-4567'],
+      booker: ['9123-4567', 'Ms Lim'],
+      name: ['9123-4567', 'Ms Lim HP: 9123-4567'],
+    },
+  },
+  {
+    label: 'booker with +65 mobile punctuation',
+    input: `Date: today
+Time: 7:30 PM
+Booker Nicole / Mobile +65 9876 5432
+PU: Office
+DO: Home
+Vehicle: E-Class / AVF`,
+    expected: {
+      company: '',
+      date: '2026-05-13',
+      time: '1930hrs',
+      pickup: 'Office',
+      dropoff: 'Home',
+      vehicle: 'E-Class / AVF',
+      booker: 'Nicole',
+      bookerContact: '+65 9876 5432',
+      name: '',
+    },
+    blocked: {
+      company: ['Nicole', '+65 9876 5432', '9876 5432'],
+      pickup: ['Nicole', '+65 9876 5432', '9876 5432'],
+      dropoff: ['Nicole', '+65 9876 5432', '9876 5432'],
+      vehicle: ['Nicole', '+65 9876 5432', '9876 5432'],
+      name: ['Nicole', '+65 9876 5432', '9876 5432'],
+    },
+  },
+  {
+    label: 'explicit company plus contact number punctuation',
+    input: `Company: BNY
+Contact No.: +65 6123 4567
+Booker: Nicole
+Date: tmr
+Time: 6.15am
+Frm: Office
+Send to: Changi Airport T1
+Veh: VVV`,
+    expected: {
+      company: 'BNY',
+      booker: 'Nicole',
+      bookerContact: '+65 6123 4567',
+      date: '2026-05-14',
+      time: '0615hrs',
+      pickup: 'Office',
+      dropoff: 'Changi Airport T1',
+      vehicle: 'VVV',
+      name: '',
+    },
+    blocked: {
+      company: ['+65 6123 4567', '6123 4567', 'Nicole'],
+      pickup: ['+65 6123 4567', '6123 4567', 'Nicole'],
+      dropoff: ['+65 6123 4567', '6123 4567', 'Nicole'],
+      vehicle: ['+65 6123 4567', '6123 4567', 'Nicole', 'BNY'],
+      name: ['Nicole', '+65 6123 4567'],
+    },
+  },
+  {
+    label: 'email domain company with tel punctuation',
+    input: `Booker: yasuko
+Email: yasuko.kunisawa@ubs.com
+Tel: +65 9123-4567
+Date: today
+Time: 0615
+From: Fullerton Hotel
+To: Gardens by the Bay
+Vehicle: Combi`,
+    expected: {
+      company: 'UBS',
+      booker: 'yasuko',
+      bookerContact: '+65 9123-4567',
+      bookerEmail: 'yasuko.kunisawa@ubs.com',
+      date: '2026-05-13',
+      time: '0615hrs',
+      pickup: 'Fullerton Hotel',
+      dropoff: 'Gardens by the Bay',
+      vehicle: 'Combi',
+      name: '',
+    },
+    blocked: {
+      company: ['+65 9123-4567', '9123-4567', 'yasuko.kunisawa@ubs.com'],
+      pickup: ['+65 9123-4567', '9123-4567', 'yasuko', 'yasuko.kunisawa@ubs.com'],
+      dropoff: ['+65 9123-4567', '9123-4567', 'yasuko', 'yasuko.kunisawa@ubs.com'],
+      vehicle: ['+65 9123-4567', '9123-4567', 'yasuko', 'UBS'],
+      name: ['yasuko', '+65 9123-4567', '9123-4567'],
+    },
+  },
+  {
+    label: 'public email plus phone punctuation guard',
+    input: `Booker: Alex
+Email: alex@gmail.com
+Phone: +65 9876 5432
+Date: tomorrow
+Time: 0730hrs
+PU: Changi Airport T4
+DO: Raffles Hotel
+Vehicle: AVF`,
+    expected: {
+      company: '',
+      booker: 'Alex',
+      bookerContact: '+65 9876 5432',
+      bookerEmail: 'alex@gmail.com',
+      date: '2026-05-14',
+      time: '0730hrs',
+      pickup: 'Changi Airport T4',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'AVF',
+      name: '',
+    },
+    blocked: {
+      company: ['GMAIL', 'gmail', 'Alex', 'alex@gmail.com', '+65 9876 5432', '9876 5432'],
+      pickup: ['Alex', 'alex@gmail.com', '+65 9876 5432', '9876 5432'],
+      dropoff: ['Alex', 'alex@gmail.com', '+65 9876 5432', '9876 5432'],
+      vehicle: ['Alex', 'alex@gmail.com', '+65 9876 5432', '9876 5432'],
+      name: ['Alex', '+65 9876 5432', '9876 5432'],
+    },
+  },
+];
+
+for (const { label, input, expected, blocked = {} } of internationalPhonePunctuationRegressionCases) {
+  const parsedInternationalPhonePunctuation = parseBookingForTest(input) ?? {};
+
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    assert.equal(
+      parsedInternationalPhonePunctuation[field] ?? '',
+      expectedValue,
+      `${label} should parse ${field} as ${expectedValue}`,
+    );
+  }
+
+  for (const [field, blockedValues] of Object.entries(blocked)) {
+    for (const blockedValue of blockedValues) {
+      assert.notEqual(
+        parsedInternationalPhonePunctuation[field] ?? '',
+        blockedValue,
+        `${label} should not pollute ${field} with ${blockedValue}`,
+      );
+    }
+  }
+}
+
+const internationalPhonePunctuationLabelVariantCases = [
+  ['HP dashed label', 'HP: 9123-4567', '9123-4567'],
+  ['Mobile +65 spaced label', 'Mobile: +65 9123 4567', '+65 9123 4567'],
+  ['Mob +65 dashed label', 'Mob: +65 9123-4567', '+65 9123-4567'],
+  ['Phone +65 spaced label', 'Phone: +65 9876 5432', '+65 9876 5432'],
+  ['WhatsApp +65 spaced label', 'WhatsApp: +65 9876 5432', '+65 9876 5432'],
+];
+
+for (const [label, contactLine, expectedContact] of internationalPhonePunctuationLabelVariantCases) {
+  const parsedInternationalPhonePunctuationLabelVariant = parseBookingForTest(`Date: today
+Time: 0615
+From: Marina Bay Sands
+To: Changi Airport T3
+Booker: Nicole
+${contactLine}
+Vehicle: AVF`) ?? {};
+
+  assert.equal(parsedInternationalPhonePunctuationLabelVariant.booker, 'Nicole', `${label} should preserve booker`);
+  assert.equal(
+    parsedInternationalPhonePunctuationLabelVariant.bookerContact,
+    expectedContact,
+    `${label} should parse punctuated contact number`,
+  );
+  assert.equal(parsedInternationalPhonePunctuationLabelVariant.company ?? '', '', `${label} should not create company`);
+  assert.equal(parsedInternationalPhonePunctuationLabelVariant.pickup, 'Marina Bay Sands', `${label} should preserve pickup`);
+  assert.equal(parsedInternationalPhonePunctuationLabelVariant.dropoff, 'Changi Airport T3', `${label} should preserve dropoff`);
+  assert.equal(parsedInternationalPhonePunctuationLabelVariant.vehicle, 'AVF', `${label} should preserve vehicle`);
+  assert.equal(parsedInternationalPhonePunctuationLabelVariant.name ?? '', '', `${label} should not create passenger name`);
+}
+
 const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
 Order total amount	S$110.00
 Comment	For Driver's Info – Passenger Name and Number: Sarah Lim, +65 81234567

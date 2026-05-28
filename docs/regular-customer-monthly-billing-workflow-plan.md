@@ -847,3 +847,107 @@ Customer payment status must not be changed by the mock quick filter, empty stat
 - [ ] Run post-commit `npm run test:safe`.
 
 This checklist does not claim the app is production-ready. It documents the locked boundary between the current mock/local `/customers` monthly billing UI and any future real billing implementation.
+
+## 16. Stage 4A-157 Future Billing Data Model Review — Docs Only
+
+This section is planning documentation only. It does not create a schema, migration, Supabase table, route, API, invoice, PDF, payment link, payment provider integration, bank integration, notification behavior, parser behavior, app behavior, or storage persistence.
+
+The goal is to define safe future data boundaries before any real monthly billing save, customer billing linking, invoice numbering, payment-status change, or Supabase work is approved.
+
+### Proposed Future Entities
+
+#### Regular Customers
+
+- Purpose: represent the internal customer, company, hotel, or account that owns bookings, contacts, billing profiles, invoice history, and payment records.
+- Key fields to consider: customer id, account display name, company/legal name, account type, active/inactive status, primary contact id, internal owner, created/updated timestamps, and safe internal notes.
+- Immutable after invoice creation: customer id and the customer identity attached to an issued invoice should not be rewritten. Legal/display name corrections after issuance should preserve the issued invoice snapshot.
+- Requires audit history: merges, deactivation, customer identity corrections, ownership changes, and any change that affects billing scope.
+- Must not be controlled by mock UI: mock `/customers` billing filters, detail panels, summaries, and resets must not create, rename, merge, delete, activate, deactivate, or relink real customers.
+
+#### Customer Billing Profiles
+
+- Purpose: store customer-specific billing settings separate from the customer identity, so operational contacts can change without accidentally changing invoice rules.
+- Key fields to consider: customer id, billing contact, billing email/phone, default payment terms, billing currency, manual bank-transfer instructions reference, invoice prefix, tax/GST treatment if later approved, billing cycle preference, and status.
+- Immutable after invoice creation: invoice prefix and billing rules used on an issued invoice should be preserved as invoice snapshots. Changing future billing settings must not rewrite issued documents.
+- Requires audit history: invoice prefix changes, payment terms changes, billing contact changes, tax/GST setting changes, and billing profile activation/deactivation.
+- Must not be controlled by mock UI: mock monthly billing UI must not edit real billing profiles, change invoice prefixes, alter payment terms, or set a customer as ready for real invoicing.
+
+#### Customer Monthly Billing Periods
+
+- Purpose: represent one customer's monthly billing review window before any real invoice or statement is issued.
+- Key fields to consider: customer id, billing month, period start, period end, review status, draft subtotal, adjustments, currency, reviewed by, reviewed at, locked at, issued invoice id if later approved, and notes.
+- Immutable after invoice creation: customer id, period boundaries, included line-item set, final totals, and issued invoice link should not be rewritten after issuance. Corrections should use amendment, credit, void, or replacement workflows after approval.
+- Requires audit history: period creation, review status changes, lock/unlock decisions, included/excluded line changes, amount adjustments, and issuance linkage.
+- Must not be controlled by mock UI: mock quick filters, empty states, detail panels, and visible summaries must not create billing periods, lock periods, mark periods reviewed, issue periods, or alter period totals.
+
+#### Monthly Billing Line Items
+
+- Purpose: represent each booking, charge, adjustment, cancellation fee, no-show fee, or approved credit that may appear inside a monthly billing period.
+- Key fields to consider: customer id, booking id, billing period id, service date/time, passenger/account label, pickup/drop-off summary, vehicle/service type, description, quantity, unit amount, line total, inclusion status, source type, adjustment reason, and staff note.
+- Immutable after invoice creation: booking link, description snapshot, service date, billed amount, inclusion status, and issued invoice relationship should remain fixed for issued invoices.
+- Requires audit history: inclusion/exclusion, amount edits, cancellation/no-show fee treatment, manual adjustments, credit lines, and corrections after review.
+- Must not be controlled by mock UI: mock UI must not add, remove, reorder, persist, or permanently change line items, and must not change customer payment status from line review.
+
+#### Invoice Number Sequences And Prefixes
+
+- Purpose: protect invoice number uniqueness, customer prefix rules, running numbers, and issued-number immutability before any real invoice creation.
+- Key fields to consider: customer id or global scope, prefix, next sequence number, last issued sequence, sequence status, effective date, created by, updated by, lock/version field, and issued-number format.
+- Immutable after invoice creation: issued invoice number, prefix, sequence number, customer relationship, and issued timestamp must not be reused or rewritten.
+- Requires audit history: prefix creation, prefix change, sequence reservation, sequence issuance, void/cancel treatment, retry handling, and any manual sequence correction.
+- Must not be controlled by mock UI: mock billing UI must not reserve, preview-as-issued, increment, reset, or create real invoice numbers. Invoice numbers must not exist until prefix/running-number rules are approved and tested.
+
+#### Payment Records And Manual Bank Transfer Records
+
+- Purpose: record real customer payment events only after staff confirm payment outside the app, including manual bank transfer references when approved.
+- Key fields to consider: customer id, invoice id or billing period id, payment method, payment status, amount, currency, received date, manual reference, staff-confirmed flag, recorded by, notes, and reversal/waiver fields if later approved.
+- Immutable after invoice creation: payment record id, original amount, received date, method, and reference should not be silently overwritten. Corrections should use audited adjustment or reversal events.
+- Requires audit history: payment requested, invoice sent, partial payment, paid, waived, refunded, manual reference correction, reversal, and follow-up state changes.
+- Must not be controlled by mock UI: mock UI must not mark real rows paid, partially paid, unpaid, overdue, waived, refunded, or payment requested. Bank wire/transfer remains manual-record only; no bank API, scraping, auto-reconciliation, or automatic paid status.
+
+#### Audit Events
+
+- Purpose: provide an immutable operational trail for billing-sensitive changes across customers, billing profiles, monthly periods, line items, invoice sequences, invoices, and payment records.
+- Key fields to consider: event id, entity type, entity id, customer id, actor id, event type, before/after summary, reason, created at, request/source id, and related invoice/payment/billing-period ids.
+- Immutable after invoice creation: audit events should be append-only. Existing audit records should not be edited to rewrite history.
+- Requires audit history: every billing-sensitive change should create an event, especially status changes, invoice issuance, sequence changes, payment status changes, line adjustments, and manual transfer references.
+- Must not be controlled by mock UI: mock UI must not create real audit records or present local mock activity as persisted audit history.
+
+### Locked Safety Rules
+
+- Mock `/customers` UI must not write real billing data.
+- Customer payment status must not be changed by mock UI.
+- Invoice numbers must not be generated until prefix and running-number rules are planned, approved, and tested.
+- Bank transfer remains manual-record only; no bank API, bank scraping, or automatic reconciliation.
+- Stripe and payment links remain future only and require explicit approval.
+- Supabase migrations require explicit approval before creation and separate explicit approval before application.
+- Parser reliability remains protected, and unrelated parser changes are forbidden.
+- Future billing data must stay scoped to the selected customer and must not leak into `/book`, `/my-bookings`, public driver token pages, or driver demo pages.
+- No storage persistence is approved by this planning section.
+
+### Open Questions Before Future Implementation
+
+- What customer invoice prefix format should be used for companies, hotels, individual VIPs, and renamed customers?
+- Should running numbers reset yearly, reset monthly, or never reset?
+- Should numbering be per customer, per billing profile, or company-wide?
+- How should amendments, cancellations, no-shows, credits, and waived rows affect monthly billing periods and issued invoices?
+- How should paid, partially paid, unpaid, overdue, waived, refunded, and manual bank transfer statuses be recorded without allowing mock UI to change them?
+- Which staff roles can create, review, lock, issue, adjust, void, or mark billing records paid?
+- What audit trail detail is required for billing profile changes, line-item edits, invoice issuance, payment recording, and manual reference corrections?
+- What export, statement, invoice PDF, or customer-facing document requirements are needed later, and what data must be snapshotted at issue time?
+- What RLS, service-role route, and server-only boundaries are required before any Supabase write is allowed?
+- What duplicate-action, retry, and concurrency behavior is required for invoice number issuance?
+
+### Conservative Future Implementation Sequence
+
+- [ ] Complete this docs-only review and keep current `/customers` billing UI mock/local.
+- [ ] Approve the future data model boundaries and open-question answers.
+- [ ] Prepare a Supabase migration plan only after explicit approval.
+- [ ] Create and apply any migration only after separate explicit approval.
+- [ ] Add test fixtures before real save/linking work, including duplicate, invalid, and cross-customer safety cases.
+- [ ] Define the mock-to-real save boundary so save/linking cannot issue invoices, generate PDFs, send payment links, or change payment status.
+- [ ] Add protected browser tests for route isolation, no unintended network/API calls, no storage persistence, and mobile/no-horizontal-overflow.
+- [ ] Run parser, lint, build, targeted browser tests, and `npm run test:safe` before and after implementation.
+- [ ] Commit only scoped files for each approved phase.
+- [ ] Run post-commit `npm run test:safe`.
+
+This review does not claim real billing works now and does not claim the app is production-ready. It only documents future data model boundaries and safety questions for a later approved implementation.

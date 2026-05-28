@@ -1717,6 +1717,199 @@ for (const { label, input, expected } of dispatcherRouteAddressShorthandRegressi
   assert.notEqual(parsedDispatcherRouteAddressShorthand.vehicle, 'Pax');
 }
 
+const passengerBookerCompanyShorthandRegressionCases = [
+  {
+    label: 'passenger for guard',
+    input: `Date: today
+Time: 0615
+From: Marina Bay Sands
+To: Changi Airport T3
+For Mr Tan
+Veh: AVF`,
+    expected: {
+      company: '',
+      date: '2026-05-13',
+      time: '0615hrs',
+      pickup: 'Marina Bay Sands',
+      dropoff: 'Changi Airport T3',
+      vehicle: 'AVF',
+      name: 'Mr Tan',
+    },
+    blocked: {
+      company: ['For Mr Tan', 'Mr Tan'],
+      vehicle: ['For Mr Tan', 'Mr Tan'],
+    },
+  },
+  {
+    label: 'booker and ctc shorthand',
+    input: `Date: tomorrow
+Time: 0730hrs
+PU: Changi Airport T2
+DO: Raffles Hotel
+Vehicle: E class
+Booked by Nicole
+Ctc: Nicole`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '0730hrs',
+      pickup: 'Changi Airport T2',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'E-Class',
+      booker: 'Nicole',
+      bookerContact: 'Nicole',
+    },
+    blocked: {
+      pickup: ['Booked by Nicole', 'Ctc: Nicole', 'Nicole'],
+      dropoff: ['Booked by Nicole', 'Ctc: Nicole', 'Nicole'],
+      company: ['Booked by Nicole', 'Ctc: Nicole', 'Nicole'],
+      vehicle: ['Booked by Nicole', 'Ctc: Nicole', 'Nicole'],
+    },
+  },
+  {
+    label: 'passenger from company is not route from',
+    input: `Date: today
+Time: 7:30 PM
+Passenger: Sharon from Shiseido
+PU: Office
+DO: Home
+Vehicle: E-Class / AVF`,
+    expected: {
+      date: '2026-05-13',
+      time: '1930hrs',
+      pickup: 'Office',
+      dropoff: 'Home',
+      vehicle: 'E-Class / AVF',
+      name: 'Sharon',
+    },
+    blocked: {
+      pickup: ['Sharon from Shiseido', 'Shiseido'],
+      dropoff: ['Sharon from Shiseido', 'Shiseido'],
+      vehicle: ['Sharon from Shiseido', 'Shiseido'],
+    },
+  },
+  {
+    label: 'explicit company label wins with booker',
+    input: `Company: BNY
+Booker: Nicole
+Date: tmr
+Time: 6.15am
+Frm: Office
+Send to: Changi Airport T1
+Veh: VVV`,
+    expected: {
+      company: 'BNY',
+      booker: 'Nicole',
+      date: '2026-05-14',
+      time: '0615hrs',
+      pickup: 'Office',
+      dropoff: 'Changi Airport T1',
+      vehicle: 'VVV',
+    },
+    blocked: {
+      pickup: ['Booker: Nicole', 'Nicole'],
+      dropoff: ['Booker: Nicole', 'Nicole'],
+      vehicle: ['Booker: Nicole', 'Nicole', 'BNY'],
+    },
+  },
+  {
+    label: 'organization email domain company',
+    input: `Booker: yasuko
+Email: yasuko.kunisawa@ubs.com
+Date: today
+Time: 0615
+From: Fullerton Hotel
+To: Gardens by the Bay
+Vehicle: Combi`,
+    expected: {
+      company: 'UBS',
+      booker: 'yasuko',
+      bookerEmail: 'yasuko.kunisawa@ubs.com',
+      date: '2026-05-13',
+      time: '0615hrs',
+      pickup: 'Fullerton Hotel',
+      dropoff: 'Gardens by the Bay',
+      vehicle: 'Combi',
+    },
+    blocked: {
+      pickup: ['yasuko', 'yasuko.kunisawa@ubs.com'],
+      dropoff: ['yasuko', 'yasuko.kunisawa@ubs.com'],
+      vehicle: ['yasuko', 'yasuko.kunisawa@ubs.com', 'UBS'],
+    },
+  },
+  {
+    label: 'public email domain guard',
+    input: `Booker: Alex
+Email: alex@gmail.com
+Date: tomorrow
+Time: 0730hrs
+PU: Changi Airport T4
+DO: Raffles Hotel
+Vehicle: AVF`,
+    expected: {
+      company: '',
+      booker: 'Alex',
+      bookerEmail: 'alex@gmail.com',
+      date: '2026-05-14',
+      time: '0730hrs',
+      pickup: 'Changi Airport T4',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'AVF',
+    },
+    blocked: {
+      company: ['GMAIL', 'gmail', 'Alex', 'alex@gmail.com'],
+      pickup: ['Alex', 'alex@gmail.com'],
+      dropoff: ['Alex', 'alex@gmail.com'],
+      vehicle: ['Alex', 'alex@gmail.com'],
+    },
+  },
+];
+
+for (const { label, input, expected, blocked = {} } of passengerBookerCompanyShorthandRegressionCases) {
+  const parsedPassengerBookerCompanyShorthand = parseBookingForTest(input) ?? {};
+
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    assert.equal(
+      parsedPassengerBookerCompanyShorthand[field] ?? '',
+      expectedValue,
+      `${label} should parse ${field} as ${expectedValue}`,
+    );
+  }
+
+  for (const [field, blockedValues] of Object.entries(blocked)) {
+    for (const blockedValue of blockedValues) {
+      assert.notEqual(
+        parsedPassengerBookerCompanyShorthand[field] ?? '',
+        blockedValue,
+        `${label} should not pollute ${field} with ${blockedValue}`,
+      );
+    }
+  }
+}
+
+const parsedForPaxPassengerShorthand = parseBookingForTest(
+  passengerBookerCompanyShorthandRegressionCases[0].input.replace('For Mr Tan', 'For pax Mr Tan'),
+) ?? {};
+assert.equal(parsedForPaxPassengerShorthand.name, 'Mr Tan');
+assert.equal(parsedForPaxPassengerShorthand.company ?? '', '');
+assert.equal(parsedForPaxPassengerShorthand.vehicle, 'AVF');
+
+const parsedMsPassengerShorthand = parseBookingForTest(
+  passengerBookerCompanyShorthandRegressionCases[0].input.replace('Mr Tan', 'Ms Lim'),
+) ?? {};
+assert.equal(parsedMsPassengerShorthand.name, 'Ms Lim');
+assert.equal(parsedMsPassengerShorthand.company ?? '', '');
+assert.equal(parsedMsPassengerShorthand.vehicle, 'AVF');
+
+const parsedContactLabelBookerShorthand = parseBookingForTest(
+  passengerBookerCompanyShorthandRegressionCases[1].input.replace('Ctc: Nicole', 'Contact: Nicole'),
+) ?? {};
+assert.equal(parsedContactLabelBookerShorthand.booker, 'Nicole');
+assert.equal(parsedContactLabelBookerShorthand.bookerContact, 'Nicole');
+assert.equal(parsedContactLabelBookerShorthand.pickup, 'Changi Airport T2');
+assert.equal(parsedContactLabelBookerShorthand.dropoff, 'Raffles Hotel');
+assert.equal(parsedContactLabelBookerShorthand.vehicle, 'E-Class');
+
 const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
 Order total amount	S$110.00
 Comment	For Driver's Info – Passenger Name and Number: Sarah Lim, +65 81234567

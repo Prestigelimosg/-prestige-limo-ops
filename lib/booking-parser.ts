@@ -368,6 +368,14 @@ function extractNamedPassengerLine(line: string) {
     return cleanDetectedName(labeledPassenger);
   }
 
+  const standaloneForPassenger = firstMatch(cleanedLine, [
+    /^for\s+(?:pax\s+)?((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{1,60})$/i,
+  ]);
+
+  if (looksLikePersonName(standaloneForPassenger)) {
+    return cleanDetectedName(standaloneForPassenger);
+  }
+
   if (/^(?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z]/i.test(cleanedLine)) {
     return cleanDetectedName(cleanedLine);
   }
@@ -1171,6 +1179,18 @@ function detectNarratedBooker(text: string) {
   ]);
 
   return looksLikePersonName(narratedBooker) ? cleanDetectedName(narratedBooker) : "";
+}
+
+function detectBookerShorthand(text: string) {
+  const booker = cleanDetectedName(firstMatch(text, [
+    /(?:^|\n)\s*booked\s+by\s+([A-Za-z][A-Za-z.' -]{1,40}?)(?=\s+from\b|\s*(?:\n|$))/i,
+  ]));
+
+  if (/^[A-Z0-9&]{2,}$/.test(booker)) {
+    return "";
+  }
+
+  return looksLikePersonName(booker) ? booker : "";
 }
 
 function detectNarratedTravelerName(text: string) {
@@ -2264,7 +2284,7 @@ function detectBookerValue(text: string, context: { booker: string; company: str
     }
   }
 
-  return labeledBooker || context.booker || detectNarratedBooker(text);
+  return labeledBooker || context.booker || detectBookerShorthand(text) || detectNarratedBooker(text);
 }
 
 function detectRoute(text: string, flight = "") {
@@ -2669,6 +2689,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
         "booker whatsapp",
         "booker phone",
         "requestor contact",
+        "ctc",
         "contact",
         "contact number",
         "mobile",

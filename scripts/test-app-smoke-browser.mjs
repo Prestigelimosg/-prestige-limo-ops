@@ -759,6 +759,144 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminIntakeConfirmationReadiness = async () => {
+      const readinessViewports = [
+        { height: 812, label: "mobile intake confirmation readiness", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop intake confirmation readiness", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of readinessViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const readiness = document.querySelector("[data-intake-confirmation-readiness]");
+              if (!readiness) {
+                return false;
+              }
+
+              const rect = readiness.getBoundingClientRect();
+              const items = [...readiness.querySelectorAll("[data-intake-confirmation-readiness-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-intake-confirmation-readiness-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+
+              return {
+                actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-intake-confirmation-readiness-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                height: Math.round(rect.height),
+                items,
+                text: readiness.innerText,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin intake confirmation readiness`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("intake review"),
+          true,
+          `${viewport.label}: expected internal intake review heading`,
+        );
+        assert.equal(
+          state.text.includes("Confirmation readiness"),
+          true,
+          `${viewport.label}: expected confirmation readiness title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Source", "Review", "Customer", "Trip", "Confirm", "Next"],
+          `${viewport.label}: expected intake-to-confirmed-booking readiness labels`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("/book mock")),
+          true,
+          `${viewport.label}: expected mock customer request source`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Dispatcher check")),
+          true,
+          `${viewport.label}: expected dispatcher review readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Contact details")),
+          true,
+          `${viewport.label}: expected customer details review readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Route and time")),
+          true,
+          `${viewport.label}: expected trip details review readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Not automatic")),
+          true,
+          `${viewport.label}: expected confirmation not to be automatic`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Review before confirmed booking")),
+          true,
+          `${viewport.label}: expected next action before confirmed booking`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only."),
+          true,
+          `${viewport.label}: expected mock/local confirmation boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("No confirmed booking"),
+          true,
+          `${viewport.label}: expected no confirmed booking creation boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("driver assignment"),
+          true,
+          `${viewport.label}: expected driver assignment boundary`,
+        );
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected readiness strip to stay display-only with no creation controls`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 320 : 140),
+          true,
+          `${viewport.label}: expected compact confirmation readiness, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected confirmation readiness items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected confirmation readiness not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -7257,6 +7395,9 @@ async function runChromeTest() {
           feedbackText: feedback?.textContent.trim() || "",
           feedbackTone: feedback?.getAttribute("data-customer-booking-feedback-tone") || "",
           customerIntakeHandoffVisible: Boolean(document.querySelector("[data-customer-intake-handoff]")),
+          intakeConfirmationReadinessVisible: Boolean(
+            document.querySelector("[data-intake-confirmation-readiness]"),
+          ),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -7348,6 +7489,11 @@ async function runChromeTest() {
         initialState.customerIntakeHandoffVisible,
         false,
         "Expected /book not to show internal customer intake handoff",
+      );
+      assert.equal(
+        initialState.intakeConfirmationReadinessVisible,
+        false,
+        "Expected /book not to show internal intake confirmation readiness",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -7617,6 +7763,11 @@ async function runChromeTest() {
         false,
         "Expected /book mobile not to show internal customer intake handoff",
       );
+      assert.equal(
+        mobileState.intakeConfirmationReadinessVisible,
+        false,
+        "Expected /book mobile not to show internal intake confirmation readiness",
+      );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -7739,6 +7890,9 @@ async function runChromeTest() {
           docClientWidth: document.documentElement.clientWidth,
           docScrollWidth: document.documentElement.scrollWidth,
           customerIntakeHandoffVisible: Boolean(document.querySelector("[data-customer-intake-handoff]")),
+          intakeConfirmationReadinessVisible: Boolean(
+            document.querySelector("[data-intake-confirmation-readiness]"),
+          ),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -8068,6 +8222,11 @@ async function runChromeTest() {
         initialState.customerIntakeHandoffVisible,
         false,
         "Expected /my-bookings not to show internal customer intake handoff",
+      );
+      assert.equal(
+        initialState.intakeConfirmationReadinessVisible,
+        false,
+        "Expected /my-bookings not to show internal intake confirmation readiness",
       );
       assert.equal(
         initialState.guidance.height <= 190,
@@ -8756,6 +8915,11 @@ async function runChromeTest() {
         mobileState.customerIntakeHandoffVisible,
         false,
         "Expected /my-bookings mobile not to show internal customer intake handoff",
+      );
+      assert.equal(
+        mobileState.intakeConfirmationReadinessVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal intake confirmation readiness",
       );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
@@ -10708,6 +10872,7 @@ async function runChromeTest() {
     };
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
     state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
+    state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

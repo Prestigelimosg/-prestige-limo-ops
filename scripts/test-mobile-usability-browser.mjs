@@ -456,6 +456,9 @@ async function runChromeTest() {
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
       );
+      const intakeConfirmationReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-intake-confirmation-readiness]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -468,6 +471,11 @@ async function runChromeTest() {
         customerIntakeHandoffVisible,
         false,
         `${viewport.label} ${route.label}: expected no customer intake handoff`,
+      );
+      assert.equal(
+        intakeConfirmationReadinessVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no intake confirmation readiness`,
       );
     };
 
@@ -798,6 +806,75 @@ async function runChromeTest() {
         customerIntakeHandoffState.items.every((item) => item.height >= 32 && item.width >= 64),
         true,
         `${viewport.label}: expected customer intake handoff items to stay readable and compact`,
+      );
+
+      const intakeConfirmationReadinessState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const readiness = document.querySelector("[data-intake-confirmation-readiness]");
+            if (!readiness) {
+              return false;
+            }
+
+            const rect = readiness.getBoundingClientRect();
+            const items = [...readiness.querySelectorAll("[data-intake-confirmation-readiness-item]")].map((item) => {
+              const itemRect = item.getBoundingClientRect();
+              return {
+                height: Math.round(itemRect.height),
+                label: item.getAttribute("data-intake-confirmation-readiness-item") || "",
+                text: item.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(itemRect.width),
+              };
+            });
+
+            return {
+              actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-intake-confirmation-readiness-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              items,
+              text: readiness.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} intake confirmation readiness`,
+      );
+      assert.equal(
+        intakeConfirmationReadinessState.text.toLowerCase().includes("intake review"),
+        true,
+        `${viewport.label}: expected intake confirmation readiness`,
+      );
+      assert.deepEqual(
+        intakeConfirmationReadinessState.items.map((item) => item.label),
+        ["Source", "Review", "Customer", "Trip", "Confirm", "Next"],
+        `${viewport.label}: expected compact intake confirmation readiness items`,
+      );
+      assert.equal(
+        intakeConfirmationReadinessState.boundary.includes("Mock/local only."),
+        true,
+        `${viewport.label}: expected intake confirmation readiness mock/local boundary`,
+      );
+      assert.equal(
+        intakeConfirmationReadinessState.boundary.includes("No confirmed booking"),
+        true,
+        `${viewport.label}: expected no confirmed booking boundary`,
+      );
+      assert.equal(
+        intakeConfirmationReadinessState.actionCount,
+        0,
+        `${viewport.label}: expected intake confirmation readiness to stay display-only`,
+      );
+      assert.equal(
+        intakeConfirmationReadinessState.height <= (viewport.width < 640 ? 320 : 140),
+        true,
+        `${viewport.label}: expected compact intake confirmation readiness, got ${intakeConfirmationReadinessState.height}px`,
+      );
+      assert.equal(
+        intakeConfirmationReadinessState.items.every((item) => item.height >= 32 && item.width >= 56),
+        true,
+        `${viewport.label}: expected intake confirmation readiness items to stay readable and compact`,
       );
 
       for (const tabLabel of appTabs) {

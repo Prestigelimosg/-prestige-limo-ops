@@ -7043,6 +7043,52 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Dispatcher intake confirmation readiness"
+          className="rounded-lg border border-emerald-100 bg-white px-3 py-2 shadow-sm"
+          data-intake-confirmation-readiness="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-emerald-700">
+                  Intake Review
+                </span>{" "}
+                <span className="text-slate-600">Confirmation readiness</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-6">
+              {[
+                ["Source", "/book mock"],
+                ["Review", "Dispatcher check"],
+                ["Customer", "Contact details"],
+                ["Trip", "Route and time"],
+                ["Confirm", "Not automatic"],
+                ["Next", "Review before confirmed booking"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-emerald-100 bg-emerald-50/60 px-2 py-1.5"
+                  data-intake-confirmation-readiness-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-emerald-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-intake-confirmation-readiness-boundary="true"
+          >
+            Mock/local only. No confirmed booking, driver assignment, request save, or API call is created here.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

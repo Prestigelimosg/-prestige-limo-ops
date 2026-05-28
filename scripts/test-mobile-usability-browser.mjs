@@ -715,6 +715,37 @@ async function runChromeTest() {
       await clickTab("Bookings");
       await clickButtonByText("Load Bookings");
       await waitForBodyText(evaluate, "MOBILE USABILITY TRAVELER", "mock loaded booking");
+      const recentAssignedDriverState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const recentArticle = [...document.querySelectorAll("article")].find((article) =>
+              article.innerText.includes("MOBILE USABILITY TRAVELER")
+            );
+            const summary = recentArticle?.querySelector("[data-assigned-driver-summary]");
+
+            return summary
+              ? {
+                  text: summary.innerText,
+                  articleText: recentArticle.innerText,
+                }
+              : false;
+          })()`),
+        10000,
+        "loaded booking assigned-driver summary",
+      );
+      for (const expectedText of [
+        "Assigned Driver",
+        "Driver: MOBILE USABILITY DRIVER",
+        "Driver contact: +65 8111 9999",
+        "Vehicle: AVF",
+        "Car plate: SMM320P",
+      ]) {
+        assert.equal(
+          recentAssignedDriverState.text.includes(expectedText),
+          true,
+          `${viewport.label}: expected Recent Bookings assigned-driver summary to include ${expectedText}`,
+        );
+      }
       await clickButtonByText("Load this booking");
       await waitForCondition(
         () =>

@@ -353,6 +353,42 @@ type ReplacementDriverFeedback = Message & {
   action: string;
 };
 
+function getAssignedDriverSummary(bookingRecord: BookingRecord, driverDraft?: DriverDraft) {
+  return {
+    contact: clean(bookingRecord.driver_contact) || clean(driverDraft?.driverContact),
+    name: clean(bookingRecord.driver_name) || clean(driverDraft?.driverName) || "—",
+    plate: clean(bookingRecord.driver_plate_number) || clean(driverDraft?.driverPlate),
+    vehicle: clean(bookingRecord.vehicle),
+  };
+}
+
+function AssignedDriverSummaryBlock({
+  bookingRecord,
+  driverDraft,
+}: {
+  bookingRecord: BookingRecord;
+  driverDraft?: DriverDraft;
+}) {
+  const driverSummary = getAssignedDriverSummary(bookingRecord, driverDraft);
+
+  return (
+    <div
+      className="mt-2 rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-sm text-slate-700"
+      data-assigned-driver-summary={String(bookingRecord.id)}
+    >
+      <p className="font-semibold text-sky-950">Assigned Driver</p>
+      <div className="mt-1 space-y-1">
+        <p className="break-words">Driver: {driverSummary.name}</p>
+        {driverSummary.contact ? (
+          <p className="break-words">Driver contact: {driverSummary.contact}</p>
+        ) : null}
+        {driverSummary.vehicle ? <p className="break-words">Vehicle: {driverSummary.vehicle}</p> : null}
+        {driverSummary.plate ? <p className="break-words">Car plate: {driverSummary.plate}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 const initialRateOverrideDraft: RateOverrideDraft = {
   companyName: "",
   bossName: "",
@@ -5956,7 +5992,7 @@ export default function Home() {
                 <p>Booker: {bookerName || "—"}</p>
                 <p>Traveler: {travelerName || "—"}</p>
                 <p>Route: {formatDashboardRoute(savedBooking)}</p>
-                <p>Driver: {driverName || "—"}</p>
+                <AssignedDriverSummaryBlock bookingRecord={savedBooking} driverDraft={driverDraft} />
                 <p>Pax {savedBooking.pax || 1}</p>
                 {savedBooking.child_seat_required ? (
                   <p>{formatChildSeatNote(savedBooking.child_seat_count, savedBooking.child_seat_type)}</p>
@@ -6476,6 +6512,7 @@ export default function Home() {
                     {getBookingName(savedBooking) || "Unknown"}
                   </p>
                   <p>{routeText}</p>
+                  <AssignedDriverSummaryBlock bookingRecord={savedBooking} />
                   {priceLine ? <p>{priceLine}</p> : null}
                   {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                 </div>
@@ -6625,10 +6662,6 @@ export default function Home() {
                 ? rawBookingCompletionMessage
                 : null;
               const priceLine = bookingCardPriceLine(savedBooking);
-              const completedDriverName = clean(savedBooking.driver_name);
-              const completedDriverContact = clean(savedBooking.driver_contact);
-              const completedDriverPlate = clean(savedBooking.driver_plate_number);
-
               return (
                 <article
                   className="rounded-md border border-stone-200 bg-white p-3 text-sm"
@@ -6654,9 +6687,7 @@ export default function Home() {
                         {getBookingName(savedBooking) || "Unknown"}
                       </p>
                       <p>{routeText}</p>
-                      {completedDriverName ? <p>Driver: {completedDriverName}</p> : null}
-                      {completedDriverContact ? <p>Driver contact: {completedDriverContact}</p> : null}
-                      {completedDriverPlate ? <p>Car plate: {completedDriverPlate}</p> : null}
+                      <AssignedDriverSummaryBlock bookingRecord={savedBooking} />
                       {priceLine ? <p>{priceLine}</p> : null}
                       {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
                     </div>

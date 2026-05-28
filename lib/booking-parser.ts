@@ -2304,6 +2304,7 @@ function detectRoute(text: string, flight = "") {
     "do",
     "end location",
     "to",
+    "send to",
     "destination",
     "destination address",
   ]);

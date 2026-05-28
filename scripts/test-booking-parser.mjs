@@ -1610,6 +1610,113 @@ for (const { label, input, expected } of dispatcherDateTimeShorthandRegressionCa
   assert.notEqual(parsedDispatcherDateTimeShorthand.vehicle, 'ETD');
 }
 
+const dispatcherRouteAddressShorthandRegressionCases = [
+  {
+    label: 'frm/to route shorthand',
+    input: `Date: today
+Time: 0615
+Frm: Marina Bay Sands
+To: Changi Airport T3
+Veh: AVF`,
+    expected: {
+      company: '',
+      date: '2026-05-13',
+      time: '0615hrs',
+      pickup: 'Marina Bay Sands',
+      dropoff: 'Changi Airport T3',
+      vehicle: 'AVF',
+    },
+  },
+  {
+    label: 'from/send to route shorthand',
+    input: `Date: tomorrow
+Time: 0730hrs
+From: Changi Airport T2
+Send to: Raffles Hotel
+Vehicle: E class`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '0730hrs',
+      pickup: 'Changi Airport T2',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'E-Class',
+    },
+  },
+  {
+    label: 'office/home route shorthand',
+    input: `Pickup tomorrow 7:30 PM
+From: Office
+To: Home
+Pax: 2
+Vehicle: E-Class / AVF`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '1930hrs',
+      pickup: 'Office',
+      dropoff: 'Home',
+      pax: '2',
+      vehicle: 'E-Class / AVF',
+    },
+  },
+  {
+    label: 'airport/hotel route labels',
+    input: `Date: tmr
+Time: 6.15am
+P/U: Changi Airport T1
+D/O: Fullerton Hotel
+Veh: VVV`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '0615hrs',
+      pickup: 'Changi Airport T1',
+      dropoff: 'Fullerton Hotel',
+      vehicle: 'VVV',
+    },
+  },
+  {
+    label: 'company guard with home and office text',
+    input: `Company: Home Office Holdings
+Date: today
+Time: 0615
+Frm: Office
+To: Changi Airport
+Vehicle: Combi`,
+    expected: {
+      company: 'Home Office Holdings',
+      date: '2026-05-13',
+      time: '0615hrs',
+      pickup: 'Office',
+      dropoff: 'Changi Airport',
+      vehicle: 'Combi',
+    },
+  },
+];
+
+for (const { label, input, expected } of dispatcherRouteAddressShorthandRegressionCases) {
+  const parsedDispatcherRouteAddressShorthand = parseBookingForTest(input) ?? {};
+
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    assert.equal(
+      parsedDispatcherRouteAddressShorthand[field] ?? '',
+      expectedValue,
+      `${label} should parse ${field} as ${expectedValue}`,
+    );
+  }
+
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.company, 'Frm');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.company, 'From');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.company, 'To');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.company, 'Send to');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.vehicle, 'Office');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.vehicle, 'Home');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.vehicle, 'Hotel');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.vehicle, 'Airport');
+  assert.notEqual(parsedDispatcherRouteAddressShorthand.vehicle, 'Pax');
+}
+
 const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
 Order total amount	S$110.00
 Comment	For Driver's Info – Passenger Name and Number: Sarah Lim, +65 81234567

@@ -245,6 +245,15 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "rates", label: "Rates" },
 ];
 
+const adminAccessLinks = [
+  { href: "/", label: "Admin Home" },
+  { href: "/book", label: "Book Request" },
+  { href: "/my-bookings", label: "My Bookings" },
+  { href: "/customers", label: "Customers" },
+  { href: "/driver-job-demo", label: "Driver Demo" },
+  { href: "/driver-job/mock-driver-job-valid-a", label: "Token Demo" },
+] as const;
+
 type AiDraftBooking = AiParseResult["bookings"][number];
 
 type ParsedBooking = Partial<BookingForm> & {
@@ -6961,6 +6970,33 @@ export default function Home() {
             );
           })}
         </nav>
+
+        <section
+          aria-label="Admin URL access hub"
+          className="rounded-lg border border-stone-200 bg-white px-3 py-2 shadow-sm"
+          data-admin-access-hub="true"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="shrink-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Admin Access
+              </p>
+              <p className="text-xs text-slate-500">Useful routes</p>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {adminAccessLinks.map((link) => (
+                <Link
+                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-stone-200 bg-stone-50 px-2 text-center text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
+                  data-admin-access-link={link.href}
+                  href={link.href}
+                  key={link.href}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">

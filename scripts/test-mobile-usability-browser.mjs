@@ -452,6 +452,7 @@ async function runChromeTest() {
       await setViewport(viewport);
       await navigate(new URL(route.path, appUrl).toString(), route.expectedText);
       const state = await layoutState();
+      const adminHubVisible = await evaluate(`Boolean(document.querySelector("[data-admin-access-hub]"))`);
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -459,6 +460,7 @@ async function runChromeTest() {
         true,
         `${viewport.label} ${route.label}: expected important section text to remain visible`,
       );
+      assert.equal(adminHubVisible, false, `${viewport.label} ${route.label}: expected no admin access hub`);
     };
 
     const setRegularCustomerField = async (field, value, context) => {
@@ -681,6 +683,58 @@ async function runChromeTest() {
       await navigate(appUrl, "Prestige Limo Ops Dispatch");
       await waitForTabLabels(evaluate, appTabs, `${viewport.label} app tabs`);
 
+      const adminHubState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const hub = document.querySelector("[data-admin-access-hub]");
+            if (!hub) {
+              return false;
+            }
+
+            const hubRect = hub.getBoundingClientRect();
+            const links = [...hub.querySelectorAll("[data-admin-access-link]")].map((link) => {
+              const rect = link.getBoundingClientRect();
+              return {
+                height: Math.round(rect.height),
+                href: link.getAttribute("href"),
+                text: link.textContent.trim(),
+                width: Math.round(rect.width),
+              };
+            });
+
+            return {
+              height: Math.round(hubRect.height),
+              links,
+              text: hub.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} admin access hub`,
+      );
+      assert.equal(adminHubState.text.includes("ADMIN ACCESS"), true, `${viewport.label}: expected admin access hub`);
+      assert.deepEqual(
+        adminHubState.links.map((link) => [link.text, link.href]),
+        [
+          ["Admin Home", "/"],
+          ["Book Request", "/book"],
+          ["My Bookings", "/my-bookings"],
+          ["Customers", "/customers"],
+          ["Driver Demo", "/driver-job-demo"],
+          ["Token Demo", "/driver-job/mock-driver-job-valid-a"],
+        ],
+        `${viewport.label}: expected compact admin access links`,
+      );
+      assert.equal(
+        adminHubState.height <= (viewport.width < 640 ? 190 : 120),
+        true,
+        `${viewport.label}: expected compact admin access hub, got ${adminHubState.height}px`,
+      );
+      assert.equal(
+        adminHubState.links.every((link) => link.height >= 32 && link.height <= 52 && link.width >= 64),
+        true,
+        `${viewport.label}: expected admin access hub links to stay compact and touchable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -702,9 +756,11 @@ async function runChromeTest() {
       await navigate(url, expectedText);
       const state = await layoutState();
       const buttons = await buttonState();
+      const adminHubVisible = await evaluate(`Boolean(document.querySelector("[data-admin-access-hub]"))`);
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
+      assert.equal(adminHubVisible, false, `${viewport.label} ${context}: expected no admin access hub`);
       return state;
     };
 

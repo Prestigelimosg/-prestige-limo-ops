@@ -2386,6 +2386,221 @@ Vehicle: AVF`) ?? {};
   assert.equal(parsedInternationalPhonePunctuationLabelVariant.name ?? '', '', `${label} should not create passenger name`);
 }
 
+const mixedIdentityContactRegressionCases = [
+  {
+    label: 'passenger booker company email and phones together',
+    input: `Company: UBS
+Booker: Nicole Mobile +65 9876 5432
+Passenger: Mr Tan HP +65 9123 4567
+Email: nicole@ubs.com
+Date: today
+Time: 0615
+From: Marina Bay Sands
+To: Changi Airport T3
+Veh: AVF`,
+    expected: {
+      company: 'UBS',
+      booker: 'Nicole',
+      bookerContact: '+65 9876 5432',
+      bookerEmail: 'nicole@ubs.com',
+      name: 'Mr Tan',
+      date: '2026-05-13',
+      time: '0615hrs',
+      flight: '',
+      pickup: 'Marina Bay Sands',
+      dropoff: 'Changi Airport T3',
+      vehicle: 'AVF',
+    },
+    blocked: {
+      company: ['Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      pickup: ['Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      dropoff: ['Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      vehicle: ['Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567', 'UBS'],
+      booker: ['Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      name: ['Nicole', '+65 9876 5432', '+65 9123 4567'],
+    },
+  },
+  {
+    label: 'person-from-company passenger plus explicit booker',
+    input: `Passenger: Sharon from Shiseido HP 9123-4567
+Booker: Alex Phone +65 9876 5432
+Date: tomorrow
+Time: 0730hrs
+PU: Changi Airport T2
+DO: Raffles Hotel
+Vehicle: E class`,
+    expected: {
+      booker: 'Alex',
+      bookerContact: '+65 9876 5432',
+      name: 'Sharon',
+      date: '2026-05-14',
+      time: '0730hrs',
+      flight: '',
+      bookingType: '',
+      pickup: 'Changi Airport T2',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'E-Class',
+    },
+    blocked: {
+      company: ['9123-4567', '+65 9876 5432', 'Sharon from Shiseido HP 9123-4567'],
+      pickup: ['Sharon', 'Alex', '9123-4567', '+65 9876 5432'],
+      dropoff: ['Sharon', 'Alex', '9123-4567', '+65 9876 5432'],
+      vehicle: ['Sharon', 'Alex', '9123-4567', '+65 9876 5432'],
+      booker: ['Sharon', '+65 9876 5432'],
+      name: ['Alex', '9123-4567', 'Sharon from Shiseido HP 9123-4567'],
+    },
+  },
+  {
+    label: 'explicit company beats adjacent person-from-company and public email',
+    input: `Company: BNY
+Pax: Ms Lim / HP +65 9123-4567
+Contact: Sharon from Shiseido Mobile 98765432
+Email: alex@gmail.com
+Date: tmr
+Time: 6.15am
+Frm: Office
+Send to: Changi Airport T1
+Veh: VVV`,
+    expected: {
+      company: 'BNY',
+      booker: 'Sharon',
+      bookerContact: '98765432',
+      bookerEmail: 'alex@gmail.com',
+      name: 'Ms Lim',
+      date: '2026-05-14',
+      time: '0615hrs',
+      flight: '',
+      pickup: 'Office',
+      dropoff: 'Changi Airport T1',
+      vehicle: 'VVV',
+    },
+    blocked: {
+      company: ['Shiseido', 'gmail', 'GMAIL', 'alex@gmail.com', '+65 9123-4567', '98765432'],
+      pickup: ['Sharon', 'Ms Lim', 'alex@gmail.com', '+65 9123-4567', '98765432'],
+      dropoff: ['Sharon', 'Ms Lim', 'alex@gmail.com', '+65 9123-4567', '98765432'],
+      vehicle: ['BNY', 'Sharon', 'Ms Lim', '+65 9123-4567', '98765432'],
+      name: ['Sharon', '+65 9123-4567', '98765432'],
+    },
+  },
+  {
+    label: 'organization email infers company while phone-only contact lines stay safe',
+    input: `Booker: yasuko
+Email: yasuko.kunisawa@ubs.com
+Contact No.: +65 6123 4567
+Pax Mr Tan / HP +65 9123 4567
+Date: today
+Time: 7:30 PM
+From: Fullerton Hotel
+To: Gardens by the Bay
+Vehicle: Combi`,
+    expected: {
+      company: 'UBS',
+      booker: 'yasuko',
+      bookerContact: '+65 6123 4567',
+      bookerEmail: 'yasuko.kunisawa@ubs.com',
+      name: 'Mr Tan',
+      date: '2026-05-13',
+      time: '1930hrs',
+      flight: '',
+      pickup: 'Fullerton Hotel',
+      dropoff: 'Gardens by the Bay',
+      vehicle: 'Combi',
+    },
+    blocked: {
+      company: ['yasuko', 'Mr Tan', '+65 6123 4567', '+65 9123 4567', 'yasuko.kunisawa@ubs.com'],
+      pickup: ['yasuko', 'Mr Tan', '+65 6123 4567', '+65 9123 4567'],
+      dropoff: ['yasuko', 'Mr Tan', '+65 6123 4567', '+65 9123 4567'],
+      vehicle: ['UBS', 'yasuko', 'Mr Tan', '+65 6123 4567', '+65 9123 4567'],
+      booker: ['Mr Tan', '+65 6123 4567', '+65 9123 4567'],
+      name: ['yasuko', '+65 6123 4567', '+65 9123 4567'],
+    },
+  },
+  {
+    label: 'multiple contact labels near route labels',
+    input: `Contact: Nicole Mobile +65 9876 5432
+Pax: Mr Tan HP: 9123-4567
+Company: Shiseido
+Date: tomorrow
+Pickup Time: 0730hrs
+From: Office
+To: Home
+Vehicle: E-Class / AVF`,
+    expected: {
+      company: 'Shiseido',
+      booker: 'Nicole',
+      bookerContact: '+65 9876 5432',
+      name: 'Mr Tan',
+      date: '2026-05-14',
+      time: '0730hrs',
+      flight: '',
+      pickup: 'Office',
+      dropoff: 'Home',
+      vehicle: 'E-Class / AVF',
+    },
+    blocked: {
+      company: ['Nicole', 'Mr Tan', '+65 9876 5432', '9123-4567'],
+      pickup: ['Nicole', 'Mr Tan', '+65 9876 5432', '9123-4567'],
+      dropoff: ['Nicole', 'Mr Tan', '+65 9876 5432', '9123-4567'],
+      vehicle: ['Shiseido', 'Nicole', 'Mr Tan', '+65 9876 5432', '9123-4567'],
+      booker: ['Mr Tan', '+65 9876 5432', '9123-4567'],
+      name: ['Nicole', '+65 9876 5432', '9123-4567'],
+    },
+  },
+  {
+    label: 'Prestige Transport own-company guard with adjacent identities',
+    input: `Company: Prestige Transport
+Booker: Nicole Mobile +65 9876 5432
+Passenger: Mr Tan HP +65 9123 4567
+Date: today
+Time: 0615
+PU: Changi Airport T4
+DO: Raffles Hotel
+Vehicle: AVF`,
+    expected: {
+      company: '',
+      booker: 'Nicole',
+      bookerContact: '+65 9876 5432',
+      name: 'Mr Tan',
+      date: '2026-05-13',
+      time: '0615hrs',
+      flight: '',
+      pickup: 'Changi Airport T4',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'AVF',
+    },
+    blocked: {
+      company: ['Prestige Transport', 'Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      pickup: ['Prestige Transport', 'Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      dropoff: ['Prestige Transport', 'Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      vehicle: ['Prestige Transport', 'Nicole', 'Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      booker: ['Mr Tan', '+65 9876 5432', '+65 9123 4567'],
+      name: ['Nicole', '+65 9876 5432', '+65 9123 4567'],
+    },
+  },
+];
+
+for (const { label, input, expected, blocked = {} } of mixedIdentityContactRegressionCases) {
+  const parsedMixedIdentityContact = parseBookingForTest(input) ?? {};
+
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    assert.equal(
+      parsedMixedIdentityContact[field] ?? '',
+      expectedValue,
+      `${label} should parse ${field} as ${expectedValue}`,
+    );
+  }
+
+  for (const [field, blockedValues] of Object.entries(blocked)) {
+    for (const blockedValue of blockedValues) {
+      assert.notEqual(
+        parsedMixedIdentityContact[field] ?? '',
+        blockedValue,
+        `${label} should not pollute ${field} with ${blockedValue}`,
+      );
+    }
+  }
+}
+
 const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
 Order total amount	S$110.00
 Comment	For Driver's Info – Passenger Name and Number: Sarah Lim, +65 81234567

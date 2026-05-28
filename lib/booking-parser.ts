@@ -298,6 +298,16 @@ function normalizeFlightCode(value: string | null | undefined) {
   return `${airlineCode}${match[2]}`;
 }
 
+function isContactPhoneFlightCode(match: RegExpMatchArray, afterMatch: string) {
+  const airlineCode = (match[1] || "").toLowerCase();
+
+  if (airlineCode !== "hp") {
+    return false;
+  }
+
+  return /^-\s*\d{2,}/.test(afterMatch) || /^\s+\d{3,}/.test(afterMatch);
+}
+
 function detectFlight(text: string) {
   const labeledFlight = firstMatch(text, [
     /\b(?:flight|flt|flight no|flight number)\s*[:=-]?\s*([A-Z]{2}\s?\d{1,4})\b/i,
@@ -315,6 +325,10 @@ function detectFlight(text: string) {
   for (const match of text.matchAll(flightCodePattern)) {
     const beforeMatch = text.slice(Math.max(0, match.index - 24), match.index);
     const afterMatch = text.slice(match.index + match[0].length, match.index + match[0].length + 24);
+
+    if (isContactPhoneFlightCode(match, afterMatch)) {
+      continue;
+    }
 
     if (
       /\b(?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z.'-]+\s*$/i.test(beforeMatch) &&
@@ -344,6 +358,10 @@ function detectAllFlights(text: string) {
   for (const match of text.matchAll(flightCodePattern)) {
     const beforeMatch = text.slice(Math.max(0, match.index - 24), match.index);
     const afterMatch = text.slice(match.index + match[0].length, match.index + match[0].length + 24);
+
+    if (isContactPhoneFlightCode(match, afterMatch)) {
+      continue;
+    }
 
     if (
       /\b(?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z.'-]+\s*$/i.test(beforeMatch) &&
@@ -1217,6 +1235,16 @@ function detectBookerShorthand(text: string) {
   }
 
   return looksLikePersonName(booker) ? booker : "";
+}
+
+function detectContactBookerValue(text: string) {
+  const contactName = cleanDetectedName(lineValue(text, ["contact", "ctc"]));
+
+  if (/^[A-Z0-9&]{2,}$/.test(contactName)) {
+    return "";
+  }
+
+  return looksLikePersonName(contactName) ? contactName : "";
 }
 
 function detectNarratedTravelerName(text: string) {
@@ -2380,7 +2408,13 @@ function detectBookerValue(text: string, context: { booker: string; company: str
     }
   }
 
-  return cleanDetectedName(labeledBooker) || context.booker || detectBookerShorthand(text) || detectNarratedBooker(text);
+  return (
+    cleanDetectedName(labeledBooker) ||
+    context.booker ||
+    detectContactBookerValue(text) ||
+    detectBookerShorthand(text) ||
+    detectNarratedBooker(text)
+  );
 }
 
 function detectRoute(text: string, flight = "") {

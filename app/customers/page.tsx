@@ -894,6 +894,7 @@ export default function MockCustomerDashboardPage() {
       ...currentFilters,
       [field]: value,
     }));
+    setRegularCustomerBillingDetailPreviewId("");
     setRegularCustomerBookingListFilterFeedback(
       "Local mock filters updated. No booking, invoice, statement, notification, calendar, payment, bank, audit, or Supabase record was changed.",
     );
@@ -935,6 +936,7 @@ export default function MockCustomerDashboardPage() {
   function clearRegularCustomerBookingListFilters() {
     setRegularCustomerBookingListFilters(initialRegularCustomerBookingListFilters);
     setRegularCustomerBillingQuickFilter(regularCustomerBillingQuickFilterAllValue);
+    setRegularCustomerBillingDetailPreviewId("");
     setRegularCustomerBookingListFilterFeedback(
       "Local mock filters cleared. The list is still page-only and no records were changed.",
     );
@@ -955,6 +957,12 @@ export default function MockCustomerDashboardPage() {
 
   function resetRegularCustomerBillingQuickFilter() {
     setRegularCustomerBillingQuickFilter(regularCustomerBillingQuickFilterAllValue);
+    setRegularCustomerBillingDetailPreviewId("");
+  }
+
+  function updateRegularCustomerBillingQuickFilter(value: string) {
+    setRegularCustomerBillingQuickFilter(value);
+    setRegularCustomerBillingDetailPreviewId("");
   }
 
   function createRegularCustomerDraftInvoicePreview() {
@@ -2165,7 +2173,7 @@ export default function MockCustomerDashboardPage() {
                     <select
                       className="min-h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-slate-700"
                       data-regular-customer-billing-quick-filter="true"
-                      onChange={(event) => setRegularCustomerBillingQuickFilter(event.target.value)}
+                      onChange={(event) => updateRegularCustomerBillingQuickFilter(event.target.value)}
                       value={activeRegularCustomerBillingQuickFilter}
                     >
                       {regularCustomerBillingQuickFilterOptions.map((option) => (
@@ -2741,7 +2749,7 @@ export default function MockCustomerDashboardPage() {
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div>
                                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-800">
-                                  Local read-only panel
+                                  Mock/local read-only panel
                                 </p>
                                 <h5
                                   className="mt-1 text-base font-bold text-indigo-950"
@@ -2756,7 +2764,7 @@ export default function MockCustomerDashboardPage() {
                                 onClick={closeRegularCustomerBillingDetails}
                                 type="button"
                               >
-                                Close Preview
+                                Close Billing Details — Mock Only
                               </button>
                             </div>
 

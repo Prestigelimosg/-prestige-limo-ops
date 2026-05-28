@@ -77,6 +77,7 @@ const replacementControlLabels = [
 const internalBillingDetailControlLabels = [
   "View Billing Details — Mock Only",
   "Billing Details Preview — Mock Only",
+  "Close Billing Details — Mock Only",
 ];
 const internalMonthlyBillingSummaryLabels = [
   "Monthly Billing Summary — Mock Only",
@@ -3687,6 +3688,9 @@ async function runChromeTest() {
               value: input.value || "",
             })),
             integrationCalls: window.__customerPaymentIntegrationCalls || [],
+            billingDetailPreviewCount: document.querySelectorAll(
+              "[data-regular-customer-billing-detail-preview]",
+            ).length,
             listText: list?.innerText || "",
             quickFilter: await (async () => {
               const section = document.querySelector("[data-regular-customer-billing-quick-filter-section]");
@@ -3780,6 +3784,8 @@ async function runChromeTest() {
               ),
               billingDetailButton:
                 row.querySelector("[data-regular-customer-billing-detail-action]")?.textContent.trim() || "",
+              billingDetailDismissText:
+                row.querySelector("[data-regular-customer-billing-detail-dismiss]")?.textContent.trim() || "",
               billingDetailPreviewVisible: Boolean(
                 row.querySelector("[data-regular-customer-billing-detail-preview]"),
               ),
@@ -4833,7 +4839,7 @@ async function runChromeTest() {
       );
       assert.equal(
         billingDetailOpenState.dismissText,
-        "Close Preview",
+        "Close Billing Details — Mock Only",
         "Expected billing detail preview dismiss control",
       );
       assert.equal(
@@ -5021,6 +5027,44 @@ async function runChromeTest() {
         assert.equal(row.invoiceNumber, "Not created", "Expected row action controls not to create invoice numbers");
       }
 
+      await clickRegularCustomerBillingDetailPreview(0, "first regular customer billing detail view");
+      const firstBillingDetailOpenState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.rows[0]?.billingDetailPreviewVisible ? candidateState : false;
+        },
+        10000,
+        "first regular customer billing detail view",
+      );
+      assert.equal(
+        firstBillingDetailOpenState.billingDetailPreviewCount,
+        1,
+        "Expected one mock billing detail panel after opening the first row",
+      );
+
+      await clickRegularCustomerBillingDetailPreview(1, "second regular customer billing detail view");
+      const secondBillingDetailOpenState = await waitForCondition(
+        async () => {
+          const candidateState = await readRegularCustomerBookingListState();
+          return candidateState.rows[1]?.billingDetailPreviewVisible &&
+            !candidateState.rows[0]?.billingDetailPreviewVisible
+            ? candidateState
+            : false;
+        },
+        10000,
+        "second regular customer billing detail view",
+      );
+      assert.equal(
+        secondBillingDetailOpenState.billingDetailPreviewCount,
+        1,
+        "Expected only one mock billing detail panel to be open at a time",
+      );
+      assert.equal(
+        secondBillingDetailOpenState.rows[1].billingDetailDismissText,
+        "Close Billing Details — Mock Only",
+        "Expected billing detail close label on the open row",
+      );
+
       await setRegularCustomerBillingQuickFilter("mock-no-match");
       const regularBookingQuickFilterEmptyState = await waitForCondition(
         async () => {
@@ -5071,6 +5115,11 @@ async function runChromeTest() {
         regularBookingQuickFilterEmptyState.rows.length,
         0,
         "Expected quick filter empty state to hide visible mock rows only",
+      );
+      assert.equal(
+        regularBookingQuickFilterEmptyState.billingDetailPreviewCount,
+        0,
+        "Expected billing quick filter change to close any open mock billing detail panel",
       );
       assert.equal(
         regularBookingQuickFilterEmptyState.summary.count,
@@ -5131,6 +5180,16 @@ async function runChromeTest() {
         regularBookingQuickFilterResetButtonState.rows.map((row) => row.id),
         regularBookingTwoRowsState.rows.map((row) => row.id),
         "Expected reset to all mock rows not to add, remove, reorder, save, or permanently change row data",
+      );
+      assert.equal(
+        regularBookingQuickFilterResetButtonState.billingDetailPreviewCount,
+        0,
+        "Expected billing quick filter reset not to restore stale mock billing detail panels",
+      );
+      assert.deepEqual(
+        regularBookingQuickFilterResetButtonState.rows.map((row) => row.billingDetailPreviewVisible),
+        [false, false],
+        "Expected reset to all mock rows to leave row detail panels closed",
       );
       assert.deepEqual(
         regularBookingQuickFilterResetButtonState.rows.map((row) => row.invoiceNumber),

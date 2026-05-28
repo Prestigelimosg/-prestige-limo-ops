@@ -999,8 +999,10 @@ async function runChromeTest() {
 
         return {
           buttonHeight: Math.round(buttonRect?.height || 0),
+          buttonText: button?.textContent.trim() || "",
           buttonWidth: Math.round(buttonRect?.width || 0),
           dismissHeight: Math.round(dismissRect?.height || 0),
+          dismissText: dismiss?.textContent.trim() || "",
           dismissWidth: Math.round(dismissRect?.width || 0),
           mutationCalls: (window.__mobileUsabilityFetchCalls || []).filter((call) => !call.startsWith("GET ")),
           panelText: panel?.innerText || "",
@@ -1010,6 +1012,16 @@ async function runChromeTest() {
       })()`);
 
       assert.equal(panelState.panelVisible, true, `${viewport.label}: expected billing detail panel`);
+      assert.equal(
+        panelState.buttonText,
+        "View Billing Details — Mock Only",
+        `${viewport.label}: expected billing detail action label`,
+      );
+      assert.equal(
+        panelState.dismissText,
+        "Close Billing Details — Mock Only",
+        `${viewport.label}: expected billing detail close label`,
+      );
       assert.equal(panelState.buttonHeight >= 44, true, `${viewport.label}: expected billing detail button height`);
       assert.equal(panelState.dismissHeight >= 44, true, `${viewport.label}: expected billing detail dismiss height`);
       assert.equal(panelState.buttonWidth >= 64, true, `${viewport.label}: expected billing detail button width`);

@@ -453,6 +453,9 @@ async function runChromeTest() {
       await navigate(new URL(route.path, appUrl).toString(), route.expectedText);
       const state = await layoutState();
       const adminHubVisible = await evaluate(`Boolean(document.querySelector("[data-admin-access-hub]"))`);
+      const customerIntakeHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -461,6 +464,11 @@ async function runChromeTest() {
         `${viewport.label} ${route.label}: expected important section text to remain visible`,
       );
       assert.equal(adminHubVisible, false, `${viewport.label} ${route.label}: expected no admin access hub`);
+      assert.equal(
+        customerIntakeHandoffVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no customer intake handoff`,
+      );
     };
 
     const setRegularCustomerField = async (field, value, context) => {
@@ -733,6 +741,63 @@ async function runChromeTest() {
         adminHubState.links.every((link) => link.height >= 32 && link.height <= 52 && link.width >= 64),
         true,
         `${viewport.label}: expected admin access hub links to stay compact and touchable`,
+      );
+
+      const customerIntakeHandoffState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const handoff = document.querySelector("[data-customer-intake-handoff]");
+            if (!handoff) {
+              return false;
+            }
+
+            const rect = handoff.getBoundingClientRect();
+            const items = [...handoff.querySelectorAll("[data-customer-intake-handoff-item]")].map((item) => {
+              const itemRect = item.getBoundingClientRect();
+              return {
+                height: Math.round(itemRect.height),
+                label: item.getAttribute("data-customer-intake-handoff-item") || "",
+                text: item.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(itemRect.width),
+              };
+            });
+
+            return {
+              boundary: document.querySelector("[data-customer-intake-handoff-boundary]")?.textContent.trim() || "",
+              height: Math.round(rect.height),
+              items,
+              text: handoff.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} customer intake handoff`,
+      );
+      assert.equal(
+        customerIntakeHandoffState.text.toLowerCase().includes("customer intake"),
+        true,
+        `${viewport.label}: expected customer intake handoff`,
+      );
+      assert.deepEqual(
+        customerIntakeHandoffState.items.map((item) => item.label),
+        ["Source", "Contact", "Trip", "Status", "Next"],
+        `${viewport.label}: expected compact customer intake handoff items`,
+      );
+      assert.equal(
+        customerIntakeHandoffState.boundary.includes(
+          "Mock/local only. No customer request is stored or sent here.",
+        ),
+        true,
+        `${viewport.label}: expected customer intake handoff mock/local boundary`,
+      );
+      assert.equal(
+        customerIntakeHandoffState.height <= (viewport.width < 640 ? 280 : 130),
+        true,
+        `${viewport.label}: expected compact customer intake handoff, got ${customerIntakeHandoffState.height}px`,
+      );
+      assert.equal(
+        customerIntakeHandoffState.items.every((item) => item.height >= 32 && item.width >= 64),
+        true,
+        `${viewport.label}: expected customer intake handoff items to stay readable and compact`,
       );
 
       for (const tabLabel of appTabs) {

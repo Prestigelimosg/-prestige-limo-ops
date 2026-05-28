@@ -6998,6 +6998,51 @@ export default function Home() {
           </div>
         </section>
 
+        <section
+          aria-label="Customer request intake handoff"
+          className="rounded-lg border border-indigo-100 bg-white px-3 py-2 shadow-sm"
+          data-customer-intake-handoff="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-indigo-700">
+                  Customer Intake
+                </span>{" "}
+                <span className="text-slate-600">Request handoff</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-5">
+              {[
+                ["Source", "/book"],
+                ["Contact", "Name, phone, email"],
+                ["Trip", "Pickup, drop-off, time"],
+                ["Status", "Needs review"],
+                ["Next", "Review before driver"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-indigo-100 bg-indigo-50/60 px-2 py-1.5"
+                  data-customer-intake-handoff-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-indigo-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-customer-intake-handoff-boundary="true"
+          >
+            Mock/local only. No customer request is stored or sent here.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

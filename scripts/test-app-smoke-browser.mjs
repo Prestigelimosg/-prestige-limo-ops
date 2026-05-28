@@ -645,6 +645,120 @@ async function runChromeTest() {
       return tabStates;
     };
 
+    const checkAdminCustomerIntakeHandoff = async () => {
+      const handoffViewports = [
+        { height: 812, label: "mobile customer intake handoff", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop customer intake handoff", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of handoffViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const handoff = document.querySelector("[data-customer-intake-handoff]");
+              if (!handoff) {
+                return false;
+              }
+
+              const rect = handoff.getBoundingClientRect();
+              const items = [...handoff.querySelectorAll("[data-customer-intake-handoff-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-customer-intake-handoff-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+
+              return {
+                boundary: document.querySelector("[data-customer-intake-handoff-boundary]")?.textContent.trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                height: Math.round(rect.height),
+                items,
+                text: handoff.innerText,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin customer intake handoff`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("customer intake"),
+          true,
+          `${viewport.label}: expected internal customer intake handoff heading`,
+        );
+        assert.equal(
+          state.text.includes("Request handoff"),
+          true,
+          `${viewport.label}: expected internal customer intake handoff title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Source", "Contact", "Trip", "Status", "Next"],
+          `${viewport.label}: expected customer intake handoff readiness labels`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("/book")),
+          true,
+          `${viewport.label}: expected customer request source readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Name, phone, email")),
+          true,
+          `${viewport.label}: expected customer contact readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Pickup, drop-off, time")),
+          true,
+          `${viewport.label}: expected trip details readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Needs review")),
+          true,
+          `${viewport.label}: expected dispatcher review status`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Review before driver")),
+          true,
+          `${viewport.label}: expected next internal action`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only. No customer request is stored or sent here."),
+          true,
+          `${viewport.label}: expected mock/local handoff boundary`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 280 : 130),
+          true,
+          `${viewport.label}: expected compact customer intake handoff, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 64),
+          true,
+          `${viewport.label}: expected customer intake handoff items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected customer intake handoff not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -7142,6 +7256,7 @@ async function runChromeTest() {
             submitRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - submitRect.bottom)) : 999,
           feedbackText: feedback?.textContent.trim() || "",
           feedbackTone: feedback?.getAttribute("data-customer-booking-feedback-tone") || "",
+          customerIntakeHandoffVisible: Boolean(document.querySelector("[data-customer-intake-handoff]")),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -7228,6 +7343,11 @@ async function runChromeTest() {
         initialState.text.includes("Submit Booking Request"),
         true,
         "Expected /book customer-safe submit button",
+      );
+      assert.equal(
+        initialState.customerIntakeHandoffVisible,
+        false,
+        "Expected /book not to show internal customer intake handoff",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -7492,6 +7612,11 @@ async function runChromeTest() {
       );
       assert.equal(mobileState.submitVisible, true, "Expected /book submit button to remain touch-friendly on mobile");
       assert.equal(mobileState.nextSteps.visible, true, "Expected /book mobile next-step guidance");
+      assert.equal(
+        mobileState.customerIntakeHandoffVisible,
+        false,
+        "Expected /book mobile not to show internal customer intake handoff",
+      );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -7613,6 +7738,7 @@ async function runChromeTest() {
           detailText: detail?.innerText || "",
           docClientWidth: document.documentElement.clientWidth,
           docScrollWidth: document.documentElement.scrollWidth,
+          customerIntakeHandoffVisible: Boolean(document.querySelector("[data-customer-intake-handoff]")),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -7938,6 +8064,11 @@ async function runChromeTest() {
         "Expected /my-bookings customer-safe explanation",
       );
       assert.equal(initialState.guidance.visible, true, "Expected /my-bookings compact customer guidance");
+      assert.equal(
+        initialState.customerIntakeHandoffVisible,
+        false,
+        "Expected /my-bookings not to show internal customer intake handoff",
+      );
       assert.equal(
         initialState.guidance.height <= 190,
         true,
@@ -8621,6 +8752,11 @@ async function runChromeTest() {
       assert.equal(mobileState.guidance.visible, true, "Expected /my-bookings mobile guidance");
       assert.equal(mobileState.searchVisible, true, "Expected /my-bookings search to remain touch-friendly on mobile");
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
+      assert.equal(
+        mobileState.customerIntakeHandoffVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal customer intake handoff",
+      );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
         [],
@@ -10571,6 +10707,7 @@ async function runChromeTest() {
       visibleText: visibleSnapshots.join("\n\n"),
     };
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
+    state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

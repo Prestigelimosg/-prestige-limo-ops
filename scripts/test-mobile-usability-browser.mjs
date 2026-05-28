@@ -771,6 +771,91 @@ async function runChromeTest() {
           `${viewport.label}: expected Recent Bookings dispatcher-status summary to include ${expectedText}`,
         );
       }
+      const recentOperationalCardState = await evaluate(`(() => {
+        const recentArticle = [...document.querySelectorAll("article")].find((article) =>
+          article.innerText.includes("MOBILE USABILITY TRAVELER")
+        );
+        const sections = [...(recentArticle?.querySelectorAll("[data-operational-card-section]") || [])].map(
+          (section) => ({
+            key: section.getAttribute("data-operational-card-section"),
+            text: section.innerText,
+          })
+        );
+        const summaryGridText =
+          recentArticle?.querySelector("[data-operational-card-summary-grid]")?.innerText || "";
+        return {
+          sections,
+          summaryGridText,
+        };
+      })()`);
+      assert.deepEqual(
+        recentOperationalCardState.sections.map((section) => section.key),
+        ["booking", "route", "vehicle-pax-price"],
+        `${viewport.label}: expected Recent Bookings card to group booking, route, and vehicle/pax/price sections`,
+      );
+      for (const expectedText of ["BOOKING", "ROUTE", "VEHICLE / PAX / PRICE"]) {
+        assert.equal(
+          recentOperationalCardState.sections.some((section) => section.text.includes(expectedText)),
+          true,
+          `${viewport.label}: expected Recent Bookings operational card section ${expectedText}`,
+        );
+      }
+      for (const expectedText of ["Dispatcher Status", "Assigned Driver"]) {
+        assert.equal(
+          recentOperationalCardState.summaryGridText.includes(expectedText),
+          true,
+          `${viewport.label}: expected Recent Bookings summary grid to include ${expectedText}`,
+        );
+      }
+      await clickTab("Dashboard");
+      await waitForBodyText(evaluate, "MOBILE USABILITY TRAVELER", "dashboard loaded booking");
+      const dashboardOperationalCardState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const dashboardCard = [...document.querySelectorAll("[data-dashboard-operational-card]")].find((card) =>
+              card.innerText.includes("MOBILE USABILITY TRAVELER")
+            );
+            if (!dashboardCard) {
+              return false;
+            }
+            const sections = [...dashboardCard.querySelectorAll("[data-operational-card-section]")].map(
+              (section) => ({
+                key: section.getAttribute("data-operational-card-section"),
+                text: section.innerText,
+              })
+            );
+            const summaryGridText =
+              dashboardCard.querySelector("[data-operational-card-summary-grid]")?.innerText || "";
+            const actionsText = dashboardCard.querySelector("[data-dashboard-action-group]")?.innerText || "";
+            return {
+              actionsText,
+              sections,
+              summaryGridText,
+            };
+          })()`),
+        10000,
+        "dashboard operational card structure",
+      );
+      assert.deepEqual(
+        dashboardOperationalCardState.sections.map((section) => section.key),
+        ["booking", "route", "vehicle-pax-price"],
+        `${viewport.label}: expected dashboard card to group booking, route, and vehicle/pax/price sections`,
+      );
+      for (const expectedText of ["Dispatcher Status", "Assigned Driver"]) {
+        assert.equal(
+          dashboardOperationalCardState.summaryGridText.includes(expectedText),
+          true,
+          `${viewport.label}: expected dashboard summary grid to include ${expectedText}`,
+        );
+      }
+      assert.equal(
+        dashboardOperationalCardState.actionsText.includes("INTERNAL ACTIONS"),
+        true,
+        `${viewport.label}: expected dashboard card to label internal actions`,
+      );
+      assertNoHorizontalOverflow(await layoutState(), `${viewport.label} dashboard operational card`);
+      await clickTab("Bookings");
+      await waitForBodyText(evaluate, "MOBILE USABILITY TRAVELER", "mock loaded booking after dashboard check");
       await clickButtonByText("Load this booking");
       await waitForCondition(
         () =>

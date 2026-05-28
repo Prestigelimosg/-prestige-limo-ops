@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   mergeParsedBookingState,
   parseBookingMessage,
@@ -365,15 +365,17 @@ function getAssignedDriverSummary(bookingRecord: BookingRecord, driverDraft?: Dr
 function AssignedDriverSummaryBlock({
   bookingRecord,
   driverDraft,
+  flush = false,
 }: {
   bookingRecord: BookingRecord;
   driverDraft?: DriverDraft;
+  flush?: boolean;
 }) {
   const driverSummary = getAssignedDriverSummary(bookingRecord, driverDraft);
 
   return (
     <div
-      className="mt-2 rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-sm text-slate-700"
+      className={`${flush ? "" : "mt-2 "}rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-sm text-slate-700`}
       data-assigned-driver-summary={String(bookingRecord.id)}
     >
       <p className="font-semibold text-sky-950">Assigned Driver</p>
@@ -389,15 +391,43 @@ function AssignedDriverSummaryBlock({
   );
 }
 
-function DispatcherStatusSummaryBlock({ bookingRecord }: { bookingRecord: BookingRecord }) {
+function DispatcherStatusSummaryBlock({
+  bookingRecord,
+  flush = false,
+}: {
+  bookingRecord: BookingRecord;
+  flush?: boolean;
+}) {
   return (
     <div
-      className="mt-2 rounded-md border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm text-slate-700"
+      className={`${flush ? "" : "mt-2 "}rounded-md border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm text-slate-700`}
       data-dispatcher-status-summary={String(bookingRecord.id)}
     >
       <p className="font-semibold text-emerald-950">Dispatcher Status</p>
       <p className="mt-1 break-words">Status: {bookingStatusLabel(bookingRecord.status)}</p>
     </div>
+  );
+}
+
+function OperationalCardSection({
+  children,
+  className = "",
+  section,
+  title,
+}: {
+  children: ReactNode;
+  className?: string;
+  section: string;
+  title: string;
+}) {
+  return (
+    <section
+      className={`border-t border-stone-200 pt-2 first:border-t-0 first:pt-0 ${className}`}
+      data-operational-card-section={section}
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</p>
+      <div className="mt-1 space-y-1 text-sm text-slate-700">{children}</div>
+    </section>
   );
 }
 
@@ -5978,12 +6008,13 @@ export default function Home() {
 
           return (
             <article
-              className="rounded-lg border border-stone-200 bg-stone-50 p-4"
+              className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm"
+              data-dashboard-operational-card={bookingId}
               key={savedBooking.id}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h3 className="font-semibold">
+                  <h3 className="text-base font-semibold text-slate-950">
                     {bookingType} / {vehicle}
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
@@ -5999,104 +6030,122 @@ export default function Home() {
                 </span>
               </div>
 
-              <div className="mt-3 space-y-1 text-sm text-slate-700">
-                {savedBooking.flight_no ? <p>Flight: {savedBooking.flight_no}</p> : null}
-                <p>Booker: {bookerName || "—"}</p>
-                <p>Traveler: {travelerName || "—"}</p>
-                <p>Route: {formatDashboardRoute(savedBooking)}</p>
-                <DispatcherStatusSummaryBlock bookingRecord={savedBooking} />
-                <AssignedDriverSummaryBlock bookingRecord={savedBooking} driverDraft={driverDraft} />
-                <p>Pax {savedBooking.pax || 1}</p>
-                {savedBooking.child_seat_required ? (
-                  <p>{formatChildSeatNote(savedBooking.child_seat_count, savedBooking.child_seat_type)}</p>
-                ) : null}
-                {normalizeExtraStopCount(savedBooking.extra_stop_count) > 0 ? (
-                  <p>Extra stops: {normalizeExtraStopCount(savedBooking.extra_stop_count)}</p>
-                ) : null}
-                {priceLine ? <p>{priceLine}</p> : null}
-                {savedBooking.customer_price_override_reason ? (
-                  <p>Customer override: {savedBooking.customer_price_override_reason}</p>
-                ) : null}
+              <div className="mt-3 grid gap-3" data-dashboard-operational-body={bookingId}>
+                <OperationalCardSection section="booking" title="Booking">
+                  {savedBooking.flight_no ? <p>Flight {savedBooking.flight_no}</p> : null}
+                  <p>Booker: {bookerName || "—"}</p>
+                  <p>Traveler: {travelerName || "—"}</p>
+                </OperationalCardSection>
+                <OperationalCardSection section="route" title="Route">
+                  <p className="break-words">Route: {formatDashboardRoute(savedBooking)}</p>
+                </OperationalCardSection>
+                <div className="grid gap-3 sm:grid-cols-2" data-operational-card-summary-grid={bookingId}>
+                  <DispatcherStatusSummaryBlock bookingRecord={savedBooking} flush />
+                  <AssignedDriverSummaryBlock
+                    bookingRecord={savedBooking}
+                    driverDraft={driverDraft}
+                    flush
+                  />
+                </div>
+                <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax / price">
+                  <p>Vehicle: {vehicle}</p>
+                  <p>Pax: {savedBooking.pax || 1}</p>
+                  {savedBooking.child_seat_required ? (
+                    <p>{formatChildSeatNote(savedBooking.child_seat_count, savedBooking.child_seat_type)}</p>
+                  ) : null}
+                  {normalizeExtraStopCount(savedBooking.extra_stop_count) > 0 ? (
+                    <p>Extra stops: {normalizeExtraStopCount(savedBooking.extra_stop_count)}</p>
+                  ) : null}
+                  {priceLine ? <p>{priceLine}</p> : null}
+                  {savedBooking.customer_price_override_reason ? (
+                    <p>Customer override: {savedBooking.customer_price_override_reason}</p>
+                  ) : null}
+                </OperationalCardSection>
               </div>
 
-              <button
-                className="mt-4 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                data-dashboard-load-booking="true"
-                onClick={() => loadSelectedBooking(savedBooking)}
-                type="button"
-              >
-                Load this booking
-              </button>
+              <div className="mt-4 border-t border-stone-200 pt-3" data-dashboard-action-group={bookingId}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                  Internal actions
+                </p>
+                <button
+                  className="mt-2 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                  data-dashboard-load-booking="true"
+                  onClick={() => loadSelectedBooking(savedBooking)}
+                  type="button"
+                >
+                  Load this booking
+                </button>
 
-              {!isCompleted || bookingCompletionMessage ? (
-                <div className="mt-2 flex flex-col gap-2" data-dashboard-status-controls={bookingId}>
-                  {canMarkOtw ? (
-                    <button
-                      className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-dashboard-mark-otw={bookingId}
-                      disabled={completingBookingId === bookingId}
-                      onClick={() => markBookingOtw(savedBooking)}
-                      type="button"
-                    >
-                      {completingBookingId === bookingId ? "Marking..." : "Mark OTW"}
-                    </button>
-                  ) : null}
-                  {canMarkPob ? (
-                    <button
-                      className="h-10 w-full rounded-md border border-indigo-300 bg-white px-3 text-sm font-semibold text-indigo-800 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-dashboard-mark-pob={bookingId}
-                      disabled={completingBookingId === bookingId}
-                      onClick={() => markBookingPob(savedBooking)}
-                      type="button"
-                    >
-                      {completingBookingId === bookingId ? "Marking..." : "Mark POB"}
-                    </button>
-                  ) : null}
-                  {isDriverOtw ? (
-                    <button
-                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-dashboard-revert-status={bookingId}
-                      disabled={completingBookingId === bookingId}
-                      onClick={() => revertBookingStatus(savedBooking)}
-                      type="button"
-                    >
-                      {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
-                    </button>
-                  ) : null}
-                  {!isCompleted ? (
-                    <button
-                      className="h-10 w-full rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-dashboard-mark-completed={bookingId}
-                      disabled={completingBookingId === bookingId}
-                      onClick={() => markBookingCompleted(savedBooking)}
-                      type="button"
-                    >
-                      {completingBookingId === bookingId ? "Marking..." : "Mark completed"}
-                    </button>
-                  ) : null}
-                  {isPob ? (
-                    <button
-                      className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-dashboard-revert-status={bookingId}
-                      disabled={completingBookingId === bookingId}
-                      onClick={() => revertBookingStatus(savedBooking)}
-                      type="button"
-                    >
-                      {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
-                    </button>
-                  ) : null}
-                  {bookingCompletionMessage ? (
-                    <p
-                      className={`rounded-md border px-3 py-2 text-xs ${statusClass(
-                        bookingCompletionMessage.tone,
-                      )}`}
-                      data-booking-completion-message={bookingId}
-                    >
-                      {bookingCompletionMessage.text}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
+                {!isCompleted || bookingCompletionMessage ? (
+                  <div className="mt-2 flex flex-col gap-2" data-dashboard-status-controls={bookingId}>
+                    {canMarkOtw ? (
+                      <button
+                        className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-dashboard-mark-otw={bookingId}
+                        disabled={completingBookingId === bookingId}
+                        onClick={() => markBookingOtw(savedBooking)}
+                        type="button"
+                      >
+                        {completingBookingId === bookingId ? "Marking..." : "Mark OTW"}
+                      </button>
+                    ) : null}
+                    {canMarkPob ? (
+                      <button
+                        className="h-10 w-full rounded-md border border-indigo-300 bg-white px-3 text-sm font-semibold text-indigo-800 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-dashboard-mark-pob={bookingId}
+                        disabled={completingBookingId === bookingId}
+                        onClick={() => markBookingPob(savedBooking)}
+                        type="button"
+                      >
+                        {completingBookingId === bookingId ? "Marking..." : "Mark POB"}
+                      </button>
+                    ) : null}
+                    {isDriverOtw ? (
+                      <button
+                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-dashboard-revert-status={bookingId}
+                        disabled={completingBookingId === bookingId}
+                        onClick={() => revertBookingStatus(savedBooking)}
+                        type="button"
+                      >
+                        {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
+                      </button>
+                    ) : null}
+                    {!isCompleted ? (
+                      <button
+                        className="h-10 w-full rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-dashboard-mark-completed={bookingId}
+                        disabled={completingBookingId === bookingId}
+                        onClick={() => markBookingCompleted(savedBooking)}
+                        type="button"
+                      >
+                        {completingBookingId === bookingId ? "Marking..." : "Mark completed"}
+                      </button>
+                    ) : null}
+                    {isPob ? (
+                      <button
+                        className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-dashboard-revert-status={bookingId}
+                        disabled={completingBookingId === bookingId}
+                        onClick={() => revertBookingStatus(savedBooking)}
+                        type="button"
+                      >
+                        {completingBookingId === bookingId ? "Reverting..." : revertStatusLabel}
+                      </button>
+                    ) : null}
+                    {bookingCompletionMessage ? (
+                      <p
+                        className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+                          bookingCompletionMessage.tone,
+                        )}`}
+                        data-booking-completion-message={bookingId}
+                      >
+                        {bookingCompletionMessage.text}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
 
               {!isCompleted ? (
                 <div className="mt-4 rounded-md border border-stone-200 bg-white p-3">
@@ -6511,26 +6560,46 @@ export default function Home() {
 
           return (
             <article
-              className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+              className="rounded-md border border-stone-200 bg-white p-3 text-sm shadow-sm"
+              data-recent-operational-card={bookingId}
               key={`recent-${savedBooking.id}`}
             >
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1 text-slate-700">
-                  <p className="font-semibold text-slate-950">
-                    {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
-                  </p>
-                  <p>
-                    {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
-                    Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
-                    {getBookingName(savedBooking) || "Unknown"}
-                  </p>
-                  <p>{routeText}</p>
-                  <DispatcherStatusSummaryBlock bookingRecord={savedBooking} />
-                  <AssignedDriverSummaryBlock bookingRecord={savedBooking} />
-                  {priceLine ? <p>{priceLine}</p> : null}
-                  {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-slate-950">
+                      {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
+                    </p>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${bookingStatusClass(
+                        savedBooking.status,
+                      )}`}
+                    >
+                      {bookingStatusLabel(savedBooking.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-3" data-recent-operational-body={bookingId}>
+                    <OperationalCardSection section="booking" title="Booking">
+                      {clean(savedBooking.flight_no) ? <p>Flight {clean(savedBooking.flight_no)}</p> : null}
+                      <p>Booker: {getBookerName(savedBooking) || "Unknown"}</p>
+                      <p>Name: {getBookingName(savedBooking) || "Unknown"}</p>
+                    </OperationalCardSection>
+                    <OperationalCardSection section="route" title="Route">
+                      <p className="break-words">Route: {routeText}</p>
+                    </OperationalCardSection>
+                    <div className="grid gap-3 sm:grid-cols-2" data-operational-card-summary-grid={bookingId}>
+                      <DispatcherStatusSummaryBlock bookingRecord={savedBooking} flush />
+                      <AssignedDriverSummaryBlock bookingRecord={savedBooking} flush />
+                    </div>
+                    <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax / price">
+                      <p>Vehicle: {clean(savedBooking.vehicle) || "Vehicle TBC"}</p>
+                      <p>Pax: {savedBooking.pax || 1}</p>
+                      {priceLine ? <p>{priceLine}</p> : null}
+                      {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                    </OperationalCardSection>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2" data-recent-operational-actions={bookingId}>
                   <button
                     className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                     onClick={() => loadSelectedBooking(savedBooking)}
@@ -6678,11 +6747,12 @@ export default function Home() {
               const priceLine = bookingCardPriceLine(savedBooking);
               return (
                 <article
-                  className="rounded-md border border-stone-200 bg-white p-3 text-sm"
+                  className="rounded-md border border-stone-200 bg-white p-3 text-sm shadow-sm"
+                  data-completed-operational-card={bookingId}
                   key={`completed-${savedBooking.id}`}
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-1 text-slate-700">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold text-slate-950">
                           {getRecentBookingTitle(savedBooking)} · {formatPickupDateTime(getBookingDateKey(savedBooking), savedBooking.pickup_time)}
@@ -6692,21 +6762,31 @@ export default function Home() {
                             savedBooking.status,
                           )}`}
                         >
-                          {savedBooking.status || "completed"}
+                          {bookingStatusLabel(savedBooking.status)}
                         </span>
                       </div>
-                      <p>
-                        {clean(savedBooking.flight_no) ? `Flight ${clean(savedBooking.flight_no)} · ` : ""}
-                        Booker: {getBookerName(savedBooking) || "Unknown"} · Name:{" "}
-                        {getBookingName(savedBooking) || "Unknown"}
-                      </p>
-                      <p>{routeText}</p>
-                      <DispatcherStatusSummaryBlock bookingRecord={savedBooking} />
-                      <AssignedDriverSummaryBlock bookingRecord={savedBooking} />
-                      {priceLine ? <p>{priceLine}</p> : null}
-                      {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                      <div className="mt-3 grid gap-3" data-completed-operational-body={bookingId}>
+                        <OperationalCardSection section="booking" title="Booking">
+                          {clean(savedBooking.flight_no) ? <p>Flight {clean(savedBooking.flight_no)}</p> : null}
+                          <p>Booker: {getBookerName(savedBooking) || "Unknown"}</p>
+                          <p>Name: {getBookingName(savedBooking) || "Unknown"}</p>
+                        </OperationalCardSection>
+                        <OperationalCardSection section="route" title="Route">
+                          <p className="break-words">Route: {routeText}</p>
+                        </OperationalCardSection>
+                        <div className="grid gap-3 sm:grid-cols-2" data-operational-card-summary-grid={bookingId}>
+                          <DispatcherStatusSummaryBlock bookingRecord={savedBooking} flush />
+                          <AssignedDriverSummaryBlock bookingRecord={savedBooking} flush />
+                        </div>
+                        <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax / price">
+                          <p>Vehicle: {clean(savedBooking.vehicle) || "Vehicle TBC"}</p>
+                          <p>Pax: {savedBooking.pax || 1}</p>
+                          {priceLine ? <p>{priceLine}</p> : null}
+                          {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
+                        </OperationalCardSection>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2" data-completed-operational-actions={bookingId}>
                       <button
                         className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                         data-completed-load-booking="true"

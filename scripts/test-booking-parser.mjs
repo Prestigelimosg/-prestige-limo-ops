@@ -1499,6 +1499,117 @@ for (const { label, input, expected } of dispatcherShorthandRegressionCases) {
   assert.notEqual(parsedDispatcherShorthand.vehicle, 'Pax');
 }
 
+const dispatcherDateTimeShorthandRegressionCases = [
+  {
+    label: 'tmr with dotted am time',
+    input: `Date: tmr
+Time: 6.15am
+PU: Marina Bay Sands
+DO: Changi Airport T3
+Veh: AVF`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '0615hrs',
+      pickup: 'Marina Bay Sands',
+      dropoff: 'Changi Airport T3',
+      vehicle: 'AVF',
+    },
+  },
+  {
+    label: 'today with compact time',
+    input: `Date: today
+Time: 0615
+P/U: Changi Airport T2
+D/O: Raffles Hotel
+Vehicle: E class`,
+    expected: {
+      company: '',
+      date: '2026-05-13',
+      time: '0615hrs',
+      pickup: 'Changi Airport T2',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'E-Class',
+    },
+  },
+  {
+    label: 'tomorrow with hrs time',
+    input: `Pickup tomorrow 0730hrs
+Pick up: Fullerton Hotel
+Drop off: Gardens by the Bay
+Pax: 2
+Vehicle: E-Class / AVF`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '0730hrs',
+      pickup: 'Fullerton Hotel',
+      dropoff: 'Gardens by the Bay',
+      pax: '2',
+      vehicle: 'E-Class / AVF',
+    },
+  },
+  {
+    label: 'pm time with ETA guard',
+    input: `Date: today
+Time: 7:30 PM
+Flight: SQ123
+ETA: 14:10
+P/U: Changi Airport T1
+D/O: Fullerton Hotel
+Veh: VVV`,
+    expected: {
+      company: '',
+      date: '2026-05-13',
+      time: '1930hrs',
+      flight: 'SQ123',
+      pickup: 'Changi Airport T1',
+      dropoff: 'Fullerton Hotel',
+      vehicle: 'VVV',
+    },
+  },
+  {
+    label: 'pickup time with ETD guard',
+    input: `Date: tomorrow
+Pickup Time: 0730hrs
+ETD: 2245
+PU: Office
+DO: Changi Airport
+Vehicle: Combi`,
+    expected: {
+      company: '',
+      date: '2026-05-14',
+      time: '0730hrs',
+      pickup: 'Office',
+      dropoff: 'Changi Airport',
+      vehicle: 'Combi',
+    },
+  },
+];
+
+for (const { label, input, expected } of dispatcherDateTimeShorthandRegressionCases) {
+  const parsedDispatcherDateTimeShorthand = parseBookingForTest(input) ?? {};
+
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    assert.equal(
+      parsedDispatcherDateTimeShorthand[field] ?? '',
+      expectedValue,
+      `${label} should parse ${field} as ${expectedValue}`,
+    );
+  }
+
+  assert.notEqual(parsedDispatcherDateTimeShorthand.company, 'tmr');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.company, 'today');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.company, 'PU');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.company, 'P/U');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.company, 'DO');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.company, 'D/O');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.company, 'Veh');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.vehicle, 'Pax');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.vehicle, 'ETA');
+  assert.notEqual(parsedDispatcherDateTimeShorthand.vehicle, 'ETD');
+}
+
 const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
 Order total amount	S$110.00
 Comment	For Driver's Info – Passenger Name and Number: Sarah Lim, +65 81234567

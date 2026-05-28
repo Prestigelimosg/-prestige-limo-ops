@@ -991,7 +991,58 @@ function normalizeAddressForComparison(value: string) {
 }
 
 function cleanVehicle(value: string) {
-  return clean(value).replace(/[|,;.]+$/g, "");
+  const cleanedValue = clean(value).replace(/[|,;.]+$/g, "");
+
+  return normalizeVehicleValue(cleanedValue, { preserveGenericVehicleText: true }) || cleanedValue;
+}
+
+function textForVehicleDetection(text: string) {
+  return text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean)
+    .filter((line) => !/^(?:company|account|client|booker|booking form name)\s*[:=\t-]/i.test(line))
+    .join("\n");
+}
+
+function normalizeVehicleValue(value: string, options: { preserveGenericVehicleText?: boolean } = {}) {
+  const upperValue = value.toUpperCase();
+  const hasAvf = /\bAVF\b|\bALPHARD\b|\bVELLFIRE\b|\bMPV\b/.test(upperValue);
+  const hasEClass = /\bE\s*-?\s*CLASS\b/.test(upperValue);
+
+  if (hasAvf && hasEClass) {
+    return "E-Class / AVF";
+  }
+
+  if (hasAvf) {
+    return "AVF";
+  }
+
+  if (hasEClass) {
+    return "E-Class";
+  }
+
+  if (/\bS\s*-?\s*CLASS\b/.test(upperValue)) {
+    return "S class";
+  }
+
+  if (/\bV\s*-?\s*CLASS\b|\bVIANO\b/.test(upperValue)) {
+    return "VVV";
+  }
+
+  if (/\bCOMBI\b|\b13\s*-?\s*SEATER\b|\bMINIBUS\b/.test(upperValue)) {
+    return "Combi";
+  }
+
+  if (!options.preserveGenericVehicleText && /\bS-?CLASS\b|\bMERC(?:EDES)?\b|\bSEDAN\b|\bLIMO\b/.test(upperValue)) {
+    return "Sedan";
+  }
+
+  if (!options.preserveGenericVehicleText && /\bVITO\b|\bVAN\b/.test(upperValue)) {
+    return "Van";
+  }
+
+  return "";
 }
 
 function detectBookerCompanyContext(text: string) {
@@ -2199,37 +2250,7 @@ function detectBookingType(text: string, flight = "", route: { pickup: string; d
 }
 
 function detectVehicle(text: string) {
-  const upperText = text.toUpperCase();
-
-  if (/\bAVF\b|\bALPHARD\b|\bVELLFIRE\b|\bMPV\b/.test(upperText)) {
-    return "AVF";
-  }
-
-  if (/\bE\s*-?\s*CLASS\b/.test(upperText)) {
-    return "E class";
-  }
-
-  if (/\bS\s*-?\s*CLASS\b/.test(upperText)) {
-    return "S class";
-  }
-
-  if (/\bV\s*-?\s*CLASS\b|\bVIANO\b/.test(upperText)) {
-    return "VVV";
-  }
-
-  if (/\bCOMBI\b|\b13\s*-?\s*SEATER\b|\bMINIBUS\b/.test(upperText)) {
-    return "Combi";
-  }
-
-  if (/\bS-?CLASS\b|\bMERC(?:EDES)?\b|\bSEDAN\b|\bLIMO\b/.test(upperText)) {
-    return "Sedan";
-  }
-
-  if (/\bVITO\b|\bVAN\b/.test(upperText)) {
-    return "Van";
-  }
-
-  return "";
+  return normalizeVehicleValue(textForVehicleDetection(text));
 }
 
 function detectBookerValue(text: string, context: { booker: string; company: string }) {

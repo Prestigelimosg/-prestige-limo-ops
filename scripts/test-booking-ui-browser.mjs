@@ -10650,7 +10650,7 @@ async function runChromeTest() {
 
         if (
           candidateState?.fields?.flight === "TR288" &&
-          candidateState?.fields?.vehicle === "E class" &&
+          candidateState?.fields?.vehicle === "E-Class" &&
           candidateState?.fields?.name === "Edien Joy" &&
           candidateState?.fields?.extraStopLocation === "351C Canberra Rd, Singapore 753351"
         ) {
@@ -10683,7 +10683,7 @@ async function runChromeTest() {
     assert.equal(exactDepartureState.fields.bookerContact, "+6580912613");
     assert.equal(exactDepartureState.fields.bookerEmail, "luthergrahambk@gmail.com");
     assert.equal(exactDepartureState.fields.bookingType, "DEP");
-    assert.equal(exactDepartureState.fields.vehicle, "E class");
+    assert.equal(exactDepartureState.fields.vehicle, "E-Class");
     assert.equal(exactDepartureState.fields.pickupDate, "2026-05-06");
     assert.equal(exactDepartureState.fields.pickupTime, "0800hrs");
     assert.equal(exactDepartureState.fields.flight, "TR288");
@@ -10778,7 +10778,7 @@ async function runChromeTest() {
     assert.equal(routeNameAirportState.fields.bookerContact, "+61419501117");
     assert.equal(routeNameAirportState.fields.bookerEmail, "pj@baonline.com.au");
     assert.equal(routeNameAirportState.fields.bookingType, "MNG");
-    assert.equal(routeNameAirportState.fields.vehicle, "E class");
+    assert.equal(routeNameAirportState.fields.vehicle, "E-Class");
     assert.equal(routeNameAirportState.fields.pickupDate, "2026-04-30");
     assert.equal(routeNameAirportState.fields.pickupTime, "1530hrs");
     assert.equal(routeNameAirportState.fields.flight, "SQ238");

@@ -1351,9 +1351,64 @@ assert.equal(parsedExactPastedWaypointAirportDepartureForm.extraStopCount, '1');
 assert.equal(parsedExactPastedWaypointAirportDepartureForm.dropoff, 'Changi Airport');
 assert.equal(parsedExactPastedWaypointAirportDepartureForm.name, 'Edien Joy');
 assert.equal(parsedExactPastedWaypointAirportDepartureForm.pax, '2');
-assert.equal(parsedExactPastedWaypointAirportDepartureForm.vehicle, 'E class');
+assert.equal(parsedExactPastedWaypointAirportDepartureForm.vehicle, 'E-Class');
 assert.equal(parsedExactPastedWaypointAirportDepartureForm.customerPriceOverride, '110');
 assert.equal(parsedExactPastedWaypointAirportDepartureForm.childSeatRequired ?? '', '');
+
+const vehicleTextRegressionCases = [
+  {
+    label: 'E class',
+    input: 'Vehicle: E class',
+    expectedVehicle: 'E-Class',
+  },
+  {
+    label: 'E-Class',
+    input: 'Vehicle: E-Class',
+    expectedVehicle: 'E-Class',
+  },
+  {
+    label: 'Mercedes E class',
+    input: 'Please arrange Mercedes E class for Mr Parser Test tomorrow.',
+    expectedVehicle: 'E-Class',
+  },
+  {
+    label: 'Mercedes E-Class',
+    input: 'Please arrange Mercedes E-Class for Mr Parser Test tomorrow.',
+    expectedVehicle: 'E-Class',
+  },
+  {
+    label: 'AVF',
+    input: 'Vehicle: AVF',
+    expectedVehicle: 'AVF',
+  },
+  {
+    label: 'E-Class / AVF',
+    input: 'Vehicle: E-Class / AVF',
+    expectedVehicle: 'E-Class / AVF',
+  },
+];
+
+for (const { label, input, expectedVehicle } of vehicleTextRegressionCases) {
+  const parsedVehicleRegressionCase = parseBookingForTest(`Booking for Mr Parser Test
+Pickup: Ritz Carlton
+Drop-off: Fullerton Hotel
+${input}`) ?? {};
+
+  assert.equal(
+    parsedVehicleRegressionCase.vehicle,
+    expectedVehicle,
+    `${label} should normalize to ${expectedVehicle}`,
+  );
+}
+
+const eClassCompanyOnlyMessage = `Company: E-Class Logistics
+Pickup: Ritz Carlton
+Drop-off: Fullerton Hotel
+Name: Mr Parser Test
+Pax: 1`;
+const parsedEClassCompanyOnly = parseBookingForTest(eClassCompanyOnlyMessage) ?? {};
+assert.equal(parsedEClassCompanyOnly.company, 'E-Class Logistics');
+assert.equal(parsedEClassCompanyOnly.vehicle ?? '', '');
 
 const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
 Order total amount	S$110.00
@@ -1690,7 +1745,7 @@ assert.equal(parsedStructuredPointToPointTransferForm.pickup, 'Capella Singapore
 assert.equal(parsedStructuredPointToPointTransferForm.dropoff, 'Marina Bay Sands');
 assert.equal(parsedStructuredPointToPointTransferForm.name, 'Audrey Lee');
 assert.equal(parsedStructuredPointToPointTransferForm.pax, '2');
-assert.equal(parsedStructuredPointToPointTransferForm.vehicle, 'E class');
+assert.equal(parsedStructuredPointToPointTransferForm.vehicle, 'E-Class');
 assert.equal(parsedStructuredPointToPointTransferForm.customerPriceOverride, '75');
 assert.equal(parsedStructuredPointToPointTransferForm.extraStopCount ?? '0', '0');
 assert.equal(parsedStructuredPointToPointTransferForm.extraStopLocation ?? '', '');
@@ -1778,7 +1833,7 @@ assert.equal(parsedStructuredAddressPointToPointTransferForm.pickup, 'The Wareho
 assert.equal(parsedStructuredAddressPointToPointTransferForm.dropoff, 'Sentosa Golf Club');
 assert.equal(parsedStructuredAddressPointToPointTransferForm.name, 'Olivia Tan');
 assert.equal(parsedStructuredAddressPointToPointTransferForm.pax, '2');
-assert.equal(parsedStructuredAddressPointToPointTransferForm.vehicle, 'E class');
+assert.equal(parsedStructuredAddressPointToPointTransferForm.vehicle, 'E-Class');
 assert.equal(parsedStructuredAddressPointToPointTransferForm.customerPriceOverride, '90');
 assert.equal(parsedStructuredAddressPointToPointTransferForm.extraStopCount ?? '0', '0');
 assert.equal(parsedStructuredAddressPointToPointTransferForm.extraStopLocation ?? '', '');

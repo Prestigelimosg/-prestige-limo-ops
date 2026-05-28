@@ -1410,6 +1410,95 @@ const parsedEClassCompanyOnly = parseBookingForTest(eClassCompanyOnlyMessage) ??
 assert.equal(parsedEClassCompanyOnly.company, 'E-Class Logistics');
 assert.equal(parsedEClassCompanyOnly.vehicle ?? '', '');
 
+const dispatcherShorthandRegressionCases = [
+  {
+    label: 'PU/DO/Veh AVF shorthand',
+    input: `PU: Marina Bay Sands
+DO: Changi Airport T3
+Veh: AVF`,
+    expected: {
+      company: '',
+      pickup: 'Marina Bay Sands',
+      dropoff: 'Changi Airport T3',
+      vehicle: 'AVF',
+    },
+  },
+  {
+    label: 'P/U and D/O airport terminal shorthand',
+    input: `P/U: Changi Airport T2
+D/O: Raffles Hotel
+Vehicle: E class`,
+    expected: {
+      company: '',
+      pickup: 'Changi Airport T2',
+      dropoff: 'Raffles Hotel',
+      vehicle: 'E-Class',
+    },
+  },
+  {
+    label: 'pax and mixed vehicle shorthand',
+    input: `Pick up: Fullerton Hotel
+Drop off: Gardens by the Bay
+Pax: 2
+Vehicle: E-Class / AVF`,
+    expected: {
+      company: '',
+      pickup: 'Fullerton Hotel',
+      dropoff: 'Gardens by the Bay',
+      pax: '2',
+      vehicle: 'E-Class / AVF',
+    },
+  },
+  {
+    label: 'arrival ETA with terminal and VVV shorthand',
+    input: `Flight: SQ123
+ETA: 14:10
+P/U: Changi Airport T1
+D/O: Fullerton Hotel
+Veh: VVV`,
+    expected: {
+      company: '',
+      flight: 'SQ123',
+      pickup: 'Changi Airport T1',
+      dropoff: 'Fullerton Hotel',
+      time: '1410hrs',
+      vehicle: 'VVV',
+    },
+  },
+  {
+    label: 'company class text with separate vehicle label',
+    input: `Company: E-Class Logistics
+PU: Office
+DO: Changi Airport
+Vehicle: E-Class`,
+    expected: {
+      company: 'E-Class Logistics',
+      pickup: 'Office',
+      dropoff: 'Changi Airport',
+      vehicle: 'E-Class',
+    },
+  },
+];
+
+for (const { label, input, expected } of dispatcherShorthandRegressionCases) {
+  const parsedDispatcherShorthand = parseBookingForTest(input) ?? {};
+
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    assert.equal(
+      parsedDispatcherShorthand[field] ?? '',
+      expectedValue,
+      `${label} should parse ${field} as ${expectedValue}`,
+    );
+  }
+
+  assert.notEqual(parsedDispatcherShorthand.company, 'PU');
+  assert.notEqual(parsedDispatcherShorthand.company, 'P/U');
+  assert.notEqual(parsedDispatcherShorthand.company, 'DO');
+  assert.notEqual(parsedDispatcherShorthand.company, 'D/O');
+  assert.notEqual(parsedDispatcherShorthand.company, 'Veh');
+  assert.notEqual(parsedDispatcherShorthand.vehicle, 'Pax');
+}
+
 const structuredPassengerNameAndNumberDepartureFormMessage = `Pickup date and time	07-05-2026 9:30
 Order total amount	S$110.00
 Comment	For Driver's Info – Passenger Name and Number: Sarah Lim, +65 81234567

@@ -1026,7 +1026,7 @@ function normalizeVehicleValue(value: string, options: { preserveGenericVehicleT
     return "S class";
   }
 
-  if (/\bV\s*-?\s*CLASS\b|\bVIANO\b/.test(upperValue)) {
+  if (/\bVVV\b|\bV\s*-?\s*CLASS\b|\bVIANO\b/.test(upperValue)) {
     return "VVV";
   }
 
@@ -2610,7 +2610,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
       domain,
     bookingType,
     vehicle:
-      cleanVehicle(lineValue(operationalText, ["vehicle", "car", "vehicle type"])) ||
+      cleanVehicle(lineValue(operationalText, ["vehicle", "veh", "car", "vehicle type"])) ||
       detectVehicle(operationalText) ||
       detectVehicle(normalizedText),
     date: parseDateFromText(dateText || operationalText, referenceDate),

@@ -389,6 +389,18 @@ function AssignedDriverSummaryBlock({
   );
 }
 
+function DispatcherStatusSummaryBlock({ bookingRecord }: { bookingRecord: BookingRecord }) {
+  return (
+    <div
+      className="mt-2 rounded-md border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-sm text-slate-700"
+      data-dispatcher-status-summary={String(bookingRecord.id)}
+    >
+      <p className="font-semibold text-emerald-950">Dispatcher Status</p>
+      <p className="mt-1 break-words">Status: {bookingStatusLabel(bookingRecord.status)}</p>
+    </div>
+  );
+}
+
 const initialRateOverrideDraft: RateOverrideDraft = {
   companyName: "",
   bossName: "",
@@ -5992,6 +6004,7 @@ export default function Home() {
                 <p>Booker: {bookerName || "—"}</p>
                 <p>Traveler: {travelerName || "—"}</p>
                 <p>Route: {formatDashboardRoute(savedBooking)}</p>
+                <DispatcherStatusSummaryBlock bookingRecord={savedBooking} />
                 <AssignedDriverSummaryBlock bookingRecord={savedBooking} driverDraft={driverDraft} />
                 <p>Pax {savedBooking.pax || 1}</p>
                 {savedBooking.child_seat_required ? (
@@ -6512,6 +6525,7 @@ export default function Home() {
                     {getBookingName(savedBooking) || "Unknown"}
                   </p>
                   <p>{routeText}</p>
+                  <DispatcherStatusSummaryBlock bookingRecord={savedBooking} />
                   <AssignedDriverSummaryBlock bookingRecord={savedBooking} />
                   {priceLine ? <p>{priceLine}</p> : null}
                   {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}
@@ -6687,6 +6701,7 @@ export default function Home() {
                         {getBookingName(savedBooking) || "Unknown"}
                       </p>
                       <p>{routeText}</p>
+                      <DispatcherStatusSummaryBlock bookingRecord={savedBooking} />
                       <AssignedDriverSummaryBlock bookingRecord={savedBooking} />
                       {priceLine ? <p>{priceLine}</p> : null}
                       {createdAt ? <p className="text-xs text-slate-500">Created {createdAt}</p> : null}

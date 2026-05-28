@@ -800,7 +800,13 @@ async function runChromeTest() {
           `${viewport.label}: expected Recent Bookings operational card section ${expectedText}`,
         );
       }
-      for (const expectedText of ["Dispatcher Status", "Assigned Driver"]) {
+      for (const expectedText of [
+        "Dispatcher Status",
+        "Assigned Driver",
+        "Operational Readiness",
+        "OTS Proof: Pending OTS step",
+        "Exception / Replacement: No replacement recorded",
+      ]) {
         assert.equal(
           recentOperationalCardState.summaryGridText.includes(expectedText),
           true,
@@ -841,7 +847,13 @@ async function runChromeTest() {
         ["booking", "route", "vehicle-pax-price"],
         `${viewport.label}: expected dashboard card to group booking, route, and vehicle/pax/price sections`,
       );
-      for (const expectedText of ["Dispatcher Status", "Assigned Driver"]) {
+      for (const expectedText of [
+        "Dispatcher Status",
+        "Assigned Driver",
+        "Operational Readiness",
+        "OTS Proof: Pending OTS step",
+        "Exception / Replacement: No replacement recorded",
+      ]) {
         assert.equal(
           dashboardOperationalCardState.summaryGridText.includes(expectedText),
           true,

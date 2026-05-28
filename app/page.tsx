@@ -409,6 +409,57 @@ function DispatcherStatusSummaryBlock({
   );
 }
 
+function getOperationalReadinessSummary(bookingRecord: BookingRecord) {
+  const normalizedStatus = clean(bookingRecord.status).toLowerCase();
+  const hasDriver = hasBookingDriver(bookingRecord);
+
+  const otsProof =
+    normalizedStatus === "completed"
+      ? "Expected before completion"
+      : normalizedStatus === "pob"
+        ? "Expected before POB"
+        : normalizedStatus === "driver_otw"
+          ? "Needed when driver reaches OTS"
+          : "Pending OTS step";
+  const exceptionReplacement =
+    normalizedStatus === "cancelled"
+      ? "Review replacement needed"
+      : hasDriver
+        ? "No replacement recorded"
+        : "Driver TBC";
+
+  return {
+    exceptionReplacement,
+    otsProof,
+  };
+}
+
+function OperationalReadinessSummaryBlock({
+  bookingRecord,
+  flush = false,
+}: {
+  bookingRecord: BookingRecord;
+  flush?: boolean;
+}) {
+  const readinessSummary = getOperationalReadinessSummary(bookingRecord);
+
+  return (
+    <div
+      className={`${flush ? "" : "mt-2 "}rounded-md border border-amber-100 bg-amber-50/70 px-3 py-2 text-sm text-slate-700`}
+      data-operational-readiness-summary={String(bookingRecord.id)}
+    >
+      <p className="font-semibold text-amber-950">Operational Readiness</p>
+      <div className="mt-1 space-y-1">
+        <p className="break-words">OTS Proof: {readinessSummary.otsProof}</p>
+        <p className="break-words">
+          Exception / Replacement: {readinessSummary.exceptionReplacement}
+        </p>
+        <p className="text-xs text-slate-500">Mock/local checklist only.</p>
+      </div>
+    </div>
+  );
+}
+
 function OperationalCardSection({
   children,
   className = "",
@@ -6039,13 +6090,14 @@ export default function Home() {
                 <OperationalCardSection section="route" title="Route">
                   <p className="break-words">Route: {formatDashboardRoute(savedBooking)}</p>
                 </OperationalCardSection>
-                <div className="grid gap-3 sm:grid-cols-2" data-operational-card-summary-grid={bookingId}>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
                   <DispatcherStatusSummaryBlock bookingRecord={savedBooking} flush />
                   <AssignedDriverSummaryBlock
                     bookingRecord={savedBooking}
                     driverDraft={driverDraft}
                     flush
                   />
+                  <OperationalReadinessSummaryBlock bookingRecord={savedBooking} flush />
                 </div>
                 <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax / price">
                   <p>Vehicle: {vehicle}</p>
@@ -6587,9 +6639,10 @@ export default function Home() {
                     <OperationalCardSection section="route" title="Route">
                       <p className="break-words">Route: {routeText}</p>
                     </OperationalCardSection>
-                    <div className="grid gap-3 sm:grid-cols-2" data-operational-card-summary-grid={bookingId}>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
                       <DispatcherStatusSummaryBlock bookingRecord={savedBooking} flush />
                       <AssignedDriverSummaryBlock bookingRecord={savedBooking} flush />
+                      <OperationalReadinessSummaryBlock bookingRecord={savedBooking} flush />
                     </div>
                     <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax / price">
                       <p>Vehicle: {clean(savedBooking.vehicle) || "Vehicle TBC"}</p>
@@ -6774,9 +6827,10 @@ export default function Home() {
                         <OperationalCardSection section="route" title="Route">
                           <p className="break-words">Route: {routeText}</p>
                         </OperationalCardSection>
-                        <div className="grid gap-3 sm:grid-cols-2" data-operational-card-summary-grid={bookingId}>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-operational-card-summary-grid={bookingId}>
                           <DispatcherStatusSummaryBlock bookingRecord={savedBooking} flush />
                           <AssignedDriverSummaryBlock bookingRecord={savedBooking} flush />
+                          <OperationalReadinessSummaryBlock bookingRecord={savedBooking} flush />
                         </div>
                         <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax / price">
                           <p>Vehicle: {clean(savedBooking.vehicle) || "Vehicle TBC"}</p>

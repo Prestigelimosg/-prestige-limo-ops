@@ -7136,6 +7136,53 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Driver assignment detail collection readiness"
+          className="rounded-lg border border-cyan-100 bg-white px-3 py-2 shadow-sm"
+          data-driver-detail-collection-readiness="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-cyan-700">
+                  Driver Details
+                </span>{" "}
+                <span className="text-slate-600">Collection readiness</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-6">
+              {[
+                ["Assigned", "Driver selected"],
+                ["Contact", "Name/contact ready"],
+                ["Vehicle", "Model/plate ready"],
+                ["Verify", "Dispatcher check"],
+                ["Update", "Future/not sent"],
+                ["Next", "Review details"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-cyan-100 bg-cyan-50/60 px-2 py-1.5"
+                  data-driver-detail-collection-readiness-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-cyan-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-driver-detail-collection-readiness-boundary="true"
+          >
+            Mock/local only. No driver detail collection, assignment, save, customer update, storage, API call,
+            or message channel.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

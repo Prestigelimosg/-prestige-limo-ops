@@ -1065,6 +1065,167 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDriverDetailCollectionReadiness = async () => {
+      const readinessViewports = [
+        { height: 812, label: "mobile driver detail collection readiness", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop driver detail collection readiness", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of readinessViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const readiness = document.querySelector("[data-driver-detail-collection-readiness]");
+              if (!readiness) {
+                return false;
+              }
+
+              const rect = readiness.getBoundingClientRect();
+              const items = [...readiness.querySelectorAll("[data-driver-detail-collection-readiness-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-driver-detail-collection-readiness-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = readiness.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-driver-detail-collection-readiness-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin driver detail collection readiness`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("driver details"),
+          true,
+          `${viewport.label}: expected internal driver details heading`,
+        );
+        assert.equal(
+          state.text.includes("Collection readiness"),
+          true,
+          `${viewport.label}: expected driver detail collection readiness title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Assigned", "Contact", "Vehicle", "Verify", "Update", "Next"],
+          `${viewport.label}: expected driver-detail-collection readiness labels`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Driver selected")),
+          true,
+          `${viewport.label}: expected assigned driver status`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Name/contact ready")),
+          true,
+          `${viewport.label}: expected driver name/contact readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Model/plate ready")),
+          true,
+          `${viewport.label}: expected vehicle model/plate readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Dispatcher check")),
+          true,
+          `${viewport.label}: expected driver detail verification readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Future/not sent")),
+          true,
+          `${viewport.label}: expected future customer update boundary`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Review details")),
+          true,
+          `${viewport.label}: expected dispatcher next action`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only."),
+          true,
+          `${viewport.label}: expected mock/local driver detail collection boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("No driver detail collection"),
+          true,
+          `${viewport.label}: expected no real driver detail collection boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("assignment") && state.boundary.includes("save"),
+          true,
+          `${viewport.label}: expected no assignment/save boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("customer update") && state.boundary.includes("message channel"),
+          true,
+          `${viewport.label}: expected no-send customer update boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("storage") && state.boundary.includes("API call"),
+          true,
+          `${viewport.label}: expected no storage/API boundary`,
+        );
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected driver detail collection readiness to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private driver details in readiness strip`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 340 : 150),
+          true,
+          `${viewport.label}: expected compact driver detail collection readiness, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected driver detail collection readiness items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected driver detail collection readiness not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -2271,6 +2432,9 @@ async function runChromeTest() {
             internalStaffNoticeRect && internalStaffNoticeRect.width > 0 && internalStaffNoticeRect.height > 0,
           ),
           driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
+          driverDetailCollectionReadinessVisible: Boolean(
+            document.querySelector("[data-driver-detail-collection-readiness]"),
+          ),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
@@ -2282,6 +2446,7 @@ async function runChromeTest() {
             "paypal",
             "secret key",
             "confirmed booking readiness",
+            "collection readiness",
             "future/not sent",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
@@ -2652,6 +2817,11 @@ async function runChromeTest() {
         dashboardState.driverAssignmentReadinessVisible,
         false,
         "Expected /customers not to show internal driver assignment readiness",
+      );
+      assert.equal(
+        dashboardState.driverDetailCollectionReadinessVisible,
+        false,
+        "Expected /customers not to show internal driver detail collection readiness",
       );
       assert.equal(
         dashboardState.regularBookingFormVisible,
@@ -7354,6 +7524,9 @@ async function runChromeTest() {
               docScrollWidth: document.documentElement.scrollWidth,
               helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
               driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
+              driverDetailCollectionReadinessVisible: Boolean(
+                document.querySelector("[data-driver-detail-collection-readiness]"),
+              ),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
               internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
@@ -7379,6 +7552,11 @@ async function runChromeTest() {
         mobileDashboardState.driverAssignmentReadinessVisible,
         false,
         "Expected mobile /customers not to show internal driver assignment readiness",
+      );
+      assert.equal(
+        mobileDashboardState.driverDetailCollectionReadinessVisible,
+        false,
+        "Expected mobile /customers not to show internal driver detail collection readiness",
       );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
@@ -7593,6 +7771,9 @@ async function runChromeTest() {
             document.querySelector("[data-intake-confirmation-readiness]"),
           ),
           driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
+          driverDetailCollectionReadinessVisible: Boolean(
+            document.querySelector("[data-driver-detail-collection-readiness]"),
+          ),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -7608,6 +7789,7 @@ async function runChromeTest() {
             "reassign replacement",
             "current driver cancelled",
             "confirmed booking readiness",
+            "collection readiness",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
@@ -7696,6 +7878,11 @@ async function runChromeTest() {
         initialState.driverAssignmentReadinessVisible,
         false,
         "Expected /book not to show internal driver assignment readiness",
+      );
+      assert.equal(
+        initialState.driverDetailCollectionReadinessVisible,
+        false,
+        "Expected /book not to show internal driver detail collection readiness",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -7975,6 +8162,11 @@ async function runChromeTest() {
         false,
         "Expected /book mobile not to show internal driver assignment readiness",
       );
+      assert.equal(
+        mobileState.driverDetailCollectionReadinessVisible,
+        false,
+        "Expected /book mobile not to show internal driver detail collection readiness",
+      );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -8101,6 +8293,9 @@ async function runChromeTest() {
             document.querySelector("[data-intake-confirmation-readiness]"),
           ),
           driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
+          driverDetailCollectionReadinessVisible: Boolean(
+            document.querySelector("[data-driver-detail-collection-readiness]"),
+          ),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -8128,6 +8323,7 @@ async function runChromeTest() {
             "reassign replacement",
             "current driver cancelled",
             "confirmed booking readiness",
+            "collection readiness",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           form: {
@@ -8442,6 +8638,11 @@ async function runChromeTest() {
         initialState.driverAssignmentReadinessVisible,
         false,
         "Expected /my-bookings not to show internal driver assignment readiness",
+      );
+      assert.equal(
+        initialState.driverDetailCollectionReadinessVisible,
+        false,
+        "Expected /my-bookings not to show internal driver detail collection readiness",
       );
       assert.equal(
         initialState.guidance.height <= 190,
@@ -9141,6 +9342,11 @@ async function runChromeTest() {
         false,
         "Expected /my-bookings mobile not to show internal driver assignment readiness",
       );
+      assert.equal(
+        mobileState.driverDetailCollectionReadinessVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal driver detail collection readiness",
+      );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
         [],
@@ -9317,6 +9523,9 @@ async function runChromeTest() {
           buttons,
           currentStatus: document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "",
           driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
+          driverDetailCollectionReadinessVisible: Boolean(
+            document.querySelector("[data-driver-detail-collection-readiness]"),
+          ),
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -9354,6 +9563,7 @@ async function runChromeTest() {
             "monthly billing summary",
             "mock summary only",
             "confirmed booking readiness",
+            "collection readiness",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
@@ -9383,6 +9593,11 @@ async function runChromeTest() {
         initialState.driverAssignmentReadinessVisible,
         false,
         `${viewport.label}: expected no internal driver assignment readiness on driver job link`,
+      );
+      assert.equal(
+        initialState.driverDetailCollectionReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal driver detail collection readiness on driver job link`,
       );
       assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
       assert.deepEqual(
@@ -9828,6 +10043,9 @@ async function runChromeTest() {
           buttons,
           docClientWidth: doc.clientWidth,
           driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
+          driverDetailCollectionReadinessVisible: Boolean(
+            document.querySelector("[data-driver-detail-collection-readiness]"),
+          ),
           docScrollWidth: doc.scrollWidth,
           dispatcherExceptionButtons: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-action]")]
             .map((button) => button.textContent.trim()),
@@ -9864,6 +10082,7 @@ async function runChromeTest() {
             "monthly billing summary",
             "mock summary only",
             "confirmed booking readiness",
+            "collection readiness",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
@@ -9895,6 +10114,11 @@ async function runChromeTest() {
         initialState.driverAssignmentReadinessVisible,
         false,
         `${viewport.label}: expected no internal driver assignment readiness on driver demo`,
+      );
+      assert.equal(
+        initialState.driverDetailCollectionReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal driver detail collection readiness on driver demo`,
       );
       assert.deepEqual(
         initialState.forbiddenText,
@@ -11110,6 +11334,7 @@ async function runChromeTest() {
     state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
     state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
     state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
+    state.adminDriverDetailCollectionReadiness = await checkAdminDriverDetailCollectionReadiness();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

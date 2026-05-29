@@ -8159,6 +8159,121 @@ export default function Home() {
             storage, API call, save, post, notification, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock receivables aging and follow-up QA review"
+          className="rounded-lg border border-sky-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-receivables-aging-follow-up-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-sky-700">Receivables Aging</span>{" "}
+                <span className="text-slate-600">Mock Follow-up QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-receivables-aging-follow-up-review-copy="true"
+              >
+                Static/mock receivables aging review data only for future follow-up QA. Nothing is reminded, collected,
+                posted, billed, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-receivables-aging-follow-up-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    agingBucket: "Current / not due",
+                    billingContact: "Contact verified",
+                    carryForward: "Manual goodwill noted",
+                    daysOutstanding: "0 days",
+                    followUpDecision: "Monitor only",
+                    followUpQa: "Follow-up not due",
+                    month: "May 2026",
+                    status: "Not sent / not posted / not billed",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    agingBucket: "1-30 day review",
+                    billingContact: "Billing contact final check",
+                    carryForward: "Disputed extra hours carried",
+                    daysOutstanding: "18 days",
+                    followUpDecision: "Prepare mock follow-up",
+                    followUpQa: "Follow-up ready",
+                    month: "May 2026",
+                    status: "Not sent / not posted / not billed",
+                  },
+                  {
+                    account: "VIP Customer",
+                    agingBucket: "1-30 day review",
+                    billingContact: "Billing contact needs check",
+                    carryForward: "Exception carried forward",
+                    daysOutstanding: "24 days",
+                    followUpDecision: "Hold for contact QA",
+                    followUpQa: "QA needs contact check",
+                    month: "May 2026",
+                    status: "Not sent / not posted / not billed",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-3 gap-1 rounded-md border border-sky-100 bg-sky-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-5 xl:grid-cols-9"
+                    data-mock-receivables-aging-follow-up-review-row={`${row.account}-${row.agingBucket}`}
+                    key={`${row.account}-${row.month}-${row.daysOutstanding}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Mock aging bucket", "Aging", row.agingBucket],
+                      ["Days outstanding", "Days", row.daysOutstanding],
+                      ["Follow-up QA status", "QA", row.followUpQa],
+                      ["Billing contact status", "Contact", row.billingContact],
+                      ["Exception carry-forward status", "Carry", row.carryForward],
+                      ["Mock follow-up decision", "Decision", row.followUpDecision],
+                      ["Not-sent/not-posted/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-sky-700"
+                          data-mock-receivables-aging-follow-up-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-receivables-aging-follow-up-review-note="true"
+                >
+                  Receivables aging review - mock only. Follow-up QA - not saved. Current/not due, 1-30 day follow-up
+                  ready, billing contact needs check, and exception carried forward. Not sent / not posted / not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-receivables-aging-follow-up-review-generation="true"
+                >
+                  No customer reminder generated. No payment link generated. No receivables record generated. No
+                  collection action created. No invoice number generated. No PDF generated. No customer account posting
+                  generated. No accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-receivables-aging-follow-up-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, aging
+            persistence, follow-up persistence, collection persistence, PDF, receivables record, collection record,
+            customer account posting, storage, API call, save, post, notification, reminder, follow-up, collection, or
+            send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

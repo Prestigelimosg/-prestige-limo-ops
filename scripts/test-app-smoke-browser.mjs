@@ -669,6 +669,7 @@ async function runChromeTest() {
         "[data-mock-accounting-statement-preview]",
         "[data-mock-statement-variance-review]",
         "[data-mock-receivables-handoff-review]",
+        "[data-mock-receivables-aging-follow-up-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -714,7 +715,8 @@ async function runChromeTest() {
         assert.equal(
           state.text.includes("Customer Intake") &&
             state.text.includes("Statement Variance") &&
-            state.text.includes("Receivables Handoff"),
+            state.text.includes("Receivables Handoff") &&
+            state.text.includes("Receivables Aging"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -4046,6 +4048,288 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockReceivablesAgingFollowUpReview = async () => {
+      const reviewViewports = [
+        {
+          height: 980,
+          label: "mobile mock receivables aging follow-up review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 980,
+          label: "desktop mock receivables aging follow-up review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-receivables-aging-follow-up-review]");
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              if (!section || !group || !dashboard || !group.contains(section)) {
+                return false;
+              }
+
+              const sectionRect = section.getBoundingClientRect();
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-receivables-aging-follow-up-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-receivables-aging-follow-up-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-receivables-aging-follow-up-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-receivables-aging-follow-up-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-receivables-aging-follow-up-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-receivables-aging-follow-up-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "release now",
+                  "bill now",
+                  "collect now",
+                  "create collection",
+                  "create follow-up",
+                  "create invoice",
+                  "create payment link",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "post accounting",
+                  "post now",
+                  "save aging",
+                  "save follow-up",
+                  "send reminder",
+                  "send statement",
+                  "send notification",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-receivables-aging-follow-up-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-receivables-aging-follow-up-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock receivables aging follow-up review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected receivables aging review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("receivables aging"),
+          true,
+          `${viewport.label}: expected receivables aging heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock Follow-up QA"),
+          true,
+          `${viewport.label}: expected mock follow-up QA title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Mock aging bucket",
+            "Days outstanding",
+            "Follow-up QA status",
+            "Billing contact status",
+            "Exception carry-forward status",
+            "Mock follow-up decision",
+            "Not-sent/not-posted/not-billed status",
+          ],
+          `${viewport.label}: expected mock receivables aging columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three static mock aging rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026",
+          "Current / not due",
+          "1-30 day review",
+          "0 days",
+          "18 days",
+          "24 days",
+          "Follow-up not due",
+          "Follow-up ready",
+          "QA needs contact check",
+          "Contact verified",
+          "Billing contact final check",
+          "Billing contact needs check",
+          "Manual goodwill noted",
+          "Disputed extra hours carried",
+          "Exception carried forward",
+          "Monitor only",
+          "Prepare mock follow-up",
+          "Hold for contact QA",
+          "Not sent / not posted / not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock aging text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static/mock receivables aging review data only") &&
+            state.copy.includes("future follow-up QA") &&
+            state.copy.includes("Nothing is reminded, collected, posted, billed, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence aging copy`,
+        );
+        assert.equal(
+          state.note.includes("Receivables aging review - mock only") &&
+            state.note.includes("Follow-up QA - not saved") &&
+            state.note.includes("Current/not due") &&
+            state.note.includes("1-30 day follow-up ready") &&
+            state.note.includes("billing contact needs check") &&
+            state.note.includes("exception carried forward") &&
+            state.note.includes("Not sent / not posted / not billed"),
+          true,
+          `${viewport.label}: expected aging and follow-up note from receivables flow`,
+        );
+        assert.equal(
+          state.generation.includes("No customer reminder generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No collection action created") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no reminder/payment/collection/invoice/PDF/posting/accounting generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "statement release",
+          "account charge",
+          "aging persistence",
+          "follow-up persistence",
+          "collection persistence",
+          "PDF",
+          "receivables record",
+          "collection record",
+          "customer account posting",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "notification",
+          "reminder",
+          "follow-up",
+          "collection",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected aging boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected receivables aging review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active follow-up/collection/bill/invoice/payment/PDF/post controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in aging review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 920 : viewport.width < 1024 ? 620 : viewport.width < 1200 ? 500 : 420),
+          true,
+          `${viewport.label}: expected compact receivables aging review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected receivables aging rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected receivables aging review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -4673,6 +4957,9 @@ async function runChromeTest() {
             mockReceivablesHandoffReviewVisible: Boolean(
               document.querySelector("[data-mock-receivables-handoff-review]"),
             ),
+            mockReceivablesAgingFollowUpReviewVisible: Boolean(
+              document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
+            ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
               "static/mock receivables handoff qa",
@@ -4683,6 +4970,16 @@ async function runChromeTest() {
               "mock release decision",
               "no receivables record generated",
               "not billed / not posted / not sent",
+              "receivables aging",
+              "static/mock receivables aging review",
+              "follow-up qa",
+              "mock aging bucket",
+              "days outstanding",
+              "billing contact status",
+              "mock follow-up decision",
+              "no customer reminder generated",
+              "no collection action created",
+              "not sent / not posted / not billed",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -4753,10 +5050,15 @@ async function runChromeTest() {
           false,
           `${routeName}: expected no internal mock receivables handoff review`,
         );
+        assert.equal(
+          routeState.mockReceivablesAgingFollowUpReviewVisible,
+          false,
+          `${routeName}: expected no internal mock receivables aging follow-up review`,
+        );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
           [],
-          `${routeName}: expected no internal mock receivables handoff text`,
+          `${routeName}: expected no internal mock receivables review text`,
         );
         assert.equal(
           routeState.billingQuickFilterVisible,
@@ -5358,6 +5660,9 @@ async function runChromeTest() {
           mockReceivablesHandoffReviewVisible: Boolean(
             document.querySelector("[data-mock-receivables-handoff-review]"),
           ),
+          mockReceivablesAgingFollowUpReviewVisible: Boolean(
+            document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -5446,6 +5751,16 @@ async function runChromeTest() {
             "mock release decision",
             "no receivables record generated",
             "not billed / not posted / not sent",
+            "receivables aging",
+            "static/mock receivables aging review",
+            "follow-up qa",
+            "mock aging bucket",
+            "days outstanding",
+            "billing contact status",
+            "mock follow-up decision",
+            "no customer reminder generated",
+            "no collection action created",
+            "not sent / not posted / not billed",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -5885,6 +6200,11 @@ async function runChromeTest() {
         dashboardState.mockReceivablesHandoffReviewVisible,
         false,
         "Expected /customers not to show internal mock receivables handoff review",
+      );
+      assert.equal(
+        dashboardState.mockReceivablesAgingFollowUpReviewVisible,
+        false,
+        "Expected /customers not to show internal mock receivables aging follow-up review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -10701,6 +11021,9 @@ async function runChromeTest() {
               mockReceivablesHandoffReviewVisible: Boolean(
                 document.querySelector("[data-mock-receivables-handoff-review]"),
               ),
+              mockReceivablesAgingFollowUpReviewVisible: Boolean(
+                document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -10798,6 +11121,11 @@ async function runChromeTest() {
         mobileDashboardState.mockReceivablesHandoffReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock receivables handoff review",
+      );
+      assert.equal(
+        mobileDashboardState.mockReceivablesAgingFollowUpReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock receivables aging follow-up review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -11061,6 +11389,9 @@ async function runChromeTest() {
           mockReceivablesHandoffReviewVisible: Boolean(
             document.querySelector("[data-mock-receivables-handoff-review]"),
           ),
+          mockReceivablesAgingFollowUpReviewVisible: Boolean(
+            document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -11153,6 +11484,16 @@ async function runChromeTest() {
             "mock release decision",
             "no receivables record generated",
             "not billed / not posted / not sent",
+            "receivables aging",
+            "static/mock receivables aging review",
+            "follow-up qa",
+            "mock aging bucket",
+            "days outstanding",
+            "billing contact status",
+            "mock follow-up decision",
+            "no customer reminder generated",
+            "no collection action created",
+            "not sent / not posted / not billed",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -11305,6 +11646,11 @@ async function runChromeTest() {
         initialState.mockReceivablesHandoffReviewVisible,
         false,
         "Expected /book not to show internal mock receivables handoff review",
+      );
+      assert.equal(
+        initialState.mockReceivablesAgingFollowUpReviewVisible,
+        false,
+        "Expected /book not to show internal mock receivables aging follow-up review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -11660,6 +12006,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock receivables handoff review",
       );
       assert.equal(
+        mobileState.mockReceivablesAgingFollowUpReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock receivables aging follow-up review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -11834,6 +12185,9 @@ async function runChromeTest() {
           mockReceivablesHandoffReviewVisible: Boolean(
             document.querySelector("[data-mock-receivables-handoff-review]"),
           ),
+          mockReceivablesAgingFollowUpReviewVisible: Boolean(
+            document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -11938,6 +12292,16 @@ async function runChromeTest() {
             "mock release decision",
             "no receivables record generated",
             "not billed / not posted / not sent",
+            "receivables aging",
+            "static/mock receivables aging review",
+            "follow-up qa",
+            "mock aging bucket",
+            "days outstanding",
+            "billing contact status",
+            "mock follow-up decision",
+            "no customer reminder generated",
+            "no collection action created",
+            "not sent / not posted / not billed",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -12316,6 +12680,11 @@ async function runChromeTest() {
         initialState.mockReceivablesHandoffReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock receivables handoff review",
+      );
+      assert.equal(
+        initialState.mockReceivablesAgingFollowUpReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock receivables aging follow-up review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -13089,6 +13458,11 @@ async function runChromeTest() {
         mobileState.mockReceivablesHandoffReviewVisible,
         false,
         "Expected /my-bookings mobile not to show internal mock receivables handoff review",
+      );
+      assert.equal(
+        mobileState.mockReceivablesAgingFollowUpReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock receivables aging follow-up review",
       );
       assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
@@ -15758,6 +16132,7 @@ async function runChromeTest() {
     state.adminMockAccountingStatementPreview = await checkAdminMockAccountingStatementPreview();
     state.adminMockStatementVarianceReview = await checkAdminMockStatementVarianceReview();
     state.adminMockReceivablesHandoffReview = await checkAdminMockReceivablesHandoffReview();
+    state.adminMockReceivablesAgingFollowUpReview = await checkAdminMockReceivablesAgingFollowUpReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

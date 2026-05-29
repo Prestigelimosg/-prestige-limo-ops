@@ -7944,6 +7944,114 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Mock statement variance approval decision review"
+          className="rounded-lg border border-amber-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-statement-variance-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-amber-700">Statement Variance</span>{" "}
+                <span className="text-slate-600">Mock decision</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-statement-variance-review-copy="true"
+              >
+                Static/mock variance review data only for dispatcher/accounting approval decision review. Nothing is
+                approved, billed, posted, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-statement-variance-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    amountVariance: "$ -- not charged",
+                    approvalDecision: "Match pending",
+                    approvedHandoffHours: "11.50h",
+                    extraVariance: "0.00h",
+                    includedVariance: "0.00h",
+                    month: "May 2026",
+                    reconciliationDecision: "Matches preview",
+                    statementPreviewHours: "11.50h",
+                    status: "Not billed / not posted",
+                    varianceHours: "0.00h",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    amountVariance: "$ -- not charged",
+                    approvalDecision: "Review variance",
+                    approvedHandoffHours: "7.25h",
+                    extraVariance: "-0.50h",
+                    includedVariance: "0.00h",
+                    month: "May 2026",
+                    reconciliationDecision: "Disputed extra hours",
+                    statementPreviewHours: "6.75h",
+                    status: "Not billed / not posted",
+                    varianceHours: "-0.50h",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-5 gap-1 rounded-md border border-amber-100 bg-amber-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 xl:grid-cols-11"
+                    data-mock-statement-variance-review-row={`${row.account}-${row.approvalDecision}`}
+                    key={`${row.account}-${row.month}-${row.approvalDecision}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Approved DSP handoff hours", "Handoff", row.approvedHandoffHours],
+                      ["Statement preview hours", "Preview", row.statementPreviewHours],
+                      ["Variance hours", "Variance", row.varianceHours],
+                      ["Included hours variance", "Inc var", row.includedVariance],
+                      ["Extra hours variance", "Extra var", row.extraVariance],
+                      ["Mock amount variance placeholder", "Amount", row.amountVariance],
+                      ["Approval decision status", "Decision", row.approvalDecision],
+                      ["Reconciliation decision status", "Recon", row.reconciliationDecision],
+                      ["Not-billed/not-posted status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-amber-700"
+                          data-mock-statement-variance-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-statement-variance-review-note="true"
+                >
+                  Variance review - mock only. Statement approval decision - not saved. Accounting approval pending.
+                  Approved handoff matches statement preview, minor extra-hours variance requiring review, exception
+                  carried forward, and manual goodwill adjustment noted. Not billed / not posted.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-statement-variance-review-generation="true"
+                >
+                  No invoice number generated. No PDF/payment link generated. No customer account posting generated. No
+                  accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-statement-variance-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, statement, account charge, approval persistence, PDF,
+            accounting record, customer account posting, storage, API call, save, post, notification, or send behavior.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

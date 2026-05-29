@@ -492,6 +492,9 @@ async function runChromeTest() {
       const mockAccountingStatementPreviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-accounting-statement-preview]"))`,
       );
+      const mockStatementVarianceReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-statement-variance-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -564,6 +567,11 @@ async function runChromeTest() {
         mockAccountingStatementPreviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock accounting statement preview`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock statement variance review`,
       );
     };
 
@@ -1914,6 +1922,110 @@ async function runChromeTest() {
         `${viewport.label}: expected accounting statement preview rows to stay readable`,
       );
 
+      const mockStatementVarianceReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-statement-variance-review]");
+            if (!review) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-statement-variance-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-statement-variance-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-statement-variance-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              generation:
+                document.querySelector("[data-mock-statement-variance-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-statement-variance-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock statement variance review`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.text.toLowerCase().includes("statement variance"),
+        true,
+        `${viewport.label}: expected mock statement variance review`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.text.includes("Static/mock variance review data only") &&
+          mockStatementVarianceReviewState.text.includes("11.50h") &&
+          mockStatementVarianceReviewState.text.includes("7.25h") &&
+          mockStatementVarianceReviewState.text.includes("6.75h") &&
+          mockStatementVarianceReviewState.text.includes("-0.50h") &&
+          mockStatementVarianceReviewState.text.includes("not charged") &&
+          mockStatementVarianceReviewState.text.includes("Not billed / not posted"),
+        true,
+        `${viewport.label}: expected static not-billed statement variance details`,
+      );
+      assert.equal(
+          mockStatementVarianceReviewState.note.includes("Variance review - mock only") &&
+          mockStatementVarianceReviewState.note.includes("Statement approval decision - not saved") &&
+          mockStatementVarianceReviewState.note.includes("Accounting approval pending") &&
+          mockStatementVarianceReviewState.note.includes("manual goodwill adjustment noted"),
+        true,
+        `${viewport.label}: expected statement variance decision note`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.generation.includes("No invoice number generated") &&
+          mockStatementVarianceReviewState.generation.includes("No PDF/payment link generated") &&
+          mockStatementVarianceReviewState.generation.includes("No customer account posting generated") &&
+          mockStatementVarianceReviewState.generation.includes("No accounting record generated"),
+        true,
+        `${viewport.label}: expected statement variance no invoice/PDF/payment/posting generation`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.boundary.includes("Mock/local only.") &&
+          mockStatementVarianceReviewState.boundary.includes("No billing automation") &&
+          mockStatementVarianceReviewState.boundary.includes("approval persistence") &&
+          mockStatementVarianceReviewState.boundary.includes("storage") &&
+          mockStatementVarianceReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected statement variance no billing/approval/storage/API boundary`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.actionCount,
+        0,
+        `${viewport.label}: expected statement variance review to stay display-only`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.rows.length,
+        2,
+        `${viewport.label}: expected two static mock statement variance rows`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.height <=
+          (viewport.width < 640 ? 800 : viewport.width < 1024 ? 520 : viewport.width < 1200 ? 440 : 400),
+        true,
+        `${viewport.label}: expected compact statement variance review, got ${mockStatementVarianceReviewState.height}px`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected statement variance rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1974,6 +2086,9 @@ async function runChromeTest() {
       );
       const mockAccountingStatementPreviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-accounting-statement-preview]"))`,
+      );
+      const mockStatementVarianceReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-statement-variance-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -2073,6 +2188,11 @@ async function runChromeTest() {
         mockAccountingStatementPreviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock accounting statement preview`,
+      );
+      assert.equal(
+        mockStatementVarianceReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock statement variance review`,
       );
       if (context === "driver job demo") {
         assert.equal(

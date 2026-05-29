@@ -3440,6 +3440,251 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockStatementVarianceReview = async () => {
+      const reviewViewports = [
+        {
+          height: 980,
+          label: "mobile mock statement variance review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 980,
+          label: "desktop mock statement variance review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-statement-variance-review]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-statement-variance-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-statement-variance-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-statement-variance-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-statement-variance-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-statement-variance-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-statement-variance-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "approve and bill",
+                  "bill now",
+                  "create invoice",
+                  "create statement",
+                  "create payment link",
+                  "generate invoice",
+                  "generate payment link",
+                  "take payment",
+                  "save approval",
+                  "save variance",
+                  "send statement",
+                  "generate pdf",
+                  "post accounting",
+                  "post now",
+                  "send notification",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-statement-variance-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                height: Math.round(rect.height),
+                note:
+                  document.querySelector("[data-mock-statement-variance-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock statement variance review`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("statement variance"),
+          true,
+          `${viewport.label}: expected statement variance heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock decision"),
+          true,
+          `${viewport.label}: expected mock decision title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Approved DSP handoff hours",
+            "Statement preview hours",
+            "Variance hours",
+            "Included hours variance",
+            "Extra hours variance",
+            "Mock amount variance placeholder",
+            "Approval decision status",
+            "Reconciliation decision status",
+            "Not-billed/not-posted status",
+          ],
+          `${viewport.label}: expected mock statement variance review columns`,
+        );
+        assert.equal(state.rows.length, 2, `${viewport.label}: expected two static mock variance rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "11.50h",
+          "7.25h",
+          "6.75h",
+          "0.00h",
+          "-0.50h",
+          "$ -- not charged",
+          "Match pending",
+          "Review variance",
+          "Matches preview",
+          "Disputed extra hours",
+          "Not billed / not posted",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock statement variance text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static/mock variance review data only") &&
+            state.copy.includes("dispatcher/accounting approval decision review") &&
+            state.copy.includes("Nothing is approved, billed, posted, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence variance review copy`,
+        );
+        assert.equal(
+          state.note.includes("Variance review - mock only") &&
+            state.note.includes("Statement approval decision - not saved") &&
+            state.note.includes("Accounting approval pending") &&
+            state.note.includes("Approved handoff matches statement preview") &&
+            state.note.includes("minor extra-hours variance requiring review") &&
+            state.note.includes("exception carried forward") &&
+            state.note.includes("manual goodwill adjustment noted") &&
+            state.note.includes("Not billed / not posted"),
+          true,
+          `${viewport.label}: expected variance and reconciliation note from statement preview flow`,
+        );
+        assert.equal(
+          state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF/payment link generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no invoice/PDF/payment/customer-posting/accounting generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "statement",
+          "account charge",
+          "approval persistence",
+          "PDF",
+          "accounting record",
+          "customer account posting",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected statement variance boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected statement variance review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active approve/bill/invoice/payment/PDF/post controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in statement variance review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 760 : viewport.width < 1024 ? 500 : viewport.width < 1200 ? 420 : 380),
+          true,
+          `${viewport.label}: expected compact statement variance review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected statement variance review rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected statement variance review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -4061,6 +4306,9 @@ async function runChromeTest() {
             mockAccountingStatementPreviewVisible: Boolean(
               document.querySelector("[data-mock-accounting-statement-preview]"),
             ),
+            mockStatementVarianceReviewVisible: Boolean(
+              document.querySelector("[data-mock-statement-variance-review]"),
+            ),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
             sentinelControlValueLeaks: sentinels.filter((sentinel) =>
@@ -4119,6 +4367,11 @@ async function runChromeTest() {
           routeState.mockAccountingStatementPreviewVisible,
           false,
           `${routeName}: expected no internal mock accounting statement preview`,
+        );
+        assert.equal(
+          routeState.mockStatementVarianceReviewVisible,
+          false,
+          `${routeName}: expected no internal mock statement variance review`,
         );
         assert.equal(
           routeState.billingQuickFilterVisible,
@@ -4714,6 +4967,9 @@ async function runChromeTest() {
           mockAccountingStatementPreviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-statement-preview]"),
           ),
+          mockStatementVarianceReviewVisible: Boolean(
+            document.querySelector("[data-mock-statement-variance-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -4775,6 +5031,24 @@ async function runChromeTest() {
             "exceptions carried forward",
             "accounting review pending",
             "extra billable hours",
+            "statement variance",
+            "static/mock variance review data",
+            "variance review - mock only",
+            "statement approval decision",
+            "approval decision review",
+            "accounting approval pending",
+            "approved handoff hours",
+            "statement preview hours",
+            "variance hours",
+            "included hours variance",
+            "extra hours variance",
+            "mock amount variance",
+            "minor extra-hours variance",
+            "exception carried forward",
+            "manual adjustment noted",
+            "customer account posting generated",
+            "accounting record generated",
+            "not billed / not posted",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -5204,6 +5478,11 @@ async function runChromeTest() {
         dashboardState.mockAccountingStatementPreviewVisible,
         false,
         "Expected /customers not to show internal mock accounting statement preview",
+      );
+      assert.equal(
+        dashboardState.mockStatementVarianceReviewVisible,
+        false,
+        "Expected /customers not to show internal mock statement variance review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -9758,6 +10037,24 @@ async function runChromeTest() {
             "exceptions carried forward",
             "accounting review pending",
             "extra billable hours",
+            "statement variance",
+            "static/mock variance review data",
+            "variance review - mock only",
+            "statement approval decision",
+            "approval decision review",
+            "accounting approval pending",
+            "approved handoff hours",
+            "statement preview hours",
+            "variance hours",
+            "included hours variance",
+            "extra hours variance",
+            "mock amount variance",
+            "minor extra-hours variance",
+            "exception carried forward",
+            "manual adjustment noted",
+            "customer account posting generated",
+            "accounting record generated",
+            "not billed / not posted",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
@@ -9996,6 +10293,9 @@ async function runChromeTest() {
               mockAccountingStatementPreviewVisible: Boolean(
                 document.querySelector("[data-mock-accounting-statement-preview]"),
               ),
+              mockStatementVarianceReviewVisible: Boolean(
+                document.querySelector("[data-mock-statement-variance-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -10083,6 +10383,11 @@ async function runChromeTest() {
         mobileDashboardState.mockAccountingStatementPreviewVisible,
         false,
         "Expected mobile /customers not to show internal mock accounting statement preview",
+      );
+      assert.equal(
+        mobileDashboardState.mockStatementVarianceReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock statement variance review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -10408,6 +10713,24 @@ async function runChromeTest() {
             "exceptions carried forward",
             "accounting review pending",
             "extra billable hours",
+            "statement variance",
+            "static/mock variance review data",
+            "variance review - mock only",
+            "statement approval decision",
+            "approval decision review",
+            "accounting approval pending",
+            "approved handoff hours",
+            "statement preview hours",
+            "variance hours",
+            "included hours variance",
+            "extra hours variance",
+            "mock amount variance",
+            "minor extra-hours variance",
+            "exception carried forward",
+            "manual adjustment noted",
+            "customer account posting generated",
+            "accounting record generated",
+            "not billed / not posted",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -11153,6 +11476,24 @@ async function runChromeTest() {
             "exceptions carried forward",
             "accounting review pending",
             "extra billable hours",
+            "statement variance",
+            "static/mock variance review data",
+            "variance review - mock only",
+            "statement approval decision",
+            "approval decision review",
+            "accounting approval pending",
+            "approved handoff hours",
+            "statement preview hours",
+            "variance hours",
+            "included hours variance",
+            "extra hours variance",
+            "mock amount variance",
+            "minor extra-hours variance",
+            "exception carried forward",
+            "manual adjustment noted",
+            "customer account posting generated",
+            "accounting record generated",
+            "not billed / not posted",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -12604,6 +12945,24 @@ async function runChromeTest() {
             "exceptions carried forward",
             "accounting review pending",
             "extra billable hours",
+            "statement variance",
+            "static/mock variance review data",
+            "variance review - mock only",
+            "statement approval decision",
+            "approval decision review",
+            "accounting approval pending",
+            "approved handoff hours",
+            "statement preview hours",
+            "variance hours",
+            "included hours variance",
+            "extra hours variance",
+            "mock amount variance",
+            "minor extra-hours variance",
+            "exception carried forward",
+            "manual adjustment noted",
+            "customer account posting generated",
+            "accounting record generated",
+            "not billed / not posted",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -13291,6 +13650,24 @@ async function runChromeTest() {
             "exceptions carried forward",
             "accounting review pending",
             "extra billable hours",
+            "statement variance",
+            "static/mock variance review data",
+            "variance review - mock only",
+            "statement approval decision",
+            "approval decision review",
+            "accounting approval pending",
+            "approved handoff hours",
+            "statement preview hours",
+            "variance hours",
+            "included hours variance",
+            "extra hours variance",
+            "mock amount variance",
+            "minor extra-hours variance",
+            "exception carried forward",
+            "manual adjustment noted",
+            "customer account posting generated",
+            "accounting record generated",
+            "not billed / not posted",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -14925,6 +15302,7 @@ async function runChromeTest() {
       await checkAdminMockDspReconciliationExceptionsReview();
     state.adminMockDspApprovalPacketReview = await checkAdminMockDspApprovalPacketReview();
     state.adminMockAccountingStatementPreview = await checkAdminMockAccountingStatementPreview();
+    state.adminMockStatementVarianceReview = await checkAdminMockStatementVarianceReview();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

@@ -8056,6 +8056,109 @@ export default function Home() {
             accounting record, customer account posting, storage, API call, save, post, notification, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock receivables handoff QA statement release review"
+          className="rounded-lg border border-emerald-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-receivables-handoff-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-emerald-700">Receivables Handoff</span>{" "}
+                <span className="text-slate-600">Mock QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-receivables-handoff-review-copy="true"
+              >
+                Static/mock receivables handoff QA data only for statement release review. Nothing is released,
+                billed, posted, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-receivables-handoff-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    billingContact: "Contact verified",
+                    carryForward: "Manual goodwill noted",
+                    month: "May 2026",
+                    qaStatus: "QA pending",
+                    releaseDecision: "Hold for accounting",
+                    releaseReadiness: "Ready for mock review",
+                    status: "Not billed / not posted / not sent",
+                    varianceDecision: "Matched to preview",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    billingContact: "Billing contact final check",
+                    carryForward: "Disputed extra hours carried",
+                    month: "May 2026",
+                    qaStatus: "QA needs contact check",
+                    releaseDecision: "Do not release",
+                    releaseReadiness: "Release blocked in mock",
+                    status: "Not billed / not posted / not sent",
+                    varianceDecision: "Review variance",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-3 gap-1 rounded-md border border-emerald-100 bg-emerald-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-5 xl:grid-cols-9"
+                    data-mock-receivables-handoff-review-row={`${row.account}-${row.varianceDecision}`}
+                    key={`${row.account}-${row.month}-${row.varianceDecision}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Variance decision status", "Variance", row.varianceDecision],
+                      ["Receivables QA status", "QA", row.qaStatus],
+                      ["Billing contact check", "Contact", row.billingContact],
+                      ["Statement release readiness", "Release", row.releaseReadiness],
+                      ["Exception carry-forward status", "Carry", row.carryForward],
+                      ["Mock release decision", "Decision", row.releaseDecision],
+                      ["Not-posted/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-emerald-700"
+                          data-mock-receivables-handoff-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-receivables-handoff-review-note="true"
+                >
+                  Receivables handoff QA - mock only. Statement release review - not saved. Approved variance matched
+                  to statement preview, billing contact needs final check, exception carried forward, and accounting
+                  review pending. Not billed / not posted / not sent.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-receivables-handoff-review-generation="true"
+                >
+                  No invoice number generated. No PDF/payment link generated. No customer account posting generated. No
+                  receivables record generated. No accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-receivables-handoff-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, statement release, account charge, approval persistence,
+            statement release persistence, PDF, receivables record, accounting record, customer account posting,
+            storage, API call, save, post, notification, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

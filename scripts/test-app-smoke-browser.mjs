@@ -668,6 +668,7 @@ async function runChromeTest() {
         "[data-mock-dsp-approval-packet-review]",
         "[data-mock-accounting-statement-preview]",
         "[data-mock-statement-variance-review]",
+        "[data-mock-receivables-handoff-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -711,7 +712,9 @@ async function runChromeTest() {
           `${viewport.label}: expected mock workflow review group after operations dashboard, got group top ${state.groupTop} before dashboard bottom ${state.dashboardBottom}`,
         );
         assert.equal(
-          state.text.includes("Customer Intake") && state.text.includes("Statement Variance"),
+          state.text.includes("Customer Intake") &&
+            state.text.includes("Statement Variance") &&
+            state.text.includes("Receivables Handoff"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -3547,7 +3550,13 @@ async function runChromeTest() {
       const states = [];
 
       for (const viewport of reviewViewports) {
-        await setViewportAndReload(viewport);
+        await client.send("Emulation.setDeviceMetricsOverride", {
+          deviceScaleFactor: viewport.scale,
+          height: viewport.height,
+          mobile: viewport.mobile,
+          width: viewport.width,
+        });
+        await clickTab("Dashboard");
         const state = await waitForCondition(
           () =>
             evaluate(`(() => {
@@ -3759,6 +3768,271 @@ async function runChromeTest() {
           state.docScrollWidth <= state.docClientWidth + 2,
           true,
           `${viewport.label}: expected statement variance review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
+    const checkAdminMockReceivablesHandoffReview = async () => {
+      const reviewViewports = [
+        {
+          height: 980,
+          label: "mobile mock receivables handoff review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 980,
+          label: "desktop mock receivables handoff review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-receivables-handoff-review]");
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              if (!section || !group || !dashboard || !group.contains(section)) {
+                return false;
+              }
+
+              const sectionRect = section.getBoundingClientRect();
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-receivables-handoff-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-receivables-handoff-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-receivables-handoff-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-receivables-handoff-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-receivables-handoff-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-receivables-handoff-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "release now",
+                  "approve and release",
+                  "bill now",
+                  "create invoice",
+                  "create statement",
+                  "create payment link",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "post accounting",
+                  "post now",
+                  "save release",
+                  "send statement",
+                  "send notification",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-receivables-handoff-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-receivables-handoff-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock receivables handoff review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected receivables handoff review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("receivables handoff"),
+          true,
+          `${viewport.label}: expected receivables handoff heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock QA"),
+          true,
+          `${viewport.label}: expected mock QA title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Variance decision status",
+            "Receivables QA status",
+            "Billing contact check",
+            "Statement release readiness",
+            "Exception carry-forward status",
+            "Mock release decision",
+            "Not-posted/not-billed status",
+          ],
+          `${viewport.label}: expected mock receivables handoff columns`,
+        );
+        assert.equal(state.rows.length, 2, `${viewport.label}: expected two static mock receivables rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "May 2026",
+          "Matched to preview",
+          "Review variance",
+          "QA pending",
+          "QA needs contact check",
+          "Contact verified",
+          "Billing contact final check",
+          "Ready for mock review",
+          "Release blocked in mock",
+          "Manual goodwill noted",
+          "Disputed extra hours carried",
+          "Hold for accounting",
+          "Do not release",
+          "Not billed / not posted / not sent",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock receivables text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static/mock receivables handoff QA data only") &&
+            state.copy.includes("statement release review") &&
+            state.copy.includes("Nothing is released, billed, posted, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence receivables copy`,
+        );
+        assert.equal(
+          state.note.includes("Receivables handoff QA - mock only") &&
+            state.note.includes("Statement release review - not saved") &&
+            state.note.includes("Approved variance matched to statement preview") &&
+            state.note.includes("billing contact needs final check") &&
+            state.note.includes("exception carried forward") &&
+            state.note.includes("accounting review pending") &&
+            state.note.includes("Not billed / not posted / not sent"),
+          true,
+          `${viewport.label}: expected QA and reconciliation note from statement variance flow`,
+        );
+        assert.equal(
+          state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF/payment link generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no invoice/PDF/payment/posting/receivables/accounting generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "statement release",
+          "account charge",
+          "approval persistence",
+          "statement release persistence",
+          "PDF",
+          "receivables record",
+          "accounting record",
+          "customer account posting",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected receivables boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected receivables handoff review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active release/bill/invoice/payment/PDF/post controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in receivables review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 780 : viewport.width < 1024 ? 520 : viewport.width < 1200 ? 420 : 360),
+          true,
+          `${viewport.label}: expected compact receivables handoff review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected receivables handoff rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected receivables handoff review not to create horizontal overflow`,
         );
 
         states.push({
@@ -4396,6 +4670,20 @@ async function runChromeTest() {
             mockStatementVarianceReviewVisible: Boolean(
               document.querySelector("[data-mock-statement-variance-review]"),
             ),
+            mockReceivablesHandoffReviewVisible: Boolean(
+              document.querySelector("[data-mock-receivables-handoff-review]"),
+            ),
+            mockReceivablesTextLeaks: [
+              "receivables handoff",
+              "static/mock receivables handoff qa",
+              "statement release review",
+              "receivables qa status",
+              "billing contact check",
+              "statement release readiness",
+              "mock release decision",
+              "no receivables record generated",
+              "not billed / not posted / not sent",
+            ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
             sentinelControlValueLeaks: sentinels.filter((sentinel) =>
@@ -4459,6 +4747,16 @@ async function runChromeTest() {
           routeState.mockStatementVarianceReviewVisible,
           false,
           `${routeName}: expected no internal mock statement variance review`,
+        );
+        assert.equal(
+          routeState.mockReceivablesHandoffReviewVisible,
+          false,
+          `${routeName}: expected no internal mock receivables handoff review`,
+        );
+        assert.deepEqual(
+          routeState.mockReceivablesTextLeaks,
+          [],
+          `${routeName}: expected no internal mock receivables handoff text`,
         );
         assert.equal(
           routeState.billingQuickFilterVisible,
@@ -5057,6 +5355,9 @@ async function runChromeTest() {
           mockStatementVarianceReviewVisible: Boolean(
             document.querySelector("[data-mock-statement-variance-review]"),
           ),
+          mockReceivablesHandoffReviewVisible: Boolean(
+            document.querySelector("[data-mock-receivables-handoff-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -5136,6 +5437,15 @@ async function runChromeTest() {
             "customer account posting generated",
             "accounting record generated",
             "not billed / not posted",
+            "receivables handoff",
+            "static/mock receivables handoff qa",
+            "statement release review",
+            "receivables qa status",
+            "billing contact check",
+            "statement release readiness",
+            "mock release decision",
+            "no receivables record generated",
+            "not billed / not posted / not sent",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -5570,6 +5880,11 @@ async function runChromeTest() {
         dashboardState.mockStatementVarianceReviewVisible,
         false,
         "Expected /customers not to show internal mock statement variance review",
+      );
+      assert.equal(
+        dashboardState.mockReceivablesHandoffReviewVisible,
+        false,
+        "Expected /customers not to show internal mock receivables handoff review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -10383,6 +10698,9 @@ async function runChromeTest() {
               mockStatementVarianceReviewVisible: Boolean(
                 document.querySelector("[data-mock-statement-variance-review]"),
               ),
+              mockReceivablesHandoffReviewVisible: Boolean(
+                document.querySelector("[data-mock-receivables-handoff-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -10475,6 +10793,11 @@ async function runChromeTest() {
         mobileDashboardState.mockStatementVarianceReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock statement variance review",
+      );
+      assert.equal(
+        mobileDashboardState.mockReceivablesHandoffReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock receivables handoff review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -10735,6 +11058,9 @@ async function runChromeTest() {
           mockAccountingStatementPreviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-statement-preview]"),
           ),
+          mockReceivablesHandoffReviewVisible: Boolean(
+            document.querySelector("[data-mock-receivables-handoff-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -10818,6 +11144,15 @@ async function runChromeTest() {
             "customer account posting generated",
             "accounting record generated",
             "not billed / not posted",
+            "receivables handoff",
+            "static/mock receivables handoff qa",
+            "statement release review",
+            "receivables qa status",
+            "billing contact check",
+            "statement release readiness",
+            "mock release decision",
+            "no receivables record generated",
+            "not billed / not posted / not sent",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -10965,6 +11300,11 @@ async function runChromeTest() {
         initialState.mockAccountingStatementPreviewVisible,
         false,
         "Expected /book not to show internal mock accounting statement preview",
+      );
+      assert.equal(
+        initialState.mockReceivablesHandoffReviewVisible,
+        false,
+        "Expected /book not to show internal mock receivables handoff review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -11315,6 +11655,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock accounting statement preview",
       );
       assert.equal(
+        mobileState.mockReceivablesHandoffReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock receivables handoff review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -11486,6 +11831,9 @@ async function runChromeTest() {
           mockAccountingStatementPreviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-statement-preview]"),
           ),
+          mockReceivablesHandoffReviewVisible: Boolean(
+            document.querySelector("[data-mock-receivables-handoff-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -11581,6 +11929,15 @@ async function runChromeTest() {
             "customer account posting generated",
             "accounting record generated",
             "not billed / not posted",
+            "receivables handoff",
+            "static/mock receivables handoff qa",
+            "statement release review",
+            "receivables qa status",
+            "billing contact check",
+            "statement release readiness",
+            "mock release decision",
+            "no receivables record generated",
+            "not billed / not posted / not sent",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -11954,6 +12311,11 @@ async function runChromeTest() {
         initialState.mockAccountingStatementPreviewVisible,
         false,
         "Expected /my-bookings not to show internal mock accounting statement preview",
+      );
+      assert.equal(
+        initialState.mockReceivablesHandoffReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock receivables handoff review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -12722,6 +13084,11 @@ async function runChromeTest() {
         mobileState.mockAccountingStatementPreviewVisible,
         false,
         "Expected /my-bookings mobile not to show internal mock accounting statement preview",
+      );
+      assert.equal(
+        mobileState.mockReceivablesHandoffReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock receivables handoff review",
       );
       assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
@@ -15390,6 +15757,7 @@ async function runChromeTest() {
     state.adminMockDspApprovalPacketReview = await checkAdminMockDspApprovalPacketReview();
     state.adminMockAccountingStatementPreview = await checkAdminMockAccountingStatementPreview();
     state.adminMockStatementVarianceReview = await checkAdminMockStatementVarianceReview();
+    state.adminMockReceivablesHandoffReview = await checkAdminMockReceivablesHandoffReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

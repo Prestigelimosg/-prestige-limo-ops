@@ -2749,6 +2749,221 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockDspReconciliationExceptionsReview = async () => {
+      const previewViewports = [
+        {
+          height: 940,
+          label: "mobile mock DSP reconciliation exceptions review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 940,
+          label: "desktop mock DSP reconciliation exceptions review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of previewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-dsp-reconciliation-exceptions-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-dsp-reconciliation-exceptions-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-dsp-reconciliation-exceptions-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-dsp-reconciliation-exceptions-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-dsp-reconciliation-exceptions-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-dsp-reconciliation-exceptions-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                detail:
+                  document.querySelector("[data-mock-dsp-reconciliation-exceptions-review-detail]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "bill now",
+                  "create invoice",
+                  "take payment",
+                  "save charge",
+                  "send statement",
+                  "generate pdf",
+                  "post accounting",
+                  "audit now",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock DSP reconciliation exceptions review`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("dsp exceptions"),
+          true,
+          `${viewport.label}: expected DSP exceptions heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock adjustments"),
+          true,
+          `${viewport.label}: expected mock adjustments title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Month",
+            "Issue type",
+            "Original hours",
+            "Proposed adjusted hours",
+            "Difference",
+            "Reason/note",
+            "Mock reconciliation status",
+          ],
+          `${viewport.label}: expected mock DSP reconciliation exception columns`,
+        );
+        assert.equal(state.rows.length, 4, `${viewport.label}: expected four static mock exception rows`);
+        for (const expectedText of [
+          "Missing job completed time",
+          "Disputed extra hours",
+          "Driver completion time needs review",
+          "Manual goodwill adjustment",
+          "Pending",
+          "Review needed",
+          "7.25h",
+          "6.75h",
+          "-0.50h",
+          "Not saved / not billed",
+          "Mock adjustment review",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock exception text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static mock exception rows only") &&
+            state.copy.includes("reconciliation review") &&
+            state.copy.includes("Nothing is billed, saved, posted, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence exception copy`,
+        );
+        assert.equal(
+          state.detail.includes("Future invoice adjustment line - mock only, not created") &&
+            state.detail.includes("7.25h original") &&
+            state.detail.includes("6.75h adjusted") &&
+            state.detail.includes("-0.50h difference") &&
+            state.detail.includes("Not saved / not billed"),
+          true,
+          `${viewport.label}: expected mock invoice adjustment detail without creation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "PDF",
+          "accounting posting",
+          "customer account",
+          "statement",
+          "storage",
+          "API call",
+          "save",
+          "notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected reconciliation exceptions boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected DSP reconciliation exceptions review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active bill/invoice/payment/PDF/accounting/audit controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in exception review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 760 : viewport.width < 1024 ? 500 : viewport.width < 1200 ? 420 : 340),
+          true,
+          `${viewport.label}: expected compact DSP reconciliation exceptions review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected DSP reconciliation exception rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected DSP reconciliation exceptions review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -3361,6 +3576,9 @@ async function runChromeTest() {
             mockDspMonthlyRollupReviewVisible: Boolean(
               document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
             ),
+            mockDspReconciliationExceptionsReviewVisible: Boolean(
+              document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
+            ),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
             sentinelControlValueLeaks: sentinels.filter((sentinel) =>
@@ -3404,6 +3622,11 @@ async function runChromeTest() {
           routeState.mockDspMonthlyRollupReviewVisible,
           false,
           `${routeName}: expected no internal mock DSP monthly rollup review`,
+        );
+        assert.equal(
+          routeState.mockDspReconciliationExceptionsReviewVisible,
+          false,
+          `${routeName}: expected no internal mock DSP reconciliation exceptions review`,
         );
         assert.equal(
           routeState.billingQuickFilterVisible,
@@ -3990,6 +4213,9 @@ async function runChromeTest() {
           mockDspMonthlyRollupReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
           ),
+          mockDspReconciliationExceptionsReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -4027,6 +4253,12 @@ async function runChromeTest() {
             "mock reconciliation",
             "static mock sample rows",
             "future monthly invoice line",
+            "dsp exceptions",
+            "mock adjustments",
+            "static mock exception rows",
+            "future invoice adjustment line",
+            "missing job completed time",
+            "disputed extra hours",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -4441,6 +4673,11 @@ async function runChromeTest() {
         dashboardState.mockDspMonthlyRollupReviewVisible,
         false,
         "Expected /customers not to show internal mock DSP monthly rollup review",
+      );
+      assert.equal(
+        dashboardState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        "Expected /customers not to show internal mock DSP reconciliation exceptions review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -8971,6 +9208,12 @@ async function runChromeTest() {
             "mock reconciliation",
             "static mock sample rows",
             "future monthly invoice line",
+            "dsp exceptions",
+            "mock adjustments",
+            "static mock exception rows",
+            "future invoice adjustment line",
+            "missing job completed time",
+            "disputed extra hours",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
@@ -9200,6 +9443,9 @@ async function runChromeTest() {
               mockDspMonthlyRollupReviewVisible: Boolean(
                 document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
               ),
+              mockDspReconciliationExceptionsReviewVisible: Boolean(
+                document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -9272,6 +9518,11 @@ async function runChromeTest() {
         mobileDashboardState.mockDspMonthlyRollupReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock DSP monthly rollup review",
+      );
+      assert.equal(
+        mobileDashboardState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock DSP reconciliation exceptions review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -9523,6 +9774,9 @@ async function runChromeTest() {
           mockDspMonthlyRollupReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
           ),
+          mockDspReconciliationExceptionsReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -9564,6 +9818,12 @@ async function runChromeTest() {
             "mock reconciliation",
             "static mock sample rows",
             "future monthly invoice line",
+            "dsp exceptions",
+            "mock adjustments",
+            "static mock exception rows",
+            "future invoice adjustment line",
+            "missing job completed time",
+            "disputed extra hours",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -9696,6 +9956,11 @@ async function runChromeTest() {
         initialState.mockDspMonthlyRollupReviewVisible,
         false,
         "Expected /book not to show internal mock DSP monthly rollup review",
+      );
+      assert.equal(
+        initialState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        "Expected /book not to show internal mock DSP reconciliation exceptions review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -10031,6 +10296,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock DSP monthly rollup review",
       );
       assert.equal(
+        mobileState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock DSP reconciliation exceptions review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -10193,6 +10463,9 @@ async function runChromeTest() {
           mockDspMonthlyRollupReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
           ),
+          mockDspReconciliationExceptionsReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -10246,6 +10519,12 @@ async function runChromeTest() {
             "mock reconciliation",
             "static mock sample rows",
             "future monthly invoice line",
+            "dsp exceptions",
+            "mock adjustments",
+            "static mock exception rows",
+            "future invoice adjustment line",
+            "missing job completed time",
+            "disputed extra hours",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -10604,6 +10883,11 @@ async function runChromeTest() {
         initialState.mockDspMonthlyRollupReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock DSP monthly rollup review",
+      );
+      assert.equal(
+        initialState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock DSP reconciliation exceptions review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -11359,6 +11643,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock DSP monthly rollup review",
       );
       assert.equal(
+        mobileState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock DSP reconciliation exceptions review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -11571,6 +11860,9 @@ async function runChromeTest() {
           mockDspMonthlyRollupReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
           ),
+          mockDspReconciliationExceptionsReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
@@ -11634,6 +11926,12 @@ async function runChromeTest() {
             "mock reconciliation",
             "static mock sample rows",
             "future monthly invoice line",
+            "dsp exceptions",
+            "mock adjustments",
+            "static mock exception rows",
+            "future invoice adjustment line",
+            "missing job completed time",
+            "disputed extra hours",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -11707,6 +12005,11 @@ async function runChromeTest() {
         initialState.mockDspMonthlyRollupReviewVisible,
         false,
         `${viewport.label}: expected no internal mock DSP monthly rollup review on driver job link`,
+      );
+      assert.equal(
+        initialState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP reconciliation exceptions review on driver job link`,
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -12189,6 +12492,9 @@ async function runChromeTest() {
           mockDspMonthlyRollupReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
           ),
+          mockDspReconciliationExceptionsReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -12273,6 +12579,12 @@ async function runChromeTest() {
             "mock reconciliation",
             "static mock sample rows",
             "future monthly invoice line",
+            "dsp exceptions",
+            "mock adjustments",
+            "static mock exception rows",
+            "future invoice adjustment line",
+            "missing job completed time",
+            "disputed extra hours",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -12348,6 +12660,11 @@ async function runChromeTest() {
         initialState.mockDspMonthlyRollupReviewVisible,
         false,
         `${viewport.label}: expected no internal mock DSP monthly rollup review on driver demo`,
+      );
+      assert.equal(
+        initialState.mockDspReconciliationExceptionsReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP reconciliation exceptions review on driver demo`,
       );
       assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
@@ -13888,6 +14205,8 @@ async function runChromeTest() {
       await checkAdminMockDriverDetailCustomerUpdatePreview();
     state.adminMockDspUsageAccountingPreview = await checkAdminMockDspUsageAccountingPreview();
     state.adminMockDspMonthlyRollupReview = await checkAdminMockDspMonthlyRollupReview();
+    state.adminMockDspReconciliationExceptionsReview =
+      await checkAdminMockDspReconciliationExceptionsReview();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

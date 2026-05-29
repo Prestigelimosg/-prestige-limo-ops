@@ -483,6 +483,9 @@ async function runChromeTest() {
       const mockDspMonthlyRollupReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-dsp-monthly-rollup-review]"))`,
       );
+      const mockDspReconciliationExceptionsReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -540,6 +543,11 @@ async function runChromeTest() {
         mockDspMonthlyRollupReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock DSP monthly rollup review`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock DSP reconciliation exceptions review`,
       );
     };
 
@@ -1608,6 +1616,85 @@ async function runChromeTest() {
         `${viewport.label}: expected monthly DSP rollup rows to stay readable`,
       );
 
+      const mockDspReconciliationExceptionsReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]");
+            if (!review) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-dsp-reconciliation-exceptions-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-dsp-reconciliation-exceptions-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-dsp-reconciliation-exceptions-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock DSP reconciliation exceptions review`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewState.text.toLowerCase().includes("dsp exceptions"),
+        true,
+        `${viewport.label}: expected mock DSP reconciliation exceptions review`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewState.text.includes("Static mock exception rows only") &&
+          mockDspReconciliationExceptionsReviewState.text.includes("Missing job completed time") &&
+          mockDspReconciliationExceptionsReviewState.text.includes("Disputed extra hours") &&
+          mockDspReconciliationExceptionsReviewState.text.includes("7.25h") &&
+          mockDspReconciliationExceptionsReviewState.text.includes("6.75h") &&
+          mockDspReconciliationExceptionsReviewState.text.includes("-0.50h") &&
+          mockDspReconciliationExceptionsReviewState.text.includes("Not saved / not billed"),
+        true,
+        `${viewport.label}: expected static not-billed DSP reconciliation exception details`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewState.boundary.includes("Mock/local only.") &&
+          mockDspReconciliationExceptionsReviewState.boundary.includes("No billing automation") &&
+          mockDspReconciliationExceptionsReviewState.boundary.includes("storage") &&
+          mockDspReconciliationExceptionsReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected reconciliation exceptions no billing/storage/API boundary`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewState.actionCount,
+        0,
+        `${viewport.label}: expected DSP reconciliation exceptions review to stay display-only`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewState.rows.length,
+        4,
+        `${viewport.label}: expected four static mock reconciliation exception rows`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewState.height <=
+          (viewport.width < 640 ? 760 : viewport.width < 1024 ? 500 : viewport.width < 1200 ? 420 : 340),
+        true,
+        `${viewport.label}: expected compact DSP reconciliation exceptions review, got ${mockDspReconciliationExceptionsReviewState.height}px`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected DSP reconciliation exception rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1659,6 +1746,9 @@ async function runChromeTest() {
       );
       const mockDspMonthlyRollupReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-dsp-monthly-rollup-review]"))`,
+      );
+      const mockDspReconciliationExceptionsReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -1743,6 +1833,11 @@ async function runChromeTest() {
         mockDspMonthlyRollupReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock DSP monthly rollup review`,
+      );
+      assert.equal(
+        mockDspReconciliationExceptionsReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock DSP reconciliation exceptions review`,
       );
       if (context === "driver job demo") {
         assert.equal(

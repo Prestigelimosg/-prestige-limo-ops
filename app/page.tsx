@@ -7624,6 +7624,116 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Mock DSP reconciliation exceptions adjustments review"
+          className="rounded-lg border border-sky-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-dsp-reconciliation-exceptions-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-sky-700">
+                  DSP Exceptions
+                </span>{" "}
+                <span className="text-slate-600">Mock adjustments</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-dsp-reconciliation-exceptions-review-copy="true"
+              >
+                Static mock exception rows only for reconciliation review. Nothing is billed, saved, posted, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-dsp-reconciliation-exceptions-review-rows="true">
+                {[
+                  {
+                    adjusted: "Review needed",
+                    customer: "UBS Priority",
+                    difference: "TBC",
+                    issue: "Missing job completed time",
+                    month: "May 2026",
+                    note: "Driver completion time missing",
+                    original: "Pending",
+                    status: "Not saved / not billed",
+                  },
+                  {
+                    adjusted: "6.75h",
+                    customer: "Ritz-Carlton",
+                    difference: "-0.50h",
+                    issue: "Disputed extra hours",
+                    month: "May 2026",
+                    note: "Customer disputed waiting time",
+                    original: "7.25h",
+                    status: "Mock adjustment review",
+                  },
+                  {
+                    adjusted: "5.50h",
+                    customer: "VIP Customer",
+                    difference: "+0.50h",
+                    issue: "Driver completion time needs review",
+                    month: "May 2026",
+                    note: "Dispatcher confirmation needed",
+                    original: "5.00h",
+                    status: "Not saved / not billed",
+                  },
+                  {
+                    adjusted: "11.50h",
+                    customer: "UBS Priority",
+                    difference: "-1.00h",
+                    issue: "Manual goodwill adjustment",
+                    month: "May 2026",
+                    note: "Goodwill adjustment before future review",
+                    original: "12.50h",
+                    status: "Mock-only adjustment",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-4 gap-1 rounded-md border border-sky-100 bg-sky-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 xl:grid-cols-8"
+                    data-mock-dsp-reconciliation-exceptions-review-row={row.issue}
+                    key={`${row.customer}-${row.issue}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.customer],
+                      ["Month", "Month", row.month],
+                      ["Issue type", "Issue", row.issue],
+                      ["Original hours", "Original", row.original],
+                      ["Proposed adjusted hours", "Adjusted", row.adjusted],
+                      ["Difference", "Diff", row.difference],
+                      ["Reason/note", "Note", row.note],
+                      ["Mock reconciliation status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase tracking-[0.04em] text-sky-700"
+                          data-mock-dsp-reconciliation-exceptions-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <p
+                className="min-w-0 rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-dsp-reconciliation-exceptions-review-detail="true"
+              >
+                Selected mock exception: Ritz-Carlton May 2026 disputed extra hours, 7.25h original, 6.75h adjusted,
+                -0.50h difference. Future invoice adjustment line - mock only, not created. Not saved / not billed.
+              </p>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-dsp-reconciliation-exceptions-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, PDF, accounting posting, customer account,
+            statement, storage, API call, save, notification, or send behavior.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

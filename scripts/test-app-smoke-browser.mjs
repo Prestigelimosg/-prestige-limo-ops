@@ -897,6 +897,174 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDriverAssignmentReadiness = async () => {
+      const readinessViewports = [
+        { height: 812, label: "mobile driver assignment readiness", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop driver assignment readiness", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of readinessViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const readiness = document.querySelector("[data-driver-assignment-readiness]");
+              if (!readiness) {
+                return false;
+              }
+
+              const rect = readiness.getBoundingClientRect();
+              const items = [...readiness.querySelectorAll("[data-driver-assignment-readiness-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-driver-assignment-readiness-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = readiness.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-driver-assignment-readiness-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin driver assignment readiness`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("driver assignment"),
+          true,
+          `${viewport.label}: expected internal driver assignment heading`,
+        );
+        assert.equal(
+          state.text.includes("Confirmed booking readiness"),
+          true,
+          `${viewport.label}: expected confirmed booking readiness title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Status", "Service", "Assign", "Driver details", "Notify", "Next"],
+          `${viewport.label}: expected confirmed-booking-to-driver-assignment readiness labels`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Confirmed")),
+          true,
+          `${viewport.label}: expected confirmed booking status`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Vehicle/service")),
+          true,
+          `${viewport.label}: expected required vehicle and service readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Dispatcher ready")),
+          true,
+          `${viewport.label}: expected dispatcher assignment readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Collect next")),
+          true,
+          `${viewport.label}: expected driver detail collection readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Future/not sent")),
+          true,
+          `${viewport.label}: expected future notification boundary`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Assign driver")),
+          true,
+          `${viewport.label}: expected dispatcher next action`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only."),
+          true,
+          `${viewport.label}: expected mock/local driver assignment boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("No driver assignment"),
+          true,
+          `${viewport.label}: expected no real driver assignment boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("customer notification"),
+          true,
+          `${viewport.label}: expected no customer notification boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("storage"),
+          true,
+          `${viewport.label}: expected no storage boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("API call"),
+          true,
+          `${viewport.label}: expected no API boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("WhatsApp") &&
+            state.boundary.includes("email") &&
+            state.boundary.includes("message channel"),
+          true,
+          `${viewport.label}: expected no-send channel boundary`,
+        );
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected driver assignment readiness to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private driver details in readiness strip`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 340 : 150),
+          true,
+          `${viewport.label}: expected compact driver assignment readiness, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected driver assignment readiness items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected driver assignment readiness not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -2102,12 +2270,20 @@ async function runChromeTest() {
           customerInternalStaffNoticeVisible: Boolean(
             internalStaffNoticeRect && internalStaffNoticeRect.width > 0 && internalStaffNoticeRect.height > 0,
           ),
+          driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
-          forbiddenText: ["driver payout", "private crm", "stripe", "hitpay", "paypal", "secret key"].filter(
-            (value) => text.toLowerCase().includes(value),
-          ),
+          forbiddenText: [
+            "driver payout",
+            "private crm",
+            "stripe",
+            "hitpay",
+            "paypal",
+            "secret key",
+            "confirmed booking readiness",
+            "future/not sent",
+          ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
           outstandingPaidInvoiceMentions: ["UBS-0002", "RITZ-0002", "VIP-0002"].filter((invoiceNumber) =>
@@ -2471,6 +2647,11 @@ async function runChromeTest() {
         dashboardState.customerInternalStaffNotice.includes("Use /book for customer booking requests."),
         true,
         "Expected /customers notice to point customers to /book",
+      );
+      assert.equal(
+        dashboardState.driverAssignmentReadinessVisible,
+        false,
+        "Expected /customers not to show internal driver assignment readiness",
       );
       assert.equal(
         dashboardState.regularBookingFormVisible,
@@ -6962,9 +7143,16 @@ async function runChromeTest() {
             bookingHistory: document.querySelector("[data-customer-booking-history]")?.innerText || "",
             boundary: detail?.querySelector("[data-payment-collection-boundary]")?.textContent.trim() || "",
             detailText: detail?.innerText || "",
-            forbiddenText: ["driver payout", "private crm", "stripe", "hitpay", "paypal", "secret key"].filter(
-              (value) => text.toLowerCase().includes(value),
-            ),
+            forbiddenText: [
+              "driver payout",
+              "private crm",
+              "stripe",
+              "hitpay",
+              "paypal",
+              "secret key",
+              "confirmed booking readiness",
+              "future/not sent",
+            ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
               detail?.querySelector("[data-payment-collection-isolation]")?.textContent.trim() || "",
@@ -7165,6 +7353,7 @@ async function runChromeTest() {
               docClientWidth: document.documentElement.clientWidth,
               docScrollWidth: document.documentElement.scrollWidth,
               helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
+              driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
               internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
@@ -7185,6 +7374,11 @@ async function runChromeTest() {
         mobileDashboardState.internalStaffNotice.includes("Use /book for customer booking requests."),
         true,
         "Expected mobile /customers internal staff-only notice to mention /book",
+      );
+      assert.equal(
+        mobileDashboardState.driverAssignmentReadinessVisible,
+        false,
+        "Expected mobile /customers not to show internal driver assignment readiness",
       );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
@@ -7398,6 +7592,7 @@ async function runChromeTest() {
           intakeConfirmationReadinessVisible: Boolean(
             document.querySelector("[data-intake-confirmation-readiness]"),
           ),
+          driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -7412,6 +7607,8 @@ async function runChromeTest() {
             "replacement driver",
             "reassign replacement",
             "current driver cancelled",
+            "confirmed booking readiness",
+            "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -7494,6 +7691,11 @@ async function runChromeTest() {
         initialState.intakeConfirmationReadinessVisible,
         false,
         "Expected /book not to show internal intake confirmation readiness",
+      );
+      assert.equal(
+        initialState.driverAssignmentReadinessVisible,
+        false,
+        "Expected /book not to show internal driver assignment readiness",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -7768,6 +7970,11 @@ async function runChromeTest() {
         false,
         "Expected /book mobile not to show internal intake confirmation readiness",
       );
+      assert.equal(
+        mobileState.driverAssignmentReadinessVisible,
+        false,
+        "Expected /book mobile not to show internal driver assignment readiness",
+      );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -7893,6 +8100,7 @@ async function runChromeTest() {
           intakeConfirmationReadinessVisible: Boolean(
             document.querySelector("[data-intake-confirmation-readiness]"),
           ),
+          driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -7919,6 +8127,8 @@ async function runChromeTest() {
             "replacement driver",
             "reassign replacement",
             "current driver cancelled",
+            "confirmed booking readiness",
+            "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -8227,6 +8437,11 @@ async function runChromeTest() {
         initialState.intakeConfirmationReadinessVisible,
         false,
         "Expected /my-bookings not to show internal intake confirmation readiness",
+      );
+      assert.equal(
+        initialState.driverAssignmentReadinessVisible,
+        false,
+        "Expected /my-bookings not to show internal driver assignment readiness",
       );
       assert.equal(
         initialState.guidance.height <= 190,
@@ -8921,6 +9136,11 @@ async function runChromeTest() {
         false,
         "Expected /my-bookings mobile not to show internal intake confirmation readiness",
       );
+      assert.equal(
+        mobileState.driverAssignmentReadinessVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal driver assignment readiness",
+      );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
         [],
@@ -9096,6 +9316,7 @@ async function runChromeTest() {
           buttonLabels: buttons.map((button) => button.text),
           buttons,
           currentStatus: document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "",
+          driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -9132,6 +9353,8 @@ async function runChromeTest() {
             "billing details preview",
             "monthly billing summary",
             "mock summary only",
+            "confirmed booking readiness",
+            "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -9156,6 +9379,11 @@ async function runChromeTest() {
         `${viewport.label}: expected driver job link to avoid horizontal document overflow`,
       );
       assert.equal(initialState.adminTabsVisible, 0, `${viewport.label}: expected no admin tabs on driver job link`);
+      assert.equal(
+        initialState.driverAssignmentReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal driver assignment readiness on driver job link`,
+      );
       assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
       assert.deepEqual(
         initialState.forbiddenText,
@@ -9599,6 +9827,7 @@ async function runChromeTest() {
           buttonLabels: buttons.map((button) => button.text),
           buttons,
           docClientWidth: doc.clientWidth,
+          driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
           docScrollWidth: doc.scrollWidth,
           dispatcherExceptionButtons: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-action]")]
             .map((button) => button.textContent.trim()),
@@ -9634,6 +9863,8 @@ async function runChromeTest() {
             "billing details preview",
             "monthly billing summary",
             "mock summary only",
+            "confirmed booking readiness",
+            "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -9660,6 +9891,11 @@ async function runChromeTest() {
       );
       assert.equal(initialState.warningVisible, true, `${viewport.label}: expected driver demo warning`);
       assert.equal(initialState.adminTabsVisible, 0, `${viewport.label}: expected no admin tabs`);
+      assert.equal(
+        initialState.driverAssignmentReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal driver assignment readiness on driver demo`,
+      );
       assert.deepEqual(
         initialState.forbiddenText,
         [],
@@ -10873,6 +11109,7 @@ async function runChromeTest() {
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
     state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
     state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
+    state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

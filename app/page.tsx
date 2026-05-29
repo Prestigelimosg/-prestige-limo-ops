@@ -7003,8 +7003,8 @@ export default function Home() {
           className="rounded-lg border border-indigo-100 bg-white px-3 py-2 shadow-sm"
           data-customer-intake-handoff="true"
         >
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <div className="shrink-0 lg:w-44">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <div className="shrink-0 md:w-44">
               <h2 className="text-sm font-semibold text-slate-950">
                 <span className="uppercase tracking-[0.08em] text-indigo-700">
                   Customer Intake
@@ -7048,8 +7048,8 @@ export default function Home() {
           className="rounded-lg border border-emerald-100 bg-white px-3 py-2 shadow-sm"
           data-intake-confirmation-readiness="true"
         >
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <div className="shrink-0 lg:w-44">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <div className="shrink-0 md:w-44">
               <h2 className="text-sm font-semibold text-slate-950">
                 <span className="uppercase tracking-[0.08em] text-emerald-700">
                   Intake Review
@@ -7057,7 +7057,7 @@ export default function Home() {
                 <span className="text-slate-600">Confirmation readiness</span>
               </h2>
             </div>
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-6">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
               {[
                 ["Source", "/book mock"],
                 ["Review", "Dispatcher check"],
@@ -7086,6 +7086,53 @@ export default function Home() {
             data-intake-confirmation-readiness-boundary="true"
           >
             Mock/local only. No confirmed booking, driver assignment, request save, or API call is created here.
+          </p>
+        </section>
+
+        <section
+          aria-label="Confirmed booking driver assignment readiness"
+          className="rounded-lg border border-sky-100 bg-white px-3 py-2 shadow-sm"
+          data-driver-assignment-readiness="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-sky-700">
+                  Driver Assignment
+                </span>{" "}
+                <span className="text-slate-600">Confirmed booking readiness</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-6">
+              {[
+                ["Status", "Confirmed"],
+                ["Service", "Vehicle/service"],
+                ["Assign", "Dispatcher ready"],
+                ["Driver details", "Collect next"],
+                ["Notify", "Future/not sent"],
+                ["Next", "Assign driver"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-sky-100 bg-sky-50/60 px-2 py-1.5"
+                  data-driver-assignment-readiness-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-sky-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-driver-assignment-readiness-boundary="true"
+          >
+            Mock/local only. No driver assignment, driver detail save, customer notification, storage, API call,
+            WhatsApp, email, or message channel.
           </p>
         </section>
 

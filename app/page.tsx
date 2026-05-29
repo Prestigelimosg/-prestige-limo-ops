@@ -7183,6 +7183,53 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Driver details customer update readiness"
+          className="rounded-lg border border-indigo-100 bg-white px-3 py-2 shadow-sm"
+          data-driver-details-customer-update-readiness="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-indigo-700">
+                  Customer Update
+                </span>{" "}
+                <span className="text-slate-600">Driver details readiness</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-6">
+              {[
+                ["Details", "Driver details received"],
+                ["Draft", "Customer update draft"],
+                ["Channel", "Future/not sent"],
+                ["Contact", "Customer contact check"],
+                ["Review", "Dispatcher review"],
+                ["Next", "Prepare update"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-indigo-100 bg-indigo-50/60 px-2 py-1.5"
+                  data-driver-details-customer-update-readiness-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-indigo-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-driver-details-customer-update-readiness-boundary="true"
+          >
+            Mock/local only. No customer update persistence, notification sending, driver detail collection,
+            assignment, save, storage, API call, or message channel.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

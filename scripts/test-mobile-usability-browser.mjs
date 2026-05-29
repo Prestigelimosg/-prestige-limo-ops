@@ -465,6 +465,9 @@ async function runChromeTest() {
       const driverDetailCollectionReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-detail-collection-readiness]"))`,
       );
+      const driverDetailsCustomerUpdateReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-driver-details-customer-update-readiness]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -492,6 +495,11 @@ async function runChromeTest() {
         driverDetailCollectionReadinessVisible,
         false,
         `${viewport.label} ${route.label}: expected no driver detail collection readiness`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no driver details customer update readiness`,
       );
     };
 
@@ -1041,6 +1049,85 @@ async function runChromeTest() {
         `${viewport.label}: expected driver detail collection readiness items to stay readable and compact`,
       );
 
+      const driverDetailsCustomerUpdateReadinessState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const readiness = document.querySelector("[data-driver-details-customer-update-readiness]");
+            if (!readiness) {
+              return false;
+            }
+
+            const rect = readiness.getBoundingClientRect();
+            const items = [...readiness.querySelectorAll("[data-driver-details-customer-update-readiness-item]")].map((item) => {
+              const itemRect = item.getBoundingClientRect();
+              return {
+                height: Math.round(itemRect.height),
+                label: item.getAttribute("data-driver-details-customer-update-readiness-item") || "",
+                text: item.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(itemRect.width),
+              };
+            });
+
+            return {
+              actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-driver-details-customer-update-readiness-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              items,
+              text: readiness.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} driver details customer update readiness`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.text.toLowerCase().includes("customer update"),
+        true,
+        `${viewport.label}: expected driver details customer update readiness`,
+      );
+      assert.deepEqual(
+        driverDetailsCustomerUpdateReadinessState.items.map((item) => item.label),
+        ["Details", "Draft", "Channel", "Contact", "Review", "Next"],
+        `${viewport.label}: expected compact driver details customer update readiness items`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.items.some((item) => item.text.includes("Future/not sent")),
+        true,
+        `${viewport.label}: expected future customer update note`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.boundary.includes("Mock/local only."),
+        true,
+        `${viewport.label}: expected driver details customer update readiness mock/local boundary`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.boundary.includes("No customer update persistence"),
+        true,
+        `${viewport.label}: expected no customer update persistence boundary`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.boundary.includes("notification sending"),
+        true,
+        `${viewport.label}: expected no notification sending boundary`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.actionCount,
+        0,
+        `${viewport.label}: expected driver details customer update readiness to stay display-only`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.height <= (viewport.width < 640 ? 340 : 150),
+        true,
+        `${viewport.label}: expected compact driver details customer update readiness, got ${driverDetailsCustomerUpdateReadinessState.height}px`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessState.items.every((item) => item.height >= 32 && item.width >= 56),
+        true,
+        `${viewport.label}: expected driver details customer update readiness items to stay readable and compact`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1069,6 +1156,9 @@ async function runChromeTest() {
       const driverDetailCollectionReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-detail-collection-readiness]"))`,
       );
+      const driverDetailsCustomerUpdateReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-driver-details-customer-update-readiness]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
@@ -1082,6 +1172,11 @@ async function runChromeTest() {
         driverDetailCollectionReadinessVisible,
         false,
         `${viewport.label} ${context}: expected no driver detail collection readiness`,
+      );
+      assert.equal(
+        driverDetailsCustomerUpdateReadinessVisible,
+        false,
+        `${viewport.label} ${context}: expected no driver details customer update readiness`,
       );
       return state;
     };

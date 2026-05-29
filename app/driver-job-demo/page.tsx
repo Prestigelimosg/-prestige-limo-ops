@@ -25,6 +25,24 @@ type MockDriverDetailWorkflowPreview = Pick<
   "mobile" | "name" | "plate" | "remarks" | "vehicleModel"
 >;
 
+type MockDspUsageInput = {
+  completedTime: string;
+  includedHours: string;
+  jobType: string;
+  remarks: string;
+  startTime: string;
+};
+
+type MockDspUsagePreview = {
+  completedTime: string;
+  extraHours: string;
+  includedHours: string;
+  jobTypeLabel: string;
+  remarks: string;
+  startTime: string;
+  totalHours: string;
+};
+
 type TargetedFeedback = ParseFeedback & {
   target: string;
 };
@@ -80,6 +98,11 @@ const dispatcherExceptionActions = [
   },
 ];
 
+const mockDspJobTypeOptions = [
+  { label: "DSP / disposal hourly", value: "dsp-disposal" },
+  { label: "Disposal standby review", value: "disposal-standby" },
+];
+
 const bankDetailsPattern = /\b(bank|account|acct)\b/i;
 const payNowDetailsPattern = /\b(paynow|pay\s+now)\b/i;
 const vehicleModelPattern =
@@ -104,6 +127,20 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
     remarks: cleanParsedValue(details.remarks),
     vehicleModel: cleanParsedValue(details.vehicleModel),
   };
+}
+
+function cleanMockDspUsageInput(input: MockDspUsageInput): MockDspUsageInput {
+  return {
+    completedTime: cleanParsedValue(input.completedTime),
+    includedHours: cleanParsedValue(input.includedHours),
+    jobType: cleanParsedValue(input.jobType),
+    remarks: cleanParsedValue(input.remarks),
+    startTime: cleanParsedValue(input.startTime),
+  };
+}
+
+function formatMockHours(value: number) {
+  return value.toFixed(2);
 }
 
 function feedbackClassName(tone: ParseFeedback["tone"]) {
@@ -306,6 +343,15 @@ export default function DriverJobDemoPage() {
     useState<ParseFeedback | null>(null);
   const [mockDriverDetailWorkflowPreview, setMockDriverDetailWorkflowPreview] =
     useState<MockDriverDetailWorkflowPreview | null>(null);
+  const [mockDspUsageInput, setMockDspUsageInput] = useState<MockDspUsageInput>({
+    completedTime: "",
+    includedHours: "",
+    jobType: "",
+    remarks: "",
+    startTime: "",
+  });
+  const [mockDspUsageFeedback, setMockDspUsageFeedback] = useState<ParseFeedback | null>(null);
+  const [mockDspUsagePreview, setMockDspUsagePreview] = useState<MockDspUsagePreview | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ParseFeedback | null>(null);
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
@@ -409,6 +455,15 @@ export default function DriverJobDemoPage() {
     }));
   }
 
+  function updateMockDspUsage(field: keyof MockDspUsageInput, value: string) {
+    setMockDspUsageFeedback(null);
+    setMockDspUsagePreview(null);
+    setMockDspUsageInput((currentInput) => ({
+      ...currentInput,
+      [field]: value,
+    }));
+  }
+
   function parsePastedDriverDetails() {
     const parsedDetails = parseDriverDetailsText(pastedDriverDetails);
     const nextDetails = {
@@ -477,6 +532,54 @@ export default function DriverJobDemoPage() {
     setMockDriverDetailWorkflowFeedback({
       tone: "success",
       text: "Mock driver detail preview ready locally. No message was sent.",
+    });
+  }
+
+  function reviewMockDspUsage() {
+    const nextInput = cleanMockDspUsageInput(mockDspUsageInput);
+    const startDate = nextInput.startTime ? new Date(nextInput.startTime) : null;
+    const completedDate = nextInput.completedTime ? new Date(nextInput.completedTime) : null;
+    const includedHours = Number(nextInput.includedHours);
+    const selectedJobType = mockDspJobTypeOptions.find((option) => option.value === nextInput.jobType);
+    const startTimeValid = Boolean(startDate && !Number.isNaN(startDate.getTime()));
+    const completedTimeValid = Boolean(completedDate && !Number.isNaN(completedDate.getTime()));
+    const completionAfterStart =
+      startTimeValid && completedTimeValid && completedDate!.getTime() > startDate!.getTime();
+    const includedHoursValid = Number.isFinite(includedHours) && includedHours > 0;
+    const invalidFields = [
+      !selectedJobType ? "DSP/disposal job type" : "",
+      !startTimeValid ? "mock start time" : "",
+      !completedTimeValid ? "mock completed time" : "",
+      startTimeValid && completedTimeValid && !completionAfterStart ? "completed time after start" : "",
+      !includedHoursValid ? "positive included hours" : "",
+    ].filter(Boolean);
+
+    setMockDspUsageInput(nextInput);
+
+    if (invalidFields.length > 0) {
+      setMockDspUsagePreview(null);
+      setMockDspUsageFeedback({
+        tone: "error",
+        text: `Add ${invalidFields.join(", ")} before previewing mock DSP usage.`,
+      });
+      return;
+    }
+
+    const totalHours = (completedDate!.getTime() - startDate!.getTime()) / (60 * 60 * 1000);
+    const extraHours = Math.max(0, totalHours - includedHours);
+
+    setMockDspUsagePreview({
+      completedTime: nextInput.completedTime,
+      extraHours: formatMockHours(extraHours),
+      includedHours: formatMockHours(includedHours),
+      jobTypeLabel: selectedJobType!.label,
+      remarks: nextInput.remarks,
+      startTime: nextInput.startTime,
+      totalHours: formatMockHours(totalHours),
+    });
+    setMockDspUsageFeedback({
+      tone: "success",
+      text: "Mock DSP usage preview ready locally. Nothing was billed or saved.",
     });
   }
 
@@ -1223,6 +1326,152 @@ export default function DriverJobDemoPage() {
                 </p>
               ) : null}
             </div>
+          </div>
+        </section>
+
+        <section className="space-y-3" aria-labelledby="mock-dsp-usage-heading">
+          <h2 id="mock-dsp-usage-heading" className="text-base font-semibold text-slate-900">
+            Mock DSP Usage Review
+          </h2>
+          <div
+            className="space-y-3 rounded-md border border-amber-100 bg-amber-50/60 p-3"
+            data-driver-demo-dsp-usage-workflow="true"
+          >
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">
+                  DSP Job Completion Usage
+                </p>
+                <h3 className="text-sm font-semibold text-slate-900">Future monthly line preview</h3>
+              </div>
+              <span className="w-fit rounded-full bg-white px-2 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">
+                Mock/local only
+              </span>
+            </div>
+            <p
+              className="text-sm font-medium text-slate-600"
+              data-driver-demo-dsp-usage-boundary="true"
+            >
+              Local review only. No billing, invoice, account charge, payment, PDF, storage, API, save, notification,
+              or monthly automation is created.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                <span>Job type</span>
+                <select
+                  className="h-12 w-full rounded-md border border-amber-200 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  data-driver-demo-dsp-job-type="true"
+                  onChange={(event) => updateMockDspUsage("jobType", event.target.value)}
+                  value={mockDspUsageInput.jobType}
+                >
+                  <option value="">Select DSP/disposal type</option>
+                  {mockDspJobTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                <span>Included hours</span>
+                <input
+                  className="h-12 w-full rounded-md border border-amber-200 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  data-driver-demo-dsp-included-hours="true"
+                  inputMode="decimal"
+                  min="0"
+                  onChange={(event) => updateMockDspUsage("includedHours", event.target.value)}
+                  step="0.25"
+                  type="number"
+                  value={mockDspUsageInput.includedHours}
+                />
+              </label>
+              <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                <span>Mock job start time</span>
+                <input
+                  className="h-12 w-full rounded-md border border-amber-200 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  data-driver-demo-dsp-start-time="true"
+                  onChange={(event) => updateMockDspUsage("startTime", event.target.value)}
+                  type="datetime-local"
+                  value={mockDspUsageInput.startTime}
+                />
+              </label>
+              <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                <span>Mock job completed time</span>
+                <input
+                  className="h-12 w-full rounded-md border border-amber-200 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  data-driver-demo-dsp-completed-time="true"
+                  onChange={(event) => updateMockDspUsage("completedTime", event.target.value)}
+                  type="datetime-local"
+                  value={mockDspUsageInput.completedTime}
+                />
+              </label>
+            </div>
+            <label className="block space-y-1 text-sm font-semibold text-slate-700">
+              <span>Usage remarks</span>
+              <textarea
+                className="min-h-24 w-full rounded-md border border-amber-200 bg-white px-3 py-3 text-base text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                data-driver-demo-dsp-remarks="true"
+                onChange={(event) => updateMockDspUsage("remarks", event.target.value)}
+                value={mockDspUsageInput.remarks}
+              />
+            </label>
+            <div className="space-y-2">
+              <button
+                className="min-h-12 w-full rounded-md bg-slate-950 px-4 py-3 text-base font-semibold text-white transition active:bg-slate-700"
+                data-driver-demo-dsp-review="true"
+                onClick={reviewMockDspUsage}
+                type="button"
+              >
+                Review Mock DSP Usage
+              </button>
+              {mockDspUsageFeedback ? (
+                <p
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockDspUsageFeedback.tone)}`}
+                  data-driver-demo-dsp-message="true"
+                >
+                  {mockDspUsageFeedback.text}
+                </p>
+              ) : null}
+            </div>
+            {mockDspUsagePreview ? (
+              <div
+                className="space-y-2 rounded-md border border-amber-200 bg-white p-3"
+                data-driver-demo-dsp-preview="true"
+              >
+                <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                  {[
+                    ["Total hours used", `${mockDspUsagePreview.totalHours}h`],
+                    ["Included hours", `${mockDspUsagePreview.includedHours}h`],
+                    ["Extra hours", `${mockDspUsagePreview.extraHours}h`],
+                  ].map(([label, value]) => (
+                    <div
+                      className="min-w-0 rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200"
+                      data-driver-demo-dsp-preview-metric={label}
+                      key={label}
+                    >
+                      <dt className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-500">
+                        {label}
+                      </dt>
+                      <dd className="break-words font-semibold text-slate-800">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p
+                  className="rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200"
+                  data-driver-demo-dsp-preview-line="true"
+                >
+                  Future monthly billing line preview, not created and not saved: {mockDspUsagePreview.jobTypeLabel}{" "}
+                  from {mockDspUsagePreview.startTime} to {mockDspUsagePreview.completedTime};{" "}
+                  {mockDspUsagePreview.totalHours} total hours, {mockDspUsagePreview.includedHours} included,{" "}
+                  {mockDspUsagePreview.extraHours} extra. Remarks:{" "}
+                  {mockDspUsagePreview.remarks || "No mock usage remarks added."}
+                </p>
+                <p className="text-sm font-semibold text-amber-800" data-driver-demo-dsp-preview-boundary="true">
+                  Mock/local only — not billed, not saved, and not connected to customer accounts, invoices, payments,
+                  PDFs, storage, APIs, or monthly automation.
+                </p>
+              </div>
+            ) : null}
           </div>
         </section>
 

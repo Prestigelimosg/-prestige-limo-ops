@@ -1569,11 +1569,29 @@ async function runChromeTest() {
       const mockDriverDetailCustomerUpdatePreviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-driver-detail-customer-update-preview]"))`,
       );
+      const mockDspUsageAccountingPreviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-dsp-usage-accounting-preview]"))`,
+      );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
         const preview = document.querySelector("[data-driver-demo-detail-workflow-preview]");
         const workflowRect = workflow?.getBoundingClientRect();
         const reviewButton = document.querySelector("[data-driver-demo-detail-workflow-review]");
+        const reviewRect = reviewButton?.getBoundingClientRect();
+
+        return {
+          previewVisible: Boolean(preview),
+          reviewButtonHeight: Math.round(reviewRect?.height || 0),
+          reviewButtonVisible: Boolean(reviewRect && reviewRect.width >= 64 && reviewRect.height >= 44),
+          text: workflow?.innerText || "",
+          visible: Boolean(workflowRect && workflowRect.width > 0 && workflowRect.height > 0),
+        };
+      })()`);
+      const driverDemoDspUsageWorkflowState = await evaluate(`(() => {
+        const workflow = document.querySelector("[data-driver-demo-dsp-usage-workflow]");
+        const preview = document.querySelector("[data-driver-demo-dsp-preview]");
+        const workflowRect = workflow?.getBoundingClientRect();
+        const reviewButton = document.querySelector("[data-driver-demo-dsp-review]");
         const reviewRect = reviewButton?.getBoundingClientRect();
 
         return {
@@ -1628,6 +1646,11 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock driver detail customer update preview`,
       );
+      assert.equal(
+        mockDspUsageAccountingPreviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock DSP usage accounting preview`,
+      );
       if (context === "driver job demo") {
         assert.equal(
           driverDemoDetailWorkflowState.visible,
@@ -1649,11 +1672,36 @@ async function runChromeTest() {
           true,
           `${viewport.label} ${context}: expected mock driver detail workflow text`,
         );
+        assert.equal(
+          driverDemoDspUsageWorkflowState.visible,
+          true,
+          `${viewport.label} ${context}: expected mock DSP usage workflow`,
+        );
+        assert.equal(
+          driverDemoDspUsageWorkflowState.reviewButtonVisible,
+          true,
+          `${viewport.label} ${context}: expected DSP usage review button to stay touch-friendly`,
+        );
+        assert.equal(
+          driverDemoDspUsageWorkflowState.previewVisible,
+          false,
+          `${viewport.label} ${context}: expected no DSP usage preview before valid mock usage`,
+        );
+        assert.equal(
+          driverDemoDspUsageWorkflowState.text.toLowerCase().includes("dsp job completion usage"),
+          true,
+          `${viewport.label} ${context}: expected mock DSP usage workflow text`,
+        );
       } else {
         assert.equal(
           driverDemoDetailWorkflowState.visible,
           false,
           `${viewport.label} ${context}: expected no driver demo detail workflow`,
+        );
+        assert.equal(
+          driverDemoDspUsageWorkflowState.visible,
+          false,
+          `${viewport.label} ${context}: expected no driver demo DSP usage workflow`,
         );
       }
       return state;
@@ -2292,6 +2340,7 @@ async function runChromeTest() {
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
         "Acknowledge Job",
         "Activate Mock Live Location",
+        "Review Mock DSP Usage",
         "Review Mock Details",
         "Save",
         "OTW",

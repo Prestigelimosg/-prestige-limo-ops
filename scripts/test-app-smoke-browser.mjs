@@ -2362,6 +2362,179 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockDspUsageAccountingPreview = async () => {
+      const previewViewports = [
+        {
+          height: 812,
+          label: "mobile mock DSP usage accounting preview",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock DSP usage accounting preview",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of previewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const preview = document.querySelector("[data-mock-dsp-usage-accounting-preview]");
+              if (!preview) {
+                return false;
+              }
+
+              const rect = preview.getBoundingClientRect();
+              const items = [...preview.querySelectorAll("[data-mock-dsp-usage-accounting-preview-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-mock-dsp-usage-accounting-preview-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = preview.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: preview.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-dsp-usage-accounting-preview-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-dsp-usage-accounting-preview-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "bill now",
+                  "create invoice",
+                  "take payment",
+                  "save charge",
+                  "send statement",
+                  "generate pdf",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock DSP usage accounting preview`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("dsp usage review"),
+          true,
+          `${viewport.label}: expected internal mock DSP usage review heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock billing note"),
+          true,
+          `${viewport.label}: expected mock billing note title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Job", "Time", "Hours", "Line", "Review", "Boundary"],
+          `${viewport.label}: expected mock DSP usage accounting preview labels`,
+        );
+        assert.equal(
+          state.copy.includes("Future monthly billing line preview only"),
+          true,
+          `${viewport.label}: expected future monthly billing line preview copy`,
+        );
+        assert.equal(
+          state.copy.includes("total hours") &&
+            state.copy.includes("included hours") &&
+            state.copy.includes("extra hours") &&
+            state.copy.includes("Not billed or saved"),
+          true,
+          `${viewport.label}: expected DSP hours and not-billed copy`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only."),
+          true,
+          `${viewport.label}: expected mock/local DSP usage boundary`,
+        );
+        for (const expectedBoundaryText of [
+          "No billing automation",
+          "invoice",
+          "payment",
+          "PDF",
+          "account charge",
+          "statement",
+          "storage",
+          "API call",
+          "save",
+          "notification",
+          "customer account behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected DSP usage boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected mock DSP usage accounting preview to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in DSP admin preview`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active bill/invoice/payment/PDF controls wording in DSP admin preview`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 360 : 180),
+          true,
+          `${viewport.label}: expected compact mock DSP usage accounting preview, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected mock DSP usage preview items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected mock DSP usage preview not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -3589,7 +3762,11 @@ async function runChromeTest() {
           mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
             document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
           ),
+          mockDspUsageAccountingPreviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
+          driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
@@ -4027,9 +4204,19 @@ async function runChromeTest() {
         "Expected /customers not to show internal mock driver detail customer update preview",
       );
       assert.equal(
+        dashboardState.mockDspUsageAccountingPreviewVisible,
+        false,
+        "Expected /customers not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /customers not to show driver demo detail workflow",
+      );
+      assert.equal(
+        dashboardState.driverDemoDspUsageWorkflowVisible,
+        false,
+        "Expected /customers not to show driver demo DSP usage workflow",
       );
       assert.equal(
         dashboardState.regularBookingFormVisible,
@@ -8769,7 +8956,11 @@ async function runChromeTest() {
               mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
                 document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
               ),
+              mockDspUsageAccountingPreviewVisible: Boolean(
+                document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
+              driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
               internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
@@ -8832,9 +9023,19 @@ async function runChromeTest() {
         "Expected mobile /customers not to show internal mock driver detail customer update preview",
       );
       assert.equal(
+        mobileDashboardState.mockDspUsageAccountingPreviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
         false,
         "Expected mobile /customers not to show driver demo detail workflow",
+      );
+      assert.equal(
+        mobileDashboardState.driverDemoDspUsageWorkflowVisible,
+        false,
+        "Expected mobile /customers not to show driver demo DSP usage workflow",
       );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
@@ -9070,7 +9271,11 @@ async function runChromeTest() {
           mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
             document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
           ),
+          mockDspUsageAccountingPreviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
+          driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -9230,9 +9435,19 @@ async function runChromeTest() {
         "Expected /book not to show internal mock driver detail customer update preview",
       );
       assert.equal(
+        initialState.mockDspUsageAccountingPreviewVisible,
+        false,
+        "Expected /book not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book not to show driver demo detail workflow",
+      );
+      assert.equal(
+        initialState.driverDemoDspUsageWorkflowVisible,
+        false,
+        "Expected /book not to show driver demo DSP usage workflow",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -9548,9 +9763,19 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock driver detail customer update preview",
       );
       assert.equal(
+        mobileState.mockDspUsageAccountingPreviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
+      );
+      assert.equal(
+        mobileState.driverDemoDspUsageWorkflowVisible,
+        false,
+        "Expected /book mobile not to show driver demo DSP usage workflow",
       );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
@@ -9699,7 +9924,11 @@ async function runChromeTest() {
           mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
             document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
           ),
+          mockDspUsageAccountingPreviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
+          driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -10097,9 +10326,19 @@ async function runChromeTest() {
         "Expected /my-bookings not to show internal mock driver detail customer update preview",
       );
       assert.equal(
+        initialState.mockDspUsageAccountingPreviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings not to show driver demo detail workflow",
+      );
+      assert.equal(
+        initialState.driverDemoDspUsageWorkflowVisible,
+        false,
+        "Expected /my-bookings not to show driver demo DSP usage workflow",
       );
       assert.equal(
         initialState.guidance.height <= 190,
@@ -10835,9 +11074,19 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock driver detail customer update preview",
       );
       assert.equal(
+        mobileState.mockDspUsageAccountingPreviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
+      );
+      assert.equal(
+        mobileState.driverDemoDspUsageWorkflowVisible,
+        false,
+        "Expected /my-bookings mobile not to show driver demo DSP usage workflow",
       );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
@@ -11036,7 +11285,11 @@ async function runChromeTest() {
           mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
             document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
           ),
+          mockDspUsageAccountingPreviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
+          driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -11159,9 +11412,19 @@ async function runChromeTest() {
         `${viewport.label}: expected no internal mock driver detail customer update preview on driver job link`,
       );
       assert.equal(
+        initialState.mockDspUsageAccountingPreviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP usage accounting preview on driver job link`,
+      );
+      assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
         false,
         `${viewport.label}: expected no driver demo detail workflow on public driver job link`,
+      );
+      assert.equal(
+        initialState.driverDemoDspUsageWorkflowVisible,
+        false,
+        `${viewport.label}: expected no driver demo DSP usage workflow on public driver job link`,
       );
       assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
       assert.deepEqual(
@@ -11628,6 +11891,9 @@ async function runChromeTest() {
           mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
             document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
           ),
+          mockDspUsageAccountingPreviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -11639,6 +11905,18 @@ async function runChromeTest() {
             text:
               document.querySelector("[data-driver-demo-detail-workflow]")?.innerText || "",
             visible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
+          },
+          mockDspUsageWorkflow: {
+            boundary:
+              document.querySelector("[data-driver-demo-dsp-usage-boundary]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            controlLabels: [...(document.querySelector("[data-driver-demo-dsp-usage-workflow]")
+              ?.querySelectorAll("button, a") || [])].map((control) => control.textContent.trim()),
+            previewVisible: Boolean(document.querySelector("[data-driver-demo-dsp-preview]")),
+            text:
+              document.querySelector("[data-driver-demo-dsp-usage-workflow]")?.innerText || "",
+            visible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           },
           docScrollWidth: doc.scrollWidth,
           dispatcherExceptionButtons: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-action]")]
@@ -11763,6 +12041,11 @@ async function runChromeTest() {
         `${viewport.label}: expected no internal mock driver detail customer update preview on driver demo`,
       );
       assert.equal(
+        initialState.mockDspUsageAccountingPreviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP usage accounting preview on driver demo`,
+      );
+      assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
         true,
         `${viewport.label}: expected mock driver detail workflow on driver demo`,
@@ -11790,6 +12073,41 @@ async function runChromeTest() {
           initialState.mockDriverDetailWorkflow.boundary.includes("message channel"),
         true,
         `${viewport.label}: expected mock driver detail workflow no persistence/storage/API/channel boundary`,
+      );
+      assert.equal(
+        initialState.mockDspUsageWorkflow.visible,
+        true,
+        `${viewport.label}: expected mock DSP usage workflow on driver demo`,
+      );
+      assert.equal(
+        initialState.mockDspUsageWorkflow.previewVisible,
+        false,
+        `${viewport.label}: expected no mock DSP usage preview before valid review`,
+      );
+      assert.equal(
+        initialState.mockDspUsageWorkflow.text.toLowerCase().includes("dsp job completion usage"),
+        true,
+        `${viewport.label}: expected mock DSP usage workflow heading`,
+      );
+      assert.equal(
+        initialState.mockDspUsageWorkflow.boundary.includes("Local review only."),
+        true,
+        `${viewport.label}: expected mock DSP usage local boundary`,
+      );
+      assert.equal(
+        initialState.mockDspUsageWorkflow.boundary.includes("No billing") &&
+          initialState.mockDspUsageWorkflow.boundary.includes("invoice") &&
+          initialState.mockDspUsageWorkflow.boundary.includes("payment") &&
+          initialState.mockDspUsageWorkflow.boundary.includes("storage") &&
+          initialState.mockDspUsageWorkflow.boundary.includes("API") &&
+          initialState.mockDspUsageWorkflow.boundary.includes("monthly automation"),
+        true,
+        `${viewport.label}: expected mock DSP usage no billing/invoice/storage/API/monthly automation boundary`,
+      );
+      assert.deepEqual(
+        initialState.mockDspUsageWorkflow.controlLabels,
+        ["Review Mock DSP Usage"],
+        `${viewport.label}: expected only the mock DSP usage review control`,
       );
       assert.deepEqual(
         initialState.forbiddenText,
@@ -11840,23 +12158,32 @@ async function runChromeTest() {
         `${viewport.label}: expected demo-only dispatcher exception buttons`,
       );
       assert.deepEqual(
-        ["Driver name", "Mobile number", "Car plate", "Vehicle model", "PayNow number"].filter(
+        [
+          "Driver name",
+          "Mobile number",
+          "Car plate",
+          "Vehicle model",
+          "PayNow number",
+          "Included hours",
+          "Mock job start time",
+          "Mock job completed time",
+        ].filter(
           (label) => !initialState.inputs.some((input) => input.label.includes(label)),
         ),
         [],
-        `${viewport.label}: expected all driver detail fields`,
+        `${viewport.label}: expected all driver detail and mock DSP usage fields`,
       );
       assert.deepEqual(
         initialState.inputs.map((input) => input.type),
-        ["text", "tel", "text", "text", "tel"],
-        `${viewport.label}: expected mobile-friendly input types`,
+        ["text", "tel", "text", "text", "tel", "number", "datetime-local", "datetime-local"],
+        `${viewport.label}: expected mobile-friendly input types for driver details and mock DSP usage`,
       );
       assert.deepEqual(
-        ["Paste Driver Details", "Optional remarks"].filter(
+        ["Paste Driver Details", "Optional remarks", "Usage remarks"].filter(
           (label) => !initialState.textareas.some((textarea) => textarea.label.includes(label)),
         ),
         [],
-        `${viewport.label}: expected driver details paste and remarks textareas`,
+        `${viewport.label}: expected driver details paste, remarks, and usage remarks textareas`,
       );
       assert.deepEqual(smallInputs, [], `${viewport.label}: expected comfortable driver inputs`);
       assert.deepEqual(smallTextareas, [], `${viewport.label}: expected comfortable paste textarea`);
@@ -11869,6 +12196,7 @@ async function runChromeTest() {
           "Acknowledge Latest ETA",
           "Parse Driver Details",
           "Review Mock Details",
+          "Review Mock DSP Usage",
           "Save",
           "Cancel current driver assignment — Mock Only",
           "Replacement driver/car details — Mock Only",
@@ -11884,7 +12212,7 @@ async function runChromeTest() {
         `${viewport.label}: expected all driver action buttons`,
       );
       assert.deepEqual(
-        ["Acknowledge Job", "Parse Driver Details", "Review Mock Details", "Save"].filter((label) => {
+        ["Acknowledge Job", "Parse Driver Details", "Review Mock Details", "Review Mock DSP Usage", "Save"].filter((label) => {
           const button = initialState.buttons.find((candidate) => candidate.text === label);
           return !button?.className.includes("bg-slate-950") || !button.className.includes("text-white");
         }),
@@ -12422,6 +12750,142 @@ async function runChromeTest() {
         validWorkflowState.distance <= 16,
         true,
         `${viewport.label}: expected valid workflow feedback close to review button`,
+      );
+
+      const invalidDspUsageFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      await clickDriverDemoButton(
+        "[data-driver-demo-dsp-review]",
+        `${viewport.label} invalid mock DSP usage review`,
+      );
+      const invalidDspUsageState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-dsp-review]");
+            const message = document.querySelector("[data-driver-demo-dsp-message]");
+            const preview = document.querySelector("[data-driver-demo-dsp-preview]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() ===
+              "Add DSP/disposal job type, mock start time, mock completed time, positive included hours before previewing mock DSP usage." &&
+              !preview
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  fetchCount: (window.__driverDemoFetchCalls || []).length,
+                  messageText: message.textContent.trim(),
+                  previewVisible: Boolean(preview),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} invalid mock DSP usage review`,
+      );
+      assert.equal(invalidDspUsageState.fetchCount, invalidDspUsageFetchCount);
+      assert.equal(invalidDspUsageState.previewVisible, false);
+      assert.equal(
+        invalidDspUsageState.distance <= 16,
+        true,
+        `${viewport.label}: expected invalid DSP usage feedback close to review button`,
+      );
+
+      const dspUsageValuesAccepted = await evaluate(`(() => {
+        const values = {
+          "[data-driver-demo-dsp-job-type]": "dsp-disposal",
+          "[data-driver-demo-dsp-start-time]": "2026-05-27T10:00",
+          "[data-driver-demo-dsp-completed-time]": "2026-05-27T13:30",
+          "[data-driver-demo-dsp-included-hours]": "2",
+          "[data-driver-demo-dsp-remarks]": "Passenger requested extra disposal stop.",
+        };
+
+        for (const [selector, value] of Object.entries(values)) {
+          const element = document.querySelector(selector);
+          if (!element) return false;
+          const setter = Object.getOwnPropertyDescriptor(
+            element instanceof HTMLTextAreaElement
+              ? HTMLTextAreaElement.prototype
+              : element instanceof HTMLSelectElement
+                ? HTMLSelectElement.prototype
+                : HTMLInputElement.prototype,
+            "value",
+          )?.set;
+          setter?.call(element, value);
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        return true;
+      })()`);
+      assert.equal(dspUsageValuesAccepted, true, `${viewport.label}: expected mock DSP usage fields`);
+
+      const validDspUsageFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      await clickDriverDemoButton(
+        "[data-driver-demo-dsp-review]",
+        `${viewport.label} valid mock DSP usage review`,
+      );
+      const validDspUsageState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-dsp-review]");
+            const message = document.querySelector("[data-driver-demo-dsp-message]");
+            const preview = document.querySelector("[data-driver-demo-dsp-preview]");
+            const line = document.querySelector("[data-driver-demo-dsp-preview-line]");
+            const boundary = document.querySelector("[data-driver-demo-dsp-preview-boundary]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            if (!preview || !line || !boundary) {
+              return false;
+            }
+
+            const previewControls = preview.querySelectorAll("button, a, input, select, textarea, form").length;
+            const previewText = preview.innerText;
+            const controlLabels = [
+              ...(document
+                .querySelector("[data-driver-demo-dsp-usage-workflow]")
+                ?.querySelectorAll("button, a") || []),
+            ].map((control) => control.textContent.trim());
+            const forbiddenControlLabels = controlLabels.filter((label) =>
+              /bill|invoice|payment|pdf|save|send|notify|create/i.test(label),
+            );
+
+            return message?.textContent.trim() === "Mock DSP usage preview ready locally. Nothing was billed or saved." &&
+              previewText.includes("3.50h") &&
+              previewText.includes("2.00h") &&
+              previewText.includes("1.50h") &&
+              line.textContent.includes("Future monthly billing line preview, not created and not saved") &&
+              boundary.textContent.includes("Mock/local only") &&
+              boundary.textContent.includes("not billed") &&
+              boundary.textContent.includes("not saved") &&
+              boundary.textContent.includes("not connected to customer accounts") &&
+              previewText.includes("Passenger requested extra disposal stop.")
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  fetchCount: (window.__driverDemoFetchCalls || []).length,
+                  forbiddenControlLabels,
+                  messageText: message.textContent.trim(),
+                  previewControls,
+                  previewText,
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} valid mock DSP usage preview`,
+      );
+      assert.equal(validDspUsageState.fetchCount, validDspUsageFetchCount);
+      assert.equal(
+        validDspUsageState.previewControls,
+        0,
+        `${viewport.label}: expected mock DSP usage preview to be display-only`,
+      );
+      assert.deepEqual(
+        validDspUsageState.forbiddenControlLabels,
+        [],
+        `${viewport.label}: expected no real bill/invoice/payment/save/send controls in mock DSP usage workflow`,
+      );
+      assert.equal(
+        validDspUsageState.distance <= 16,
+        true,
+        `${viewport.label}: expected valid DSP usage feedback close to review button`,
       );
 
       await clickDriverDemoButton("[data-driver-demo-save-details]", `${viewport.label} Save`);
@@ -13118,6 +13582,7 @@ async function runChromeTest() {
       await checkAdminFutureNotificationQueueCustomerUpdateAuditReadiness();
     state.adminMockDriverDetailCustomerUpdatePreview =
       await checkAdminMockDriverDetailCustomerUpdatePreview();
+    state.adminMockDspUsageAccountingPreview = await checkAdminMockDspUsageAccountingPreview();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

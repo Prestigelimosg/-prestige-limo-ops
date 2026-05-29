@@ -6998,6 +6998,11 @@ export default function Home() {
           </div>
         </section>
 
+        <div
+          aria-label="Mock workflow review sections"
+          className="order-last grid gap-6"
+          data-mock-workflow-review-group="true"
+        >
         <section
           aria-label="Customer request intake handoff"
           className="rounded-lg border border-indigo-100 bg-white px-3 py-2 shadow-sm"
@@ -8051,6 +8056,7 @@ export default function Home() {
             accounting record, customer account posting, storage, API call, save, post, notification, or send behavior.
           </p>
         </section>
+        </div>
 
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -9993,7 +9999,10 @@ export default function Home() {
         ) : null}
 
         {activeTab === "dashboard" ? (
-        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+        <section
+          className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5"
+          data-operations-dashboard="true"
+        >
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold">Operations Dashboard</h2>

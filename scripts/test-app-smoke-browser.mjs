@@ -645,6 +645,93 @@ async function runChromeTest() {
       return tabStates;
     };
 
+    const checkMockWorkflowReviewBottomPlacement = async () => {
+      const placementViewports = [
+        { height: 812, label: "mobile mock workflow bottom placement", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop mock workflow bottom placement", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+      const requiredSelectors = [
+        "[data-customer-intake-handoff]",
+        "[data-intake-confirmation-readiness]",
+        "[data-driver-assignment-readiness]",
+        "[data-driver-detail-collection-readiness]",
+        "[data-driver-details-customer-update-readiness]",
+        "[data-customer-update-delivery-review-readiness]",
+        "[data-delivery-review-dispatcher-approval-readiness]",
+        "[data-dispatcher-approval-notification-queue-readiness]",
+        "[data-future-notification-queue-customer-update-audit-readiness]",
+        "[data-mock-driver-detail-customer-update-preview]",
+        "[data-mock-dsp-usage-accounting-preview]",
+        "[data-mock-dsp-monthly-rollup-review]",
+        "[data-mock-dsp-reconciliation-exceptions-review]",
+        "[data-mock-dsp-approval-packet-review]",
+        "[data-mock-accounting-statement-preview]",
+        "[data-mock-statement-variance-review]",
+      ];
+
+      for (const viewport of placementViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              if (!dashboard || !group) {
+                return false;
+              }
+
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const groupRect = group.getBoundingClientRect();
+              const selectors = ${JSON.stringify(requiredSelectors)};
+              const foundSelectors = selectors.filter((selector) => group.querySelector(selector));
+
+              return {
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                foundSelectors,
+                groupTop: Math.round(groupRect.top),
+                text: group.textContent || "",
+              };
+            })()`),
+          10000,
+          `${viewport.label} mock workflow review bottom placement`,
+        );
+
+        assert.equal(
+          state.foundSelectors.length,
+          requiredSelectors.length,
+          `${viewport.label}: expected all mock workflow review sections to remain grouped`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected mock workflow review group after operations dashboard, got group top ${state.groupTop} before dashboard bottom ${state.dashboardBottom}`,
+        );
+        assert.equal(
+          state.text.includes("Customer Intake") && state.text.includes("Statement Variance"),
+          true,
+          `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected bottom mock workflow group not to create horizontal overflow`,
+        );
+
+        states.push({
+          dashboardBottom: state.dashboardBottom,
+          groupTop: state.groupTop,
+          sectionCount: state.foundSelectors.length,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminCustomerIntakeHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile customer intake handoff", mobile: true, scale: 3, width: 375 },
@@ -15303,6 +15390,7 @@ async function runChromeTest() {
     state.adminMockDspApprovalPacketReview = await checkAdminMockDspApprovalPacketReview();
     state.adminMockAccountingStatementPreview = await checkAdminMockAccountingStatementPreview();
     state.adminMockStatementVarianceReview = await checkAdminMockStatementVarianceReview();
+    state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

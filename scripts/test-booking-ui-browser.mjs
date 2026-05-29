@@ -8409,9 +8409,18 @@ async function runChromeTest() {
     await evaluate(`window.__prestigeFetchCalls = []`);
 
     const clickedDashboardLoadThisBooking = await evaluate(`(() => {
-      const loadThisBookingButton = document.querySelector("[data-dashboard-load-booking='true']");
+      const dashboardArticle = document.querySelector(
+        "[data-dashboard-operational-card='${loadedSavedBookingFixture.id}']",
+      );
+      const loadThisBookingButton = dashboardArticle?.querySelector("[data-dashboard-load-booking='true']");
 
-      if (!loadThisBookingButton || loadThisBookingButton.disabled) {
+      if (
+        !dashboardArticle ||
+        !dashboardArticle.innerText.includes("LOADED SAVED TRAVELER") ||
+        !dashboardArticle.innerText.includes("SQ999") ||
+        !loadThisBookingButton ||
+        loadThisBookingButton.disabled
+      ) {
         return false;
       }
 
@@ -8421,7 +8430,7 @@ async function runChromeTest() {
     assert.equal(
       clickedDashboardLoadThisBooking,
       true,
-      "Expected dashboard Load this booking button to be clickable",
+      "Expected LOADED SAVED booking dashboard Load this booking button to be clickable",
     );
 
     const loadedBookingState = await waitForCondition(

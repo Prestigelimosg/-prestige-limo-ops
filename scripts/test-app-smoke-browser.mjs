@@ -2964,6 +2964,238 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockDspApprovalPacketReview = async () => {
+      const previewViewports = [
+        {
+          height: 940,
+          label: "mobile mock DSP approval packet review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 940,
+          label: "desktop mock DSP approval packet review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of previewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-dsp-approval-packet-review]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-dsp-approval-packet-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-dsp-approval-packet-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-dsp-approval-packet-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-dsp-approval-packet-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-dsp-approval-packet-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-dsp-approval-packet-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                exceptions:
+                  document.querySelector("[data-mock-dsp-approval-packet-review-exceptions]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "approve now",
+                  "approve and bill",
+                  "bill now",
+                  "create invoice",
+                  "take payment",
+                  "save charge",
+                  "send statement",
+                  "generate pdf",
+                  "post accounting",
+                  "send notification",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                handoff:
+                  document.querySelector("[data-mock-dsp-approval-packet-review-handoff]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                height: Math.round(rect.height),
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock DSP approval packet review`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("dsp approval packet"),
+          true,
+          `${viewport.label}: expected DSP approval packet heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock handoff"),
+          true,
+          `${viewport.label}: expected mock handoff title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Month",
+            "Job count",
+            "Total DSP hours",
+            "Included hours",
+            "Extra hours",
+            "Exception count",
+            "Adjustment count",
+            "Final reviewed extra hours",
+            "Mock approval/handoff status",
+          ],
+          `${viewport.label}: expected mock DSP approval packet columns`,
+        );
+        assert.equal(state.rows.length, 2, `${viewport.label}: expected two static mock approval packet rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "3 jobs",
+          "2 jobs",
+          "12.50h",
+          "8.00h",
+          "4.50h",
+          "4 exceptions",
+          "2 adjustments",
+          "3.50h",
+          "Not saved / not billed",
+          "Mock handoff review",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock approval packet text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static/mock approval packet data only") &&
+            state.copy.includes("dispatcher/accounting handoff review") &&
+            state.copy.includes("Nothing is approved, billed, saved, posted, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence approval packet copy`,
+        );
+        assert.equal(
+          state.handoff.includes("Future accounting handoff - mock only") &&
+            state.handoff.includes("Future monthly invoice line - not created") &&
+            state.handoff.includes("No invoice/payment/PDF generated") &&
+            state.handoff.includes("Not saved / not billed"),
+          true,
+          `${viewport.label}: expected mock accounting handoff without invoice/payment/PDF creation`,
+        );
+        assert.equal(
+          state.exceptions.includes("missing completion time reviewed") &&
+            state.exceptions.includes("disputed extra hours reviewed") &&
+            state.exceptions.includes("manual goodwill adjustment noted") &&
+            state.exceptions.includes("dispatcher/accounting review note"),
+          true,
+          `${viewport.label}: expected exception and adjustment summary`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No approval persistence",
+          "billing automation",
+          "invoice",
+          "payment",
+          "PDF",
+          "accounting posting",
+          "customer account",
+          "statement",
+          "storage",
+          "API call",
+          "save",
+          "notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected approval packet boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected DSP approval packet review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active approve/bill/invoice/payment/PDF/accounting controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in approval packet review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 620 : viewport.width < 1024 ? 420 : viewport.width < 1200 ? 360 : 300),
+          true,
+          `${viewport.label}: expected compact DSP approval packet review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected DSP approval packet rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected DSP approval packet review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -3579,6 +3811,9 @@ async function runChromeTest() {
             mockDspReconciliationExceptionsReviewVisible: Boolean(
               document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
             ),
+            mockDspApprovalPacketReviewVisible: Boolean(
+              document.querySelector("[data-mock-dsp-approval-packet-review]"),
+            ),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
             sentinelControlValueLeaks: sentinels.filter((sentinel) =>
@@ -3627,6 +3862,11 @@ async function runChromeTest() {
           routeState.mockDspReconciliationExceptionsReviewVisible,
           false,
           `${routeName}: expected no internal mock DSP reconciliation exceptions review`,
+        );
+        assert.equal(
+          routeState.mockDspApprovalPacketReviewVisible,
+          false,
+          `${routeName}: expected no internal mock DSP approval packet review`,
         );
         assert.equal(
           routeState.billingQuickFilterVisible,
@@ -4216,6 +4456,9 @@ async function runChromeTest() {
           mockDspReconciliationExceptionsReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
           ),
+          mockDspApprovalPacketReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-approval-packet-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -4259,6 +4502,13 @@ async function runChromeTest() {
             "future invoice adjustment line",
             "missing job completed time",
             "disputed extra hours",
+            "dsp approval packet",
+            "mock handoff",
+            "static/mock approval packet data",
+            "future accounting handoff",
+            "future monthly invoice line - not created",
+            "no invoice/payment/pdf generated",
+            "final reviewed extra hours",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -4678,6 +4928,11 @@ async function runChromeTest() {
         dashboardState.mockDspReconciliationExceptionsReviewVisible,
         false,
         "Expected /customers not to show internal mock DSP reconciliation exceptions review",
+      );
+      assert.equal(
+        dashboardState.mockDspApprovalPacketReviewVisible,
+        false,
+        "Expected /customers not to show internal mock DSP approval packet review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -9214,6 +9469,13 @@ async function runChromeTest() {
             "future invoice adjustment line",
             "missing job completed time",
             "disputed extra hours",
+            "dsp approval packet",
+            "mock handoff",
+            "static/mock approval packet data",
+            "future accounting handoff",
+            "future monthly invoice line - not created",
+            "no invoice/payment/pdf generated",
+            "final reviewed extra hours",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
@@ -9446,6 +9708,9 @@ async function runChromeTest() {
               mockDspReconciliationExceptionsReviewVisible: Boolean(
                 document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
               ),
+              mockDspApprovalPacketReviewVisible: Boolean(
+                document.querySelector("[data-mock-dsp-approval-packet-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -9523,6 +9788,11 @@ async function runChromeTest() {
         mobileDashboardState.mockDspReconciliationExceptionsReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock DSP reconciliation exceptions review",
+      );
+      assert.equal(
+        mobileDashboardState.mockDspApprovalPacketReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock DSP approval packet review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -9777,6 +10047,9 @@ async function runChromeTest() {
           mockDspReconciliationExceptionsReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
           ),
+          mockDspApprovalPacketReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-approval-packet-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -9824,6 +10097,13 @@ async function runChromeTest() {
             "future invoice adjustment line",
             "missing job completed time",
             "disputed extra hours",
+            "dsp approval packet",
+            "mock handoff",
+            "static/mock approval packet data",
+            "future accounting handoff",
+            "future monthly invoice line - not created",
+            "no invoice/payment/pdf generated",
+            "final reviewed extra hours",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -9961,6 +10241,11 @@ async function runChromeTest() {
         initialState.mockDspReconciliationExceptionsReviewVisible,
         false,
         "Expected /book not to show internal mock DSP reconciliation exceptions review",
+      );
+      assert.equal(
+        initialState.mockDspApprovalPacketReviewVisible,
+        false,
+        "Expected /book not to show internal mock DSP approval packet review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -10301,6 +10586,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock DSP reconciliation exceptions review",
       );
       assert.equal(
+        mobileState.mockDspApprovalPacketReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock DSP approval packet review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -10466,6 +10756,9 @@ async function runChromeTest() {
           mockDspReconciliationExceptionsReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
           ),
+          mockDspApprovalPacketReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-approval-packet-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -10525,6 +10818,13 @@ async function runChromeTest() {
             "future invoice adjustment line",
             "missing job completed time",
             "disputed extra hours",
+            "dsp approval packet",
+            "mock handoff",
+            "static/mock approval packet data",
+            "future accounting handoff",
+            "future monthly invoice line - not created",
+            "no invoice/payment/pdf generated",
+            "final reviewed extra hours",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -10888,6 +11188,11 @@ async function runChromeTest() {
         initialState.mockDspReconciliationExceptionsReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock DSP reconciliation exceptions review",
+      );
+      assert.equal(
+        initialState.mockDspApprovalPacketReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock DSP approval packet review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -11648,6 +11953,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock DSP reconciliation exceptions review",
       );
       assert.equal(
+        mobileState.mockDspApprovalPacketReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock DSP approval packet review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -11863,6 +12173,9 @@ async function runChromeTest() {
           mockDspReconciliationExceptionsReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
           ),
+          mockDspApprovalPacketReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-approval-packet-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
@@ -11932,6 +12245,13 @@ async function runChromeTest() {
             "future invoice adjustment line",
             "missing job completed time",
             "disputed extra hours",
+            "dsp approval packet",
+            "mock handoff",
+            "static/mock approval packet data",
+            "future accounting handoff",
+            "future monthly invoice line - not created",
+            "no invoice/payment/pdf generated",
+            "final reviewed extra hours",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -12010,6 +12330,11 @@ async function runChromeTest() {
         initialState.mockDspReconciliationExceptionsReviewVisible,
         false,
         `${viewport.label}: expected no internal mock DSP reconciliation exceptions review on driver job link`,
+      );
+      assert.equal(
+        initialState.mockDspApprovalPacketReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP approval packet review on driver job link`,
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -12495,6 +12820,9 @@ async function runChromeTest() {
           mockDspReconciliationExceptionsReviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"),
           ),
+          mockDspApprovalPacketReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-approval-packet-review]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -12585,6 +12913,13 @@ async function runChromeTest() {
             "future invoice adjustment line",
             "missing job completed time",
             "disputed extra hours",
+            "dsp approval packet",
+            "mock handoff",
+            "static/mock approval packet data",
+            "future accounting handoff",
+            "future monthly invoice line - not created",
+            "no invoice/payment/pdf generated",
+            "final reviewed extra hours",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -12665,6 +13000,11 @@ async function runChromeTest() {
         initialState.mockDspReconciliationExceptionsReviewVisible,
         false,
         `${viewport.label}: expected no internal mock DSP reconciliation exceptions review on driver demo`,
+      );
+      assert.equal(
+        initialState.mockDspApprovalPacketReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP approval packet review on driver demo`,
       );
       assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
@@ -14207,6 +14547,7 @@ async function runChromeTest() {
     state.adminMockDspMonthlyRollupReview = await checkAdminMockDspMonthlyRollupReview();
     state.adminMockDspReconciliationExceptionsReview =
       await checkAdminMockDspReconciliationExceptionsReview();
+    state.adminMockDspApprovalPacketReview = await checkAdminMockDspApprovalPacketReview();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

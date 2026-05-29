@@ -7734,6 +7734,112 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Mock DSP reconciliation approval packet accounting handoff review"
+          className="rounded-lg border border-indigo-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-dsp-approval-packet-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-indigo-700">
+                  DSP Approval Packet
+                </span>{" "}
+                <span className="text-slate-600">Mock handoff</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-indigo-100 bg-indigo-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-dsp-approval-packet-review-copy="true"
+              >
+                Static/mock approval packet data only for dispatcher/accounting handoff review. Nothing is approved,
+                billed, saved, posted, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-dsp-approval-packet-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    adjustments: "2 adjustments",
+                    exceptions: "4 exceptions",
+                    extra: "4.50h",
+                    finalExtra: "3.50h",
+                    included: "8.00h",
+                    jobs: "3 jobs",
+                    month: "May 2026",
+                    status: "Not saved / not billed",
+                    total: "12.50h",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    adjustments: "1 adjustment",
+                    exceptions: "1 exception",
+                    extra: "1.25h",
+                    finalExtra: "0.75h",
+                    included: "6.00h",
+                    jobs: "2 jobs",
+                    month: "May 2026",
+                    status: "Mock handoff review",
+                    total: "7.25h",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-5 gap-1 rounded-md border border-indigo-100 bg-indigo-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 xl:grid-cols-10"
+                    data-mock-dsp-approval-packet-review-row={row.account}
+                    key={`${row.account}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Month", "Month", row.month],
+                      ["Job count", "Jobs", row.jobs],
+                      ["Total DSP hours", "Total", row.total],
+                      ["Included hours", "Included", row.included],
+                      ["Extra hours", "Extra", row.extra],
+                      ["Exception count", "Exceptions", row.exceptions],
+                      ["Adjustment count", "Adjustments", row.adjustments],
+                      ["Final reviewed extra hours", "Final extra", row.finalExtra],
+                      ["Mock approval/handoff status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase tracking-[0.04em] text-indigo-700"
+                          data-mock-dsp-approval-packet-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-indigo-100 bg-indigo-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-dsp-approval-packet-review-handoff="true"
+                >
+                  Future accounting handoff - mock only. Future monthly invoice line - not created. No invoice/payment/PDF
+                  generated. Not saved / not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-indigo-100 bg-indigo-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-dsp-approval-packet-review-exceptions="true"
+                >
+                  Exception/adjustment summary: missing completion time reviewed, disputed extra hours reviewed, manual
+                  goodwill adjustment noted, dispatcher/accounting review note kept for mock handoff.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-dsp-approval-packet-review-boundary="true"
+          >
+            Mock/local only. No approval persistence, billing automation, invoice, payment, PDF, accounting posting,
+            customer account, statement, storage, API call, save, notification, or send behavior.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

@@ -486,6 +486,9 @@ async function runChromeTest() {
       const mockDspReconciliationExceptionsReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"))`,
       );
+      const mockDspApprovalPacketReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-dsp-approval-packet-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -548,6 +551,11 @@ async function runChromeTest() {
         mockDspReconciliationExceptionsReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock DSP reconciliation exceptions review`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock DSP approval packet review`,
       );
     };
 
@@ -1695,6 +1703,100 @@ async function runChromeTest() {
         `${viewport.label}: expected DSP reconciliation exception rows to stay readable`,
       );
 
+      const mockDspApprovalPacketReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-dsp-approval-packet-review]");
+            if (!review) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-dsp-approval-packet-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-dsp-approval-packet-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-dsp-approval-packet-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              handoff:
+                document.querySelector("[data-mock-dsp-approval-packet-review-handoff]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock DSP approval packet review`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.text.toLowerCase().includes("dsp approval packet"),
+        true,
+        `${viewport.label}: expected mock DSP approval packet review`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.text.includes("Static/mock approval packet data only") &&
+          mockDspApprovalPacketReviewState.text.includes("3 jobs") &&
+          mockDspApprovalPacketReviewState.text.includes("12.50h") &&
+          mockDspApprovalPacketReviewState.text.includes("8.00h") &&
+          mockDspApprovalPacketReviewState.text.includes("4.50h") &&
+          mockDspApprovalPacketReviewState.text.includes("4 exceptions") &&
+          mockDspApprovalPacketReviewState.text.includes("2 adjustments") &&
+          mockDspApprovalPacketReviewState.text.includes("3.50h") &&
+          mockDspApprovalPacketReviewState.text.includes("Not saved / not billed"),
+        true,
+        `${viewport.label}: expected static not-billed DSP approval packet details`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.handoff.includes("Future accounting handoff - mock only") &&
+          mockDspApprovalPacketReviewState.handoff.includes("Future monthly invoice line - not created") &&
+          mockDspApprovalPacketReviewState.handoff.includes("No invoice/payment/PDF generated") &&
+          mockDspApprovalPacketReviewState.handoff.includes("Not saved / not billed"),
+        true,
+        `${viewport.label}: expected mock accounting handoff no invoice/payment/PDF copy`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.boundary.includes("Mock/local only.") &&
+          mockDspApprovalPacketReviewState.boundary.includes("No approval persistence") &&
+          mockDspApprovalPacketReviewState.boundary.includes("billing automation") &&
+          mockDspApprovalPacketReviewState.boundary.includes("storage") &&
+          mockDspApprovalPacketReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected approval packet no billing/storage/API boundary`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.actionCount,
+        0,
+        `${viewport.label}: expected DSP approval packet review to stay display-only`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.rows.length,
+        2,
+        `${viewport.label}: expected two static mock approval packet rows`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.height <=
+          (viewport.width < 640 ? 620 : viewport.width < 1024 ? 420 : viewport.width < 1200 ? 360 : 300),
+        true,
+        `${viewport.label}: expected compact DSP approval packet review, got ${mockDspApprovalPacketReviewState.height}px`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected DSP approval packet rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1749,6 +1851,9 @@ async function runChromeTest() {
       );
       const mockDspReconciliationExceptionsReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-dsp-reconciliation-exceptions-review]"))`,
+      );
+      const mockDspApprovalPacketReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-dsp-approval-packet-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -1838,6 +1943,11 @@ async function runChromeTest() {
         mockDspReconciliationExceptionsReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock DSP reconciliation exceptions review`,
+      );
+      assert.equal(
+        mockDspApprovalPacketReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock DSP approval packet review`,
       );
       if (context === "driver job demo") {
         assert.equal(

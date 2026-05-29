@@ -477,6 +477,9 @@ async function runChromeTest() {
       const dispatcherApprovalNotificationQueueReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-dispatcher-approval-notification-queue-readiness]"))`,
       );
+      const futureNotificationQueueCustomerUpdateAuditReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -524,6 +527,11 @@ async function runChromeTest() {
         dispatcherApprovalNotificationQueueReadinessVisible,
         false,
         `${viewport.label} ${route.label}: expected no dispatcher approval notification queue readiness`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no future notification queue customer update audit readiness`,
       );
     };
 
@@ -1419,6 +1427,102 @@ async function runChromeTest() {
         `${viewport.label}: expected dispatcher approval notification queue readiness items to stay readable and compact`,
       );
 
+      const futureNotificationQueueCustomerUpdateAuditReadinessState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const readiness = document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]");
+            if (!readiness) {
+              return false;
+            }
+
+            const rect = readiness.getBoundingClientRect();
+            const items = [...readiness.querySelectorAll("[data-future-notification-queue-customer-update-audit-readiness-item]")].map((item) => {
+              const itemRect = item.getBoundingClientRect();
+              return {
+                height: Math.round(itemRect.height),
+                label: item.getAttribute("data-future-notification-queue-customer-update-audit-readiness-item") || "",
+                text: item.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(itemRect.width),
+              };
+            });
+
+            return {
+              actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-future-notification-queue-customer-update-audit-readiness-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              items,
+              text: readiness.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} future notification queue customer update audit readiness`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.text.toLowerCase().includes("customer audit"),
+        true,
+        `${viewport.label}: expected future notification queue customer update audit readiness`,
+      );
+      assert.deepEqual(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.items.map((item) => item.label),
+        ["Queue", "Audit", "Channel", "Contact", "Boundary", "Next"],
+        `${viewport.label}: expected compact future notification queue customer update audit readiness items`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.items.some((item) =>
+          item.text.includes("Future audit review"),
+        ),
+        true,
+        `${viewport.label}: expected future audit review readiness`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.items.some((item) =>
+          item.text.includes("Message audit, not sent"),
+        ),
+        true,
+        `${viewport.label}: expected not-sent message channel audit readiness`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.boundary.includes("Mock/local only."),
+        true,
+        `${viewport.label}: expected future notification queue customer update audit readiness mock/local boundary`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.boundary.includes("audit persistence"),
+        true,
+        `${viewport.label}: expected no audit persistence boundary`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.boundary.includes("notification queue persistence"),
+        true,
+        `${viewport.label}: expected no notification queue persistence boundary`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.boundary.includes("delivery") &&
+          futureNotificationQueueCustomerUpdateAuditReadinessState.boundary.includes("notification sending"),
+        true,
+        `${viewport.label}: expected no delivery/notification sending boundary`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.actionCount,
+        0,
+        `${viewport.label}: expected future notification queue customer update audit readiness to stay display-only`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.height <= (viewport.width < 640 ? 340 : 150),
+        true,
+        `${viewport.label}: expected compact future notification queue customer update audit readiness, got ${futureNotificationQueueCustomerUpdateAuditReadinessState.height}px`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessState.items.every((item) =>
+          item.height >= 32 && item.width >= 56,
+        ),
+        true,
+        `${viewport.label}: expected future notification queue customer update audit readiness items to stay readable and compact`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1459,6 +1563,9 @@ async function runChromeTest() {
       const dispatcherApprovalNotificationQueueReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-dispatcher-approval-notification-queue-readiness]"))`,
       );
+      const futureNotificationQueueCustomerUpdateAuditReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
@@ -1492,6 +1599,11 @@ async function runChromeTest() {
         dispatcherApprovalNotificationQueueReadinessVisible,
         false,
         `${viewport.label} ${context}: expected no dispatcher approval notification queue readiness`,
+      );
+      assert.equal(
+        futureNotificationQueueCustomerUpdateAuditReadinessVisible,
+        false,
+        `${viewport.label} ${context}: expected no future notification queue customer update audit readiness`,
       );
       return state;
     };

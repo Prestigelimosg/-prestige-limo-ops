@@ -7372,6 +7372,54 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Future notification queue customer update audit readiness"
+          className="rounded-lg border border-rose-100 bg-white px-3 py-1.5 shadow-sm"
+          data-future-notification-queue-customer-update-audit-readiness="true"
+        >
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <div className="shrink-0 md:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-rose-700">
+                  Customer Audit
+                </span>{" "}
+                <span className="text-slate-600">Future queue readiness</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-6">
+              {[
+                ["Queue", "Future queue status"],
+                ["Audit", "Future audit review"],
+                ["Channel", "Message audit, not sent"],
+                ["Contact", "Contact/audit ready"],
+                ["Boundary", "Mock/local only"],
+                ["Next", "Review audit boundary"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-rose-100 bg-rose-50/60 px-2 py-1.5"
+                  data-future-notification-queue-customer-update-audit-readiness-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-rose-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-future-notification-queue-customer-update-audit-readiness-boundary="true"
+          >
+            Mock/local only. No customer update persistence, approval persistence, notification queue persistence,
+            audit persistence, delivery, notification sending, driver detail collection, assignment, save, storage,
+            API call, or message channel.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

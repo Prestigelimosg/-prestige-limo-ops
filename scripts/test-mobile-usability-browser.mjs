@@ -1566,6 +1566,24 @@ async function runChromeTest() {
       const futureNotificationQueueCustomerUpdateAuditReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"))`,
       );
+      const mockDriverDetailCustomerUpdatePreviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-driver-detail-customer-update-preview]"))`,
+      );
+      const driverDemoDetailWorkflowState = await evaluate(`(() => {
+        const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
+        const preview = document.querySelector("[data-driver-demo-detail-workflow-preview]");
+        const workflowRect = workflow?.getBoundingClientRect();
+        const reviewButton = document.querySelector("[data-driver-demo-detail-workflow-review]");
+        const reviewRect = reviewButton?.getBoundingClientRect();
+
+        return {
+          previewVisible: Boolean(preview),
+          reviewButtonHeight: Math.round(reviewRect?.height || 0),
+          reviewButtonVisible: Boolean(reviewRect && reviewRect.width >= 64 && reviewRect.height >= 44),
+          text: workflow?.innerText || "",
+          visible: Boolean(workflowRect && workflowRect.width > 0 && workflowRect.height > 0),
+        };
+      })()`);
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
@@ -1605,6 +1623,39 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no future notification queue customer update audit readiness`,
       );
+      assert.equal(
+        mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock driver detail customer update preview`,
+      );
+      if (context === "driver job demo") {
+        assert.equal(
+          driverDemoDetailWorkflowState.visible,
+          true,
+          `${viewport.label} ${context}: expected mock driver detail workflow`,
+        );
+        assert.equal(
+          driverDemoDetailWorkflowState.reviewButtonVisible,
+          true,
+          `${viewport.label} ${context}: expected review button to stay touch-friendly`,
+        );
+        assert.equal(
+          driverDemoDetailWorkflowState.previewVisible,
+          false,
+          `${viewport.label} ${context}: expected no preview before valid mock details`,
+        );
+        assert.equal(
+          driverDemoDetailWorkflowState.text.toLowerCase().includes("mock driver detail workflow"),
+          true,
+          `${viewport.label} ${context}: expected mock driver detail workflow text`,
+        );
+      } else {
+        assert.equal(
+          driverDemoDetailWorkflowState.visible,
+          false,
+          `${viewport.label} ${context}: expected no driver demo detail workflow`,
+        );
+      }
       return state;
     };
 
@@ -2241,6 +2292,7 @@ async function runChromeTest() {
       await checkDriverRouteViewport(viewport, driverDemoUrl, "Prestige Limo Driver Job", [
         "Acknowledge Job",
         "Activate Mock Live Location",
+        "Review Mock Details",
         "Save",
         "OTW",
         "OTS",

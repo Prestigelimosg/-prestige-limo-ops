@@ -2191,6 +2191,177 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockDriverDetailCustomerUpdatePreview = async () => {
+      const previewViewports = [
+        {
+          height: 812,
+          label: "mobile mock driver detail customer update preview",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock driver detail customer update preview",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of previewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const preview = document.querySelector("[data-mock-driver-detail-customer-update-preview]");
+              if (!preview) {
+                return false;
+              }
+
+              const rect = preview.getBoundingClientRect();
+              const items = [...preview.querySelectorAll("[data-mock-driver-detail-customer-update-preview-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-mock-driver-detail-customer-update-preview-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = preview.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: preview.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-driver-detail-customer-update-preview-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-driver-detail-customer-update-preview-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenActionText: [
+                  "send whatsapp",
+                  "send email",
+                  "notify customer now",
+                  "deliver now",
+                  "queue now",
+                  "approve and send",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock driver detail customer update preview`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("driver update preview"),
+          true,
+          `${viewport.label}: expected internal mock driver update preview heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock customer note"),
+          true,
+          `${viewport.label}: expected mock customer note title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Driver", "Vehicle", "Contact", "Channel", "Review", "Boundary"],
+          `${viewport.label}: expected mock driver detail customer update preview labels`,
+        );
+        assert.equal(
+          state.copy.includes("Future customer preview, not sent"),
+          true,
+          `${viewport.label}: expected not-sent future customer preview copy`,
+        );
+        assert.equal(
+          state.copy.includes("phone") && state.copy.includes("vehicle model") && state.copy.includes("plate"),
+          true,
+          `${viewport.label}: expected customer-safe driver detail preview contents`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only."),
+          true,
+          `${viewport.label}: expected mock/local preview boundary`,
+        );
+        for (const expectedBoundaryText of [
+          "No driver detail persistence",
+          "customer update persistence",
+          "approval persistence",
+          "notification queue persistence",
+          "audit persistence",
+          "storage",
+          "API call",
+          "delivery",
+          "assignment",
+          "save",
+          "billing",
+          "message channel",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected preview boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected mock driver detail customer update preview to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in admin preview`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active send/notify/deliver/queue wording in admin preview`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 360 : 180),
+          true,
+          `${viewport.label}: expected compact mock driver detail customer update preview, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected mock driver detail preview items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected mock driver detail preview not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -3415,6 +3586,10 @@ async function runChromeTest() {
           futureNotificationQueueCustomerUpdateAuditReadinessVisible: Boolean(
             document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"),
           ),
+          mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
+            document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
+          ),
+          driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
@@ -3845,6 +4020,16 @@ async function runChromeTest() {
         dashboardState.futureNotificationQueueCustomerUpdateAuditReadinessVisible,
         false,
         "Expected /customers not to show internal future notification queue customer update audit readiness",
+      );
+      assert.equal(
+        dashboardState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        "Expected /customers not to show internal mock driver detail customer update preview",
+      );
+      assert.equal(
+        dashboardState.driverDemoDetailWorkflowVisible,
+        false,
+        "Expected /customers not to show driver demo detail workflow",
       );
       assert.equal(
         dashboardState.regularBookingFormVisible,
@@ -8581,6 +8766,10 @@ async function runChromeTest() {
               futureNotificationQueueCustomerUpdateAuditReadinessVisible: Boolean(
                 document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"),
               ),
+              mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
+                document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
+              ),
+              driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
               internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
@@ -8636,6 +8825,16 @@ async function runChromeTest() {
         mobileDashboardState.futureNotificationQueueCustomerUpdateAuditReadinessVisible,
         false,
         "Expected mobile /customers not to show internal future notification queue customer update audit readiness",
+      );
+      assert.equal(
+        mobileDashboardState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock driver detail customer update preview",
+      );
+      assert.equal(
+        mobileDashboardState.driverDemoDetailWorkflowVisible,
+        false,
+        "Expected mobile /customers not to show driver demo detail workflow",
       );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
@@ -8868,6 +9067,10 @@ async function runChromeTest() {
           futureNotificationQueueCustomerUpdateAuditReadinessVisible: Boolean(
             document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"),
           ),
+          mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
+            document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
+          ),
+          driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -9020,6 +9223,16 @@ async function runChromeTest() {
         initialState.futureNotificationQueueCustomerUpdateAuditReadinessVisible,
         false,
         "Expected /book not to show internal future notification queue customer update audit readiness",
+      );
+      assert.equal(
+        initialState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        "Expected /book not to show internal mock driver detail customer update preview",
+      );
+      assert.equal(
+        initialState.driverDemoDetailWorkflowVisible,
+        false,
+        "Expected /book not to show driver demo detail workflow",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -9329,6 +9542,16 @@ async function runChromeTest() {
         false,
         "Expected /book mobile not to show internal future notification queue customer update audit readiness",
       );
+      assert.equal(
+        mobileState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock driver detail customer update preview",
+      );
+      assert.equal(
+        mobileState.driverDemoDetailWorkflowVisible,
+        false,
+        "Expected /book mobile not to show driver demo detail workflow",
+      );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -9473,6 +9696,10 @@ async function runChromeTest() {
           futureNotificationQueueCustomerUpdateAuditReadinessVisible: Boolean(
             document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"),
           ),
+          mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
+            document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
+          ),
+          driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -9863,6 +10090,16 @@ async function runChromeTest() {
         initialState.futureNotificationQueueCustomerUpdateAuditReadinessVisible,
         false,
         "Expected /my-bookings not to show internal future notification queue customer update audit readiness",
+      );
+      assert.equal(
+        initialState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock driver detail customer update preview",
+      );
+      assert.equal(
+        initialState.driverDemoDetailWorkflowVisible,
+        false,
+        "Expected /my-bookings not to show driver demo detail workflow",
       );
       assert.equal(
         initialState.guidance.height <= 190,
@@ -10592,6 +10829,16 @@ async function runChromeTest() {
         false,
         "Expected /my-bookings mobile not to show internal future notification queue customer update audit readiness",
       );
+      assert.equal(
+        mobileState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock driver detail customer update preview",
+      );
+      assert.equal(
+        mobileState.driverDemoDetailWorkflowVisible,
+        false,
+        "Expected /my-bookings mobile not to show driver demo detail workflow",
+      );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
         [],
@@ -10786,6 +11033,10 @@ async function runChromeTest() {
           futureNotificationQueueCustomerUpdateAuditReadinessVisible: Boolean(
             document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"),
           ),
+          mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
+            document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
+          ),
+          driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -10901,6 +11152,16 @@ async function runChromeTest() {
         initialState.futureNotificationQueueCustomerUpdateAuditReadinessVisible,
         false,
         `${viewport.label}: expected no internal future notification queue customer update audit readiness on driver job link`,
+      );
+      assert.equal(
+        initialState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock driver detail customer update preview on driver job link`,
+      );
+      assert.equal(
+        initialState.driverDemoDetailWorkflowVisible,
+        false,
+        `${viewport.label}: expected no driver demo detail workflow on public driver job link`,
       );
       assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
       assert.deepEqual(
@@ -11364,6 +11625,21 @@ async function runChromeTest() {
           futureNotificationQueueCustomerUpdateAuditReadinessVisible: Boolean(
             document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"),
           ),
+          mockDriverDetailCustomerUpdatePreviewVisible: Boolean(
+            document.querySelector("[data-mock-driver-detail-customer-update-preview]"),
+          ),
+          mockDriverDetailWorkflow: {
+            actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
+              ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
+            boundary:
+              document.querySelector("[data-driver-demo-detail-workflow-boundary]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            previewVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow-preview]")),
+            text:
+              document.querySelector("[data-driver-demo-detail-workflow]")?.innerText || "",
+            visible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
+          },
           docScrollWidth: doc.scrollWidth,
           dispatcherExceptionButtons: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-action]")]
             .map((button) => button.textContent.trim()),
@@ -11481,6 +11757,40 @@ async function runChromeTest() {
         false,
         `${viewport.label}: expected no internal future notification queue customer update audit readiness on driver demo`,
       );
+      assert.equal(
+        initialState.mockDriverDetailCustomerUpdatePreviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock driver detail customer update preview on driver demo`,
+      );
+      assert.equal(
+        initialState.mockDriverDetailWorkflow.visible,
+        true,
+        `${viewport.label}: expected mock driver detail workflow on driver demo`,
+      );
+      assert.equal(
+        initialState.mockDriverDetailWorkflow.previewVisible,
+        false,
+        `${viewport.label}: expected no mock driver detail workflow preview before valid review`,
+      );
+      assert.equal(
+        initialState.mockDriverDetailWorkflow.text.toLowerCase().includes("mock driver detail workflow"),
+        true,
+        `${viewport.label}: expected mock driver detail workflow heading`,
+      );
+      assert.equal(
+        initialState.mockDriverDetailWorkflow.boundary.includes("Local review only."),
+        true,
+        `${viewport.label}: expected mock driver detail workflow local boundary`,
+      );
+      assert.equal(
+        initialState.mockDriverDetailWorkflow.boundary.includes("No driver detail persistence") &&
+          initialState.mockDriverDetailWorkflow.boundary.includes("customer update persistence") &&
+          initialState.mockDriverDetailWorkflow.boundary.includes("storage") &&
+          initialState.mockDriverDetailWorkflow.boundary.includes("API") &&
+          initialState.mockDriverDetailWorkflow.boundary.includes("message channel"),
+        true,
+        `${viewport.label}: expected mock driver detail workflow no persistence/storage/API/channel boundary`,
+      );
       assert.deepEqual(
         initialState.forbiddenText,
         [],
@@ -11542,11 +11852,11 @@ async function runChromeTest() {
         `${viewport.label}: expected mobile-friendly input types`,
       );
       assert.deepEqual(
-        ["Paste Driver Details"].filter(
+        ["Paste Driver Details", "Optional remarks"].filter(
           (label) => !initialState.textareas.some((textarea) => textarea.label.includes(label)),
         ),
         [],
-        `${viewport.label}: expected driver details paste textarea`,
+        `${viewport.label}: expected driver details paste and remarks textareas`,
       );
       assert.deepEqual(smallInputs, [], `${viewport.label}: expected comfortable driver inputs`);
       assert.deepEqual(smallTextareas, [], `${viewport.label}: expected comfortable paste textarea`);
@@ -11558,6 +11868,7 @@ async function runChromeTest() {
           "Trigger Mock 1-Hour Reminder",
           "Acknowledge Latest ETA",
           "Parse Driver Details",
+          "Review Mock Details",
           "Save",
           "Cancel current driver assignment — Mock Only",
           "Replacement driver/car details — Mock Only",
@@ -11573,7 +11884,7 @@ async function runChromeTest() {
         `${viewport.label}: expected all driver action buttons`,
       );
       assert.deepEqual(
-        ["Acknowledge Job", "Parse Driver Details", "Save"].filter((label) => {
+        ["Acknowledge Job", "Parse Driver Details", "Review Mock Details", "Save"].filter((label) => {
           const button = initialState.buttons.find((candidate) => candidate.text === label);
           return !button?.className.includes("bg-slate-950") || !button.className.includes("text-white");
         }),
@@ -11985,6 +12296,42 @@ async function runChromeTest() {
 
       await setDriverDemoViewportAndLoad(viewport);
 
+      const invalidWorkflowFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      await clickDriverDemoButton(
+        "[data-driver-demo-detail-workflow-review]",
+        `${viewport.label} invalid mock driver detail workflow review`,
+      );
+      const invalidWorkflowState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-detail-workflow-review]");
+            const message = document.querySelector("[data-driver-demo-detail-workflow-message]");
+            const preview = document.querySelector("[data-driver-demo-detail-workflow-preview]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() ===
+              "Add driver name, valid driver phone, vehicle model, valid vehicle plate before previewing the mock customer update." &&
+              !preview
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  fetchCount: (window.__driverDemoFetchCalls || []).length,
+                  messageText: message.textContent.trim(),
+                  previewVisible: Boolean(preview),
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} invalid mock driver detail workflow review`,
+      );
+      assert.equal(invalidWorkflowState.fetchCount, invalidWorkflowFetchCount);
+      assert.equal(invalidWorkflowState.previewVisible, false);
+      assert.equal(
+        invalidWorkflowState.distance <= 16,
+        true,
+        `${viewport.label}: expected invalid workflow feedback close to review button`,
+      );
+
       const freeformDriverDetails = [
         "Juraimi",
         "Alphard HS/ Black",
@@ -12010,6 +12357,71 @@ async function runChromeTest() {
         freeformDetailsState.messageDistance <= 16,
         true,
         `${viewport.label}: expected freeform parse feedback close to Parse Driver Details`,
+      );
+
+      const remarksAccepted = await evaluate(`(() => {
+        const textarea = document.querySelector("[data-driver-demo-remarks]");
+        if (!textarea) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+        setter?.call(textarea, "Meet at arrival pickup after luggage collection.");
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      })()`);
+      assert.equal(remarksAccepted, true, `${viewport.label}: expected optional remarks textarea`);
+
+      const validWorkflowFetchCount = await evaluate(`(window.__driverDemoFetchCalls || []).length`);
+      await clickDriverDemoButton(
+        "[data-driver-demo-detail-workflow-review]",
+        `${viewport.label} valid mock driver detail workflow review`,
+      );
+      const validWorkflowState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-demo-detail-workflow-review]");
+            const message = document.querySelector("[data-driver-demo-detail-workflow-message]");
+            const preview = document.querySelector("[data-driver-demo-detail-workflow-preview]");
+            const copy = document.querySelector("[data-driver-demo-detail-workflow-copy]");
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            if (!preview || !copy) {
+              return false;
+            }
+
+            const previewControls = preview.querySelectorAll("button, a, input, select, textarea, form").length;
+            const previewText = preview.innerText;
+            const copyText = copy.textContent.trim();
+
+            return message?.textContent.trim() === "Mock driver detail preview ready locally. No message was sent." &&
+              copyText.includes("Future customer preview, not sent") &&
+              previewText.includes("Juraimi") &&
+              previewText.includes("8189 5041") &&
+              previewText.includes("Alphard HS/ Black") &&
+              previewText.includes("SNH4429M") &&
+              previewText.includes("Meet at arrival pickup after luggage collection.") &&
+              !previewText.toLowerCase().includes("paynow")
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  fetchCount: (window.__driverDemoFetchCalls || []).length,
+                  messageText: message.textContent.trim(),
+                  previewControls,
+                  previewText,
+                }
+              : false;
+          })()`),
+        10000,
+        `${viewport.label} valid mock driver detail workflow preview`,
+      );
+      assert.equal(validWorkflowState.fetchCount, validWorkflowFetchCount);
+      assert.equal(
+        validWorkflowState.previewControls,
+        0,
+        `${viewport.label}: expected mock driver detail preview to be display-only`,
+      );
+      assert.equal(
+        validWorkflowState.distance <= 16,
+        true,
+        `${viewport.label}: expected valid workflow feedback close to review button`,
       );
 
       await clickDriverDemoButton("[data-driver-demo-save-details]", `${viewport.label} Save`);
@@ -12704,6 +13116,8 @@ async function runChromeTest() {
       await checkAdminDispatcherApprovalNotificationQueueReadiness();
     state.adminFutureNotificationQueueCustomerUpdateAuditReadiness =
       await checkAdminFutureNotificationQueueCustomerUpdateAuditReadiness();
+    state.adminMockDriverDetailCustomerUpdatePreview =
+      await checkAdminMockDriverDetailCustomerUpdatePreview();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

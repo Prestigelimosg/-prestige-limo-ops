@@ -11,6 +11,7 @@ type DriverDetails = {
   mobile: string;
   payNowNumber: string;
   plate: string;
+  remarks: string;
   vehicleModel: string;
 };
 
@@ -18,6 +19,11 @@ type ParseFeedback = {
   tone: "error" | "success" | "warning";
   text: string;
 };
+
+type MockDriverDetailWorkflowPreview = Pick<
+  DriverDetails,
+  "mobile" | "name" | "plate" | "remarks" | "vehicleModel"
+>;
 
 type TargetedFeedback = ParseFeedback & {
   target: string;
@@ -95,6 +101,7 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
     name: cleanParsedValue(details.name),
     payNowNumber: cleanParsedValue(details.payNowNumber),
     plate: cleanParsedValue(details.plate),
+    remarks: cleanParsedValue(details.remarks),
     vehicleModel: cleanParsedValue(details.vehicleModel),
   };
 }
@@ -288,12 +295,17 @@ export default function DriverJobDemoPage() {
     mobile: "",
     payNowNumber: "",
     plate: "",
+    remarks: "",
     vehicleModel: "",
   });
   const [pastedDriverDetails, setPastedDriverDetails] = useState("");
   const [parseFeedback, setParseFeedback] = useState<ParseFeedback | null>(null);
   const [paymentHelperVisible, setPaymentHelperVisible] = useState(false);
   const [detailsFeedback, setDetailsFeedback] = useState<ParseFeedback | null>(null);
+  const [mockDriverDetailWorkflowFeedback, setMockDriverDetailWorkflowFeedback] =
+    useState<ParseFeedback | null>(null);
+  const [mockDriverDetailWorkflowPreview, setMockDriverDetailWorkflowPreview] =
+    useState<MockDriverDetailWorkflowPreview | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ParseFeedback | null>(null);
   const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
@@ -389,6 +401,8 @@ export default function DriverJobDemoPage() {
 
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
+    setMockDriverDetailWorkflowFeedback(null);
+    setMockDriverDetailWorkflowPreview(null);
     setDriverDetails((currentDetails) => ({
       ...currentDetails,
       [field]: value,
@@ -402,6 +416,7 @@ export default function DriverJobDemoPage() {
       name: parsedDetails.name || driverDetails.name,
       payNowNumber: parsedDetails.payNowNumber || driverDetails.payNowNumber,
       plate: parsedDetails.plate || driverDetails.plate,
+      remarks: driverDetails.remarks,
       vehicleModel: parsedDetails.vehicleModel || driverDetails.vehicleModel,
     };
     const detectedFieldCount = [
@@ -424,9 +439,44 @@ export default function DriverJobDemoPage() {
 
     setDriverDetails(nextDetails);
     setDetailsFeedback(null);
+    setMockDriverDetailWorkflowFeedback(null);
+    setMockDriverDetailWorkflowPreview(null);
     setParseFeedback({
       tone: "success",
       text: "Driver details parsed. Please review before saving.",
+    });
+  }
+
+  function reviewMockDriverDetailWorkflow() {
+    const nextDetails = cleanDriverDetails(driverDetails);
+    const invalidFields = [
+      !nextDetails.name ? "driver name" : "",
+      !isPhoneLikeLine(nextDetails.mobile) ? "valid driver phone" : "",
+      !nextDetails.vehicleModel ? "vehicle model" : "",
+      !isSingaporePlateLine(nextDetails.plate) ? "valid vehicle plate" : "",
+    ].filter(Boolean);
+
+    setDriverDetails(nextDetails);
+
+    if (invalidFields.length > 0) {
+      setMockDriverDetailWorkflowPreview(null);
+      setMockDriverDetailWorkflowFeedback({
+        tone: "error",
+        text: `Add ${invalidFields.join(", ")} before previewing the mock customer update.`,
+      });
+      return;
+    }
+
+    setMockDriverDetailWorkflowPreview({
+      mobile: nextDetails.mobile,
+      name: nextDetails.name,
+      plate: nextDetails.plate,
+      remarks: nextDetails.remarks,
+      vehicleModel: nextDetails.vehicleModel,
+    });
+    setMockDriverDetailWorkflowFeedback({
+      tone: "success",
+      text: "Mock driver detail preview ready locally. No message was sent.",
     });
   }
 
@@ -1076,6 +1126,85 @@ export default function DriverJobDemoPage() {
                 value={driverDetails.payNowNumber}
               />
             </label>
+            <label className="block space-y-1 text-sm font-semibold text-slate-700">
+              <span>Optional remarks</span>
+              <textarea
+                className="min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                data-driver-demo-remarks="true"
+                onChange={(event) => updateDriverDetail("remarks", event.target.value)}
+                value={driverDetails.remarks}
+              />
+            </label>
+            <div
+              className="space-y-2 rounded-md border border-sky-100 bg-sky-50/70 p-3"
+              data-driver-demo-detail-workflow="true"
+            >
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-sky-700">
+                    Mock Driver Detail Workflow
+                  </p>
+                  <h3 className="text-sm font-semibold text-slate-900">Customer update preview</h3>
+                </div>
+                <span className="w-fit rounded-full bg-white px-2 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
+                  Mock/local only
+                </span>
+              </div>
+              <p
+                className="text-sm font-medium text-slate-600"
+                data-driver-demo-detail-workflow-boundary="true"
+              >
+                Local review only. No driver detail persistence, customer update persistence, message channel,
+                storage, API, assignment, queue, audit, or billing behavior is created.
+              </p>
+              <button
+                className="min-h-12 w-full rounded-md bg-slate-950 px-4 py-3 text-base font-semibold text-white transition active:bg-slate-700"
+                data-driver-demo-detail-workflow-review="true"
+                onClick={reviewMockDriverDetailWorkflow}
+                type="button"
+              >
+                Review Mock Details
+              </button>
+              {mockDriverDetailWorkflowFeedback ? (
+                <p
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockDriverDetailWorkflowFeedback.tone)}`}
+                  data-driver-demo-detail-workflow-message="true"
+                >
+                  {mockDriverDetailWorkflowFeedback.text}
+                </p>
+              ) : null}
+              {mockDriverDetailWorkflowPreview ? (
+                <div
+                  className="space-y-2 rounded-md border border-sky-200 bg-white p-3"
+                  data-driver-demo-detail-workflow-preview="true"
+                >
+                  <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                    {[
+                      ["Driver", mockDriverDetailWorkflowPreview.name],
+                      ["Phone", mockDriverDetailWorkflowPreview.mobile],
+                      ["Vehicle", mockDriverDetailWorkflowPreview.vehicleModel],
+                      ["Plate", mockDriverDetailWorkflowPreview.plate],
+                    ].map(([label, value]) => (
+                      <div className="min-w-0 rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200" key={label}>
+                        <dt className="text-xs font-semibold uppercase tracking-[0.06em] text-slate-500">
+                          {label}
+                        </dt>
+                        <dd className="break-words font-semibold text-slate-800">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p
+                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200"
+                    data-driver-demo-detail-workflow-copy="true"
+                  >
+                    Future customer preview, not sent: Driver {mockDriverDetailWorkflowPreview.name} (
+                    {mockDriverDetailWorkflowPreview.mobile}) with {mockDriverDetailWorkflowPreview.vehicleModel}{" "}
+                    {mockDriverDetailWorkflowPreview.plate}. Remarks:{" "}
+                    {mockDriverDetailWorkflowPreview.remarks || "No customer-safe remarks added."}
+                  </p>
+                </div>
+              ) : null}
+            </div>
             <div className="space-y-2">
               <button
                 className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"

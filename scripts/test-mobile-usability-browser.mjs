@@ -468,6 +468,9 @@ async function runChromeTest() {
       const driverDetailsCustomerUpdateReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-details-customer-update-readiness]"))`,
       );
+      const customerUpdateDeliveryReviewReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-update-delivery-review-readiness]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -500,6 +503,11 @@ async function runChromeTest() {
         driverDetailsCustomerUpdateReadinessVisible,
         false,
         `${viewport.label} ${route.label}: expected no driver details customer update readiness`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no customer update delivery review readiness`,
       );
     };
 
@@ -1128,6 +1136,95 @@ async function runChromeTest() {
         `${viewport.label}: expected driver details customer update readiness items to stay readable and compact`,
       );
 
+      const customerUpdateDeliveryReviewReadinessState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const readiness = document.querySelector("[data-customer-update-delivery-review-readiness]");
+            if (!readiness) {
+              return false;
+            }
+
+            const rect = readiness.getBoundingClientRect();
+            const items = [...readiness.querySelectorAll("[data-customer-update-delivery-review-readiness-item]")].map((item) => {
+              const itemRect = item.getBoundingClientRect();
+              return {
+                height: Math.round(itemRect.height),
+                label: item.getAttribute("data-customer-update-delivery-review-readiness-item") || "",
+                text: item.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(itemRect.width),
+              };
+            });
+
+            return {
+              actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-customer-update-delivery-review-readiness-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              items,
+              text: readiness.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} customer update delivery review readiness`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.text.toLowerCase().includes("delivery review"),
+        true,
+        `${viewport.label}: expected customer update delivery review readiness`,
+      );
+      assert.deepEqual(
+        customerUpdateDeliveryReviewReadinessState.items.map((item) => item.label),
+        ["Update", "Review", "Channel", "Audit", "Approval", "Next"],
+        `${viewport.label}: expected compact customer update delivery review readiness items`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.items.some((item) =>
+          item.text.includes("Message check, not sent"),
+        ),
+        true,
+        `${viewport.label}: expected not-sent message channel check`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.items.some((item) =>
+          item.text.includes("Dispatcher approval"),
+        ),
+        true,
+        `${viewport.label}: expected dispatcher approval readiness`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.boundary.includes("Mock/local only."),
+        true,
+        `${viewport.label}: expected customer update delivery review readiness mock/local boundary`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.boundary.includes("No customer update persistence"),
+        true,
+        `${viewport.label}: expected no customer update persistence boundary`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.boundary.includes("delivery") &&
+          customerUpdateDeliveryReviewReadinessState.boundary.includes("notification sending"),
+        true,
+        `${viewport.label}: expected no delivery/notification sending boundary`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.actionCount,
+        0,
+        `${viewport.label}: expected customer update delivery review readiness to stay display-only`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.height <= (viewport.width < 640 ? 340 : 150),
+        true,
+        `${viewport.label}: expected compact customer update delivery review readiness, got ${customerUpdateDeliveryReviewReadinessState.height}px`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessState.items.every((item) => item.height >= 32 && item.width >= 56),
+        true,
+        `${viewport.label}: expected customer update delivery review readiness items to stay readable and compact`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1159,6 +1256,9 @@ async function runChromeTest() {
       const driverDetailsCustomerUpdateReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-details-customer-update-readiness]"))`,
       );
+      const customerUpdateDeliveryReviewReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-update-delivery-review-readiness]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
@@ -1177,6 +1277,11 @@ async function runChromeTest() {
         driverDetailsCustomerUpdateReadinessVisible,
         false,
         `${viewport.label} ${context}: expected no driver details customer update readiness`,
+      );
+      assert.equal(
+        customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        `${viewport.label} ${context}: expected no customer update delivery review readiness`,
       );
       return state;
     };

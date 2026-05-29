@@ -1397,6 +1397,188 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminCustomerUpdateDeliveryReviewReadiness = async () => {
+      const readinessViewports = [
+        { height: 812, label: "mobile customer update delivery review readiness", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop customer update delivery review readiness", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of readinessViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const readiness = document.querySelector("[data-customer-update-delivery-review-readiness]");
+              if (!readiness) {
+                return false;
+              }
+
+              const rect = readiness.getBoundingClientRect();
+              const items = [...readiness.querySelectorAll("[data-customer-update-delivery-review-readiness-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-customer-update-delivery-review-readiness-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = readiness.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-customer-update-delivery-review-readiness-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenActionText: [
+                  "send whatsapp",
+                  "send email",
+                  "notify customer now",
+                  "deliver now",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin customer update delivery review readiness`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("delivery review"),
+          true,
+          `${viewport.label}: expected internal delivery review heading`,
+        );
+        assert.equal(
+          state.text.includes("Customer update readiness"),
+          true,
+          `${viewport.label}: expected customer-update-to-delivery-review readiness title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Update", "Review", "Channel", "Audit", "Approval", "Next"],
+          `${viewport.label}: expected customer-update-to-delivery-review readiness labels`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Customer update prepared")),
+          true,
+          `${viewport.label}: expected customer update prepared readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Future delivery review")),
+          true,
+          `${viewport.label}: expected future delivery review readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Message check, not sent")),
+          true,
+          `${viewport.label}: expected message channel check not-sent readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Contact/audit review")),
+          true,
+          `${viewport.label}: expected contact audit review readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Dispatcher approval")),
+          true,
+          `${viewport.label}: expected dispatcher approval readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Review before future update")),
+          true,
+          `${viewport.label}: expected dispatcher next action`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only."),
+          true,
+          `${viewport.label}: expected mock/local delivery review boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("No customer update persistence"),
+          true,
+          `${viewport.label}: expected no customer update persistence boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("delivery") && state.boundary.includes("notification sending"),
+          true,
+          `${viewport.label}: expected no delivery/notification sending boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("driver detail collection"),
+          true,
+          `${viewport.label}: expected no driver detail collection boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("assignment") && state.boundary.includes("save"),
+          true,
+          `${viewport.label}: expected no assignment/save boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("storage") && state.boundary.includes("API call"),
+          true,
+          `${viewport.label}: expected no storage/API boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("message channel"),
+          true,
+          `${viewport.label}: expected no message channel boundary`,
+        );
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected delivery review readiness to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private driver details in delivery review strip`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active send/notify/deliver wording in delivery review strip`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 340 : 150),
+          true,
+          `${viewport.label}: expected compact delivery review readiness, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected delivery review readiness items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected delivery review readiness not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -2609,6 +2791,9 @@ async function runChromeTest() {
           driverDetailsCustomerUpdateReadinessVisible: Boolean(
             document.querySelector("[data-driver-details-customer-update-readiness]"),
           ),
+          customerUpdateDeliveryReviewReadinessVisible: Boolean(
+            document.querySelector("[data-customer-update-delivery-review-readiness]"),
+          ),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
@@ -2623,6 +2808,10 @@ async function runChromeTest() {
             "collection readiness",
             "driver details readiness",
             "customer update draft",
+            "delivery review",
+            "customer update prepared",
+            "dispatcher approval",
+            "message check, not sent",
             "future/not sent",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
@@ -3003,6 +3192,11 @@ async function runChromeTest() {
         dashboardState.driverDetailsCustomerUpdateReadinessVisible,
         false,
         "Expected /customers not to show internal driver details customer update readiness",
+      );
+      assert.equal(
+        dashboardState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        "Expected /customers not to show internal customer update delivery review readiness",
       );
       assert.equal(
         dashboardState.regularBookingFormVisible,
@@ -7502,6 +7696,10 @@ async function runChromeTest() {
               "paypal",
               "secret key",
               "confirmed booking readiness",
+              "delivery review",
+              "customer update prepared",
+              "dispatcher approval",
+              "message check, not sent",
               "future/not sent",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
@@ -7711,6 +7909,9 @@ async function runChromeTest() {
               driverDetailsCustomerUpdateReadinessVisible: Boolean(
                 document.querySelector("[data-driver-details-customer-update-readiness]"),
               ),
+              customerUpdateDeliveryReviewReadinessVisible: Boolean(
+                document.querySelector("[data-customer-update-delivery-review-readiness]"),
+              ),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
               internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
@@ -7746,6 +7947,11 @@ async function runChromeTest() {
         mobileDashboardState.driverDetailsCustomerUpdateReadinessVisible,
         false,
         "Expected mobile /customers not to show internal driver details customer update readiness",
+      );
+      assert.equal(
+        mobileDashboardState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        "Expected mobile /customers not to show internal customer update delivery review readiness",
       );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
@@ -7966,6 +8172,9 @@ async function runChromeTest() {
           driverDetailsCustomerUpdateReadinessVisible: Boolean(
             document.querySelector("[data-driver-details-customer-update-readiness]"),
           ),
+          customerUpdateDeliveryReviewReadinessVisible: Boolean(
+            document.querySelector("[data-customer-update-delivery-review-readiness]"),
+          ),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -7984,6 +8193,10 @@ async function runChromeTest() {
             "collection readiness",
             "driver details readiness",
             "customer update draft",
+            "delivery review",
+            "customer update prepared",
+            "dispatcher approval",
+            "message check, not sent",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
@@ -8082,6 +8295,11 @@ async function runChromeTest() {
         initialState.driverDetailsCustomerUpdateReadinessVisible,
         false,
         "Expected /book not to show internal driver details customer update readiness",
+      );
+      assert.equal(
+        initialState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        "Expected /book not to show internal customer update delivery review readiness",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -8371,6 +8589,11 @@ async function runChromeTest() {
         false,
         "Expected /book mobile not to show internal driver details customer update readiness",
       );
+      assert.equal(
+        mobileState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        "Expected /book mobile not to show internal customer update delivery review readiness",
+      );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -8503,6 +8726,9 @@ async function runChromeTest() {
           driverDetailsCustomerUpdateReadinessVisible: Boolean(
             document.querySelector("[data-driver-details-customer-update-readiness]"),
           ),
+          customerUpdateDeliveryReviewReadinessVisible: Boolean(
+            document.querySelector("[data-customer-update-delivery-review-readiness]"),
+          ),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -8533,6 +8759,10 @@ async function runChromeTest() {
             "collection readiness",
             "driver details readiness",
             "customer update draft",
+            "delivery review",
+            "customer update prepared",
+            "dispatcher approval",
+            "message check, not sent",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           form: {
@@ -8857,6 +9087,11 @@ async function runChromeTest() {
         initialState.driverDetailsCustomerUpdateReadinessVisible,
         false,
         "Expected /my-bookings not to show internal driver details customer update readiness",
+      );
+      assert.equal(
+        initialState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        "Expected /my-bookings not to show internal customer update delivery review readiness",
       );
       assert.equal(
         initialState.guidance.height <= 190,
@@ -9566,6 +9801,11 @@ async function runChromeTest() {
         false,
         "Expected /my-bookings mobile not to show internal driver details customer update readiness",
       );
+      assert.equal(
+        mobileState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal customer update delivery review readiness",
+      );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
         [],
@@ -9748,6 +9988,9 @@ async function runChromeTest() {
           driverDetailsCustomerUpdateReadinessVisible: Boolean(
             document.querySelector("[data-driver-details-customer-update-readiness]"),
           ),
+          customerUpdateDeliveryReviewReadinessVisible: Boolean(
+            document.querySelector("[data-customer-update-delivery-review-readiness]"),
+          ),
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -9788,6 +10031,10 @@ async function runChromeTest() {
             "collection readiness",
             "driver details readiness",
             "customer update draft",
+            "delivery review",
+            "customer update prepared",
+            "dispatcher approval",
+            "message check, not sent",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
@@ -9827,6 +10074,11 @@ async function runChromeTest() {
         initialState.driverDetailsCustomerUpdateReadinessVisible,
         false,
         `${viewport.label}: expected no internal driver details customer update readiness on driver job link`,
+      );
+      assert.equal(
+        initialState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal customer update delivery review readiness on driver job link`,
       );
       assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
       assert.deepEqual(
@@ -10278,6 +10530,9 @@ async function runChromeTest() {
           driverDetailsCustomerUpdateReadinessVisible: Boolean(
             document.querySelector("[data-driver-details-customer-update-readiness]"),
           ),
+          customerUpdateDeliveryReviewReadinessVisible: Boolean(
+            document.querySelector("[data-customer-update-delivery-review-readiness]"),
+          ),
           docScrollWidth: doc.scrollWidth,
           dispatcherExceptionButtons: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-action]")]
             .map((button) => button.textContent.trim()),
@@ -10317,6 +10572,10 @@ async function runChromeTest() {
             "collection readiness",
             "driver details readiness",
             "customer update draft",
+            "delivery review",
+            "customer update prepared",
+            "dispatcher approval",
+            "message check, not sent",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
@@ -10358,6 +10617,11 @@ async function runChromeTest() {
         initialState.driverDetailsCustomerUpdateReadinessVisible,
         false,
         `${viewport.label}: expected no internal driver details customer update readiness on driver demo`,
+      );
+      assert.equal(
+        initialState.customerUpdateDeliveryReviewReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal customer update delivery review readiness on driver demo`,
       );
       assert.deepEqual(
         initialState.forbiddenText,
@@ -11575,6 +11839,7 @@ async function runChromeTest() {
     state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
     state.adminDriverDetailCollectionReadiness = await checkAdminDriverDetailCollectionReadiness();
     state.adminDriverDetailsCustomerUpdateReadiness = await checkAdminDriverDetailsCustomerUpdateReadiness();
+    state.adminCustomerUpdateDeliveryReviewReadiness = await checkAdminCustomerUpdateDeliveryReviewReadiness();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

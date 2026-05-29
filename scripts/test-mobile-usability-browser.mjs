@@ -480,6 +480,9 @@ async function runChromeTest() {
       const futureNotificationQueueCustomerUpdateAuditReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-future-notification-queue-customer-update-audit-readiness]"))`,
       );
+      const mockDspMonthlyRollupReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-dsp-monthly-rollup-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -532,6 +535,11 @@ async function runChromeTest() {
         futureNotificationQueueCustomerUpdateAuditReadinessVisible,
         false,
         `${viewport.label} ${route.label}: expected no future notification queue customer update audit readiness`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock DSP monthly rollup review`,
       );
     };
 
@@ -1523,6 +1531,83 @@ async function runChromeTest() {
         `${viewport.label}: expected future notification queue customer update audit readiness items to stay readable and compact`,
       );
 
+      const mockDspMonthlyRollupReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-dsp-monthly-rollup-review]");
+            if (!review) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-dsp-monthly-rollup-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-dsp-monthly-rollup-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-dsp-monthly-rollup-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock monthly DSP rollup review`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewState.text.toLowerCase().includes("monthly dsp rollup"),
+        true,
+        `${viewport.label}: expected mock monthly DSP rollup review`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewState.text.includes("Static mock sample rows only") &&
+          mockDspMonthlyRollupReviewState.text.includes("12.50h") &&
+          mockDspMonthlyRollupReviewState.text.includes("8.00h") &&
+          mockDspMonthlyRollupReviewState.text.includes("4.50h") &&
+          mockDspMonthlyRollupReviewState.text.includes("Not billed"),
+        true,
+        `${viewport.label}: expected static not-billed DSP rollup totals`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewState.boundary.includes("Mock/local only.") &&
+          mockDspMonthlyRollupReviewState.boundary.includes("No billing automation") &&
+          mockDspMonthlyRollupReviewState.boundary.includes("storage") &&
+          mockDspMonthlyRollupReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected monthly rollup no billing/storage/API boundary`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewState.actionCount,
+        0,
+        `${viewport.label}: expected monthly DSP rollup review to stay display-only`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewState.rows.length,
+        2,
+        `${viewport.label}: expected two static mock monthly DSP rollup rows`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewState.height <=
+          (viewport.width < 640 ? 520 : viewport.width < 1024 ? 380 : viewport.width < 1200 ? 320 : 260),
+        true,
+        `${viewport.label}: expected compact monthly DSP rollup review, got ${mockDspMonthlyRollupReviewState.height}px`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected monthly DSP rollup rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1571,6 +1656,9 @@ async function runChromeTest() {
       );
       const mockDspUsageAccountingPreviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-dsp-usage-accounting-preview]"))`,
+      );
+      const mockDspMonthlyRollupReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-dsp-monthly-rollup-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -1650,6 +1738,11 @@ async function runChromeTest() {
         mockDspUsageAccountingPreviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock DSP usage accounting preview`,
+      );
+      assert.equal(
+        mockDspMonthlyRollupReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock DSP monthly rollup review`,
       );
       if (context === "driver job demo") {
         assert.equal(

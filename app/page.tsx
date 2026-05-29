@@ -7533,6 +7533,97 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Mock monthly DSP usage rollup reconciliation review"
+          className="rounded-lg border border-cyan-100 bg-white px-3 py-2 shadow-sm"
+          data-mock-dsp-monthly-rollup-review="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-cyan-700">
+                  Monthly DSP Rollup
+                </span>{" "}
+                <span className="text-slate-600">Mock reconciliation</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-cyan-100 bg-cyan-50/70 px-3 py-2 text-xs font-medium leading-5 text-slate-700"
+                data-mock-dsp-monthly-rollup-review-copy="true"
+              >
+                Static mock sample rows only for completed DSP/disposal usage by customer/month. Nothing is billed,
+                saved, posted, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-dsp-monthly-rollup-review-rows="true">
+                {[
+                  {
+                    charge: "Not billed",
+                    customer: "UBS Priority",
+                    extra: "4.50h",
+                    included: "8.00h",
+                    jobs: "3 jobs",
+                    month: "May 2026",
+                    reconciliation: "Needs review",
+                    total: "12.50h",
+                  },
+                  {
+                    charge: "Not billed",
+                    customer: "Ritz-Carlton",
+                    extra: "1.25h",
+                    included: "6.00h",
+                    jobs: "2 jobs",
+                    month: "May 2026",
+                    reconciliation: "Matched to mock usage",
+                    total: "7.25h",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-4 gap-1 rounded-md border border-cyan-100 bg-cyan-50/70 p-1.5 text-[10px] leading-tight text-slate-800 xl:grid-cols-8"
+                    data-mock-dsp-monthly-rollup-review-row={row.customer}
+                    key={`${row.customer}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.customer],
+                      ["Month", "Month", row.month],
+                      ["Job count", "Jobs", row.jobs],
+                      ["Total DSP hours", "Total", row.total],
+                      ["Included hours", "Included", row.included],
+                      ["Extra hours", "Extra", row.extra],
+                      ["Charge status", "Status", row.charge],
+                      ["Reconciliation", "Recon", row.reconciliation],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase tracking-[0.04em] text-cyan-700"
+                          data-mock-dsp-monthly-rollup-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <p
+                className="min-w-0 rounded-md border border-cyan-100 bg-cyan-50/70 px-3 py-2 text-xs font-medium leading-5 text-slate-700"
+                data-mock-dsp-monthly-rollup-review-detail="true"
+              >
+                Selected mock review: UBS Priority May 2026, 3 jobs, 12.50h total, 8.00h included, 4.50h extra.
+                Future monthly invoice line - mock only, not created.
+              </p>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-dsp-monthly-rollup-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, PDF, accounting posting, customer account,
+            statement, storage, API call, save, notification, or send behavior.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

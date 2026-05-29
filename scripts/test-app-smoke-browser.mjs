@@ -2535,6 +2535,220 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockDspMonthlyRollupReview = async () => {
+      const previewViewports = [
+        {
+          height: 900,
+          label: "mobile mock DSP monthly rollup review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock DSP monthly rollup review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of previewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-dsp-monthly-rollup-review]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-dsp-monthly-rollup-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-dsp-monthly-rollup-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-dsp-monthly-rollup-review-column]")].map((column) =>
+                    column.getAttribute("data-mock-dsp-monthly-rollup-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-dsp-monthly-rollup-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-dsp-monthly-rollup-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                detail:
+                  document.querySelector("[data-mock-dsp-monthly-rollup-review-detail]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "bill now",
+                  "create invoice",
+                  "take payment",
+                  "save charge",
+                  "send statement",
+                  "generate pdf",
+                  "post accounting",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock DSP monthly rollup review`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("monthly dsp rollup"),
+          true,
+          `${viewport.label}: expected monthly DSP rollup heading`,
+        );
+        assert.equal(
+          state.text.includes("Mock reconciliation"),
+          true,
+          `${viewport.label}: expected mock reconciliation title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Month",
+            "Job count",
+            "Total DSP hours",
+            "Included hours",
+            "Extra hours",
+            "Charge status",
+            "Reconciliation",
+          ],
+          `${viewport.label}: expected mock monthly DSP rollup columns`,
+        );
+        assert.equal(state.rows.length, 2, `${viewport.label}: expected two static mock rollup rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "May 2026",
+          "3 jobs",
+          "2 jobs",
+          "12.50h",
+          "8.00h",
+          "4.50h",
+          "7.25h",
+          "6.00h",
+          "1.25h",
+          "Not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock rollup text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static mock sample rows only") &&
+            state.copy.includes("completed DSP/disposal usage") &&
+            state.copy.includes("Nothing is billed, saved, posted, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence copy`,
+        );
+        assert.equal(
+          state.detail.includes("Future monthly invoice line - mock only, not created") &&
+            state.detail.includes("12.50h total") &&
+            state.detail.includes("8.00h included") &&
+            state.detail.includes("4.50h extra"),
+          true,
+          `${viewport.label}: expected mock invoice-line detail without creation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "PDF",
+          "accounting posting",
+          "customer account",
+          "statement",
+          "storage",
+          "API call",
+          "save",
+          "notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected monthly rollup boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected monthly DSP rollup review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active bill/invoice/payment/PDF/accounting controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in monthly rollup review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 520 : viewport.width < 1024 ? 380 : viewport.width < 1200 ? 320 : 260),
+          true,
+          `${viewport.label}: expected compact monthly DSP rollup review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected monthly DSP rollup rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected monthly DSP rollup review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -3144,6 +3358,9 @@ async function runChromeTest() {
                 "[data-regular-customer-billing-visible-summary], [data-regular-customer-monthly-billing-summary]",
               ),
             ),
+            mockDspMonthlyRollupReviewVisible: Boolean(
+              document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
+            ),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
             sentinelControlValueLeaks: sentinels.filter((sentinel) =>
@@ -3182,6 +3399,11 @@ async function runChromeTest() {
           routeState.monthlyBillingSummaryText,
           [],
           `${routeName}: expected no internal monthly billing summary text`,
+        );
+        assert.equal(
+          routeState.mockDspMonthlyRollupReviewVisible,
+          false,
+          `${routeName}: expected no internal mock DSP monthly rollup review`,
         );
         assert.equal(
           routeState.billingQuickFilterVisible,
@@ -3765,6 +3987,9 @@ async function runChromeTest() {
           mockDspUsageAccountingPreviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
           ),
+          mockDspMonthlyRollupReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -3798,6 +4023,10 @@ async function runChromeTest() {
             "message audit, not sent",
             "review audit boundary",
             "future/not sent",
+            "monthly dsp rollup",
+            "mock reconciliation",
+            "static mock sample rows",
+            "future monthly invoice line",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -4207,6 +4436,11 @@ async function runChromeTest() {
         dashboardState.mockDspUsageAccountingPreviewVisible,
         false,
         "Expected /customers not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
+        dashboardState.mockDspMonthlyRollupReviewVisible,
+        false,
+        "Expected /customers not to show internal mock DSP monthly rollup review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -8733,6 +8967,10 @@ async function runChromeTest() {
             "message audit, not sent",
             "review audit boundary",
             "future/not sent",
+            "monthly dsp rollup",
+            "mock reconciliation",
+            "static mock sample rows",
+            "future monthly invoice line",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
@@ -8959,6 +9197,9 @@ async function runChromeTest() {
               mockDspUsageAccountingPreviewVisible: Boolean(
                 document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
               ),
+              mockDspMonthlyRollupReviewVisible: Boolean(
+                document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -9026,6 +9267,11 @@ async function runChromeTest() {
         mobileDashboardState.mockDspUsageAccountingPreviewVisible,
         false,
         "Expected mobile /customers not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
+        mobileDashboardState.mockDspMonthlyRollupReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock DSP monthly rollup review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -9274,6 +9520,9 @@ async function runChromeTest() {
           mockDspUsageAccountingPreviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
           ),
+          mockDspMonthlyRollupReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -9311,6 +9560,10 @@ async function runChromeTest() {
             "message audit, not sent",
             "review audit boundary",
             "future/not sent",
+            "monthly dsp rollup",
+            "mock reconciliation",
+            "static mock sample rows",
+            "future monthly invoice line",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -9438,6 +9691,11 @@ async function runChromeTest() {
         initialState.mockDspUsageAccountingPreviewVisible,
         false,
         "Expected /book not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
+        initialState.mockDspMonthlyRollupReviewVisible,
+        false,
+        "Expected /book not to show internal mock DSP monthly rollup review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -9768,6 +10026,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock DSP usage accounting preview",
       );
       assert.equal(
+        mobileState.mockDspMonthlyRollupReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock DSP monthly rollup review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -9927,6 +10190,9 @@ async function runChromeTest() {
           mockDspUsageAccountingPreviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
           ),
+          mockDspMonthlyRollupReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -9976,6 +10242,10 @@ async function runChromeTest() {
             "message audit, not sent",
             "review audit boundary",
             "future/not sent",
+            "monthly dsp rollup",
+            "mock reconciliation",
+            "static mock sample rows",
+            "future monthly invoice line",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -10329,6 +10599,11 @@ async function runChromeTest() {
         initialState.mockDspUsageAccountingPreviewVisible,
         false,
         "Expected /my-bookings not to show internal mock DSP usage accounting preview",
+      );
+      assert.equal(
+        initialState.mockDspMonthlyRollupReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock DSP monthly rollup review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -11079,6 +11354,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock DSP usage accounting preview",
       );
       assert.equal(
+        mobileState.mockDspMonthlyRollupReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock DSP monthly rollup review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -11288,6 +11568,9 @@ async function runChromeTest() {
           mockDspUsageAccountingPreviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
           ),
+          mockDspMonthlyRollupReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
@@ -11347,6 +11630,10 @@ async function runChromeTest() {
             "message audit, not sent",
             "review audit boundary",
             "future/not sent",
+            "monthly dsp rollup",
+            "mock reconciliation",
+            "static mock sample rows",
+            "future monthly invoice line",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -11415,6 +11702,11 @@ async function runChromeTest() {
         initialState.mockDspUsageAccountingPreviewVisible,
         false,
         `${viewport.label}: expected no internal mock DSP usage accounting preview on driver job link`,
+      );
+      assert.equal(
+        initialState.mockDspMonthlyRollupReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP monthly rollup review on driver job link`,
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -11894,6 +12186,9 @@ async function runChromeTest() {
           mockDspUsageAccountingPreviewVisible: Boolean(
             document.querySelector("[data-mock-dsp-usage-accounting-preview]"),
           ),
+          mockDspMonthlyRollupReviewVisible: Boolean(
+            document.querySelector("[data-mock-dsp-monthly-rollup-review]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -11974,6 +12269,10 @@ async function runChromeTest() {
             "message audit, not sent",
             "review audit boundary",
             "future/not sent",
+            "monthly dsp rollup",
+            "mock reconciliation",
+            "static mock sample rows",
+            "future monthly invoice line",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -12044,6 +12343,11 @@ async function runChromeTest() {
         initialState.mockDspUsageAccountingPreviewVisible,
         false,
         `${viewport.label}: expected no internal mock DSP usage accounting preview on driver demo`,
+      );
+      assert.equal(
+        initialState.mockDspMonthlyRollupReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock DSP monthly rollup review on driver demo`,
       );
       assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
@@ -13583,6 +13887,7 @@ async function runChromeTest() {
     state.adminMockDriverDetailCustomerUpdatePreview =
       await checkAdminMockDriverDetailCustomerUpdatePreview();
     state.adminMockDspUsageAccountingPreview = await checkAdminMockDspUsageAccountingPreview();
+    state.adminMockDspMonthlyRollupReview = await checkAdminMockDspMonthlyRollupReview();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

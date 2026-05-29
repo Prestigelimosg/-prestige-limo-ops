@@ -7840,6 +7840,110 @@ export default function Home() {
           </p>
         </section>
 
+        <section
+          aria-label="Mock accounting statement preview reconciliation packet"
+          className="rounded-lg border border-violet-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-accounting-statement-preview="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-violet-700">Accounting Statement</span>{" "}
+                <span className="text-slate-600">Mock preview</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-violet-100 bg-violet-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-accounting-statement-preview-copy="true"
+              >
+                Static/mock statement preview data only for future reconciliation review. Nothing is charged, posted,
+                billed, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-accounting-statement-preview-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    amount: "$ -- not charged",
+                    approvedJobs: "3 jobs",
+                    extra: "3.50h",
+                    finalHours: "11.50h",
+                    included: "8.00h",
+                    month: "May 2026",
+                    rate: "Mock DSP rate / not charged",
+                    reconciliation: "Approved handoff reviewed",
+                    status: "Not saved / not posted / not billed",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    amount: "$ -- not charged",
+                    approvedJobs: "2 jobs",
+                    extra: "0.75h",
+                    finalHours: "6.75h",
+                    included: "6.00h",
+                    month: "May 2026",
+                    rate: "Mock DSP rate / not charged",
+                    reconciliation: "Adjustments noted",
+                    status: "Future preview only",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-5 gap-1 rounded-md border border-violet-100 bg-violet-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 xl:grid-cols-10"
+                    data-mock-accounting-statement-preview-row={row.account}
+                    key={`${row.account}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Approved DSP job count", "Jobs", row.approvedJobs],
+                      ["Final reviewed DSP hours", "Final hrs", row.finalHours],
+                      ["Included hours", "Included", row.included],
+                      ["Extra billable hours", "Extra", row.extra],
+                      ["Mock rate label", "Rate", row.rate],
+                      ["Mock amount placeholder", "Amount", row.amount],
+                      ["Reconciliation status", "Recon", row.reconciliation],
+                      ["Statement preview status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-violet-700"
+                          data-mock-accounting-statement-preview-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-violet-100 bg-violet-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-accounting-statement-preview-line="true"
+                >
+                  Future statement line - mock only. Future monthly invoice preview - not created. No invoice number
+                  generated. No PDF/payment link generated. Not saved / not posted / not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-violet-100 bg-violet-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-accounting-statement-preview-note="true"
+                >
+                  Reconciliation note: approved handoff reviewed, exceptions carried forward, adjustments noted,
+                  accounting review pending.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-accounting-statement-preview-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, statement, payment link, PDF, accounting posting, customer
+            account, account charge, storage, API call, save, post, approval, notification, or send behavior.
+          </p>
+        </section>
+
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
           <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">

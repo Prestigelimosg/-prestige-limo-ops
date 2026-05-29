@@ -489,6 +489,9 @@ async function runChromeTest() {
       const mockDspApprovalPacketReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-dsp-approval-packet-review]"))`,
       );
+      const mockAccountingStatementPreviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-accounting-statement-preview]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -556,6 +559,11 @@ async function runChromeTest() {
         mockDspApprovalPacketReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock DSP approval packet review`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock accounting statement preview`,
       );
     };
 
@@ -1797,6 +1805,115 @@ async function runChromeTest() {
         `${viewport.label}: expected DSP approval packet rows to stay readable`,
       );
 
+      const mockAccountingStatementPreviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const preview = document.querySelector("[data-mock-accounting-statement-preview]");
+            if (!preview) {
+              return false;
+            }
+
+            const rect = preview.getBoundingClientRect();
+            const rows = [...preview.querySelectorAll("[data-mock-accounting-statement-preview-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-accounting-statement-preview-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: preview.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-accounting-statement-preview-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(rect.height),
+              line:
+                document.querySelector("[data-mock-accounting-statement-preview-line]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              note:
+                document.querySelector("[data-mock-accounting-statement-preview-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: preview.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock accounting statement preview`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.text.toLowerCase().includes("accounting statement"),
+        true,
+        `${viewport.label}: expected mock accounting statement preview`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.text.includes("Static/mock statement preview data only") &&
+          mockAccountingStatementPreviewState.text.includes("3 jobs") &&
+          mockAccountingStatementPreviewState.text.includes("11.50h") &&
+          mockAccountingStatementPreviewState.text.includes("8.00h") &&
+          mockAccountingStatementPreviewState.text.includes("3.50h") &&
+          mockAccountingStatementPreviewState.text.includes("not charged") &&
+          mockAccountingStatementPreviewState.text.includes("Not saved / not posted / not billed") &&
+          mockAccountingStatementPreviewState.text.includes("Future preview only"),
+        true,
+        `${viewport.label}: expected static not-charged accounting statement preview details`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.line.includes("Future statement line - mock only") &&
+          mockAccountingStatementPreviewState.line.includes("Future monthly invoice preview - not created") &&
+          mockAccountingStatementPreviewState.line.includes("No invoice number generated") &&
+          mockAccountingStatementPreviewState.line.includes("No PDF/payment link generated") &&
+          mockAccountingStatementPreviewState.line.includes("Not saved / not posted / not billed"),
+        true,
+        `${viewport.label}: expected mock statement line with no invoice/PDF/payment/posting`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.note.includes("approved handoff reviewed") &&
+          mockAccountingStatementPreviewState.note.includes("exceptions carried forward") &&
+          mockAccountingStatementPreviewState.note.includes("adjustments noted") &&
+          mockAccountingStatementPreviewState.note.includes("accounting review pending"),
+        true,
+        `${viewport.label}: expected accounting preview reconciliation note`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.boundary.includes("Mock/local only.") &&
+          mockAccountingStatementPreviewState.boundary.includes("No billing automation") &&
+          mockAccountingStatementPreviewState.boundary.includes("invoice") &&
+          mockAccountingStatementPreviewState.boundary.includes("statement") &&
+          mockAccountingStatementPreviewState.boundary.includes("payment link") &&
+          mockAccountingStatementPreviewState.boundary.includes("PDF") &&
+          mockAccountingStatementPreviewState.boundary.includes("storage") &&
+          mockAccountingStatementPreviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected statement preview no billing/storage/API boundary`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.actionCount,
+        0,
+        `${viewport.label}: expected accounting statement preview to stay display-only`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.rows.length,
+        2,
+        `${viewport.label}: expected two static mock accounting statement preview rows`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.height <=
+          (viewport.width < 640 ? 660 : viewport.width < 1024 ? 440 : viewport.width < 1200 ? 380 : 320),
+        true,
+        `${viewport.label}: expected compact accounting statement preview, got ${mockAccountingStatementPreviewState.height}px`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected accounting statement preview rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -1854,6 +1971,9 @@ async function runChromeTest() {
       );
       const mockDspApprovalPacketReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-dsp-approval-packet-review]"))`,
+      );
+      const mockAccountingStatementPreviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-accounting-statement-preview]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -1948,6 +2068,11 @@ async function runChromeTest() {
         mockDspApprovalPacketReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock DSP approval packet review`,
+      );
+      assert.equal(
+        mockAccountingStatementPreviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock accounting statement preview`,
       );
       if (context === "driver job demo") {
         assert.equal(

@@ -1579,6 +1579,200 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDeliveryReviewDispatcherApprovalReadiness = async () => {
+      const readinessViewports = [
+        { height: 812, label: "mobile delivery review dispatcher approval readiness", mobile: true, scale: 3, width: 375 },
+        {
+          height: 900,
+          label: "desktop delivery review dispatcher approval readiness",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of readinessViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const readiness = document.querySelector("[data-delivery-review-dispatcher-approval-readiness]");
+              if (!readiness) {
+                return false;
+              }
+
+              const rect = readiness.getBoundingClientRect();
+              const items = [...readiness.querySelectorAll("[data-delivery-review-dispatcher-approval-readiness-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-delivery-review-dispatcher-approval-readiness-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = readiness.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: readiness.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-delivery-review-dispatcher-approval-readiness-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenActionText: [
+                  "approve and send",
+                  "send whatsapp",
+                  "send email",
+                  "notify customer now",
+                  "deliver now",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin delivery review dispatcher approval readiness`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("dispatcher approval"),
+          true,
+          `${viewport.label}: expected internal dispatcher approval heading`,
+        );
+        assert.equal(
+          state.text.includes("Delivery review readiness"),
+          true,
+          `${viewport.label}: expected delivery-review-to-dispatcher-approval readiness title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Review", "Approval", "Channel", "Audit", "Boundary", "Next"],
+          `${viewport.label}: expected delivery-review-to-dispatcher-approval readiness labels`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Review status")),
+          true,
+          `${viewport.label}: expected delivery review status readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Future approval review")),
+          true,
+          `${viewport.label}: expected future approval review readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Final check, not sent")),
+          true,
+          `${viewport.label}: expected final message channel check not-sent readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Contact/audit ready")),
+          true,
+          `${viewport.label}: expected customer contact/audit readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Mock/local only")),
+          true,
+          `${viewport.label}: expected approval boundary readiness`,
+        );
+        assert.equal(
+          state.items.some((item) => item.text.includes("Review boundary")),
+          true,
+          `${viewport.label}: expected dispatcher next action`,
+        );
+        assert.equal(
+          state.boundary.includes("Mock/local only."),
+          true,
+          `${viewport.label}: expected mock/local dispatcher approval boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("No customer update persistence"),
+          true,
+          `${viewport.label}: expected no customer update persistence boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("approval persistence"),
+          true,
+          `${viewport.label}: expected no approval persistence boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("delivery") && state.boundary.includes("notification sending"),
+          true,
+          `${viewport.label}: expected no delivery/notification sending boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("driver detail collection"),
+          true,
+          `${viewport.label}: expected no driver detail collection boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("assignment") && state.boundary.includes("save"),
+          true,
+          `${viewport.label}: expected no assignment/save boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("storage") && state.boundary.includes("API call"),
+          true,
+          `${viewport.label}: expected no storage/API boundary`,
+        );
+        assert.equal(
+          state.boundary.includes("message channel"),
+          true,
+          `${viewport.label}: expected no message channel boundary`,
+        );
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected dispatcher approval readiness to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private driver details in dispatcher approval strip`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active approve/send/notify/deliver wording in dispatcher approval strip`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 340 : 150),
+          true,
+          `${viewport.label}: expected compact dispatcher approval readiness, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected dispatcher approval readiness items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected dispatcher approval readiness not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -2794,6 +2988,9 @@ async function runChromeTest() {
           customerUpdateDeliveryReviewReadinessVisible: Boolean(
             document.querySelector("[data-customer-update-delivery-review-readiness]"),
           ),
+          deliveryReviewDispatcherApprovalReadinessVisible: Boolean(
+            document.querySelector("[data-delivery-review-dispatcher-approval-readiness]"),
+          ),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
@@ -2812,6 +3009,9 @@ async function runChromeTest() {
             "customer update prepared",
             "dispatcher approval",
             "message check, not sent",
+            "final check, not sent",
+            "future approval review",
+            "review boundary",
             "future/not sent",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
@@ -3197,6 +3397,11 @@ async function runChromeTest() {
         dashboardState.customerUpdateDeliveryReviewReadinessVisible,
         false,
         "Expected /customers not to show internal customer update delivery review readiness",
+      );
+      assert.equal(
+        dashboardState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        "Expected /customers not to show internal delivery review dispatcher approval readiness",
       );
       assert.equal(
         dashboardState.regularBookingFormVisible,
@@ -7700,6 +7905,9 @@ async function runChromeTest() {
               "customer update prepared",
               "dispatcher approval",
               "message check, not sent",
+              "final check, not sent",
+              "future approval review",
+              "review boundary",
               "future/not sent",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
@@ -7912,6 +8120,9 @@ async function runChromeTest() {
               customerUpdateDeliveryReviewReadinessVisible: Boolean(
                 document.querySelector("[data-customer-update-delivery-review-readiness]"),
               ),
+              deliveryReviewDispatcherApprovalReadinessVisible: Boolean(
+                document.querySelector("[data-delivery-review-dispatcher-approval-readiness]"),
+              ),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
               internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
@@ -7952,6 +8163,11 @@ async function runChromeTest() {
         mobileDashboardState.customerUpdateDeliveryReviewReadinessVisible,
         false,
         "Expected mobile /customers not to show internal customer update delivery review readiness",
+      );
+      assert.equal(
+        mobileDashboardState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        "Expected mobile /customers not to show internal delivery review dispatcher approval readiness",
       );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,
@@ -8175,6 +8391,9 @@ async function runChromeTest() {
           customerUpdateDeliveryReviewReadinessVisible: Boolean(
             document.querySelector("[data-customer-update-delivery-review-readiness]"),
           ),
+          deliveryReviewDispatcherApprovalReadinessVisible: Boolean(
+            document.querySelector("[data-delivery-review-dispatcher-approval-readiness]"),
+          ),
           forbiddenVisibleText: [
             "invoice",
             "outstanding payment",
@@ -8197,6 +8416,9 @@ async function runChromeTest() {
             "customer update prepared",
             "dispatcher approval",
             "message check, not sent",
+            "final check, not sent",
+            "future approval review",
+            "review boundary",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
@@ -8300,6 +8522,11 @@ async function runChromeTest() {
         initialState.customerUpdateDeliveryReviewReadinessVisible,
         false,
         "Expected /book not to show internal customer update delivery review readiness",
+      );
+      assert.equal(
+        initialState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        "Expected /book not to show internal delivery review dispatcher approval readiness",
       );
       assert.equal(initialState.nextSteps.visible, true, "Expected /book compact next-step guidance");
       assert.equal(
@@ -8594,6 +8821,11 @@ async function runChromeTest() {
         false,
         "Expected /book mobile not to show internal customer update delivery review readiness",
       );
+      assert.equal(
+        mobileState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        "Expected /book mobile not to show internal delivery review dispatcher approval readiness",
+      );
       assert.deepEqual(
         Object.entries(mobileState.fieldState)
           .filter(([, state]) => !state.visible)
@@ -8729,6 +8961,9 @@ async function runChromeTest() {
           customerUpdateDeliveryReviewReadinessVisible: Boolean(
             document.querySelector("[data-customer-update-delivery-review-readiness]"),
           ),
+          deliveryReviewDispatcherApprovalReadinessVisible: Boolean(
+            document.querySelector("[data-delivery-review-dispatcher-approval-readiness]"),
+          ),
           feedbackDistanceFromRow:
             feedbackRect && feedbackRowRect ? Math.round(Math.abs(feedbackRect.top - feedbackRowRect.bottom)) : 999,
           feedbackRowId: feedbackRow?.getAttribute("data-customer-portal-row") || "",
@@ -8763,6 +8998,9 @@ async function runChromeTest() {
             "customer update prepared",
             "dispatcher approval",
             "message check, not sent",
+            "final check, not sent",
+            "future approval review",
+            "review boundary",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           form: {
@@ -9092,6 +9330,11 @@ async function runChromeTest() {
         initialState.customerUpdateDeliveryReviewReadinessVisible,
         false,
         "Expected /my-bookings not to show internal customer update delivery review readiness",
+      );
+      assert.equal(
+        initialState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        "Expected /my-bookings not to show internal delivery review dispatcher approval readiness",
       );
       assert.equal(
         initialState.guidance.height <= 190,
@@ -9806,6 +10049,11 @@ async function runChromeTest() {
         false,
         "Expected /my-bookings mobile not to show internal customer update delivery review readiness",
       );
+      assert.equal(
+        mobileState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal delivery review dispatcher approval readiness",
+      );
       assert.deepEqual(
         mobileState.forbiddenVisibleText,
         [],
@@ -9991,6 +10239,9 @@ async function runChromeTest() {
           customerUpdateDeliveryReviewReadinessVisible: Boolean(
             document.querySelector("[data-customer-update-delivery-review-readiness]"),
           ),
+          deliveryReviewDispatcherApprovalReadinessVisible: Boolean(
+            document.querySelector("[data-delivery-review-dispatcher-approval-readiness]"),
+          ),
           docClientWidth: doc.clientWidth,
           docScrollWidth: doc.scrollWidth,
           fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -10035,6 +10286,9 @@ async function runChromeTest() {
             "customer update prepared",
             "dispatcher approval",
             "message check, not sent",
+            "final check, not sent",
+            "future approval review",
+            "review boundary",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
@@ -10079,6 +10333,11 @@ async function runChromeTest() {
         initialState.customerUpdateDeliveryReviewReadinessVisible,
         false,
         `${viewport.label}: expected no internal customer update delivery review readiness on driver job link`,
+      );
+      assert.equal(
+        initialState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal delivery review dispatcher approval readiness on driver job link`,
       );
       assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
       assert.deepEqual(
@@ -10533,6 +10792,9 @@ async function runChromeTest() {
           customerUpdateDeliveryReviewReadinessVisible: Boolean(
             document.querySelector("[data-customer-update-delivery-review-readiness]"),
           ),
+          deliveryReviewDispatcherApprovalReadinessVisible: Boolean(
+            document.querySelector("[data-delivery-review-dispatcher-approval-readiness]"),
+          ),
           docScrollWidth: doc.scrollWidth,
           dispatcherExceptionButtons: [...document.querySelectorAll("[data-driver-demo-dispatcher-exception-action]")]
             .map((button) => button.textContent.trim()),
@@ -10576,6 +10838,9 @@ async function runChromeTest() {
             "customer update prepared",
             "dispatcher approval",
             "message check, not sent",
+            "final check, not sent",
+            "future approval review",
+            "review boundary",
             "future/not sent",
           ].filter((value) => lowerText.includes(value)),
           inputs,
@@ -10622,6 +10887,11 @@ async function runChromeTest() {
         initialState.customerUpdateDeliveryReviewReadinessVisible,
         false,
         `${viewport.label}: expected no internal customer update delivery review readiness on driver demo`,
+      );
+      assert.equal(
+        initialState.deliveryReviewDispatcherApprovalReadinessVisible,
+        false,
+        `${viewport.label}: expected no internal delivery review dispatcher approval readiness on driver demo`,
       );
       assert.deepEqual(
         initialState.forbiddenText,
@@ -11840,6 +12110,8 @@ async function runChromeTest() {
     state.adminDriverDetailCollectionReadiness = await checkAdminDriverDetailCollectionReadiness();
     state.adminDriverDetailsCustomerUpdateReadiness = await checkAdminDriverDetailsCustomerUpdateReadiness();
     state.adminCustomerUpdateDeliveryReviewReadiness = await checkAdminCustomerUpdateDeliveryReviewReadiness();
+    state.adminDeliveryReviewDispatcherApprovalReadiness =
+      await checkAdminDeliveryReviewDispatcherApprovalReadiness();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

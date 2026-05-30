@@ -510,6 +510,9 @@ async function runChromeTest() {
       const mockMonthEndArCloseReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-month-end-ar-close-review]"))`,
       );
+      const mockAccountingHandoffGlAuditReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -612,6 +615,11 @@ async function runChromeTest() {
         mockMonthEndArCloseReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock month-end AR close review`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock accounting handoff GL audit review`,
       );
     };
 
@@ -2714,6 +2722,191 @@ async function runChromeTest() {
         `${viewport.label}: expected month-end AR close rows to stay readable`,
       );
 
+      const mockAccountingHandoffGlAuditReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-accounting-handoff-gl-audit-review]");
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            if (!review || !group || !dashboard || !group.contains(review)) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-accounting-handoff-gl-audit-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-accounting-handoff-gl-audit-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-accounting-handoff-gl-audit-review-column]")].map(
+                  (column) => column.getAttribute("data-mock-accounting-handoff-gl-audit-review-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-accounting-handoff-gl-audit-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              copy:
+                document.querySelector("[data-mock-accounting-handoff-gl-audit-review-copy]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-accounting-handoff-gl-audit-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-accounting-handoff-gl-audit-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock accounting handoff GL audit review`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.groupTop >=
+          mockAccountingHandoffGlAuditReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected accounting handoff GL audit review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.text.toLowerCase().includes("accounting handoff") &&
+          mockAccountingHandoffGlAuditReviewState.text.toLowerCase().includes("gl / audit qa"),
+        true,
+        `${viewport.label}: expected mock accounting handoff GL audit review`,
+      );
+      assert.deepEqual(
+        mockAccountingHandoffGlAuditReviewState.columns,
+        [
+          "Customer/account",
+          "Statement month",
+          "AR close status",
+          "Accounting handoff status",
+          "GL exception status",
+          "Audit export readiness status",
+          "Unresolved exception carry-forward status",
+          "Manager/accounting approval status",
+          "Mock handoff decision status",
+          "Not-handed-off/not-posted/not-exported/not-billed status",
+        ],
+        `${viewport.label}: expected accounting handoff GL audit columns`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.copy.includes(
+          "Static/mock accounting handoff, GL close exception, and audit export QA data only",
+        ) &&
+          mockAccountingHandoffGlAuditReviewState.copy.includes("internal review") &&
+          mockAccountingHandoffGlAuditReviewState.copy.includes(
+            "Nothing is handed off, posted, exported, billed, saved, generated, or sent",
+          ),
+        true,
+        `${viewport.label}: expected static no-persistence accounting handoff copy`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.text.includes("AR close ready for accounting handoff") &&
+          mockAccountingHandoffGlAuditReviewState.text.includes("GL exception needs review") &&
+          mockAccountingHandoffGlAuditReviewState.text.includes("Audit export readiness pending") &&
+          mockAccountingHandoffGlAuditReviewState.text.includes("Manager/accounting approval needed") &&
+          mockAccountingHandoffGlAuditReviewState.text.includes("Unresolved exception carried forward") &&
+          mockAccountingHandoffGlAuditReviewState.text.includes(
+            "Not handed off / not posted / not exported / not billed",
+          ),
+        true,
+        `${viewport.label}: expected static accounting handoff GL close audit scenarios`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.note.includes("Accounting handoff review - mock only") &&
+          mockAccountingHandoffGlAuditReviewState.note.includes("GL close exception QA - not saved") &&
+          mockAccountingHandoffGlAuditReviewState.note.includes("Audit export readiness - not exported") &&
+          mockAccountingHandoffGlAuditReviewState.note.includes("AR close ready for accounting handoff") &&
+          mockAccountingHandoffGlAuditReviewState.note.includes("GL exception needs review") &&
+          mockAccountingHandoffGlAuditReviewState.note.includes("audit export readiness pending") &&
+          mockAccountingHandoffGlAuditReviewState.note.includes("manager/accounting approval needed") &&
+          mockAccountingHandoffGlAuditReviewState.note.includes("unresolved exception carried forward"),
+        true,
+        `${viewport.label}: expected accounting handoff GL audit note`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.generation.includes("No GL record generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No journal entry generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No accounting handoff generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No audit export file generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No customer account posting generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No invoice number generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No PDF generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No payment link generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No payment record generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No remittance record generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No dispute record generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No receivables record generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No collection action created") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No credit note generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No write-off record generated") &&
+          mockAccountingHandoffGlAuditReviewState.generation.includes("No accounting record generated"),
+        true,
+        `${viewport.label}: expected accounting handoff no GL/journal/export/invoice/PDF generation`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.boundary.includes("Mock/local only.") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("No billing automation") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("AR close persistence") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("GL close persistence") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("accounting handoff persistence") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("journal entry persistence") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("audit export persistence") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("storage") &&
+          mockAccountingHandoffGlAuditReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected accounting handoff no billing/GL/export/storage/API boundary`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.actionCount,
+        0,
+        `${viewport.label}: expected accounting handoff GL audit review to stay display-only`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.rows.length,
+        3,
+        `${viewport.label}: expected three static mock accounting handoff rows`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.height <=
+          (viewport.width < 640 ? 1160 : viewport.width < 1024 ? 820 : viewport.width < 1200 ? 660 : 560),
+        true,
+        `${viewport.label}: expected compact accounting handoff GL audit review, got ${mockAccountingHandoffGlAuditReviewState.height}px`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected accounting handoff GL audit rows to stay readable`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewState.docScrollWidth <=
+          mockAccountingHandoffGlAuditReviewState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected accounting handoff GL audit review not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -2792,6 +2985,9 @@ async function runChromeTest() {
       );
       const mockMonthEndArCloseReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-month-end-ar-close-review]"))`,
+      );
+      const mockAccountingHandoffGlAuditReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -2921,6 +3117,11 @@ async function runChromeTest() {
         mockMonthEndArCloseReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock month-end AR close review`,
+      );
+      assert.equal(
+        mockAccountingHandoffGlAuditReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock accounting handoff GL audit review`,
       );
       if (context === "driver job demo") {
         assert.equal(

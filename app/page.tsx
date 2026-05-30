@@ -8649,6 +8649,132 @@ export default function Home() {
             reminder, follow-up, collection, credit, write-off, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock accounting handoff GL close exception and audit export QA review"
+          className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-accounting-handoff-gl-audit-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-slate-700">Accounting Handoff</span>{" "}
+                <span className="text-slate-600">GL / Audit QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-accounting-handoff-gl-audit-review-copy="true"
+              >
+                Static/mock accounting handoff, GL close exception, and audit export QA data only for internal review.
+                Nothing is handed off, posted, exported, billed, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-accounting-handoff-gl-audit-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    accountingHandoff: "Accounting handoff ready",
+                    arClose: "AR close ready for accounting handoff",
+                    auditExport: "Audit export ready for mock review",
+                    glException: "No GL exception",
+                    managerApproval: "Manager/accounting approval not needed",
+                    month: "May 2026",
+                    handoffDecision: "Ready for mock handoff",
+                    status: "Not handed off / not posted / not exported / not billed",
+                    unresolvedException: "No unresolved exception carry-forward",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    accountingHandoff: "Accounting handoff pending",
+                    arClose: "AR close held for exception",
+                    auditExport: "Audit export readiness pending",
+                    glException: "GL exception needs review",
+                    managerApproval: "Manager/accounting approval needed",
+                    month: "May 2026",
+                    handoffDecision: "Hold GL close exception",
+                    status: "Not handed off / not posted / not exported / not billed",
+                    unresolvedException: "Unresolved short-pay exception carried forward",
+                  },
+                  {
+                    account: "VIP Customer",
+                    accountingHandoff: "Accounting handoff pending",
+                    arClose: "AR close carry-forward pending",
+                    auditExport: "Audit export readiness pending",
+                    glException: "Credit carry-forward GL review",
+                    managerApproval: "Manager/accounting approval needed",
+                    month: "May 2026",
+                    handoffDecision: "Carry exception before export",
+                    status: "Not handed off / not posted / not exported / not billed",
+                    unresolvedException: "Unresolved exception carried forward",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-zinc-200 bg-zinc-50/80 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-5 xl:grid-cols-10"
+                    data-mock-accounting-handoff-gl-audit-review-row={`${row.account}-${row.month}`}
+                    key={`${row.account}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["AR close status", "AR close", row.arClose],
+                      ["Accounting handoff status", "Acct handoff", row.accountingHandoff],
+                      ["GL exception status", "GL exception", row.glException],
+                      ["Audit export readiness status", "Audit export", row.auditExport],
+                      ["Unresolved exception carry-forward status", "Carry", row.unresolvedException],
+                      ["Manager/accounting approval status", "Mgr/acct QA", row.managerApproval],
+                      ["Mock handoff decision status", "Decision", row.handoffDecision],
+                      ["Not-handed-off/not-posted/not-exported/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-slate-700"
+                          data-mock-accounting-handoff-gl-audit-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-accounting-handoff-gl-audit-review-note="true"
+                >
+                  Accounting handoff review - mock only. GL close exception QA - not saved. Audit export readiness - not
+                  exported. AR close ready for accounting handoff, GL exception needs review, audit export readiness
+                  pending, manager/accounting approval needed, and unresolved exception carried forward. Not handed off
+                  / not posted / not exported / not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-zinc-200 bg-zinc-50/80 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-accounting-handoff-gl-audit-review-generation="true"
+                >
+                  No GL record generated. No journal entry generated. No accounting handoff generated. No audit export
+                  file generated. No customer account posting generated. No invoice number generated. No PDF generated.
+                  No payment link generated. No payment record generated. No remittance record generated. No dispute
+                  record generated. No receivables record generated. No collection action created. No credit note
+                  generated. No write-off record generated. No accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-accounting-handoff-gl-audit-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, approval
+            persistence, payment allocation persistence, remittance persistence, dispute persistence, AR close
+            persistence, GL close persistence, accounting handoff persistence, journal entry persistence, audit export
+            persistence, PDF, receivables record, collection record, credit note, write-off record, customer account
+            posting, payment record, remittance record, dispute record, AR close record, GL record, journal entry,
+            accounting handoff record, audit export file, storage, API call, save, post, reconcile, allocate, dispute,
+            close, export, notification, reminder, follow-up, collection, credit, write-off, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

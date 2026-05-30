@@ -677,6 +677,7 @@ async function runChromeTest() {
         "[data-mock-audit-evidence-finance-archive-review]",
         "[data-mock-post-close-audit-retention-review]",
         "[data-mock-close-cycle-evidence-response-retention-review]",
+        "[data-mock-close-cycle-exception-resolution-audit-handoff-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -726,7 +727,8 @@ async function runChromeTest() {
             state.text.includes("Receivables Aging") &&
             state.text.includes("Month-end AR Close") &&
             state.text.includes("Accounting Handoff") &&
-            state.text.includes("Audit Evidence"),
+            state.text.includes("Audit Evidence") &&
+            state.text.includes("Exception / Handoff QA"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -6643,6 +6645,442 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockCloseCycleExceptionResolutionAuditHandoffReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1040,
+          label: "mobile mock close-cycle exception resolution audit handoff review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock close-cycle exception resolution audit handoff review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const section = document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review]");
+              if (!group || !dashboard || !section) {
+                return false;
+              }
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const rows = [...section.querySelectorAll("[data-mock-close-cycle-exception-resolution-audit-handoff-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-close-cycle-exception-resolution-audit-handoff-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-close-cycle-exception-resolution-audit-handoff-review-column]")].map(
+                    (column) =>
+                      column.getAttribute("data-mock-close-cycle-exception-resolution-audit-handoff-review-column") || "",
+                  ),
+                ),
+              ];
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "allocate now",
+                  "approve now",
+                  "archive now",
+                  "bill now",
+                  "close now",
+                  "create audit handoff",
+                  "create audit response",
+                  "create exception resolution",
+                  "create evidence index",
+                  "create invoice",
+                  "create payment",
+                  "create response packet",
+                  "create retention approval",
+                  "export now",
+                  "generate evidence index",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "generate response packet",
+                  "handoff now",
+                  "index now",
+                  "notify customer",
+                  "post accounting",
+                  "post now",
+                  "reconcile now",
+                  "release now",
+                  "reopen now",
+                  "resolve now",
+                  "retrieve now",
+                  "save audit handoff",
+                  "save exception resolution",
+                  "save evidence index",
+                  "save response packet",
+                  "save retention approval",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock close-cycle exception resolution audit handoff review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected close-cycle exception resolution audit handoff review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("close-cycle") &&
+            state.text.toLowerCase().includes("exception / handoff qa"),
+          true,
+          `${viewport.label}: expected close-cycle exception handoff heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Close-cycle evidence status",
+            "Manager review outcome status",
+            "Evidence follow-up queue status",
+            "Audit response handoff status",
+            "Retention exception disposition status",
+            "Carried exception resolution status",
+            "Mock resolution decision status",
+            "Not-resolved/not-handed-off/not-exported/not-billed status",
+          ],
+          `${viewport.label}: expected mock close-cycle exception resolution audit handoff columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three static mock exception handoff rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026",
+          "Evidence ready",
+          "Missing evidence requires follow-up",
+          "Carried evidence exception remains unresolved",
+          "Manager review approved - mock only",
+          "Blocked pending manager review",
+          "Outcome pending",
+          "No evidence follow-up needed",
+          "Follow-up queued",
+          "Queue active",
+          "Handoff ready",
+          "Handoff held",
+          "Waiting for evidence QA",
+          "Not needed",
+          "Disposition pending",
+          "Needs approval",
+          "No carried exception",
+          "Short-pay evidence open",
+          "Carried exception still unresolved",
+          "Ready for mock handoff QA",
+          "Hold mock handoff",
+          "Carry exception before handoff",
+          "Not resolved / not handed off / not exported / not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock exception handoff text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes(
+            "Static/mock internal close-cycle exception resolution, audit response handoff, and retention exception disposition QA data only",
+          ) &&
+            state.copy.includes("internal review") &&
+            state.copy.includes("Nothing is resolved, handed off, exported, billed, saved, generated, approved, indexed, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence exception handoff copy`,
+        );
+        assert.equal(
+          state.note.includes("Close-cycle exception resolution - mock only") &&
+            state.note.includes("Audit response handoff QA - not saved") &&
+            state.note.includes("Retention exception disposition - not approved") &&
+            state.note.includes("Manager review approved - mock only") &&
+            state.note.includes("evidence follow-up queued") &&
+            state.note.includes("audit response handoff ready") &&
+            state.note.includes("retention exception disposition pending") &&
+            state.note.includes("resolution blocked pending manager review") &&
+            state.note.includes("carried exception still unresolved") &&
+            state.note.includes("Not resolved / not handed off / not exported / not billed"),
+          true,
+          `${viewport.label}: expected close-cycle exception resolution audit handoff note`,
+        );
+        assert.equal(
+          state.generation.includes("No exception resolution record generated") &&
+            state.generation.includes("No audit response handoff record generated") &&
+            state.generation.includes("No retention approval record generated") &&
+            state.generation.includes("No evidence index generated") &&
+            state.generation.includes("No audit response packet generated") &&
+            state.generation.includes("No post-close exception record generated") &&
+            state.generation.includes("No audit inquiry record generated") &&
+            state.generation.includes("No retrieval/export file generated") &&
+            state.generation.includes("No retention record generated") &&
+            state.generation.includes("No audit evidence file generated") &&
+            state.generation.includes("No finance sign-off record generated") &&
+            state.generation.includes("No archive record generated") &&
+            state.generation.includes("No audit export file generated") &&
+            state.generation.includes("No GL record generated") &&
+            state.generation.includes("No journal entry generated") &&
+            state.generation.includes("No accounting handoff generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No payment record generated") &&
+            state.generation.includes("No invoice/payment/PDF generated") &&
+            state.generation.includes("No remittance record generated") &&
+            state.generation.includes("No dispute record generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No collection action created") &&
+            state.generation.includes("No credit note generated") &&
+            state.generation.includes("No write-off record generated") &&
+            state.generation.includes("No accounting record generated") &&
+            state.generation.includes("No waiting-time record generated") &&
+            state.generation.includes("No extra-charge record generated") &&
+            state.generation.includes("No customer charge record generated") &&
+            state.generation.includes("No driver payout record generated"),
+          true,
+          `${viewport.label}: expected no exception/audit handoff/waiting-time/extra-charge/invoice/PDF generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "statement release",
+          "account charge",
+          "approval persistence",
+          "payment allocation persistence",
+          "remittance persistence",
+          "dispute persistence",
+          "AR close persistence",
+          "GL close persistence",
+          "accounting handoff persistence",
+          "journal entry persistence",
+          "audit export persistence",
+          "audit evidence persistence",
+          "finance sign-off persistence",
+          "archive persistence",
+          "retention persistence",
+          "post-close exception persistence",
+          "audit inquiry persistence",
+          "retrieval/export persistence",
+          "response packet persistence",
+          "retention exception approval persistence",
+          "close-cycle evidence index persistence",
+          "evidence index persistence",
+          "exception resolution persistence",
+          "audit response handoff persistence",
+          "waiting-time persistence",
+          "extra-charge persistence",
+          "PDF",
+          "receivables record",
+          "collection record",
+          "credit note",
+          "write-off record",
+          "customer account posting",
+          "payment record",
+          "remittance record",
+          "dispute record",
+          "AR close record",
+          "GL record",
+          "journal entry",
+          "accounting handoff record",
+          "audit export file",
+          "audit evidence file",
+          "finance sign-off record",
+          "archive record",
+          "retention record",
+          "post-close exception record",
+          "audit inquiry record",
+          "retrieval/export file",
+          "response packet",
+          "evidence index",
+          "exception resolution record",
+          "audit response handoff record",
+          "retention approval record",
+          "waiting-time record",
+          "extra-charge record",
+          "customer charge record",
+          "driver payout record",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "reconcile",
+          "allocate",
+          "dispute",
+          "close",
+          "reopen",
+          "retrieve",
+          "export",
+          "archive",
+          "retain",
+          "approve",
+          "index",
+          "resolve",
+          "handoff",
+          "notification",
+          "reminder",
+          "follow-up",
+          "collection",
+          "credit",
+          "write-off",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected close-cycle exception resolution audit handoff boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected close-cycle exception resolution audit handoff review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active close-cycle/exception/handoff/bill/invoice/payment/PDF/post/export controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in exception handoff review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1360 : viewport.width < 1024 ? 940 : viewport.width < 1200 ? 760 : 660),
+          true,
+          `${viewport.label}: expected compact close-cycle exception resolution audit handoff review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected close-cycle exception resolution audit handoff rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected close-cycle exception resolution audit handoff review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
+    const assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "static/mock internal close-cycle exception resolution",
+            "exception / handoff qa",
+            "close-cycle exception resolution",
+            "audit response handoff qa",
+            "audit response handoff status",
+            "retention exception disposition",
+            "manager review outcome status",
+            "evidence follow-up queue status",
+            "carried exception resolution status",
+            "mock resolution decision status",
+            "no exception resolution record generated",
+            "no audit response handoff record generated",
+            "exception resolution persistence",
+            "audit response handoff persistence",
+            "waiting-time record",
+            "extra-charge record",
+            "customer charge record",
+            "driver payout record",
+            "not resolved / not handed off / not exported / not billed",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(
+            document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review]"),
+          ),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock close-cycle exception resolution audit handoff review`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal close-cycle exception resolution/audit handoff data leak`,
+      );
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -7227,6 +7665,7 @@ async function runChromeTest() {
           expectedText,
           `${routeName} leak-check route`,
         );
+        await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -8091,6 +8530,7 @@ async function runChromeTest() {
         "Mock customer payments dashboard",
         "mock customer dashboard route",
       );
+      await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -13740,6 +14180,7 @@ async function runChromeTest() {
         10000,
         "mobile mock customer dashboard",
       );
+      await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -19623,6 +20064,8 @@ async function runChromeTest() {
       await checkAdminMockPostCloseAuditRetentionReview();
     state.adminMockCloseCycleEvidenceResponseRetentionReview =
       await checkAdminMockCloseCycleEvidenceResponseRetentionReview();
+    state.adminMockCloseCycleExceptionResolutionAuditHandoffReview =
+      await checkAdminMockCloseCycleExceptionResolutionAuditHandoffReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

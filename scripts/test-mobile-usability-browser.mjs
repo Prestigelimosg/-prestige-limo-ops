@@ -522,6 +522,9 @@ async function runChromeTest() {
       const mockCloseCycleEvidenceResponseRetentionReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"))`,
       );
+      const mockCloseCycleExceptionResolutionAuditHandoffReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -644,6 +647,11 @@ async function runChromeTest() {
         mockCloseCycleEvidenceResponseRetentionReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock close-cycle evidence response retention review`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock close-cycle exception resolution audit handoff review`,
       );
     };
 
@@ -3552,6 +3560,257 @@ async function runChromeTest() {
         `${viewport.label}: expected close-cycle evidence response retention review not to create horizontal overflow`,
       );
 
+      const mockCloseCycleExceptionResolutionAuditHandoffReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const review = document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review]");
+            if (!group || !dashboard || !review) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-close-cycle-exception-resolution-audit-handoff-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-close-cycle-exception-resolution-audit-handoff-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-close-cycle-exception-resolution-audit-handoff-review-column]")].map(
+                  (column) =>
+                    column.getAttribute("data-mock-close-cycle-exception-resolution-audit-handoff-review-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              copy:
+                document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-copy]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock close-cycle exception resolution audit handoff review`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.groupTop >=
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected close-cycle exception resolution audit handoff review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.toLowerCase().includes("close-cycle") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.text
+            .toLowerCase()
+            .includes("exception / handoff qa"),
+        true,
+        `${viewport.label}: expected mock close-cycle exception resolution audit handoff review`,
+      );
+      assert.deepEqual(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.columns,
+        [
+          "Customer/account",
+          "Statement month",
+          "Close-cycle evidence status",
+          "Manager review outcome status",
+          "Evidence follow-up queue status",
+          "Audit response handoff status",
+          "Retention exception disposition status",
+          "Carried exception resolution status",
+          "Mock resolution decision status",
+          "Not-resolved/not-handed-off/not-exported/not-billed status",
+        ],
+        `${viewport.label}: expected close-cycle exception resolution audit handoff columns`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.copy.includes(
+          "Static/mock internal close-cycle exception resolution, audit response handoff, and retention exception disposition QA data only",
+        ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.copy.includes("internal review") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.copy.includes(
+            "Nothing is resolved, handed off, exported, billed, saved, generated, approved, indexed, or sent",
+          ),
+        true,
+        `${viewport.label}: expected static no-persistence close-cycle exception resolution audit handoff copy`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.includes(
+          "Manager review approved - mock only",
+        ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.includes("Follow-up queued") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.includes("Handoff ready") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.includes("Disposition pending") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.includes("Blocked pending manager review") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.includes(
+            "Carried exception still unresolved",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.text.includes(
+            "Not resolved / not handed off / not exported / not billed",
+          ),
+        true,
+        `${viewport.label}: expected static close-cycle exception resolution audit handoff scenarios`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes(
+          "Close-cycle exception resolution - mock only",
+        ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes(
+            "Audit response handoff QA - not saved",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes(
+            "Retention exception disposition - not approved",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes(
+            "Manager review approved - mock only",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes("evidence follow-up queued") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes("audit response handoff ready") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes(
+            "retention exception disposition pending",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes(
+            "resolution blocked pending manager review",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.note.includes(
+            "carried exception still unresolved",
+          ),
+        true,
+        `${viewport.label}: expected close-cycle exception resolution audit handoff note`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+          "No exception resolution record generated",
+        ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No audit response handoff record generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No retention approval record generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No evidence index generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No audit response packet generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No post-close exception record generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No audit inquiry record generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No retrieval/export file generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No invoice/payment/PDF generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No waiting-time record generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No extra-charge record generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No customer charge record generated",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.generation.includes(
+            "No driver payout record generated",
+          ),
+        true,
+        `${viewport.label}: expected close-cycle no exception/audit handoff/waiting-time/extra-charge/invoice/PDF generation`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes("Mock/local only.") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes("No billing automation") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes(
+            "response packet persistence",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes(
+            "retention exception approval persistence",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes(
+            "close-cycle evidence index persistence",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes(
+            "exception resolution persistence",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes(
+            "audit response handoff persistence",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes(
+            "waiting-time persistence",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes(
+            "extra-charge persistence",
+          ) &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes("storage") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes("API call") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes("resolve") &&
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.boundary.includes("handoff"),
+        true,
+        `${viewport.label}: expected close-cycle no billing/exception/handoff/storage/API boundary`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.actionCount,
+        0,
+        `${viewport.label}: expected close-cycle exception resolution audit handoff review to stay display-only`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.rows.length,
+        3,
+        `${viewport.label}: expected three static mock close-cycle exception resolution audit handoff rows`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.height <=
+          (viewport.width < 640 ? 1360 : viewport.width < 1024 ? 920 : viewport.width < 1200 ? 740 : 640),
+        true,
+        `${viewport.label}: expected compact close-cycle exception resolution audit handoff review, got ${mockCloseCycleExceptionResolutionAuditHandoffReviewState.height}px`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.rows.every(
+          (row) => row.height >= 28 && row.width >= 240,
+        ),
+        true,
+        `${viewport.label}: expected close-cycle exception resolution audit handoff rows to stay readable`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewState.docScrollWidth <=
+          mockCloseCycleExceptionResolutionAuditHandoffReviewState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected close-cycle exception resolution audit handoff review not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -3642,6 +3901,9 @@ async function runChromeTest() {
       );
       const mockCloseCycleEvidenceResponseRetentionReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"))`,
+      );
+      const mockCloseCycleExceptionResolutionAuditHandoffReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -3791,6 +4053,11 @@ async function runChromeTest() {
         mockCloseCycleEvidenceResponseRetentionReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock close-cycle evidence response retention review`,
+      );
+      assert.equal(
+        mockCloseCycleExceptionResolutionAuditHandoffReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock close-cycle exception resolution audit handoff review`,
       );
       if (context === "driver job demo") {
         assert.equal(

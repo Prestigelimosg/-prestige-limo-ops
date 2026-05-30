@@ -9180,6 +9180,152 @@ export default function Home() {
             follow-up, collection, credit, write-off, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock internal close-cycle exception resolution and audit response handoff QA review"
+          className="rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-close-cycle-exception-resolution-audit-handoff-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-rose-700">Close-cycle</span>{" "}
+                <span className="text-slate-600">Exception / Handoff QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-close-cycle-exception-resolution-audit-handoff-review-copy="true"
+              >
+                Static/mock internal close-cycle exception resolution, audit response handoff, and retention exception
+                disposition QA data only for internal review. Nothing is resolved, handed off, exported, billed, saved,
+                generated, approved, indexed, or sent.
+              </p>
+              <div
+                className="grid min-w-0 gap-1.5"
+                data-mock-close-cycle-exception-resolution-audit-handoff-review-rows="true"
+              >
+                {[
+                  {
+                    account: "UBS Priority",
+                    auditHandoff: "Handoff ready",
+                    carriedResolution: "No carried exception",
+                    closeCycleEvidence: "Evidence ready",
+                    followUpQueue: "No evidence follow-up needed",
+                    managerReview: "Approved - mock only",
+                    month: "May 2026",
+                    resolutionDecision: "Ready for mock handoff QA",
+                    retentionDisposition: "Not needed",
+                    status: "Not resolved / not handed off / not exported / not billed",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    auditHandoff: "Handoff held",
+                    carriedResolution: "Short-pay evidence open",
+                    closeCycleEvidence: "Missing evidence requires follow-up",
+                    followUpQueue: "Follow-up queued",
+                    managerReview: "Blocked pending manager review",
+                    month: "May 2026",
+                    resolutionDecision: "Hold mock handoff",
+                    retentionDisposition: "Disposition pending",
+                    status: "Not resolved / not handed off / not exported / not billed",
+                  },
+                  {
+                    account: "VIP Customer",
+                    auditHandoff: "Waiting for evidence QA",
+                    carriedResolution: "Carried exception still unresolved",
+                    closeCycleEvidence: "Carried evidence exception remains unresolved",
+                    followUpQueue: "Queue active",
+                    managerReview: "Outcome pending",
+                    month: "May 2026",
+                    resolutionDecision: "Carry exception before handoff",
+                    retentionDisposition: "Needs approval",
+                    status: "Not resolved / not handed off / not exported / not billed",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-rose-200 bg-rose-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-5 xl:grid-cols-10"
+                    data-mock-close-cycle-exception-resolution-audit-handoff-review-row={`${row.account}-${row.month}`}
+                    key={`${row.account}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Close-cycle evidence status", "Evidence", row.closeCycleEvidence],
+                      ["Manager review outcome status", "Mgr review", row.managerReview],
+                      ["Evidence follow-up queue status", "Follow-up", row.followUpQueue],
+                      ["Audit response handoff status", "Audit handoff", row.auditHandoff],
+                      ["Retention exception disposition status", "Retention disp", row.retentionDisposition],
+                      ["Carried exception resolution status", "Carry", row.carriedResolution],
+                      ["Mock resolution decision status", "Decision", row.resolutionDecision],
+                      ["Not-resolved/not-handed-off/not-exported/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-rose-700"
+                          data-mock-close-cycle-exception-resolution-audit-handoff-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-close-cycle-exception-resolution-audit-handoff-review-note="true"
+                >
+                  Close-cycle exception resolution - mock only. Audit response handoff QA - not saved. Retention
+                  exception disposition - not approved. Manager review approved - mock only, evidence follow-up queued,
+                  audit response handoff ready, retention exception disposition pending, resolution blocked pending
+                  manager review, and carried exception still unresolved. Not resolved / not handed off / not exported /
+                  not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-close-cycle-exception-resolution-audit-handoff-review-generation="true"
+                >
+                  No exception resolution record generated. No audit response handoff record generated. No retention
+                  approval record generated. No evidence index generated. No audit response packet generated. No
+                  post-close exception record generated. No audit inquiry record generated. No retrieval/export file
+                  generated. No retention record generated. No audit evidence file generated. No finance sign-off
+                  record generated. No archive record generated. No audit export file generated. No GL record
+                  generated. No journal entry generated. No accounting handoff generated. No customer account posting
+                  generated. No invoice number generated. No PDF generated. No payment link generated. No payment
+                  record generated. No invoice/payment/PDF generated. No remittance record generated. No dispute record
+                  generated. No receivables record generated. No collection action created. No credit note generated. No
+                  write-off record generated. No accounting record generated. No waiting-time record generated. No
+                  extra-charge record generated. No customer charge record generated. No driver payout record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-close-cycle-exception-resolution-audit-handoff-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, approval
+            persistence, payment allocation persistence, remittance persistence, dispute persistence, AR close
+            persistence, GL close persistence, accounting handoff persistence, journal entry persistence, audit export
+            persistence, audit evidence persistence, finance sign-off persistence, archive persistence, retention
+            persistence, post-close exception persistence, audit inquiry persistence, retrieval/export persistence,
+            response packet persistence, retention exception approval persistence, close-cycle evidence index
+            persistence, evidence index persistence, exception resolution persistence, audit response handoff
+            persistence, waiting-time persistence, extra-charge persistence, PDF, receivables record, collection record,
+            credit note, write-off record, customer account posting, payment record, remittance record, dispute record,
+            AR close record, GL record, journal entry, accounting handoff record, audit export file, audit evidence
+            file, finance sign-off record, archive record, retention record, post-close exception record, audit inquiry
+            record, retrieval/export file, response packet, evidence index, exception resolution record, audit response
+            handoff record, retention approval record, waiting-time record, extra-charge record, customer charge record,
+            driver payout record, storage, API call, save, post, reconcile, allocate, dispute, close, reopen, retrieve,
+            export, archive, retain, approve, index, resolve, handoff, notification, reminder, follow-up, collection,
+            credit, write-off, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

@@ -9039,6 +9039,147 @@ export default function Home() {
             follow-up, collection, credit, write-off, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock close-cycle evidence index audit inquiry response packet and retention exception approval QA review"
+          className="rounded-lg border border-cyan-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-close-cycle-evidence-response-retention-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-cyan-700">Close-cycle</span>{" "}
+                <span className="text-slate-600">Evidence / Response QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-close-cycle-evidence-response-retention-review-copy="true"
+              >
+                Static/mock close-cycle evidence index, audit inquiry response packet, and retention exception approval
+                QA data only for internal review. Nothing is indexed, approved, exported, billed, saved, generated, or
+                sent.
+              </p>
+              <div
+                className="grid min-w-0 gap-1.5"
+                data-mock-close-cycle-evidence-response-retention-review-rows="true"
+              >
+                {[
+                  {
+                    account: "UBS Priority",
+                    auditInquiryResponse: "Audit inquiry response packet ready",
+                    evidenceCarryForward: "No unresolved evidence carry-forward",
+                    evidenceIndex: "Evidence index ready",
+                    month: "May 2026",
+                    postCloseReview: "Post-close review complete / no reopen",
+                    responseDecision: "Ready for mock response packet QA",
+                    responsePacketCompleteness: "Response packet complete",
+                    retentionExceptionApproval: "Retention exception approval not needed",
+                    status: "Not indexed / not approved / not exported / not billed",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    auditInquiryResponse: "Audit inquiry response packet held",
+                    evidenceCarryForward: "Unresolved short-pay evidence carried forward",
+                    evidenceIndex: "Missing evidence requires follow-up",
+                    month: "May 2026",
+                    postCloseReview: "Post-close exception needs manager review",
+                    responseDecision: "Hold mock response packet",
+                    responsePacketCompleteness: "Response packet blocked pending manager review",
+                    retentionExceptionApproval: "Retention exception needs approval",
+                    status: "Not indexed / not approved / not exported / not billed",
+                  },
+                  {
+                    account: "VIP Customer",
+                    auditInquiryResponse: "Audit inquiry response needs evidence QA",
+                    evidenceCarryForward: "Carried evidence exception remains unresolved",
+                    evidenceIndex: "Evidence index missing exception item",
+                    month: "May 2026",
+                    postCloseReview: "Unresolved evidence exception carried forward",
+                    responseDecision: "Carry evidence before response",
+                    responsePacketCompleteness: "Response packet incomplete",
+                    retentionExceptionApproval: "Retention exception approval needed",
+                    status: "Not indexed / not approved / not exported / not billed",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-cyan-200 bg-cyan-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-5 xl:grid-cols-10"
+                    data-mock-close-cycle-evidence-response-retention-review-row={`${row.account}-${row.month}`}
+                    key={`${row.account}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Post-close review status", "Post-close", row.postCloseReview],
+                      ["Evidence index status", "Evidence index", row.evidenceIndex],
+                      ["Audit inquiry response status", "Audit response", row.auditInquiryResponse],
+                      ["Response packet completeness status", "Packet", row.responsePacketCompleteness],
+                      ["Retention exception approval status", "Retention approval", row.retentionExceptionApproval],
+                      ["Evidence carry-forward status", "Carry", row.evidenceCarryForward],
+                      ["Mock response decision status", "Decision", row.responseDecision],
+                      ["Not-indexed/not-approved/not-exported/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-cyan-700"
+                          data-mock-close-cycle-evidence-response-retention-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-close-cycle-evidence-response-retention-review-note="true"
+                >
+                  Close-cycle evidence index - mock only. Audit inquiry response packet - not saved. Retention
+                  exception approval - not approved. Evidence index ready, audit inquiry response packet ready, missing
+                  evidence requires follow-up, retention exception needs approval, response packet blocked pending
+                  manager review, and carried evidence exception remains unresolved. Not indexed / not approved / not
+                  exported / not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-close-cycle-evidence-response-retention-review-generation="true"
+                >
+                  No evidence index generated. No audit response packet generated. No retention approval record
+                  generated. No post-close exception record generated. No audit inquiry record generated. No
+                  retrieval/export file generated. No retention record generated. No audit evidence file generated. No
+                  finance sign-off record generated. No archive record generated. No audit export file generated. No GL
+                  record generated. No journal entry generated. No accounting handoff generated. No customer account
+                  posting generated. No invoice number generated. No PDF generated. No payment link generated. No
+                  payment record generated. No remittance record generated. No dispute record generated. No receivables
+                  record generated. No collection action created. No credit note generated. No write-off record
+                  generated. No accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-close-cycle-evidence-response-retention-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, approval
+            persistence, payment allocation persistence, remittance persistence, dispute persistence, AR close
+            persistence, GL close persistence, accounting handoff persistence, journal entry persistence, audit export
+            persistence, audit evidence persistence, finance sign-off persistence, archive persistence, retention
+            persistence, post-close exception persistence, audit inquiry persistence, retrieval/export persistence,
+            response packet persistence, retention exception approval persistence, close-cycle evidence index
+            persistence, evidence index persistence, PDF, receivables record, collection record, credit note, write-off
+            record, customer account posting, payment record, remittance record, dispute record, AR close record, GL
+            record, journal entry, accounting handoff record, audit export file, audit evidence file, finance sign-off
+            record, archive record, retention record, post-close exception record, audit inquiry record,
+            retrieval/export file, response packet, evidence index, storage, API call, save, post, reconcile, allocate,
+            dispute, close, reopen, retrieve, export, archive, retain, approve, index, notification, reminder,
+            follow-up, collection, credit, write-off, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

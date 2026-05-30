@@ -676,6 +676,7 @@ async function runChromeTest() {
         "[data-mock-accounting-handoff-gl-audit-review]",
         "[data-mock-audit-evidence-finance-archive-review]",
         "[data-mock-post-close-audit-retention-review]",
+        "[data-mock-close-cycle-evidence-response-retention-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -6275,6 +6276,373 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockCloseCycleEvidenceResponseRetentionReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1040,
+          label: "mobile mock close-cycle evidence response retention review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock close-cycle evidence response retention review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const section = document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]");
+              if (!group || !dashboard || !section) {
+                return false;
+              }
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const rows = [...section.querySelectorAll("[data-mock-close-cycle-evidence-response-retention-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-close-cycle-evidence-response-retention-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-close-cycle-evidence-response-retention-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-close-cycle-evidence-response-retention-review-column") || "",
+                  ),
+                ),
+              ];
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-close-cycle-evidence-response-retention-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-close-cycle-evidence-response-retention-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "allocate now",
+                  "approve now",
+                  "archive now",
+                  "bill now",
+                  "close now",
+                  "create audit response",
+                  "create evidence index",
+                  "create invoice",
+                  "create payment",
+                  "create response packet",
+                  "create retention approval",
+                  "export now",
+                  "generate evidence index",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "generate response packet",
+                  "index now",
+                  "notify customer",
+                  "post accounting",
+                  "post now",
+                  "reconcile now",
+                  "release now",
+                  "reopen now",
+                  "retrieve now",
+                  "save audit response",
+                  "save evidence index",
+                  "save response packet",
+                  "save retention approval",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-close-cycle-evidence-response-retention-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-close-cycle-evidence-response-retention-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock close-cycle evidence response retention review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected close-cycle evidence response retention review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("close-cycle") &&
+            state.text.toLowerCase().includes("evidence / response qa"),
+          true,
+          `${viewport.label}: expected close-cycle evidence response heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Post-close review status",
+            "Evidence index status",
+            "Audit inquiry response status",
+            "Response packet completeness status",
+            "Retention exception approval status",
+            "Evidence carry-forward status",
+            "Mock response decision status",
+            "Not-indexed/not-approved/not-exported/not-billed status",
+          ],
+          `${viewport.label}: expected mock close-cycle evidence response retention columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three static mock close-cycle rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026",
+          "Post-close review complete / no reopen",
+          "Post-close exception needs manager review",
+          "Unresolved evidence exception carried forward",
+          "Evidence index ready",
+          "Missing evidence requires follow-up",
+          "Evidence index missing exception item",
+          "Audit inquiry response packet ready",
+          "Audit inquiry response packet held",
+          "Audit inquiry response needs evidence QA",
+          "Response packet complete",
+          "Response packet blocked pending manager review",
+          "Response packet incomplete",
+          "Retention exception approval not needed",
+          "Retention exception needs approval",
+          "Retention exception approval needed",
+          "No unresolved evidence carry-forward",
+          "Unresolved short-pay evidence carried forward",
+          "Carried evidence exception remains unresolved",
+          "Ready for mock response packet QA",
+          "Hold mock response packet",
+          "Carry evidence before response",
+          "Not indexed / not approved / not exported / not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock close-cycle text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes(
+            "Static/mock close-cycle evidence index, audit inquiry response packet, and retention exception approval QA data only",
+          ) &&
+            state.copy.includes("internal review") &&
+            state.copy.includes("Nothing is indexed, approved, exported, billed, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence close-cycle copy`,
+        );
+        assert.equal(
+          state.note.includes("Close-cycle evidence index - mock only") &&
+            state.note.includes("Audit inquiry response packet - not saved") &&
+            state.note.includes("Retention exception approval - not approved") &&
+            state.note.includes("Evidence index ready") &&
+            state.note.includes("audit inquiry response packet ready") &&
+            state.note.includes("missing evidence requires follow-up") &&
+            state.note.includes("retention exception needs approval") &&
+            state.note.includes("response packet blocked pending manager review") &&
+            state.note.includes("carried evidence exception remains unresolved") &&
+            state.note.includes("Not indexed / not approved / not exported / not billed"),
+          true,
+          `${viewport.label}: expected close-cycle evidence response retention note`,
+        );
+        assert.equal(
+          state.generation.includes("No evidence index generated") &&
+            state.generation.includes("No audit response packet generated") &&
+            state.generation.includes("No retention approval record generated") &&
+            state.generation.includes("No post-close exception record generated") &&
+            state.generation.includes("No audit inquiry record generated") &&
+            state.generation.includes("No retrieval/export file generated") &&
+            state.generation.includes("No retention record generated") &&
+            state.generation.includes("No audit evidence file generated") &&
+            state.generation.includes("No finance sign-off record generated") &&
+            state.generation.includes("No archive record generated") &&
+            state.generation.includes("No audit export file generated") &&
+            state.generation.includes("No GL record generated") &&
+            state.generation.includes("No journal entry generated") &&
+            state.generation.includes("No accounting handoff generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No payment record generated") &&
+            state.generation.includes("No remittance record generated") &&
+            state.generation.includes("No dispute record generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No collection action created") &&
+            state.generation.includes("No credit note generated") &&
+            state.generation.includes("No write-off record generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no close-cycle/audit/retention/invoice/PDF generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "statement release",
+          "account charge",
+          "approval persistence",
+          "payment allocation persistence",
+          "remittance persistence",
+          "dispute persistence",
+          "AR close persistence",
+          "GL close persistence",
+          "accounting handoff persistence",
+          "journal entry persistence",
+          "audit export persistence",
+          "audit evidence persistence",
+          "finance sign-off persistence",
+          "archive persistence",
+          "retention persistence",
+          "post-close exception persistence",
+          "audit inquiry persistence",
+          "retrieval/export persistence",
+          "response packet persistence",
+          "retention exception approval persistence",
+          "close-cycle evidence index persistence",
+          "evidence index persistence",
+          "PDF",
+          "receivables record",
+          "collection record",
+          "credit note",
+          "write-off record",
+          "customer account posting",
+          "payment record",
+          "remittance record",
+          "dispute record",
+          "AR close record",
+          "GL record",
+          "journal entry",
+          "accounting handoff record",
+          "audit export file",
+          "audit evidence file",
+          "finance sign-off record",
+          "archive record",
+          "retention record",
+          "post-close exception record",
+          "audit inquiry record",
+          "retrieval/export file",
+          "response packet",
+          "evidence index",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "reconcile",
+          "allocate",
+          "dispute",
+          "close",
+          "reopen",
+          "retrieve",
+          "export",
+          "archive",
+          "retain",
+          "approve",
+          "index",
+          "notification",
+          "reminder",
+          "follow-up",
+          "collection",
+          "credit",
+          "write-off",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected close-cycle evidence response retention boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected close-cycle evidence response retention review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active close-cycle/evidence/response/retention controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in close-cycle review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1320 : viewport.width < 1024 ? 920 : viewport.width < 1200 ? 740 : 640),
+          true,
+          `${viewport.label}: expected compact close-cycle evidence response retention review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected close-cycle evidence response retention rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected close-cycle evidence response retention review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -6923,6 +7291,9 @@ async function runChromeTest() {
             mockPostCloseAuditRetentionReviewVisible: Boolean(
               document.querySelector("[data-mock-post-close-audit-retention-review]"),
             ),
+            mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
+              document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
+            ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
               "static/mock receivables handoff qa",
@@ -7039,6 +7410,27 @@ async function runChromeTest() {
               "no retrieval/export file generated",
               "no retention record generated",
               "not reopened / not retrieved / not exported / not billed",
+              "close-cycle",
+              "evidence / response qa",
+              "static/mock close-cycle evidence index",
+              "audit inquiry response packet",
+              "retention exception approval",
+              "post-close review status",
+              "evidence index status",
+              "audit inquiry response status",
+              "response packet completeness status",
+              "retention exception approval status",
+              "evidence carry-forward status",
+              "mock response decision status",
+              "close-cycle evidence index - mock only",
+              "audit inquiry response packet - not saved",
+              "retention exception approval - not approved",
+              "no evidence index generated",
+              "no audit response packet generated",
+              "no retention approval record generated",
+              "response packet persistence",
+              "close-cycle evidence index persistence",
+              "not indexed / not approved / not exported / not billed",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -7143,6 +7535,11 @@ async function runChromeTest() {
           routeState.mockPostCloseAuditRetentionReviewVisible,
           false,
           `${routeName}: expected no internal mock post-close audit retention review`,
+        );
+        assert.equal(
+          routeState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+          false,
+          `${routeName}: expected no internal mock close-cycle evidence response retention review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -7770,6 +8167,9 @@ async function runChromeTest() {
           mockPostCloseAuditRetentionReviewVisible: Boolean(
             document.querySelector("[data-mock-post-close-audit-retention-review]"),
           ),
+          mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -7964,6 +8364,25 @@ async function runChromeTest() {
             "no retrieval/export file generated",
             "no retention record generated",
             "not reopened / not retrieved / not exported / not billed",
+            "close-cycle",
+            "evidence / response qa",
+            "static/mock close-cycle evidence index",
+            "audit inquiry response packet",
+            "retention exception approval",
+            "post-close review status",
+            "evidence index status",
+            "audit inquiry response status",
+            "response packet completeness status",
+            "retention exception approval status",
+            "evidence carry-forward status",
+            "mock response decision status",
+            "close-cycle evidence index - mock only",
+            "audit inquiry response packet - not saved",
+            "retention exception approval - not approved",
+            "no evidence index generated",
+            "no audit response packet generated",
+            "no retention approval record generated",
+            "not indexed / not approved / not exported / not billed",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -8438,6 +8857,11 @@ async function runChromeTest() {
         dashboardState.mockPostCloseAuditRetentionReviewVisible,
         false,
         "Expected /customers not to show internal mock post-close audit retention review",
+      );
+      assert.equal(
+        dashboardState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        "Expected /customers not to show internal mock close-cycle evidence response retention review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -13302,6 +13726,9 @@ async function runChromeTest() {
               mockPostCloseAuditRetentionReviewVisible: Boolean(
                 document.querySelector("[data-mock-post-close-audit-retention-review]"),
               ),
+              mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
+                document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -13434,6 +13861,11 @@ async function runChromeTest() {
         mobileDashboardState.mockPostCloseAuditRetentionReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock post-close audit retention review",
+      );
+      assert.equal(
+        mobileDashboardState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock close-cycle evidence response retention review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -13718,6 +14150,9 @@ async function runChromeTest() {
           mockPostCloseAuditRetentionReviewVisible: Boolean(
             document.querySelector("[data-mock-post-close-audit-retention-review]"),
           ),
+          mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -13916,6 +14351,25 @@ async function runChromeTest() {
             "no retrieval/export file generated",
             "no retention record generated",
             "not reopened / not retrieved / not exported / not billed",
+            "close-cycle",
+            "evidence / response qa",
+            "static/mock close-cycle evidence index",
+            "audit inquiry response packet",
+            "retention exception approval",
+            "post-close review status",
+            "evidence index status",
+            "audit inquiry response status",
+            "response packet completeness status",
+            "retention exception approval status",
+            "evidence carry-forward status",
+            "mock response decision status",
+            "close-cycle evidence index - mock only",
+            "audit inquiry response packet - not saved",
+            "retention exception approval - not approved",
+            "no evidence index generated",
+            "no audit response packet generated",
+            "no retention approval record generated",
+            "not indexed / not approved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -14103,6 +14557,11 @@ async function runChromeTest() {
         initialState.mockPostCloseAuditRetentionReviewVisible,
         false,
         "Expected /book not to show internal mock post-close audit retention review",
+      );
+      assert.equal(
+        initialState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        "Expected /book not to show internal mock close-cycle evidence response retention review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -14493,6 +14952,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock post-close audit retention review",
       );
       assert.equal(
+        mobileState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock close-cycle evidence response retention review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -14687,6 +15151,9 @@ async function runChromeTest() {
           ),
           mockPostCloseAuditRetentionReviewVisible: Boolean(
             document.querySelector("[data-mock-post-close-audit-retention-review]"),
+          ),
+          mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
           ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
@@ -14898,6 +15365,25 @@ async function runChromeTest() {
             "no retrieval/export file generated",
             "no retention record generated",
             "not reopened / not retrieved / not exported / not billed",
+            "close-cycle",
+            "evidence / response qa",
+            "static/mock close-cycle evidence index",
+            "audit inquiry response packet",
+            "retention exception approval",
+            "post-close review status",
+            "evidence index status",
+            "audit inquiry response status",
+            "response packet completeness status",
+            "retention exception approval status",
+            "evidence carry-forward status",
+            "mock response decision status",
+            "close-cycle evidence index - mock only",
+            "audit inquiry response packet - not saved",
+            "retention exception approval - not approved",
+            "no evidence index generated",
+            "no audit response packet generated",
+            "no retention approval record generated",
+            "not indexed / not approved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -15311,6 +15797,11 @@ async function runChromeTest() {
         initialState.mockPostCloseAuditRetentionReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock post-close audit retention review",
+      );
+      assert.equal(
+        initialState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock close-cycle evidence response retention review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -16121,6 +16612,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock post-close audit retention review",
       );
       assert.equal(
+        mobileState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock close-cycle evidence response retention review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -16357,6 +16853,9 @@ async function runChromeTest() {
           mockPostCloseAuditRetentionReviewVisible: Boolean(
             document.querySelector("[data-mock-post-close-audit-retention-review]"),
           ),
+          mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
@@ -16558,6 +17057,25 @@ async function runChromeTest() {
             "no retrieval/export file generated",
             "no retention record generated",
             "not reopened / not retrieved / not exported / not billed",
+            "close-cycle",
+            "evidence / response qa",
+            "static/mock close-cycle evidence index",
+            "audit inquiry response packet",
+            "retention exception approval",
+            "post-close review status",
+            "evidence index status",
+            "audit inquiry response status",
+            "response packet completeness status",
+            "retention exception approval status",
+            "evidence carry-forward status",
+            "mock response decision status",
+            "close-cycle evidence index - mock only",
+            "audit inquiry response packet - not saved",
+            "retention exception approval - not approved",
+            "no evidence index generated",
+            "no audit response packet generated",
+            "no retention approval record generated",
+            "not indexed / not approved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -16671,6 +17189,11 @@ async function runChromeTest() {
         initialState.mockPostCloseAuditRetentionReviewVisible,
         false,
         `${viewport.label}: expected no internal mock post-close audit retention review on driver job link`,
+      );
+      assert.equal(
+        initialState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock close-cycle evidence response retention review on driver job link`,
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -17177,6 +17700,9 @@ async function runChromeTest() {
           mockPostCloseAuditRetentionReviewVisible: Boolean(
             document.querySelector("[data-mock-post-close-audit-retention-review]"),
           ),
+          mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -17399,6 +17925,25 @@ async function runChromeTest() {
             "no retrieval/export file generated",
             "no retention record generated",
             "not reopened / not retrieved / not exported / not billed",
+            "close-cycle",
+            "evidence / response qa",
+            "static/mock close-cycle evidence index",
+            "audit inquiry response packet",
+            "retention exception approval",
+            "post-close review status",
+            "evidence index status",
+            "audit inquiry response status",
+            "response packet completeness status",
+            "retention exception approval status",
+            "evidence carry-forward status",
+            "mock response decision status",
+            "close-cycle evidence index - mock only",
+            "audit inquiry response packet - not saved",
+            "retention exception approval - not approved",
+            "no evidence index generated",
+            "no audit response packet generated",
+            "no retention approval record generated",
+            "not indexed / not approved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -17514,6 +18059,11 @@ async function runChromeTest() {
         initialState.mockPostCloseAuditRetentionReviewVisible,
         false,
         `${viewport.label}: expected no internal mock post-close audit retention review on driver demo`,
+      );
+      assert.equal(
+        initialState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock close-cycle evidence response retention review on driver demo`,
       );
       assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
@@ -19071,6 +19621,8 @@ async function runChromeTest() {
       await checkAdminMockAuditEvidenceFinanceArchiveReview();
     state.adminMockPostCloseAuditRetentionReview =
       await checkAdminMockPostCloseAuditRetentionReview();
+    state.adminMockCloseCycleEvidenceResponseRetentionReview =
+      await checkAdminMockCloseCycleEvidenceResponseRetentionReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

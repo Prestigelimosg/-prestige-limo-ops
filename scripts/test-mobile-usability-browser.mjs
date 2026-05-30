@@ -507,6 +507,9 @@ async function runChromeTest() {
       const mockPaymentAllocationRemittanceReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-payment-allocation-remittance-review]"))`,
       );
+      const mockMonthEndArCloseReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-month-end-ar-close-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -604,6 +607,11 @@ async function runChromeTest() {
         mockPaymentAllocationRemittanceReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock payment allocation remittance review`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock month-end AR close review`,
       );
     };
 
@@ -2569,6 +2577,143 @@ async function runChromeTest() {
         `${viewport.label}: expected payment allocation remittance rows to stay readable`,
       );
 
+      const mockMonthEndArCloseReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-month-end-ar-close-review]");
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            if (!review || !group || !dashboard || !group.contains(review)) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-month-end-ar-close-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-month-end-ar-close-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-month-end-ar-close-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              generation:
+                document.querySelector("[data-mock-month-end-ar-close-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-month-end-ar-close-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock month-end AR close review`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.groupTop >= mockMonthEndArCloseReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected month-end AR close review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.text.toLowerCase().includes("month-end ar close") &&
+          mockMonthEndArCloseReviewState.text.toLowerCase().includes("dispute packet qa"),
+        true,
+        `${viewport.label}: expected mock month-end AR close review`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.text.includes(
+          "Static/mock month-end AR close and dispute-resolution approval packet QA data only",
+        ) &&
+          mockMonthEndArCloseReviewState.text.includes("Fully reconciled / ready for close") &&
+          mockMonthEndArCloseReviewState.text.includes("Unresolved short-pay dispute") &&
+          mockMonthEndArCloseReviewState.text.includes("Credit carry-forward pending") &&
+          mockMonthEndArCloseReviewState.text.includes("Manager approval needed") &&
+          mockMonthEndArCloseReviewState.text.includes("Accounting handoff pending") &&
+          mockMonthEndArCloseReviewState.text.includes(
+            "Not closed / not posted / not reconciled / not billed",
+          ),
+        true,
+        `${viewport.label}: expected static not-closed month-end AR close details`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.note.includes("Month-end AR close review - mock only") &&
+          mockMonthEndArCloseReviewState.note.includes("Dispute-resolution approval packet - not saved") &&
+          mockMonthEndArCloseReviewState.note.includes("Fully reconciled/ready for close") &&
+          mockMonthEndArCloseReviewState.note.includes("unresolved short-pay dispute") &&
+          mockMonthEndArCloseReviewState.note.includes("credit carry-forward pending") &&
+          mockMonthEndArCloseReviewState.note.includes("manager approval needed") &&
+          mockMonthEndArCloseReviewState.note.includes("accounting handoff pending"),
+        true,
+        `${viewport.label}: expected month-end AR close dispute packet note`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.generation.includes("No AR close record generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No accounting handoff generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No customer account posting generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No invoice number generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No PDF generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No payment link generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No payment record generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No remittance record generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No dispute record generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No receivables record generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No collection action created") &&
+          mockMonthEndArCloseReviewState.generation.includes("No credit note generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No write-off record generated") &&
+          mockMonthEndArCloseReviewState.generation.includes("No accounting record generated"),
+        true,
+        `${viewport.label}: expected month-end AR close no close/payment/remittance/dispute/invoice/PDF generation`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.boundary.includes("Mock/local only.") &&
+          mockMonthEndArCloseReviewState.boundary.includes("No billing automation") &&
+          mockMonthEndArCloseReviewState.boundary.includes("AR close persistence") &&
+          mockMonthEndArCloseReviewState.boundary.includes("month-end close persistence") &&
+          mockMonthEndArCloseReviewState.boundary.includes("payment allocation persistence") &&
+          mockMonthEndArCloseReviewState.boundary.includes("remittance persistence") &&
+          mockMonthEndArCloseReviewState.boundary.includes("dispute persistence") &&
+          mockMonthEndArCloseReviewState.boundary.includes("storage") &&
+          mockMonthEndArCloseReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected month-end AR close no billing/close/remittance/dispute/storage/API boundary`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.actionCount,
+        0,
+        `${viewport.label}: expected month-end AR close review to stay display-only`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.rows.length,
+        3,
+        `${viewport.label}: expected three static mock month-end AR close rows`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.height <=
+          (viewport.width < 640 ? 1180 : viewport.width < 1024 ? 840 : viewport.width < 1200 ? 680 : 580),
+        true,
+        `${viewport.label}: expected compact month-end AR close review, got ${mockMonthEndArCloseReviewState.height}px`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected month-end AR close rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -2644,6 +2789,9 @@ async function runChromeTest() {
       );
       const mockPaymentAllocationRemittanceReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-payment-allocation-remittance-review]"))`,
+      );
+      const mockMonthEndArCloseReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-month-end-ar-close-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -2768,6 +2916,11 @@ async function runChromeTest() {
         mockPaymentAllocationRemittanceReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock payment allocation remittance review`,
+      );
+      assert.equal(
+        mockMonthEndArCloseReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock month-end AR close review`,
       );
       if (context === "driver job demo") {
         assert.equal(

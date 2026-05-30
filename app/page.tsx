@@ -8523,6 +8523,132 @@ export default function Home() {
             credit, write-off, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock month-end AR close and dispute-resolution approval packet QA review"
+          className="rounded-lg border border-cyan-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-month-end-ar-close-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-cyan-700">Month-end AR Close</span>{" "}
+                <span className="text-slate-600">Dispute packet QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-cyan-100 bg-cyan-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-month-end-ar-close-review-copy="true"
+              >
+                Static/mock month-end AR close and dispute-resolution approval packet QA data only for internal review.
+                Nothing is closed, approved, posted, reconciled, billed, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-month-end-ar-close-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    accountingHandoff: "Accounting handoff ready",
+                    closeDecision: "Fully reconciled / ready for close",
+                    creditCarry: "No credit carry-forward",
+                    managerApproval: "Manager approval not needed",
+                    month: "May 2026",
+                    paymentStatus: "Reconciled payment matched",
+                    shortPayResolution: "No short-pay dispute",
+                    status: "Not closed / not posted / not reconciled / not billed",
+                    unresolvedDispute: "No unresolved dispute",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    accountingHandoff: "Accounting handoff pending",
+                    closeDecision: "Hold mock close",
+                    creditCarry: "No credit carry-forward",
+                    managerApproval: "Manager approval needed",
+                    month: "May 2026",
+                    paymentStatus: "Short-pay not reconciled",
+                    shortPayResolution: "Short-pay resolution pending",
+                    status: "Not closed / not posted / not reconciled / not billed",
+                    unresolvedDispute: "Unresolved short-pay dispute",
+                  },
+                  {
+                    account: "VIP Customer",
+                    accountingHandoff: "Accounting handoff pending",
+                    closeDecision: "Carry credit before close",
+                    creditCarry: "Credit carry-forward pending",
+                    managerApproval: "Manager approval needed",
+                    month: "May 2026",
+                    paymentStatus: "Overpayment match reviewed",
+                    shortPayResolution: "Short-pay resolved in mock",
+                    status: "Not closed / not posted / not reconciled / not billed",
+                    unresolvedDispute: "Dispute carried forward",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-5 gap-0.5 rounded-md border border-cyan-100 bg-cyan-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 xl:grid-cols-10"
+                    data-mock-month-end-ar-close-review-row={`${row.account}-${row.month}`}
+                    key={`${row.account}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Reconciled payment status", "Payment", row.paymentStatus],
+                      ["Unresolved dispute status", "Dispute", row.unresolvedDispute],
+                      ["Credit carry-forward status", "Credit", row.creditCarry],
+                      ["Short-pay resolution status", "Short-pay", row.shortPayResolution],
+                      ["Manager approval status", "Mgr QA", row.managerApproval],
+                      ["Accounting handoff status", "Acct handoff", row.accountingHandoff],
+                      ["Mock close decision status", "Decision", row.closeDecision],
+                      ["Not-closed/not-posted/not-reconciled/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-cyan-700"
+                          data-mock-month-end-ar-close-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-cyan-100 bg-cyan-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-month-end-ar-close-review-note="true"
+                >
+                  Month-end AR close review - mock only. Dispute-resolution approval packet - not saved. Fully
+                  reconciled/ready for close, unresolved short-pay dispute, credit carry-forward pending, manager
+                  approval needed, and accounting handoff pending. Not closed / not posted / not reconciled / not
+                  billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-cyan-100 bg-cyan-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-month-end-ar-close-review-generation="true"
+                >
+                  No AR close record generated. No accounting handoff generated. No customer account posting generated.
+                  No invoice number generated. No PDF generated. No payment link generated. No payment record
+                  generated. No remittance record generated. No dispute record generated. No receivables record
+                  generated. No collection action created. No credit note generated. No write-off record generated. No
+                  accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-month-end-ar-close-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, approval
+            persistence, payment allocation persistence, remittance persistence, dispute persistence, AR close
+            persistence, month-end close persistence, collection persistence, credit note persistence, write-off
+            persistence, PDF, receivables record, collection record, credit note, write-off record, customer account
+            posting, payment record, remittance record, dispute record, AR close record, month-end close record,
+            accounting handoff, storage, API call, save, post, reconcile, allocate, dispute, close, notification,
+            reminder, follow-up, collection, credit, write-off, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

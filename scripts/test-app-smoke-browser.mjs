@@ -671,6 +671,7 @@ async function runChromeTest() {
         "[data-mock-receivables-handoff-review]",
         "[data-mock-receivables-aging-follow-up-review]",
         "[data-mock-collections-credit-writeoff-review]",
+        "[data-mock-payment-allocation-remittance-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -4624,6 +4625,318 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockPaymentAllocationRemittanceReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1040,
+          label: "mobile mock payment allocation remittance review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock payment allocation remittance review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-payment-allocation-remittance-review]");
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              if (!section || !group || !dashboard || !group.contains(section)) {
+                return false;
+              }
+
+              const sectionRect = section.getBoundingClientRect();
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-payment-allocation-remittance-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-payment-allocation-remittance-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-payment-allocation-remittance-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-payment-allocation-remittance-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-payment-allocation-remittance-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-payment-allocation-remittance-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "allocate now",
+                  "approve now",
+                  "bill now",
+                  "create collection",
+                  "create credit note",
+                  "create dispute",
+                  "create invoice",
+                  "create payment",
+                  "create payment link",
+                  "create remittance",
+                  "create write-off",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "notify customer",
+                  "post accounting",
+                  "post now",
+                  "reconcile now",
+                  "release now",
+                  "save allocation",
+                  "save dispute",
+                  "save payment",
+                  "save remittance",
+                  "send reminder",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-payment-allocation-remittance-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-payment-allocation-remittance-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock payment allocation remittance review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected payment allocation remittance review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("payment allocation"),
+          true,
+          `${viewport.label}: expected payment allocation heading`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("remittance / short-pay qa"),
+          true,
+          `${viewport.label}: expected remittance short-pay QA title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Mock payment reference",
+            "Statement amount",
+            "Received amount",
+            "Allocation QA status",
+            "Remittance match status",
+            "Short-pay/overpay status",
+            "Dispute carry-forward status",
+            "Mock decision status",
+            "Not-allocated/not-posted/not-reconciled/not-billed status",
+          ],
+          `${viewport.label}: expected mock payment allocation remittance columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three static mock payment rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026",
+          "MOCK-PAY-UBS-MAY",
+          "MOCK-PAY-RITZ-SHORT",
+          "MOCK-PAY-VIP-OVER",
+          "$ -- not charged",
+          "$ -- not posted",
+          "$ -- short-pay not posted",
+          "$ -- overpay not posted",
+          "Allocation full match",
+          "Allocation needs review",
+          "Allocation exception review",
+          "Remittance matched",
+          "Remittance reference mismatch",
+          "Remittance advice needs QA",
+          "Full match / no dispute",
+          "Short-pay needs review",
+          "Overpayment / credit carry-forward",
+          "No dispute carry-forward",
+          "Disputed extra hours carried",
+          "Dispute carried forward",
+          "Not allocated / not posted / not reconciled / not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock payment allocation text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static/mock payment allocation, remittance reconciliation, and short-pay dispute QA data only") &&
+            state.copy.includes("internal review") &&
+            state.copy.includes("Nothing is allocated, reconciled, disputed, posted, billed, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence payment allocation copy`,
+        );
+        assert.equal(
+          state.note.includes("Payment allocation review - mock only") &&
+            state.note.includes("Remittance reconciliation QA - not saved") &&
+            state.note.includes("Short-pay dispute review - not saved") &&
+            state.note.includes("Full match/no dispute") &&
+            state.note.includes("short-pay needs review") &&
+            state.note.includes("remittance reference mismatch") &&
+            state.note.includes("overpayment/credit carry-forward") &&
+            state.note.includes("dispute carried forward") &&
+            state.note.includes("Not allocated / not posted / not reconciled / not billed"),
+          true,
+          `${viewport.label}: expected payment allocation remittance short-pay note`,
+        );
+        assert.equal(
+          state.generation.includes("No payment record generated") &&
+            state.generation.includes("No remittance record generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No collection action created") &&
+            state.generation.includes("No credit note generated") &&
+            state.generation.includes("No write-off record generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no payment/remittance/posting/invoice/PDF/receivables/collection/credit/write-off generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "statement release",
+          "account charge",
+          "approval persistence",
+          "payment allocation persistence",
+          "remittance persistence",
+          "dispute persistence",
+          "collection persistence",
+          "credit note persistence",
+          "write-off persistence",
+          "PDF",
+          "receivables record",
+          "collection record",
+          "credit note",
+          "write-off record",
+          "customer account posting",
+          "payment record",
+          "remittance record",
+          "dispute record",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "reconcile",
+          "allocate",
+          "dispute",
+          "notification",
+          "reminder",
+          "follow-up",
+          "collection",
+          "credit",
+          "write-off",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected payment allocation boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected payment allocation remittance review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active allocation/remittance/dispute/bill/invoice/payment/PDF/post controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in payment allocation review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1160 : viewport.width < 1024 ? 820 : viewport.width < 1200 ? 660 : 560),
+          true,
+          `${viewport.label}: expected compact payment allocation remittance review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected payment allocation remittance rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected payment allocation remittance review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -5257,6 +5570,9 @@ async function runChromeTest() {
             mockCollectionsCreditWriteoffReviewVisible: Boolean(
               document.querySelector("[data-mock-collections-credit-writeoff-review]"),
             ),
+            mockPaymentAllocationRemittanceReviewVisible: Boolean(
+              document.querySelector("[data-mock-payment-allocation-remittance-review]"),
+            ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
               "static/mock receivables handoff qa",
@@ -5287,6 +5603,23 @@ async function runChromeTest() {
               "no credit note generated",
               "no write-off record generated",
               "not sent / not posted / not billed / not written off",
+              "payment allocation",
+              "remittance reconciliation",
+              "short-pay dispute",
+              "static/mock payment allocation",
+              "mock payment reference",
+              "statement amount",
+              "received amount",
+              "allocation qa status",
+              "remittance match status",
+              "short-pay/overpay status",
+              "dispute carry-forward status",
+              "payment allocation review - mock only",
+              "remittance reconciliation qa - not saved",
+              "short-pay dispute review - not saved",
+              "no payment record generated",
+              "no remittance record generated",
+              "not allocated / not posted / not reconciled / not billed",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -5366,6 +5699,11 @@ async function runChromeTest() {
           routeState.mockCollectionsCreditWriteoffReviewVisible,
           false,
           `${routeName}: expected no internal mock collections credit write-off review`,
+        );
+        assert.equal(
+          routeState.mockPaymentAllocationRemittanceReviewVisible,
+          false,
+          `${routeName}: expected no internal mock payment allocation remittance review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -5978,6 +6316,9 @@ async function runChromeTest() {
           mockCollectionsCreditWriteoffReviewVisible: Boolean(
             document.querySelector("[data-mock-collections-credit-writeoff-review]"),
           ),
+          mockPaymentAllocationRemittanceReviewVisible: Boolean(
+            document.querySelector("[data-mock-payment-allocation-remittance-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -6086,6 +6427,23 @@ async function runChromeTest() {
             "no credit note generated",
             "no write-off record generated",
             "not sent / not posted / not billed / not written off",
+            "payment allocation",
+            "remittance reconciliation",
+            "short-pay dispute",
+            "static/mock payment allocation",
+            "mock payment reference",
+            "statement amount",
+            "received amount",
+            "allocation qa status",
+            "remittance match status",
+            "short-pay/overpay status",
+            "dispute carry-forward status",
+            "payment allocation review - mock only",
+            "remittance reconciliation qa - not saved",
+            "short-pay dispute review - not saved",
+            "no payment record generated",
+            "no remittance record generated",
+            "not allocated / not posted / not reconciled / not billed",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -6535,6 +6893,11 @@ async function runChromeTest() {
         dashboardState.mockCollectionsCreditWriteoffReviewVisible,
         false,
         "Expected /customers not to show internal mock collections credit write-off review",
+      );
+      assert.equal(
+        dashboardState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        "Expected /customers not to show internal mock payment allocation remittance review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -11117,6 +11480,23 @@ async function runChromeTest() {
             "no credit note generated",
             "no write-off record generated",
             "not sent / not posted / not billed / not written off",
+            "payment allocation",
+            "remittance reconciliation",
+            "short-pay dispute",
+            "static/mock payment allocation",
+            "mock payment reference",
+            "statement amount",
+            "received amount",
+            "allocation qa status",
+            "remittance match status",
+            "short-pay/overpay status",
+            "dispute carry-forward status",
+            "payment allocation review - mock only",
+            "remittance reconciliation qa - not saved",
+            "short-pay dispute review - not saved",
+            "no payment record generated",
+            "no remittance record generated",
+            "not allocated / not posted / not reconciled / not billed",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
@@ -11367,6 +11747,9 @@ async function runChromeTest() {
               mockCollectionsCreditWriteoffReviewVisible: Boolean(
                 document.querySelector("[data-mock-collections-credit-writeoff-review]"),
               ),
+              mockPaymentAllocationRemittanceReviewVisible: Boolean(
+                document.querySelector("[data-mock-payment-allocation-remittance-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -11474,6 +11857,11 @@ async function runChromeTest() {
         mobileDashboardState.mockCollectionsCreditWriteoffReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock collections credit write-off review",
+      );
+      assert.equal(
+        mobileDashboardState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock payment allocation remittance review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -11743,6 +12131,9 @@ async function runChromeTest() {
           mockCollectionsCreditWriteoffReviewVisible: Boolean(
             document.querySelector("[data-mock-collections-credit-writeoff-review]"),
           ),
+          mockPaymentAllocationRemittanceReviewVisible: Boolean(
+            document.querySelector("[data-mock-payment-allocation-remittance-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -11855,6 +12246,23 @@ async function runChromeTest() {
             "no credit note generated",
             "no write-off record generated",
             "not sent / not posted / not billed / not written off",
+            "payment allocation",
+            "remittance reconciliation",
+            "short-pay dispute",
+            "static/mock payment allocation",
+            "mock payment reference",
+            "statement amount",
+            "received amount",
+            "allocation qa status",
+            "remittance match status",
+            "short-pay/overpay status",
+            "dispute carry-forward status",
+            "payment allocation review - mock only",
+            "remittance reconciliation qa - not saved",
+            "short-pay dispute review - not saved",
+            "no payment record generated",
+            "no remittance record generated",
+            "not allocated / not posted / not reconciled / not billed",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -12017,6 +12425,11 @@ async function runChromeTest() {
         initialState.mockCollectionsCreditWriteoffReviewVisible,
         false,
         "Expected /book not to show internal mock collections credit write-off review",
+      );
+      assert.equal(
+        initialState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        "Expected /book not to show internal mock payment allocation remittance review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -12382,6 +12795,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock collections credit write-off review",
       );
       assert.equal(
+        mobileState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock payment allocation remittance review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -12562,6 +12980,9 @@ async function runChromeTest() {
           mockCollectionsCreditWriteoffReviewVisible: Boolean(
             document.querySelector("[data-mock-collections-credit-writeoff-review]"),
           ),
+          mockPaymentAllocationRemittanceReviewVisible: Boolean(
+            document.querySelector("[data-mock-payment-allocation-remittance-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -12686,6 +13107,23 @@ async function runChromeTest() {
             "no credit note generated",
             "no write-off record generated",
             "not sent / not posted / not billed / not written off",
+            "payment allocation",
+            "remittance reconciliation",
+            "short-pay dispute",
+            "static/mock payment allocation",
+            "mock payment reference",
+            "statement amount",
+            "received amount",
+            "allocation qa status",
+            "remittance match status",
+            "short-pay/overpay status",
+            "dispute carry-forward status",
+            "payment allocation review - mock only",
+            "remittance reconciliation qa - not saved",
+            "short-pay dispute review - not saved",
+            "no payment record generated",
+            "no remittance record generated",
+            "not allocated / not posted / not reconciled / not billed",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -13074,6 +13512,11 @@ async function runChromeTest() {
         initialState.mockCollectionsCreditWriteoffReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock collections credit write-off review",
+      );
+      assert.equal(
+        initialState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock payment allocation remittance review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -13859,6 +14302,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock collections credit write-off review",
       );
       assert.equal(
+        mobileState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock payment allocation remittance review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -14080,6 +14528,9 @@ async function runChromeTest() {
           mockAccountingStatementPreviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-statement-preview]"),
           ),
+          mockPaymentAllocationRemittanceReviewVisible: Boolean(
+            document.querySelector("[data-mock-payment-allocation-remittance-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
@@ -14195,6 +14646,23 @@ async function runChromeTest() {
             "no credit note generated",
             "no write-off record generated",
             "not sent / not posted / not billed / not written off",
+            "payment allocation",
+            "remittance reconciliation",
+            "short-pay dispute",
+            "static/mock payment allocation",
+            "mock payment reference",
+            "statement amount",
+            "received amount",
+            "allocation qa status",
+            "remittance match status",
+            "short-pay/overpay status",
+            "dispute carry-forward status",
+            "payment allocation review - mock only",
+            "remittance reconciliation qa - not saved",
+            "short-pay dispute review - not saved",
+            "no payment record generated",
+            "no remittance record generated",
+            "not allocated / not posted / not reconciled / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -14283,6 +14751,11 @@ async function runChromeTest() {
         initialState.mockAccountingStatementPreviewVisible,
         false,
         `${viewport.label}: expected no internal mock accounting statement preview on driver job link`,
+      );
+      assert.equal(
+        initialState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock payment allocation remittance review on driver job link`,
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -14774,6 +15247,9 @@ async function runChromeTest() {
           mockAccountingStatementPreviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-statement-preview]"),
           ),
+          mockPaymentAllocationRemittanceReviewVisible: Boolean(
+            document.querySelector("[data-mock-payment-allocation-remittance-review]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -14910,6 +15386,23 @@ async function runChromeTest() {
             "no credit note generated",
             "no write-off record generated",
             "not sent / not posted / not billed / not written off",
+            "payment allocation",
+            "remittance reconciliation",
+            "short-pay dispute",
+            "static/mock payment allocation",
+            "mock payment reference",
+            "statement amount",
+            "received amount",
+            "allocation qa status",
+            "remittance match status",
+            "short-pay/overpay status",
+            "dispute carry-forward status",
+            "payment allocation review - mock only",
+            "remittance reconciliation qa - not saved",
+            "short-pay dispute review - not saved",
+            "no payment record generated",
+            "no remittance record generated",
+            "not allocated / not posted / not reconciled / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -15000,6 +15493,11 @@ async function runChromeTest() {
         initialState.mockAccountingStatementPreviewVisible,
         false,
         `${viewport.label}: expected no internal mock accounting statement preview on driver demo`,
+      );
+      assert.equal(
+        initialState.mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock payment allocation remittance review on driver demo`,
       );
       assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
@@ -16548,6 +17046,8 @@ async function runChromeTest() {
     state.adminMockReceivablesHandoffReview = await checkAdminMockReceivablesHandoffReview();
     state.adminMockReceivablesAgingFollowUpReview = await checkAdminMockReceivablesAgingFollowUpReview();
     state.adminMockCollectionsCreditWriteoffReview = await checkAdminMockCollectionsCreditWriteoffReview();
+    state.adminMockPaymentAllocationRemittanceReview =
+      await checkAdminMockPaymentAllocationRemittanceReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

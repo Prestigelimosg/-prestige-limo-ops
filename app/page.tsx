@@ -8395,6 +8395,134 @@ export default function Home() {
             credit, write-off, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock payment allocation remittance reconciliation and short-pay dispute QA review"
+          className="rounded-lg border border-emerald-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-payment-allocation-remittance-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-emerald-700">Payment Allocation</span>{" "}
+                <span className="text-slate-600">Remittance / Short-pay QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-payment-allocation-remittance-review-copy="true"
+              >
+                Static/mock payment allocation, remittance reconciliation, and short-pay dispute QA data only for
+                internal review. Nothing is allocated, reconciled, disputed, posted, billed, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-payment-allocation-remittance-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    allocationQa: "Allocation full match",
+                    decision: "Keep matched in mock",
+                    disputeCarry: "No dispute carry-forward",
+                    month: "May 2026",
+                    paymentRef: "MOCK-PAY-UBS-MAY",
+                    receivedAmount: "$ -- not posted",
+                    remittanceMatch: "Remittance matched",
+                    shortPayOverpay: "Full match / no dispute",
+                    statementAmount: "$ -- not charged",
+                    status: "Not allocated / not posted / not reconciled / not billed",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    allocationQa: "Allocation needs review",
+                    decision: "Hold short-pay dispute",
+                    disputeCarry: "Disputed extra hours carried",
+                    month: "May 2026",
+                    paymentRef: "MOCK-PAY-RITZ-SHORT",
+                    receivedAmount: "$ -- short-pay not posted",
+                    remittanceMatch: "Remittance reference mismatch",
+                    shortPayOverpay: "Short-pay needs review",
+                    statementAmount: "$ -- not charged",
+                    status: "Not allocated / not posted / not reconciled / not billed",
+                  },
+                  {
+                    account: "VIP Customer",
+                    allocationQa: "Allocation exception review",
+                    decision: "Carry credit in mock review",
+                    disputeCarry: "Dispute carried forward",
+                    month: "May 2026",
+                    paymentRef: "MOCK-PAY-VIP-OVER",
+                    receivedAmount: "$ -- overpay not posted",
+                    remittanceMatch: "Remittance advice needs QA",
+                    shortPayOverpay: "Overpayment / credit carry-forward",
+                    statementAmount: "$ -- not charged",
+                    status: "Not allocated / not posted / not reconciled / not billed",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-4 gap-0.5 rounded-md border border-emerald-100 bg-emerald-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-6 xl:grid-cols-11"
+                    data-mock-payment-allocation-remittance-review-row={`${row.account}-${row.paymentRef}`}
+                    key={`${row.account}-${row.month}-${row.paymentRef}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Mock payment reference", "Pay ref", row.paymentRef],
+                      ["Statement amount", "Stmt amt", row.statementAmount],
+                      ["Received amount", "Rcvd amt", row.receivedAmount],
+                      ["Allocation QA status", "Alloc QA", row.allocationQa],
+                      ["Remittance match status", "Remit", row.remittanceMatch],
+                      ["Short-pay/overpay status", "Short/over", row.shortPayOverpay],
+                      ["Dispute carry-forward status", "Dispute", row.disputeCarry],
+                      ["Mock decision status", "Decision", row.decision],
+                      ["Not-allocated/not-posted/not-reconciled/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-emerald-700"
+                          data-mock-payment-allocation-remittance-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-payment-allocation-remittance-review-note="true"
+                >
+                  Payment allocation review - mock only. Remittance reconciliation QA - not saved. Short-pay dispute
+                  review - not saved. Full match/no dispute, short-pay needs review, remittance reference mismatch,
+                  overpayment/credit carry-forward, and dispute carried forward. Not allocated / not posted / not
+                  reconciled / not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-payment-allocation-remittance-review-generation="true"
+                >
+                  No payment record generated. No remittance record generated. No customer account posting generated.
+                  No invoice number generated. No PDF generated. No payment link generated. No receivables record
+                  generated. No collection action created. No credit note generated. No write-off record generated. No
+                  accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-payment-allocation-remittance-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, approval
+            persistence, payment allocation persistence, remittance persistence, dispute persistence, collection
+            persistence, credit note persistence, write-off persistence, PDF, receivables record, collection record,
+            credit note, write-off record, customer account posting, payment record, remittance record, dispute record,
+            storage, API call, save, post, reconcile, allocate, dispute, notification, reminder, follow-up, collection,
+            credit, write-off, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

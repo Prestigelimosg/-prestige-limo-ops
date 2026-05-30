@@ -504,6 +504,9 @@ async function runChromeTest() {
       const mockCollectionsCreditWriteoffReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-collections-credit-writeoff-review]"))`,
       );
+      const mockPaymentAllocationRemittanceReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-payment-allocation-remittance-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -596,6 +599,11 @@ async function runChromeTest() {
         mockCollectionsCreditWriteoffReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock collections credit write-off review`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock payment allocation remittance review`,
       );
     };
 
@@ -2426,6 +2434,141 @@ async function runChromeTest() {
         `${viewport.label}: expected collections credit write-off rows to stay readable`,
       );
 
+      const mockPaymentAllocationRemittanceReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-payment-allocation-remittance-review]");
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            if (!review || !group || !dashboard || !group.contains(review)) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-payment-allocation-remittance-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-payment-allocation-remittance-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-payment-allocation-remittance-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              generation:
+                document.querySelector("[data-mock-payment-allocation-remittance-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-payment-allocation-remittance-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock payment allocation remittance review`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.groupTop >=
+          mockPaymentAllocationRemittanceReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected payment allocation remittance review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.text.toLowerCase().includes("payment allocation") &&
+          mockPaymentAllocationRemittanceReviewState.text.toLowerCase().includes("remittance / short-pay qa"),
+        true,
+        `${viewport.label}: expected mock payment allocation remittance review`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.text.includes(
+          "Static/mock payment allocation, remittance reconciliation, and short-pay dispute QA data only",
+        ) &&
+          mockPaymentAllocationRemittanceReviewState.text.includes("MOCK-PAY-UBS-MAY") &&
+          mockPaymentAllocationRemittanceReviewState.text.includes("Full match / no dispute") &&
+          mockPaymentAllocationRemittanceReviewState.text.includes("Short-pay needs review") &&
+          mockPaymentAllocationRemittanceReviewState.text.includes("Remittance reference mismatch") &&
+          mockPaymentAllocationRemittanceReviewState.text.includes("Overpayment / credit carry-forward") &&
+          mockPaymentAllocationRemittanceReviewState.text.includes("Dispute carried forward") &&
+          mockPaymentAllocationRemittanceReviewState.text.includes(
+            "Not allocated / not posted / not reconciled / not billed",
+          ),
+        true,
+        `${viewport.label}: expected static not-allocated payment allocation details`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.note.includes("Payment allocation review - mock only") &&
+          mockPaymentAllocationRemittanceReviewState.note.includes("Remittance reconciliation QA - not saved") &&
+          mockPaymentAllocationRemittanceReviewState.note.includes("Short-pay dispute review - not saved") &&
+          mockPaymentAllocationRemittanceReviewState.note.includes("Full match/no dispute") &&
+          mockPaymentAllocationRemittanceReviewState.note.includes("short-pay needs review") &&
+          mockPaymentAllocationRemittanceReviewState.note.includes("remittance reference mismatch") &&
+          mockPaymentAllocationRemittanceReviewState.note.includes("overpayment/credit carry-forward") &&
+          mockPaymentAllocationRemittanceReviewState.note.includes("dispute carried forward"),
+        true,
+        `${viewport.label}: expected payment allocation remittance short-pay note`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.generation.includes("No payment record generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No remittance record generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No customer account posting generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No invoice number generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No PDF generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No payment link generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No receivables record generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No collection action created") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No credit note generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No write-off record generated") &&
+          mockPaymentAllocationRemittanceReviewState.generation.includes("No accounting record generated"),
+        true,
+        `${viewport.label}: expected payment allocation no payment/remittance/posting/invoice/PDF generation`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.boundary.includes("Mock/local only.") &&
+          mockPaymentAllocationRemittanceReviewState.boundary.includes("No billing automation") &&
+          mockPaymentAllocationRemittanceReviewState.boundary.includes("payment allocation persistence") &&
+          mockPaymentAllocationRemittanceReviewState.boundary.includes("remittance persistence") &&
+          mockPaymentAllocationRemittanceReviewState.boundary.includes("dispute persistence") &&
+          mockPaymentAllocationRemittanceReviewState.boundary.includes("storage") &&
+          mockPaymentAllocationRemittanceReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected payment allocation no billing/remittance/dispute/storage/API boundary`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.actionCount,
+        0,
+        `${viewport.label}: expected payment allocation remittance review to stay display-only`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.rows.length,
+        3,
+        `${viewport.label}: expected three static mock payment allocation rows`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.height <=
+          (viewport.width < 640 ? 1180 : viewport.width < 1024 ? 840 : viewport.width < 1200 ? 680 : 580),
+        true,
+        `${viewport.label}: expected compact payment allocation remittance review, got ${mockPaymentAllocationRemittanceReviewState.height}px`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected payment allocation remittance rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -2498,6 +2641,9 @@ async function runChromeTest() {
       );
       const mockCollectionsCreditWriteoffReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-collections-credit-writeoff-review]"))`,
+      );
+      const mockPaymentAllocationRemittanceReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-payment-allocation-remittance-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -2617,6 +2763,11 @@ async function runChromeTest() {
         mockCollectionsCreditWriteoffReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock collections credit write-off review`,
+      );
+      assert.equal(
+        mockPaymentAllocationRemittanceReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock payment allocation remittance review`,
       );
       if (context === "driver job demo") {
         assert.equal(

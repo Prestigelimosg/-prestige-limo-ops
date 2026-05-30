@@ -675,6 +675,7 @@ async function runChromeTest() {
         "[data-mock-month-end-ar-close-review]",
         "[data-mock-accounting-handoff-gl-audit-review]",
         "[data-mock-audit-evidence-finance-archive-review]",
+        "[data-mock-post-close-audit-retention-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -5921,6 +5922,359 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockPostCloseAuditRetentionReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1040,
+          label: "mobile mock post-close audit retention review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock post-close audit retention review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const section = document.querySelector("[data-mock-post-close-audit-retention-review]");
+              if (!group || !dashboard || !section) {
+                return false;
+              }
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const rows = [...section.querySelectorAll("[data-mock-post-close-audit-retention-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-post-close-audit-retention-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-post-close-audit-retention-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-post-close-audit-retention-review-column") || "",
+                  ),
+                ),
+              ];
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-post-close-audit-retention-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-post-close-audit-retention-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "allocate now",
+                  "approve now",
+                  "archive now",
+                  "bill now",
+                  "close now",
+                  "create archive",
+                  "create audit inquiry",
+                  "create invoice",
+                  "create payment",
+                  "create payment link",
+                  "create post-close",
+                  "create retention",
+                  "export now",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "generate retrieval",
+                  "notify customer",
+                  "post accounting",
+                  "post now",
+                  "reconcile now",
+                  "release now",
+                  "reopen now",
+                  "retrieve now",
+                  "save audit inquiry",
+                  "save post-close",
+                  "save retention",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-post-close-audit-retention-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-post-close-audit-retention-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock post-close audit retention review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected post-close audit retention review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("post-close") &&
+            state.text.toLowerCase().includes("audit / retention qa"),
+          true,
+          `${viewport.label}: expected post-close audit retention heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Finance close status",
+            "Archive status",
+            "Post-close exception status",
+            "Audit inquiry retrieval status",
+            "Retention-readiness status",
+            "Reopen approval status",
+            "Mock retrieval decision status",
+            "Not-reopened/not-retrieved/not-exported/not-billed status",
+          ],
+          `${viewport.label}: expected mock post-close audit retention columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three static mock post-close rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026",
+          "Finance close sign-off ready",
+          "Finance sign-off pending",
+          "Finance close sign-off pending",
+          "Archive-readiness ready for mock lookup",
+          "Archive-readiness pending",
+          "Archive evidence carried forward",
+          "Closed account / no reopen needed",
+          "Post-close exception needs manager review",
+          "Unresolved evidence exception carried forward",
+          "Audit inquiry retrieval ready",
+          "Audit inquiry retrieval held",
+          "Audit inquiry retrieval needs evidence QA",
+          "Retention-readiness ready",
+          "Retention-readiness pending",
+          "Reopen approval not needed",
+          "Reopen request blocked pending approval",
+          "Manager/finance approval needed",
+          "Ready for mock inquiry lookup",
+          "Hold mock retrieval",
+          "Carry exception before retrieval",
+          "Not reopened / not retrieved / not exported / not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock post-close text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes(
+            "Static/mock post-close exception reopen, audit inquiry retrieval, and retention-readiness QA data only",
+          ) &&
+            state.copy.includes("internal review") &&
+            state.copy.includes("Nothing is reopened, retrieved, exported, archived, retained, billed, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence post-close copy`,
+        );
+        assert.equal(
+          state.note.includes("Post-close exception review - mock only") &&
+            state.note.includes("Audit inquiry retrieval QA - not saved") &&
+            state.note.includes("Retention-readiness review - not archived") &&
+            state.note.includes("Closed account/no reopen needed") &&
+            state.note.includes("audit inquiry retrieval ready") &&
+            state.note.includes("post-close exception needs manager review") &&
+            state.note.includes("retention-readiness pending") &&
+            state.note.includes("reopen request blocked pending approval") &&
+            state.note.includes("unresolved evidence exception carried forward") &&
+            state.note.includes("Not reopened / not retrieved / not exported / not billed"),
+          true,
+          `${viewport.label}: expected post-close audit retention note`,
+        );
+        assert.equal(
+          state.generation.includes("No post-close exception record generated") &&
+            state.generation.includes("No audit inquiry record generated") &&
+            state.generation.includes("No retrieval/export file generated") &&
+            state.generation.includes("No retention record generated") &&
+            state.generation.includes("No audit evidence file generated") &&
+            state.generation.includes("No finance sign-off record generated") &&
+            state.generation.includes("No archive record generated") &&
+            state.generation.includes("No audit export file generated") &&
+            state.generation.includes("No GL record generated") &&
+            state.generation.includes("No journal entry generated") &&
+            state.generation.includes("No accounting handoff generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No payment record generated") &&
+            state.generation.includes("No remittance record generated") &&
+            state.generation.includes("No dispute record generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No collection action created") &&
+            state.generation.includes("No credit note generated") &&
+            state.generation.includes("No write-off record generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no post-close/audit/retention/invoice/PDF generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "statement release",
+          "account charge",
+          "approval persistence",
+          "payment allocation persistence",
+          "remittance persistence",
+          "dispute persistence",
+          "AR close persistence",
+          "GL close persistence",
+          "accounting handoff persistence",
+          "journal entry persistence",
+          "audit export persistence",
+          "audit evidence persistence",
+          "finance sign-off persistence",
+          "archive persistence",
+          "retention persistence",
+          "post-close exception persistence",
+          "audit inquiry persistence",
+          "retrieval/export persistence",
+          "PDF",
+          "receivables record",
+          "collection record",
+          "credit note",
+          "write-off record",
+          "customer account posting",
+          "payment record",
+          "remittance record",
+          "dispute record",
+          "AR close record",
+          "GL record",
+          "journal entry",
+          "accounting handoff record",
+          "audit export file",
+          "audit evidence file",
+          "finance sign-off record",
+          "archive record",
+          "retention record",
+          "post-close exception record",
+          "audit inquiry record",
+          "retrieval/export file",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "reconcile",
+          "allocate",
+          "dispute",
+          "close",
+          "reopen",
+          "retrieve",
+          "export",
+          "archive",
+          "retain",
+          "notification",
+          "reminder",
+          "follow-up",
+          "collection",
+          "credit",
+          "write-off",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected post-close audit retention boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected post-close audit retention review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active post-close/audit/retention/bill/invoice/payment/PDF/post/export controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in post-close review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1280 : viewport.width < 1024 ? 900 : viewport.width < 1200 ? 720 : 620),
+          true,
+          `${viewport.label}: expected compact post-close audit retention review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected post-close audit retention rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected post-close audit retention review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -6566,6 +6920,9 @@ async function runChromeTest() {
             mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
               document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
             ),
+            mockPostCloseAuditRetentionReviewVisible: Boolean(
+              document.querySelector("[data-mock-post-close-audit-retention-review]"),
+            ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
               "static/mock receivables handoff qa",
@@ -6662,6 +7019,26 @@ async function runChromeTest() {
               "no finance sign-off record generated",
               "no archive record generated",
               "not signed off / not archived / not exported / not billed",
+              "post-close",
+              "audit / retention qa",
+              "static/mock post-close exception",
+              "audit inquiry retrieval",
+              "retention-readiness",
+              "finance close status",
+              "archive status",
+              "post-close exception status",
+              "audit inquiry retrieval status",
+              "retention-readiness status",
+              "reopen approval status",
+              "mock retrieval decision status",
+              "post-close exception review - mock only",
+              "audit inquiry retrieval qa - not saved",
+              "retention-readiness review - not archived",
+              "no post-close exception record generated",
+              "no audit inquiry record generated",
+              "no retrieval/export file generated",
+              "no retention record generated",
+              "not reopened / not retrieved / not exported / not billed",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -6761,6 +7138,11 @@ async function runChromeTest() {
           routeState.mockAuditEvidenceFinanceArchiveReviewVisible,
           false,
           `${routeName}: expected no internal mock audit evidence finance archive review`,
+        );
+        assert.equal(
+          routeState.mockPostCloseAuditRetentionReviewVisible,
+          false,
+          `${routeName}: expected no internal mock post-close audit retention review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -7385,6 +7767,9 @@ async function runChromeTest() {
           mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
             document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
           ),
+          mockPostCloseAuditRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-post-close-audit-retention-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -7559,6 +7944,26 @@ async function runChromeTest() {
             "no finance sign-off record generated",
             "no archive record generated",
             "not signed off / not archived / not exported / not billed",
+            "post-close",
+            "audit / retention qa",
+            "static/mock post-close exception",
+            "audit inquiry retrieval",
+            "retention-readiness",
+            "finance close status",
+            "archive status",
+            "post-close exception status",
+            "audit inquiry retrieval status",
+            "retention-readiness status",
+            "reopen approval status",
+            "mock retrieval decision status",
+            "post-close exception review - mock only",
+            "audit inquiry retrieval qa - not saved",
+            "retention-readiness review - not archived",
+            "no post-close exception record generated",
+            "no audit inquiry record generated",
+            "no retrieval/export file generated",
+            "no retention record generated",
+            "not reopened / not retrieved / not exported / not billed",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -8028,6 +8433,11 @@ async function runChromeTest() {
         dashboardState.mockAuditEvidenceFinanceArchiveReviewVisible,
         false,
         "Expected /customers not to show internal mock audit evidence finance archive review",
+      );
+      assert.equal(
+        dashboardState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        "Expected /customers not to show internal mock post-close audit retention review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -12889,6 +13299,9 @@ async function runChromeTest() {
               mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
                 document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
               ),
+              mockPostCloseAuditRetentionReviewVisible: Boolean(
+                document.querySelector("[data-mock-post-close-audit-retention-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -13016,6 +13429,11 @@ async function runChromeTest() {
         mobileDashboardState.mockAuditEvidenceFinanceArchiveReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock audit evidence finance archive review",
+      );
+      assert.equal(
+        mobileDashboardState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock post-close audit retention review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -13297,6 +13715,9 @@ async function runChromeTest() {
           mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
             document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
           ),
+          mockPostCloseAuditRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-post-close-audit-retention-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -13475,6 +13896,26 @@ async function runChromeTest() {
             "no finance sign-off record generated",
             "no archive record generated",
             "not signed off / not archived / not exported / not billed",
+            "post-close",
+            "audit / retention qa",
+            "static/mock post-close exception",
+            "audit inquiry retrieval",
+            "retention-readiness",
+            "finance close status",
+            "archive status",
+            "post-close exception status",
+            "audit inquiry retrieval status",
+            "retention-readiness status",
+            "reopen approval status",
+            "mock retrieval decision status",
+            "post-close exception review - mock only",
+            "audit inquiry retrieval qa - not saved",
+            "retention-readiness review - not archived",
+            "no post-close exception record generated",
+            "no audit inquiry record generated",
+            "no retrieval/export file generated",
+            "no retention record generated",
+            "not reopened / not retrieved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -13657,6 +14098,11 @@ async function runChromeTest() {
         initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
         false,
         "Expected /book not to show internal mock audit evidence finance archive review",
+      );
+      assert.equal(
+        initialState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        "Expected /book not to show internal mock post-close audit retention review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -14042,6 +14488,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock audit evidence finance archive review",
       );
       assert.equal(
+        mobileState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock post-close audit retention review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -14234,6 +14685,9 @@ async function runChromeTest() {
           mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
             document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
           ),
+          mockPostCloseAuditRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-post-close-audit-retention-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -14424,6 +14878,26 @@ async function runChromeTest() {
             "no finance sign-off record generated",
             "no archive record generated",
             "not signed off / not archived / not exported / not billed",
+            "post-close",
+            "audit / retention qa",
+            "static/mock post-close exception",
+            "audit inquiry retrieval",
+            "retention-readiness",
+            "finance close status",
+            "archive status",
+            "post-close exception status",
+            "audit inquiry retrieval status",
+            "retention-readiness status",
+            "reopen approval status",
+            "mock retrieval decision status",
+            "post-close exception review - mock only",
+            "audit inquiry retrieval qa - not saved",
+            "retention-readiness review - not archived",
+            "no post-close exception record generated",
+            "no audit inquiry record generated",
+            "no retrieval/export file generated",
+            "no retention record generated",
+            "not reopened / not retrieved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -14832,6 +15306,11 @@ async function runChromeTest() {
         initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock audit evidence finance archive review",
+      );
+      assert.equal(
+        initialState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock post-close audit retention review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -15637,6 +16116,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock audit evidence finance archive review",
       );
       assert.equal(
+        mobileState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock post-close audit retention review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -15870,6 +16354,9 @@ async function runChromeTest() {
           mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
             document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
           ),
+          mockPostCloseAuditRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-post-close-audit-retention-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
@@ -16051,6 +16538,26 @@ async function runChromeTest() {
             "no finance sign-off record generated",
             "no archive record generated",
             "not signed off / not archived / not exported / not billed",
+            "post-close",
+            "audit / retention qa",
+            "static/mock post-close exception",
+            "audit inquiry retrieval",
+            "retention-readiness",
+            "finance close status",
+            "archive status",
+            "post-close exception status",
+            "audit inquiry retrieval status",
+            "retention-readiness status",
+            "reopen approval status",
+            "mock retrieval decision status",
+            "post-close exception review - mock only",
+            "audit inquiry retrieval qa - not saved",
+            "retention-readiness review - not archived",
+            "no post-close exception record generated",
+            "no audit inquiry record generated",
+            "no retrieval/export file generated",
+            "no retention record generated",
+            "not reopened / not retrieved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -16159,6 +16666,11 @@ async function runChromeTest() {
         initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
         false,
         `${viewport.label}: expected no internal mock audit evidence finance archive review on driver job link`,
+      );
+      assert.equal(
+        initialState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock post-close audit retention review on driver job link`,
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -16662,6 +17174,9 @@ async function runChromeTest() {
           mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
             document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
           ),
+          mockPostCloseAuditRetentionReviewVisible: Boolean(
+            document.querySelector("[data-mock-post-close-audit-retention-review]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -16864,6 +17379,26 @@ async function runChromeTest() {
             "no finance sign-off record generated",
             "no archive record generated",
             "not signed off / not archived / not exported / not billed",
+            "post-close",
+            "audit / retention qa",
+            "static/mock post-close exception",
+            "audit inquiry retrieval",
+            "retention-readiness",
+            "finance close status",
+            "archive status",
+            "post-close exception status",
+            "audit inquiry retrieval status",
+            "retention-readiness status",
+            "reopen approval status",
+            "mock retrieval decision status",
+            "post-close exception review - mock only",
+            "audit inquiry retrieval qa - not saved",
+            "retention-readiness review - not archived",
+            "no post-close exception record generated",
+            "no audit inquiry record generated",
+            "no retrieval/export file generated",
+            "no retention record generated",
+            "not reopened / not retrieved / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -16974,6 +17509,11 @@ async function runChromeTest() {
         initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
         false,
         `${viewport.label}: expected no internal mock audit evidence finance archive review on driver demo`,
+      );
+      assert.equal(
+        initialState.mockPostCloseAuditRetentionReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock post-close audit retention review on driver demo`,
       );
       assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
@@ -18529,6 +19069,8 @@ async function runChromeTest() {
       await checkAdminMockAccountingHandoffGlAuditReview();
     state.adminMockAuditEvidenceFinanceArchiveReview =
       await checkAdminMockAuditEvidenceFinanceArchiveReview();
+    state.adminMockPostCloseAuditRetentionReview =
+      await checkAdminMockPostCloseAuditRetentionReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

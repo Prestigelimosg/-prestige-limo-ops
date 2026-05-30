@@ -8775,6 +8775,135 @@ export default function Home() {
             close, export, notification, reminder, follow-up, collection, credit, write-off, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock audit evidence packet finance close sign-off and archive-readiness QA review"
+          className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-audit-evidence-finance-archive-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-amber-700">Audit Evidence</span>{" "}
+                <span className="text-slate-600">Finance / Archive QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-audit-evidence-finance-archive-review-copy="true"
+              >
+                Static/mock audit evidence packet, finance close sign-off, and archive-readiness QA data only for
+                internal review. Nothing is signed off, archived, exported, billed, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-audit-evidence-finance-archive-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    accountingHandoff: "Accounting handoff ready",
+                    archiveReadiness: "Archive-readiness ready for mock review",
+                    auditEvidence: "Audit evidence packet ready",
+                    financeSignoff: "Finance close sign-off ready",
+                    managerFinanceApproval: "Manager/finance approval not needed",
+                    month: "May 2026",
+                    archiveDecision: "Ready for mock archive review",
+                    status: "Not signed off / not archived / not exported / not billed",
+                    unresolvedEvidence: "No unresolved evidence exception carry-forward",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    accountingHandoff: "Accounting handoff pending",
+                    archiveReadiness: "Archive-readiness pending",
+                    auditEvidence: "Evidence exception needs review",
+                    financeSignoff: "Finance sign-off needed",
+                    managerFinanceApproval: "Manager/finance approval needed",
+                    month: "May 2026",
+                    archiveDecision: "Hold finance sign-off",
+                    status: "Not signed off / not archived / not exported / not billed",
+                    unresolvedEvidence: "Unresolved short-pay evidence exception carried forward",
+                  },
+                  {
+                    account: "VIP Customer",
+                    accountingHandoff: "Accounting handoff held",
+                    archiveReadiness: "Archive-readiness pending",
+                    auditEvidence: "Credit carry-forward evidence pending",
+                    financeSignoff: "Finance close sign-off pending",
+                    managerFinanceApproval: "Manager/finance approval needed",
+                    month: "May 2026",
+                    archiveDecision: "Carry evidence before archive",
+                    status: "Not signed off / not archived / not exported / not billed",
+                    unresolvedEvidence: "Unresolved evidence exception carried forward",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-amber-200 bg-amber-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-5 xl:grid-cols-10"
+                    data-mock-audit-evidence-finance-archive-review-row={`${row.account}-${row.month}`}
+                    key={`${row.account}-${row.month}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Accounting handoff status", "Acct handoff", row.accountingHandoff],
+                      ["Audit evidence packet status", "Evidence", row.auditEvidence],
+                      ["Finance close sign-off status", "Finance sign-off", row.financeSignoff],
+                      ["Archive-readiness status", "Archive ready", row.archiveReadiness],
+                      ["Unresolved evidence exception carry-forward status", "Carry", row.unresolvedEvidence],
+                      ["Manager/finance approval status", "Mgr/fin QA", row.managerFinanceApproval],
+                      ["Mock archive decision status", "Decision", row.archiveDecision],
+                      ["Not-signed-off/not-archived/not-exported/not-billed status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-amber-700"
+                          data-mock-audit-evidence-finance-archive-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-audit-evidence-finance-archive-review-note="true"
+                >
+                  Audit evidence packet review - mock only. Finance close sign-off QA - not saved.
+                  Archive-readiness review - not archived. Audit evidence packet ready, finance sign-off needed,
+                  archive-readiness pending, manager/finance approval needed, and unresolved evidence exception carried
+                  forward. Not signed off / not archived / not exported / not billed.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-audit-evidence-finance-archive-review-generation="true"
+                >
+                  No audit evidence file generated. No finance sign-off record generated. No archive record generated.
+                  No audit export file generated. No GL record generated. No journal entry generated. No accounting
+                  handoff generated. No customer account posting generated. No invoice number generated. No PDF
+                  generated. No payment link generated. No payment record generated. No remittance record generated.
+                  No dispute record generated. No receivables record generated. No collection action created. No
+                  credit note generated. No write-off record generated. No accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-audit-evidence-finance-archive-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, approval
+            persistence, payment allocation persistence, remittance persistence, dispute persistence, AR close
+            persistence, GL close persistence, accounting handoff persistence, journal entry persistence, audit export
+            persistence, audit evidence persistence, finance sign-off persistence, archive persistence, PDF,
+            receivables record, collection record, credit note, write-off record, customer account posting, payment
+            record, remittance record, dispute record, AR close record, GL record, journal entry, accounting handoff
+            record, audit export file, audit evidence file, finance sign-off record, archive record, storage, API call,
+            save, post, reconcile, allocate, dispute, close, export, archive, notification, reminder, follow-up,
+            collection, credit, write-off, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

@@ -513,6 +513,9 @@ async function runChromeTest() {
       const mockAccountingHandoffGlAuditReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"))`,
       );
+      const mockAuditEvidenceFinanceArchiveReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-audit-evidence-finance-archive-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -620,6 +623,11 @@ async function runChromeTest() {
         mockAccountingHandoffGlAuditReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock accounting handoff GL audit review`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock audit evidence finance archive review`,
       );
     };
 
@@ -2907,6 +2915,193 @@ async function runChromeTest() {
         `${viewport.label}: expected accounting handoff GL audit review not to create horizontal overflow`,
       );
 
+      const mockAuditEvidenceFinanceArchiveReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const review = document.querySelector("[data-mock-audit-evidence-finance-archive-review]");
+            if (!group || !dashboard || !review) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-audit-evidence-finance-archive-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-audit-evidence-finance-archive-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-audit-evidence-finance-archive-review-column]")].map(
+                  (column) => column.getAttribute("data-mock-audit-evidence-finance-archive-review-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-audit-evidence-finance-archive-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              copy:
+                document.querySelector("[data-mock-audit-evidence-finance-archive-review-copy]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-audit-evidence-finance-archive-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-audit-evidence-finance-archive-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock audit evidence finance archive review`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.groupTop >=
+          mockAuditEvidenceFinanceArchiveReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected audit evidence finance archive review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.text.toLowerCase().includes("audit evidence") &&
+          mockAuditEvidenceFinanceArchiveReviewState.text.toLowerCase().includes("finance / archive qa"),
+        true,
+        `${viewport.label}: expected mock audit evidence finance archive review`,
+      );
+      assert.deepEqual(
+        mockAuditEvidenceFinanceArchiveReviewState.columns,
+        [
+          "Customer/account",
+          "Statement month",
+          "Accounting handoff status",
+          "Audit evidence packet status",
+          "Finance close sign-off status",
+          "Archive-readiness status",
+          "Unresolved evidence exception carry-forward status",
+          "Manager/finance approval status",
+          "Mock archive decision status",
+          "Not-signed-off/not-archived/not-exported/not-billed status",
+        ],
+        `${viewport.label}: expected audit evidence finance archive columns`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.copy.includes(
+          "Static/mock audit evidence packet, finance close sign-off, and archive-readiness QA data only",
+        ) &&
+          mockAuditEvidenceFinanceArchiveReviewState.copy.includes("internal review") &&
+          mockAuditEvidenceFinanceArchiveReviewState.copy.includes(
+            "Nothing is signed off, archived, exported, billed, saved, generated, or sent",
+          ),
+        true,
+        `${viewport.label}: expected static no-persistence audit evidence copy`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.text.includes("Audit evidence packet ready") &&
+          mockAuditEvidenceFinanceArchiveReviewState.text.includes("Finance sign-off needed") &&
+          mockAuditEvidenceFinanceArchiveReviewState.text.includes("Archive-readiness pending") &&
+          mockAuditEvidenceFinanceArchiveReviewState.text.includes("Manager/finance approval needed") &&
+          mockAuditEvidenceFinanceArchiveReviewState.text.includes("Unresolved evidence exception carried forward") &&
+          mockAuditEvidenceFinanceArchiveReviewState.text.includes(
+            "Not signed off / not archived / not exported / not billed",
+          ),
+        true,
+        `${viewport.label}: expected static audit evidence finance archive scenarios`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.note.includes("Audit evidence packet review - mock only") &&
+          mockAuditEvidenceFinanceArchiveReviewState.note.includes("Finance close sign-off QA - not saved") &&
+          mockAuditEvidenceFinanceArchiveReviewState.note.includes("Archive-readiness review - not archived") &&
+          mockAuditEvidenceFinanceArchiveReviewState.note.includes("Audit evidence packet ready") &&
+          mockAuditEvidenceFinanceArchiveReviewState.note.includes("finance sign-off needed") &&
+          mockAuditEvidenceFinanceArchiveReviewState.note.includes("archive-readiness pending") &&
+          mockAuditEvidenceFinanceArchiveReviewState.note.includes("manager/finance approval needed") &&
+          mockAuditEvidenceFinanceArchiveReviewState.note.includes("unresolved evidence exception carried forward"),
+        true,
+        `${viewport.label}: expected audit evidence finance archive note`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No audit evidence file generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No finance sign-off record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No archive record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No audit export file generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No GL record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No journal entry generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No accounting handoff generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No customer account posting generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No invoice number generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No PDF generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No payment link generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No payment record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No remittance record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No dispute record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No receivables record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No collection action created") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No credit note generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No write-off record generated") &&
+          mockAuditEvidenceFinanceArchiveReviewState.generation.includes("No accounting record generated"),
+        true,
+        `${viewport.label}: expected audit evidence no archive/export/invoice/PDF generation`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("Mock/local only.") &&
+          mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("No billing automation") &&
+          mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("audit export persistence") &&
+          mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("audit evidence persistence") &&
+          mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("finance sign-off persistence") &&
+          mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("archive persistence") &&
+          mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("storage") &&
+          mockAuditEvidenceFinanceArchiveReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected audit evidence no billing/archive/storage/API boundary`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.actionCount,
+        0,
+        `${viewport.label}: expected audit evidence finance archive review to stay display-only`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.rows.length,
+        3,
+        `${viewport.label}: expected three static mock audit evidence rows`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.height <=
+          (viewport.width < 640 ? 1180 : viewport.width < 1024 ? 840 : viewport.width < 1200 ? 680 : 580),
+        true,
+        `${viewport.label}: expected compact audit evidence finance archive review, got ${mockAuditEvidenceFinanceArchiveReviewState.height}px`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected audit evidence finance archive rows to stay readable`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewState.docScrollWidth <=
+          mockAuditEvidenceFinanceArchiveReviewState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected audit evidence finance archive review not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -2988,6 +3183,9 @@ async function runChromeTest() {
       );
       const mockAccountingHandoffGlAuditReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"))`,
+      );
+      const mockAuditEvidenceFinanceArchiveReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-audit-evidence-finance-archive-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -3122,6 +3320,11 @@ async function runChromeTest() {
         mockAccountingHandoffGlAuditReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock accounting handoff GL audit review`,
+      );
+      assert.equal(
+        mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock audit evidence finance archive review`,
       );
       if (context === "driver job demo") {
         assert.equal(

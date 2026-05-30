@@ -674,6 +674,7 @@ async function runChromeTest() {
         "[data-mock-payment-allocation-remittance-review]",
         "[data-mock-month-end-ar-close-review]",
         "[data-mock-accounting-handoff-gl-audit-review]",
+        "[data-mock-audit-evidence-finance-archive-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -722,7 +723,8 @@ async function runChromeTest() {
             state.text.includes("Receivables Handoff") &&
             state.text.includes("Receivables Aging") &&
             state.text.includes("Month-end AR Close") &&
-            state.text.includes("Accounting Handoff"),
+            state.text.includes("Accounting Handoff") &&
+            state.text.includes("Audit Evidence"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -5585,6 +5587,340 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockAuditEvidenceFinanceArchiveReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1040,
+          label: "mobile mock audit evidence finance archive review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock audit evidence finance archive review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const section = document.querySelector("[data-mock-audit-evidence-finance-archive-review]");
+              if (!group || !dashboard || !section) {
+                return false;
+              }
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const rows = [...section.querySelectorAll("[data-mock-audit-evidence-finance-archive-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-audit-evidence-finance-archive-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-audit-evidence-finance-archive-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-audit-evidence-finance-archive-review-column") || "",
+                  ),
+                ),
+              ];
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-audit-evidence-finance-archive-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-audit-evidence-finance-archive-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "allocate now",
+                  "approve now",
+                  "archive now",
+                  "bill now",
+                  "close now",
+                  "create archive",
+                  "create audit evidence",
+                  "create finance sign-off",
+                  "create invoice",
+                  "create payment",
+                  "create payment link",
+                  "export now",
+                  "generate archive",
+                  "generate audit evidence",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "notify customer",
+                  "post accounting",
+                  "post now",
+                  "reconcile now",
+                  "release now",
+                  "save archive",
+                  "save audit evidence",
+                  "save finance sign-off",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-audit-evidence-finance-archive-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-audit-evidence-finance-archive-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock audit evidence finance archive review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected audit evidence finance archive review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("audit evidence") &&
+            state.text.toLowerCase().includes("finance / archive qa"),
+          true,
+          `${viewport.label}: expected audit evidence finance archive heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Accounting handoff status",
+            "Audit evidence packet status",
+            "Finance close sign-off status",
+            "Archive-readiness status",
+            "Unresolved evidence exception carry-forward status",
+            "Manager/finance approval status",
+            "Mock archive decision status",
+            "Not-signed-off/not-archived/not-exported/not-billed status",
+          ],
+          `${viewport.label}: expected mock audit evidence finance archive columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three static mock audit evidence rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026",
+          "Accounting handoff ready",
+          "Accounting handoff pending",
+          "Accounting handoff held",
+          "Audit evidence packet ready",
+          "Evidence exception needs review",
+          "Credit carry-forward evidence pending",
+          "Finance close sign-off ready",
+          "Finance sign-off needed",
+          "Finance close sign-off pending",
+          "Archive-readiness ready for mock review",
+          "Archive-readiness pending",
+          "No unresolved evidence exception carry-forward",
+          "Unresolved short-pay evidence exception carried forward",
+          "Unresolved evidence exception carried forward",
+          "Manager/finance approval not needed",
+          "Manager/finance approval needed",
+          "Ready for mock archive review",
+          "Hold finance sign-off",
+          "Carry evidence before archive",
+          "Not signed off / not archived / not exported / not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock audit evidence text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes(
+            "Static/mock audit evidence packet, finance close sign-off, and archive-readiness QA data only",
+          ) &&
+            state.copy.includes("internal review") &&
+            state.copy.includes("Nothing is signed off, archived, exported, billed, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence audit evidence copy`,
+        );
+        assert.equal(
+          state.note.includes("Audit evidence packet review - mock only") &&
+            state.note.includes("Finance close sign-off QA - not saved") &&
+            state.note.includes("Archive-readiness review - not archived") &&
+            state.note.includes("Audit evidence packet ready") &&
+            state.note.includes("finance sign-off needed") &&
+            state.note.includes("archive-readiness pending") &&
+            state.note.includes("manager/finance approval needed") &&
+            state.note.includes("unresolved evidence exception carried forward") &&
+            state.note.includes("Not signed off / not archived / not exported / not billed"),
+          true,
+          `${viewport.label}: expected audit evidence finance archive note`,
+        );
+        assert.equal(
+          state.generation.includes("No audit evidence file generated") &&
+            state.generation.includes("No finance sign-off record generated") &&
+            state.generation.includes("No archive record generated") &&
+            state.generation.includes("No audit export file generated") &&
+            state.generation.includes("No GL record generated") &&
+            state.generation.includes("No journal entry generated") &&
+            state.generation.includes("No accounting handoff generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No payment record generated") &&
+            state.generation.includes("No remittance record generated") &&
+            state.generation.includes("No dispute record generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No collection action created") &&
+            state.generation.includes("No credit note generated") &&
+            state.generation.includes("No write-off record generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no audit evidence/archive/payment/remittance/dispute/invoice/PDF generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "statement release",
+          "account charge",
+          "approval persistence",
+          "payment allocation persistence",
+          "remittance persistence",
+          "dispute persistence",
+          "AR close persistence",
+          "GL close persistence",
+          "accounting handoff persistence",
+          "journal entry persistence",
+          "audit export persistence",
+          "audit evidence persistence",
+          "finance sign-off persistence",
+          "archive persistence",
+          "PDF",
+          "receivables record",
+          "collection record",
+          "credit note",
+          "write-off record",
+          "customer account posting",
+          "payment record",
+          "remittance record",
+          "dispute record",
+          "AR close record",
+          "GL record",
+          "journal entry",
+          "accounting handoff record",
+          "audit export file",
+          "audit evidence file",
+          "finance sign-off record",
+          "archive record",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "reconcile",
+          "allocate",
+          "dispute",
+          "close",
+          "export",
+          "archive",
+          "notification",
+          "reminder",
+          "follow-up",
+          "collection",
+          "credit",
+          "write-off",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected audit evidence finance archive boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected audit evidence finance archive review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active audit/finance/archive/bill/invoice/payment/PDF/post/export controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in audit evidence review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1180 : viewport.width < 1024 ? 840 : viewport.width < 1200 ? 680 : 580),
+          true,
+          `${viewport.label}: expected compact audit evidence finance archive review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected audit evidence finance archive rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected audit evidence finance archive review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -6227,6 +6563,9 @@ async function runChromeTest() {
             mockAccountingHandoffGlAuditReviewVisible: Boolean(
               document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"),
             ),
+            mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
+              document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
+            ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
               "static/mock receivables handoff qa",
@@ -6307,6 +6646,22 @@ async function runChromeTest() {
               "no journal entry generated",
               "no audit export file generated",
               "not handed off / not posted / not exported / not billed",
+              "audit evidence",
+              "finance / archive qa",
+              "static/mock audit evidence packet",
+              "audit evidence packet status",
+              "finance close sign-off status",
+              "archive-readiness status",
+              "unresolved evidence exception carry-forward status",
+              "manager/finance approval status",
+              "mock archive decision status",
+              "audit evidence packet review - mock only",
+              "finance close sign-off qa - not saved",
+              "archive-readiness review - not archived",
+              "no audit evidence file generated",
+              "no finance sign-off record generated",
+              "no archive record generated",
+              "not signed off / not archived / not exported / not billed",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -6401,6 +6756,11 @@ async function runChromeTest() {
           routeState.mockAccountingHandoffGlAuditReviewVisible,
           false,
           `${routeName}: expected no internal mock accounting handoff GL audit review`,
+        );
+        assert.equal(
+          routeState.mockAuditEvidenceFinanceArchiveReviewVisible,
+          false,
+          `${routeName}: expected no internal mock audit evidence finance archive review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -7022,6 +7382,9 @@ async function runChromeTest() {
           mockAccountingHandoffGlAuditReviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"),
           ),
+          mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
+            document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -7180,6 +7543,22 @@ async function runChromeTest() {
             "no journal entry generated",
             "no audit export file generated",
             "not handed off / not posted / not exported / not billed",
+            "audit evidence",
+            "finance / archive qa",
+            "static/mock audit evidence packet",
+            "audit evidence packet status",
+            "finance close sign-off status",
+            "archive-readiness status",
+            "unresolved evidence exception carry-forward status",
+            "manager/finance approval status",
+            "mock archive decision status",
+            "audit evidence packet review - mock only",
+            "finance close sign-off qa - not saved",
+            "archive-readiness review - not archived",
+            "no audit evidence file generated",
+            "no finance sign-off record generated",
+            "no archive record generated",
+            "not signed off / not archived / not exported / not billed",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -7644,6 +8023,11 @@ async function runChromeTest() {
         dashboardState.mockAccountingHandoffGlAuditReviewVisible,
         false,
         "Expected /customers not to show internal mock accounting handoff GL audit review",
+      );
+      assert.equal(
+        dashboardState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        "Expected /customers not to show internal mock audit evidence finance archive review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -12502,6 +12886,9 @@ async function runChromeTest() {
               mockAccountingHandoffGlAuditReviewVisible: Boolean(
                 document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"),
               ),
+              mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
+                document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -12624,6 +13011,11 @@ async function runChromeTest() {
         mobileDashboardState.mockAccountingHandoffGlAuditReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock accounting handoff GL audit review",
+      );
+      assert.equal(
+        mobileDashboardState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock audit evidence finance archive review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -12902,6 +13294,9 @@ async function runChromeTest() {
           mockAccountingHandoffGlAuditReviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"),
           ),
+          mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
+            document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -13064,6 +13459,22 @@ async function runChromeTest() {
             "no journal entry generated",
             "no audit export file generated",
             "not handed off / not posted / not exported / not billed",
+            "audit evidence",
+            "finance / archive qa",
+            "static/mock audit evidence packet",
+            "audit evidence packet status",
+            "finance close sign-off status",
+            "archive-readiness status",
+            "unresolved evidence exception carry-forward status",
+            "manager/finance approval status",
+            "mock archive decision status",
+            "audit evidence packet review - mock only",
+            "finance close sign-off qa - not saved",
+            "archive-readiness review - not archived",
+            "no audit evidence file generated",
+            "no finance sign-off record generated",
+            "no archive record generated",
+            "not signed off / not archived / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -13241,6 +13652,11 @@ async function runChromeTest() {
         initialState.mockAccountingHandoffGlAuditReviewVisible,
         false,
         "Expected /book not to show internal mock accounting handoff GL audit review",
+      );
+      assert.equal(
+        initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        "Expected /book not to show internal mock audit evidence finance archive review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -13621,6 +14037,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock accounting handoff GL audit review",
       );
       assert.equal(
+        mobileState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock audit evidence finance archive review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -13810,6 +14231,9 @@ async function runChromeTest() {
           mockAccountingHandoffGlAuditReviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"),
           ),
+          mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
+            document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -13984,6 +14408,22 @@ async function runChromeTest() {
             "no journal entry generated",
             "no audit export file generated",
             "not handed off / not posted / not exported / not billed",
+            "audit evidence",
+            "finance / archive qa",
+            "static/mock audit evidence packet",
+            "audit evidence packet status",
+            "finance close sign-off status",
+            "archive-readiness status",
+            "unresolved evidence exception carry-forward status",
+            "manager/finance approval status",
+            "mock archive decision status",
+            "audit evidence packet review - mock only",
+            "finance close sign-off qa - not saved",
+            "archive-readiness review - not archived",
+            "no audit evidence file generated",
+            "no finance sign-off record generated",
+            "no archive record generated",
+            "not signed off / not archived / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -14387,6 +14827,11 @@ async function runChromeTest() {
         initialState.mockAccountingHandoffGlAuditReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock accounting handoff GL audit review",
+      );
+      assert.equal(
+        initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock audit evidence finance archive review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -15187,6 +15632,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock accounting handoff GL audit review",
       );
       assert.equal(
+        mobileState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock audit evidence finance archive review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -15417,6 +15867,9 @@ async function runChromeTest() {
           mockAccountingHandoffGlAuditReviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"),
           ),
+          mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
+            document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           docClientWidth: doc.clientWidth,
@@ -15582,6 +16035,22 @@ async function runChromeTest() {
             "no journal entry generated",
             "no audit export file generated",
             "not handed off / not posted / not exported / not billed",
+            "audit evidence",
+            "finance / archive qa",
+            "static/mock audit evidence packet",
+            "audit evidence packet status",
+            "finance close sign-off status",
+            "archive-readiness status",
+            "unresolved evidence exception carry-forward status",
+            "manager/finance approval status",
+            "mock archive decision status",
+            "audit evidence packet review - mock only",
+            "finance close sign-off qa - not saved",
+            "archive-readiness review - not archived",
+            "no audit evidence file generated",
+            "no finance sign-off record generated",
+            "no archive record generated",
+            "not signed off / not archived / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -15685,6 +16154,11 @@ async function runChromeTest() {
         initialState.mockAccountingHandoffGlAuditReviewVisible,
         false,
         `${viewport.label}: expected no internal mock accounting handoff GL audit review on driver job link`,
+      );
+      assert.equal(
+        initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock audit evidence finance archive review on driver job link`,
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -16185,6 +16659,9 @@ async function runChromeTest() {
           mockAccountingHandoffGlAuditReviewVisible: Boolean(
             document.querySelector("[data-mock-accounting-handoff-gl-audit-review]"),
           ),
+          mockAuditEvidenceFinanceArchiveReviewVisible: Boolean(
+            document.querySelector("[data-mock-audit-evidence-finance-archive-review]"),
+          ),
           mockDriverDetailWorkflow: {
             actionCount: document.querySelector("[data-driver-demo-detail-workflow-preview]")
               ?.querySelectorAll("button, a, input, select, textarea, form").length || 0,
@@ -16371,6 +16848,22 @@ async function runChromeTest() {
             "no journal entry generated",
             "no audit export file generated",
             "not handed off / not posted / not exported / not billed",
+            "audit evidence",
+            "finance / archive qa",
+            "static/mock audit evidence packet",
+            "audit evidence packet status",
+            "finance close sign-off status",
+            "archive-readiness status",
+            "unresolved evidence exception carry-forward status",
+            "manager/finance approval status",
+            "mock archive decision status",
+            "audit evidence packet review - mock only",
+            "finance close sign-off qa - not saved",
+            "archive-readiness review - not archived",
+            "no audit evidence file generated",
+            "no finance sign-off record generated",
+            "no archive record generated",
+            "not signed off / not archived / not exported / not billed",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -16476,6 +16969,11 @@ async function runChromeTest() {
         initialState.mockAccountingHandoffGlAuditReviewVisible,
         false,
         `${viewport.label}: expected no internal mock accounting handoff GL audit review on driver demo`,
+      );
+      assert.equal(
+        initialState.mockAuditEvidenceFinanceArchiveReviewVisible,
+        false,
+        `${viewport.label}: expected no internal mock audit evidence finance archive review on driver demo`,
       );
       assert.equal(
         initialState.mockDriverDetailWorkflow.visible,
@@ -18029,6 +18527,8 @@ async function runChromeTest() {
     state.adminMockMonthEndArCloseReview = await checkAdminMockMonthEndArCloseReview();
     state.adminMockAccountingHandoffGlAuditReview =
       await checkAdminMockAccountingHandoffGlAuditReview();
+    state.adminMockAuditEvidenceFinanceArchiveReview =
+      await checkAdminMockAuditEvidenceFinanceArchiveReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

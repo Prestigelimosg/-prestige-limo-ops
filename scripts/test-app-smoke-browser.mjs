@@ -670,6 +670,7 @@ async function runChromeTest() {
         "[data-mock-statement-variance-review]",
         "[data-mock-receivables-handoff-review]",
         "[data-mock-receivables-aging-follow-up-review]",
+        "[data-mock-collections-credit-writeoff-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -4330,6 +4331,299 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockCollectionsCreditWriteoffReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1040,
+          label: "mobile mock collections credit write-off review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock collections credit write-off review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-mock-collections-credit-writeoff-review]");
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              if (!section || !group || !dashboard || !group.contains(section)) {
+                return false;
+              }
+
+              const sectionRect = section.getBoundingClientRect();
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const rows = [...section.querySelectorAll("[data-mock-collections-credit-writeoff-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-collections-credit-writeoff-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-collections-credit-writeoff-review-column]")].map(
+                    (column) => column.getAttribute("data-mock-collections-credit-writeoff-review-column") || "",
+                  ),
+                ),
+              ];
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-collections-credit-writeoff-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                copy:
+                  document.querySelector("[data-mock-collections-credit-writeoff-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "release now",
+                  "bill now",
+                  "collect now",
+                  "create collection",
+                  "create credit note",
+                  "create invoice",
+                  "create payment link",
+                  "create write-off",
+                  "generate credit note",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "post accounting",
+                  "post now",
+                  "save credit",
+                  "save escalation",
+                  "save write-off",
+                  "send reminder",
+                  "send statement",
+                  "send notification",
+                  "write off now",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "payout",
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-collections-credit-writeoff-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-collections-credit-writeoff-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                columns,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock collections credit write-off review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected collections credit write-off review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("collections escalation"),
+          true,
+          `${viewport.label}: expected collections escalation heading`,
+        );
+        assert.equal(
+          state.text.includes("Credit Write-off QA"),
+          true,
+          `${viewport.label}: expected credit write-off QA title`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month",
+            "Mock aging bucket",
+            "Days outstanding",
+            "Escalation QA status",
+            "Follow-up status",
+            "Credit/write-off review status",
+            "Exception carry-forward status",
+            "Mock decision status",
+            "Not-sent/not-posted/not-billed/not-written-off status",
+          ],
+          `${viewport.label}: expected mock collections credit write-off columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three static mock collections rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026",
+          "Current / no escalation",
+          "1-30 day review",
+          "31-60 day review",
+          "0 days",
+          "18 days",
+          "42 days",
+          "Escalation not due",
+          "Follow-up ready",
+          "Escalation needs manager review",
+          "Credit/write-off candidate review",
+          "Exception carried forward",
+          "Review write-off candidate",
+          "Not sent / not posted / not billed / not written off",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock collections text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static/mock collections escalation and credit/write-off QA data only") &&
+            state.copy.includes("internal review") &&
+            state.copy.includes("Nothing is escalated, credited, written off, posted, billed, saved, generated, or sent"),
+          true,
+          `${viewport.label}: expected static/mock no-persistence collections copy`,
+        );
+        assert.equal(
+          state.note.includes("Collections escalation review - mock only") &&
+            state.note.includes("Credit/write-off QA - not saved") &&
+            state.note.includes("Current account/no escalation") &&
+            state.note.includes("follow-up ready") &&
+            state.note.includes("escalation needs manager review") &&
+            state.note.includes("credit/write-off candidate review") &&
+            state.note.includes("exception carried forward") &&
+            state.note.includes("Not sent / not posted / not billed / not written off"),
+          true,
+          `${viewport.label}: expected collections escalation and credit/write-off note`,
+        );
+        assert.equal(
+          state.generation.includes("No customer reminder generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No collection action created") &&
+            state.generation.includes("No credit note generated") &&
+            state.generation.includes("No write-off record generated") &&
+            state.generation.includes("No receivables record generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No customer account posting generated") &&
+            state.generation.includes("No accounting record generated"),
+          true,
+          `${viewport.label}: expected no reminder/payment/collection/credit/write-off/invoice/PDF/posting generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "payment",
+          "statement release",
+          "account charge",
+          "approval persistence",
+          "aging persistence",
+          "follow-up persistence",
+          "collection persistence",
+          "credit note persistence",
+          "write-off persistence",
+          "PDF",
+          "receivables record",
+          "collection record",
+          "credit note",
+          "write-off record",
+          "customer account posting",
+          "storage",
+          "API call",
+          "save",
+          "post",
+          "notification",
+          "reminder",
+          "escalation",
+          "follow-up",
+          "collection",
+          "credit",
+          "write-off",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected collections boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected collections credit write-off review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active collection/credit/write-off/bill/invoice/payment/PDF/post controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no payout/proof/replacement/private/PayNow details in collections review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1100 : viewport.width < 1024 ? 760 : viewport.width < 1200 ? 620 : 520),
+          true,
+          `${viewport.label}: expected compact collections credit write-off review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected collections credit write-off rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected collections credit write-off review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -4960,6 +5254,9 @@ async function runChromeTest() {
             mockReceivablesAgingFollowUpReviewVisible: Boolean(
               document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
             ),
+            mockCollectionsCreditWriteoffReviewVisible: Boolean(
+              document.querySelector("[data-mock-collections-credit-writeoff-review]"),
+            ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
               "static/mock receivables handoff qa",
@@ -4980,6 +5277,16 @@ async function runChromeTest() {
               "no customer reminder generated",
               "no collection action created",
               "not sent / not posted / not billed",
+              "collections escalation",
+              "credit write-off qa",
+              "static/mock collections escalation",
+              "credit/write-off qa",
+              "escalation qa status",
+              "credit/write-off review status",
+              "mock decision status",
+              "no credit note generated",
+              "no write-off record generated",
+              "not sent / not posted / not billed / not written off",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -5054,6 +5361,11 @@ async function runChromeTest() {
           routeState.mockReceivablesAgingFollowUpReviewVisible,
           false,
           `${routeName}: expected no internal mock receivables aging follow-up review`,
+        );
+        assert.equal(
+          routeState.mockCollectionsCreditWriteoffReviewVisible,
+          false,
+          `${routeName}: expected no internal mock collections credit write-off review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -5663,6 +5975,9 @@ async function runChromeTest() {
           mockReceivablesAgingFollowUpReviewVisible: Boolean(
             document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
           ),
+          mockCollectionsCreditWriteoffReviewVisible: Boolean(
+            document.querySelector("[data-mock-collections-credit-writeoff-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
@@ -5761,6 +6076,16 @@ async function runChromeTest() {
             "no customer reminder generated",
             "no collection action created",
             "not sent / not posted / not billed",
+            "collections escalation",
+            "credit write-off qa",
+            "static/mock collections escalation",
+            "credit/write-off qa",
+            "escalation qa status",
+            "credit/write-off review status",
+            "mock decision status",
+            "no credit note generated",
+            "no write-off record generated",
+            "not sent / not posted / not billed / not written off",
           ].filter((value) => text.toLowerCase().includes(value)),
           helperVisible: Boolean(document.querySelector("[data-customer-search-helper]")),
           links: [...document.querySelectorAll("[data-open-customer-folder]")].map((link) => link.getAttribute("href")),
@@ -6205,6 +6530,11 @@ async function runChromeTest() {
         dashboardState.mockReceivablesAgingFollowUpReviewVisible,
         false,
         "Expected /customers not to show internal mock receivables aging follow-up review",
+      );
+      assert.equal(
+        dashboardState.mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        "Expected /customers not to show internal mock collections credit write-off review",
       );
       assert.equal(
         dashboardState.driverDemoDetailWorkflowVisible,
@@ -10777,6 +11107,16 @@ async function runChromeTest() {
             "customer account posting generated",
             "accounting record generated",
             "not billed / not posted",
+            "collections escalation",
+            "credit write-off qa",
+            "static/mock collections escalation",
+            "credit/write-off qa",
+            "escalation qa status",
+            "credit/write-off review status",
+            "mock decision status",
+            "no credit note generated",
+            "no write-off record generated",
+            "not sent / not posted / not billed / not written off",
             ].filter((value) => text.toLowerCase().includes(value)),
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
@@ -11024,6 +11364,9 @@ async function runChromeTest() {
               mockReceivablesAgingFollowUpReviewVisible: Boolean(
                 document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
               ),
+              mockCollectionsCreditWriteoffReviewVisible: Boolean(
+                document.querySelector("[data-mock-collections-credit-writeoff-review]"),
+              ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
               internalStaffNotice:
@@ -11126,6 +11469,11 @@ async function runChromeTest() {
         mobileDashboardState.mockReceivablesAgingFollowUpReviewVisible,
         false,
         "Expected mobile /customers not to show internal mock receivables aging follow-up review",
+      );
+      assert.equal(
+        mobileDashboardState.mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        "Expected mobile /customers not to show internal mock collections credit write-off review",
       );
       assert.equal(
         mobileDashboardState.driverDemoDetailWorkflowVisible,
@@ -11392,6 +11740,9 @@ async function runChromeTest() {
           mockReceivablesAgingFollowUpReviewVisible: Boolean(
             document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
           ),
+          mockCollectionsCreditWriteoffReviewVisible: Boolean(
+            document.querySelector("[data-mock-collections-credit-writeoff-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           forbiddenVisibleText: [
@@ -11494,6 +11845,16 @@ async function runChromeTest() {
             "no customer reminder generated",
             "no collection action created",
             "not sent / not posted / not billed",
+            "collections escalation",
+            "credit write-off qa",
+            "static/mock collections escalation",
+            "credit/write-off qa",
+            "escalation qa status",
+            "credit/write-off review status",
+            "mock decision status",
+            "no credit note generated",
+            "no write-off record generated",
+            "not sent / not posted / not billed / not written off",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           sameTimeBlockingText: [
@@ -11651,6 +12012,11 @@ async function runChromeTest() {
         initialState.mockReceivablesAgingFollowUpReviewVisible,
         false,
         "Expected /book not to show internal mock receivables aging follow-up review",
+      );
+      assert.equal(
+        initialState.mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        "Expected /book not to show internal mock collections credit write-off review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -12011,6 +12377,11 @@ async function runChromeTest() {
         "Expected /book mobile not to show internal mock receivables aging follow-up review",
       );
       assert.equal(
+        mobileState.mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        "Expected /book mobile not to show internal mock collections credit write-off review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /book mobile not to show driver demo detail workflow",
@@ -12188,6 +12559,9 @@ async function runChromeTest() {
           mockReceivablesAgingFollowUpReviewVisible: Boolean(
             document.querySelector("[data-mock-receivables-aging-follow-up-review]"),
           ),
+          mockCollectionsCreditWriteoffReviewVisible: Boolean(
+            document.querySelector("[data-mock-collections-credit-writeoff-review]"),
+          ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
           feedbackDistanceFromRow:
@@ -12302,6 +12676,16 @@ async function runChromeTest() {
             "no customer reminder generated",
             "no collection action created",
             "not sent / not posted / not billed",
+            "collections escalation",
+            "credit write-off qa",
+            "static/mock collections escalation",
+            "credit/write-off qa",
+            "escalation qa status",
+            "credit/write-off review status",
+            "mock decision status",
+            "no credit note generated",
+            "no write-off record generated",
+            "not sent / not posted / not billed / not written off",
           ].filter((value) => lowerText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
@@ -12685,6 +13069,11 @@ async function runChromeTest() {
         initialState.mockReceivablesAgingFollowUpReviewVisible,
         false,
         "Expected /my-bookings not to show internal mock receivables aging follow-up review",
+      );
+      assert.equal(
+        initialState.mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        "Expected /my-bookings not to show internal mock collections credit write-off review",
       );
       assert.equal(
         initialState.driverDemoDetailWorkflowVisible,
@@ -13465,6 +13854,11 @@ async function runChromeTest() {
         "Expected /my-bookings mobile not to show internal mock receivables aging follow-up review",
       );
       assert.equal(
+        mobileState.mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        "Expected /my-bookings mobile not to show internal mock collections credit write-off review",
+      );
+      assert.equal(
         mobileState.driverDemoDetailWorkflowVisible,
         false,
         "Expected /my-bookings mobile not to show driver demo detail workflow",
@@ -13791,6 +14185,16 @@ async function runChromeTest() {
             "customer account posting generated",
             "accounting record generated",
             "not billed / not posted",
+            "collections escalation",
+            "credit write-off qa",
+            "static/mock collections escalation",
+            "credit/write-off qa",
+            "escalation qa status",
+            "credit/write-off review status",
+            "mock decision status",
+            "no credit note generated",
+            "no write-off record generated",
+            "not sent / not posted / not billed / not written off",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
@@ -14496,6 +14900,16 @@ async function runChromeTest() {
             "customer account posting generated",
             "accounting record generated",
             "not billed / not posted",
+            "collections escalation",
+            "credit write-off qa",
+            "static/mock collections escalation",
+            "credit/write-off qa",
+            "escalation qa status",
+            "credit/write-off review status",
+            "mock decision status",
+            "no credit note generated",
+            "no write-off record generated",
+            "not sent / not posted / not billed / not written off",
           ].filter((value) => lowerText.includes(value)),
           inputs,
           text,
@@ -16133,6 +16547,7 @@ async function runChromeTest() {
     state.adminMockStatementVarianceReview = await checkAdminMockStatementVarianceReview();
     state.adminMockReceivablesHandoffReview = await checkAdminMockReceivablesHandoffReview();
     state.adminMockReceivablesAgingFollowUpReview = await checkAdminMockReceivablesAgingFollowUpReview();
+    state.adminMockCollectionsCreditWriteoffReview = await checkAdminMockCollectionsCreditWriteoffReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

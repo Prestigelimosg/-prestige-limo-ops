@@ -501,6 +501,9 @@ async function runChromeTest() {
       const mockReceivablesAgingFollowUpReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-receivables-aging-follow-up-review]"))`,
       );
+      const mockCollectionsCreditWriteoffReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-collections-credit-writeoff-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -588,6 +591,11 @@ async function runChromeTest() {
         mockReceivablesAgingFollowUpReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock receivables aging follow-up review`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock collections credit write-off review`,
       );
     };
 
@@ -2287,6 +2295,137 @@ async function runChromeTest() {
         `${viewport.label}: expected receivables aging rows to stay readable`,
       );
 
+      const mockCollectionsCreditWriteoffReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const review = document.querySelector("[data-mock-collections-credit-writeoff-review]");
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            if (!review || !group || !dashboard || !group.contains(review)) {
+              return false;
+            }
+
+            const rect = review.getBoundingClientRect();
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-collections-credit-writeoff-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-collections-credit-writeoff-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-collections-credit-writeoff-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              generation:
+                document.querySelector("[data-mock-collections-credit-writeoff-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-collections-credit-writeoff-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock collections credit write-off review`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.groupTop >=
+          mockCollectionsCreditWriteoffReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected collections credit write-off review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.text.toLowerCase().includes("collections escalation"),
+        true,
+        `${viewport.label}: expected mock collections escalation review`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.text.includes(
+          "Static/mock collections escalation and credit/write-off QA data only",
+        ) &&
+          mockCollectionsCreditWriteoffReviewState.text.includes("Current / no escalation") &&
+          mockCollectionsCreditWriteoffReviewState.text.includes("Follow-up ready") &&
+          mockCollectionsCreditWriteoffReviewState.text.includes("Escalation needs manager review") &&
+          mockCollectionsCreditWriteoffReviewState.text.includes("Credit/write-off candidate review") &&
+          mockCollectionsCreditWriteoffReviewState.text.includes("Exception carried forward") &&
+          mockCollectionsCreditWriteoffReviewState.text.includes(
+            "Not sent / not posted / not billed / not written off",
+          ),
+        true,
+        `${viewport.label}: expected static not-sent collections credit/write-off details`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.note.includes("Collections escalation review - mock only") &&
+          mockCollectionsCreditWriteoffReviewState.note.includes("Credit/write-off QA - not saved") &&
+          mockCollectionsCreditWriteoffReviewState.note.includes("Current account/no escalation") &&
+          mockCollectionsCreditWriteoffReviewState.note.includes("follow-up ready") &&
+          mockCollectionsCreditWriteoffReviewState.note.includes("escalation needs manager review") &&
+          mockCollectionsCreditWriteoffReviewState.note.includes("credit/write-off candidate review") &&
+          mockCollectionsCreditWriteoffReviewState.note.includes("exception carried forward"),
+        true,
+        `${viewport.label}: expected collections credit/write-off note`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.generation.includes("No customer reminder generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No payment link generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No collection action created") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No credit note generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No write-off record generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No receivables record generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No invoice number generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No PDF generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No customer account posting generated") &&
+          mockCollectionsCreditWriteoffReviewState.generation.includes("No accounting record generated"),
+        true,
+        `${viewport.label}: expected collections no reminder/payment/collection/credit/write-off generation`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.boundary.includes("Mock/local only.") &&
+          mockCollectionsCreditWriteoffReviewState.boundary.includes("No billing automation") &&
+          mockCollectionsCreditWriteoffReviewState.boundary.includes("collection persistence") &&
+          mockCollectionsCreditWriteoffReviewState.boundary.includes("credit note persistence") &&
+          mockCollectionsCreditWriteoffReviewState.boundary.includes("write-off persistence") &&
+          mockCollectionsCreditWriteoffReviewState.boundary.includes("storage") &&
+          mockCollectionsCreditWriteoffReviewState.boundary.includes("API call"),
+        true,
+        `${viewport.label}: expected collections no billing/credit/write-off/storage/API boundary`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.actionCount,
+        0,
+        `${viewport.label}: expected collections credit write-off review to stay display-only`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.rows.length,
+        3,
+        `${viewport.label}: expected three static mock collections rows`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.height <=
+          (viewport.width < 640 ? 1120 : viewport.width < 1024 ? 780 : viewport.width < 1200 ? 640 : 540),
+        true,
+        `${viewport.label}: expected compact collections credit write-off review, got ${mockCollectionsCreditWriteoffReviewState.height}px`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected collections credit write-off rows to stay readable`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -2356,6 +2495,9 @@ async function runChromeTest() {
       );
       const mockReceivablesAgingFollowUpReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-receivables-aging-follow-up-review]"))`,
+      );
+      const mockCollectionsCreditWriteoffReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-collections-credit-writeoff-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -2470,6 +2612,11 @@ async function runChromeTest() {
         mockReceivablesAgingFollowUpReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock receivables aging follow-up review`,
+      );
+      assert.equal(
+        mockCollectionsCreditWriteoffReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock collections credit write-off review`,
       );
       if (context === "driver job demo") {
         assert.equal(

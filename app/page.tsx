@@ -8274,6 +8274,127 @@ export default function Home() {
             send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock collections escalation and credit write-off QA review"
+          className="rounded-lg border border-rose-100 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-collections-credit-writeoff-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-rose-700">Collections Escalation</span>{" "}
+                <span className="text-slate-600">Credit Write-off QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-rose-100 bg-rose-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                data-mock-collections-credit-writeoff-review-copy="true"
+              >
+                Static/mock collections escalation and credit/write-off QA data only for internal review. Nothing is
+                escalated, credited, written off, posted, billed, saved, generated, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-collections-credit-writeoff-review-rows="true">
+                {[
+                  {
+                    account: "UBS Priority",
+                    agingBucket: "Current / no escalation",
+                    carryForward: "Manual goodwill noted",
+                    creditWriteoff: "No credit/write-off review",
+                    daysOutstanding: "0 days",
+                    escalationQa: "Escalation not due",
+                    followUpStatus: "Monitor only",
+                    mockDecision: "Keep current",
+                    month: "May 2026",
+                    status: "Not sent / not posted / not billed / not written off",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    agingBucket: "1-30 day review",
+                    carryForward: "Disputed extra hours carried",
+                    creditWriteoff: "Credit review not started",
+                    daysOutstanding: "18 days",
+                    escalationQa: "Follow-up ready",
+                    followUpStatus: "Prepare mock follow-up",
+                    mockDecision: "No escalation yet",
+                    month: "May 2026",
+                    status: "Not sent / not posted / not billed / not written off",
+                  },
+                  {
+                    account: "VIP Customer",
+                    agingBucket: "31-60 day review",
+                    carryForward: "Exception carried forward",
+                    creditWriteoff: "Credit/write-off candidate review",
+                    daysOutstanding: "42 days",
+                    escalationQa: "Escalation needs manager review",
+                    followUpStatus: "Follow-up held",
+                    mockDecision: "Review write-off candidate",
+                    month: "May 2026",
+                    status: "Not sent / not posted / not billed / not written off",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-3 gap-1 rounded-md border border-rose-100 bg-rose-50/70 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-5 xl:grid-cols-10"
+                    data-mock-collections-credit-writeoff-review-row={`${row.account}-${row.agingBucket}`}
+                    key={`${row.account}-${row.month}-${row.daysOutstanding}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month", "Month", row.month],
+                      ["Mock aging bucket", "Aging", row.agingBucket],
+                      ["Days outstanding", "Days", row.daysOutstanding],
+                      ["Escalation QA status", "Esc QA", row.escalationQa],
+                      ["Follow-up status", "Follow-up", row.followUpStatus],
+                      ["Credit/write-off review status", "Credit/WO", row.creditWriteoff],
+                      ["Exception carry-forward status", "Carry", row.carryForward],
+                      ["Mock decision status", "Decision", row.mockDecision],
+                      ["Not-sent/not-posted/not-billed/not-written-off status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-rose-700"
+                          data-mock-collections-credit-writeoff-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-rose-100 bg-rose-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-collections-credit-writeoff-review-note="true"
+                >
+                  Collections escalation review - mock only. Credit/write-off QA - not saved. Current account/no
+                  escalation, follow-up ready, escalation needs manager review, credit/write-off candidate review, and
+                  exception carried forward. Not sent / not posted / not billed / not written off.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-rose-100 bg-rose-50/70 px-2 py-1.5 text-xs font-medium leading-4 text-slate-700"
+                  data-mock-collections-credit-writeoff-review-generation="true"
+                >
+                  No customer reminder generated. No payment link generated. No collection action created. No credit
+                  note generated. No write-off record generated. No receivables record generated. No invoice number
+                  generated. No PDF generated. No customer account posting generated. No accounting record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-mock-collections-credit-writeoff-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, account charge, approval
+            persistence, aging persistence, follow-up persistence, collection persistence, credit note persistence,
+            write-off persistence, PDF, receivables record, collection record, credit note, write-off record, customer
+            account posting, storage, API call, save, post, notification, reminder, escalation, follow-up, collection,
+            credit, write-off, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

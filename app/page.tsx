@@ -9326,6 +9326,165 @@ export default function Home() {
             credit, write-off, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock waiting time extra charges pricing and driver payout planning QA review"
+          className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-waiting-time-extra-charges-planning-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-amber-700">Waiting Time</span>{" "}
+                <span className="text-slate-600">Extra Charges QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-waiting-time-extra-charges-planning-review-copy="true"
+              >
+                Static/mock waiting-time, extra-charge pricing, and driver payout planning QA data only for internal
+                review. Nothing is billed, paid, posted, saved, calculated as a real price, generated, exported, or
+                sent.
+              </p>
+              <div
+                className="grid min-w-0 gap-1.5"
+                data-mock-waiting-time-extra-charges-planning-review-rows="true"
+              >
+                {[
+                  {
+                    account: "UBS Priority",
+                    customerPreview: "No customer extra charge preview",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherReview: "No review needed",
+                    driverPayoutPreview: "No driver payout preview",
+                    driverWaitingPayout: "$10 per block",
+                    extraChargeType: "No waiting / no extra stop",
+                    extraStopReview: "No extra stop review",
+                    jobRef: "May 2026 / JOB-UBS-042",
+                    minutesPerBlock: "15 minutes",
+                    pricingDecision: "No waiting time / no extra charge",
+                    status: "Not billed / not paid / not posted / not saved",
+                    waitingBlocks: "0 blocks",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    customerPreview: "Waiting blocks ready for dispatcher review",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherReview: "Dispatcher review pending",
+                    driverPayoutPreview: "Driver payout preview needs dispatcher confirmation",
+                    driverWaitingPayout: "$10 per block",
+                    extraChargeType: "Waiting time only",
+                    extraStopReview: "Extra stops separate / none",
+                    jobRef: "May 2026 / JOB-RITZ-118",
+                    minutesPerBlock: "15 minutes",
+                    pricingDecision: "Customer charge preview blocked from real billing",
+                    status: "Not billed / not paid / not posted / not saved",
+                    waitingBlocks: "2 blocks",
+                  },
+                  {
+                    account: "VIP Customer",
+                    customerPreview: "Extra stop preview only / no wait charge",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherReview: "Dispatcher confirms route extra",
+                    driverPayoutPreview: "Extra stop payout preview not paid",
+                    driverWaitingPayout: "$10 per block",
+                    extraChargeType: "Extra stop only",
+                    extraStopReview: "Extra stop charge reviewed separately",
+                    jobRef: "May 2026 / JOB-VIP-207",
+                    minutesPerBlock: "15 minutes",
+                    pricingDecision: "Keep waiting time separate",
+                    status: "Not billed / not paid / not posted / not saved",
+                    waitingBlocks: "0 blocks",
+                  },
+                  {
+                    account: "UBS Priority",
+                    customerPreview: "Extra Charges preview groups waiting + stop",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherReview: "Needs dispatcher confirmation",
+                    driverPayoutPreview: "Waiting payout preview plus stop payout",
+                    driverWaitingPayout: "$10 per block",
+                    extraChargeType: "Waiting time + extra stop",
+                    extraStopReview: "Extra stop reviewed separately",
+                    jobRef: "May 2026 / JOB-UBS-209",
+                    minutesPerBlock: "15 minutes",
+                    pricingDecision: "Mock combined display only",
+                    status: "Not billed / not paid / not posted / not saved",
+                    waitingBlocks: "3 blocks",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-amber-200 bg-amber-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-4 xl:grid-cols-[repeat(13,minmax(0,1fr))]"
+                    data-mock-waiting-time-extra-charges-planning-review-row={`${row.account}-${row.jobRef}`}
+                    key={`${row.account}-${row.jobRef}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month or job reference", "Job ref", row.jobRef],
+                      ["Extra charge type", "Type", row.extraChargeType],
+                      ["Waiting blocks", "Blocks", row.waitingBlocks],
+                      ["Minutes per block", "Min/block", row.minutesPerBlock],
+                      ["Customer waiting charge per block", "Cust wait", row.customerWaitingCharge],
+                      ["Driver waiting payout per block", "Driver wait", row.driverWaitingPayout],
+                      ["Extra stop review status", "Stop review", row.extraStopReview],
+                      ["Customer extra-charge preview status", "Cust preview", row.customerPreview],
+                      ["Driver payout preview status", "Driver preview", row.driverPayoutPreview],
+                      ["Dispatcher review status", "Dispatch QA", row.dispatcherReview],
+                      ["Mock pricing decision status", "Decision", row.pricingDecision],
+                      ["Not-billed/not-paid/not-posted/not-saved status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-amber-700"
+                          data-mock-waiting-time-extra-charges-planning-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-waiting-time-extra-charges-planning-review-note="true"
+                >
+                  Waiting time pricing review - mock only. 1 waiting block = 15 minutes. Customer waiting charge: $15
+                  per block. Driver waiting payout: $10 per block. Waiting time remains separate from extra stops
+                  internally and remains internally distinct from extra stops. Extra Charges display may group waiting
+                  time and extra stops. No waiting time / no extra charge, waiting time blocks ready for dispatcher
+                  review, extra stop charge reviewed separately, waiting time plus extra stop shown under Extra Charges
+                  preview, driver payout preview needs dispatcher confirmation, and customer charge preview blocked
+                  from real billing. Not billed / not paid / not posted / not saved.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-waiting-time-extra-charges-planning-review-generation="true"
+                >
+                  No customer charge record generated. No driver payout record generated. No waiting-time record
+                  generated. No extra-charge record generated. No invoice number generated. No PDF generated. No
+                  payment link generated. No receivables record generated. No collection action created. No credit note
+                  generated. No write-off record generated. No accounting record generated. No invoice/payment/PDF
+                  generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-waiting-time-extra-charges-planning-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, payment, statement release, customer charge, driver
+            payout, waiting-time persistence, extra-charge persistence, customer-charge persistence, driver-payout
+            persistence, approval persistence, account charge, PDF, receivables record, collection record, credit note,
+            write-off record, customer account posting, accounting record, payment record, remittance record, dispute
+            record, storage, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, save, post,
+            calculate-real-price, pay, bill, export, notification, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

@@ -525,6 +525,9 @@ async function runChromeTest() {
       const mockCloseCycleExceptionResolutionAuditHandoffReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review]"))`,
       );
+      const mockWaitingTimeExtraChargesPlanningReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -652,6 +655,11 @@ async function runChromeTest() {
         mockCloseCycleExceptionResolutionAuditHandoffReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock close-cycle exception resolution audit handoff review`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock waiting-time extra-charges planning review`,
       );
     };
 
@@ -3811,6 +3819,232 @@ async function runChromeTest() {
         `${viewport.label}: expected close-cycle exception resolution audit handoff review not to create horizontal overflow`,
       );
 
+      const mockWaitingTimeExtraChargesPlanningReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const review = document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]");
+            if (!group || !dashboard || !review) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-waiting-time-extra-charges-planning-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-waiting-time-extra-charges-planning-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-waiting-time-extra-charges-planning-review-column]")].map(
+                  (column) =>
+                    column.getAttribute("data-mock-waiting-time-extra-charges-planning-review-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-waiting-time-extra-charges-planning-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              copy:
+                document.querySelector("[data-mock-waiting-time-extra-charges-planning-review-copy]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-waiting-time-extra-charges-planning-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-waiting-time-extra-charges-planning-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock waiting-time extra-charges planning review`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.groupTop >=
+          mockWaitingTimeExtraChargesPlanningReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected waiting-time extra-charges planning review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.text.toLowerCase().includes("waiting time") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.toLowerCase().includes("extra charges qa"),
+        true,
+        `${viewport.label}: expected mock waiting-time extra-charges planning review`,
+      );
+      assert.deepEqual(
+        mockWaitingTimeExtraChargesPlanningReviewState.columns,
+        [
+          "Customer/account",
+          "Statement month or job reference",
+          "Extra charge type",
+          "Waiting blocks",
+          "Minutes per block",
+          "Customer waiting charge per block",
+          "Driver waiting payout per block",
+          "Extra stop review status",
+          "Customer extra-charge preview status",
+          "Driver payout preview status",
+          "Dispatcher review status",
+          "Mock pricing decision status",
+          "Not-billed/not-paid/not-posted/not-saved status",
+        ],
+        `${viewport.label}: expected waiting-time extra-charges planning columns`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.copy.includes(
+          "Static/mock waiting-time, extra-charge pricing, and driver payout planning QA data only",
+        ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.copy.includes("internal review") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.copy.includes(
+            "Nothing is billed, paid, posted, saved, calculated as a real price, generated, exported, or sent",
+          ),
+        true,
+        `${viewport.label}: expected static no-persistence waiting-time extra-charges planning copy`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.text.includes("No waiting / no extra stop") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes("Waiting time only") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes("Extra stop only") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes("Waiting time + extra stop") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes("2 blocks") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes("3 blocks") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes("$15 per block") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes("$10 per block") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes(
+            "Driver payout preview needs dispatcher confirmation",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes(
+            "Customer charge preview blocked from real billing",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.text.includes(
+            "Not billed / not paid / not posted / not saved",
+          ),
+        true,
+        `${viewport.label}: expected static waiting-time extra-charge driver-payout planning scenarios`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.note.includes("Waiting time pricing review - mock only") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.note.includes("1 waiting block = 15 minutes") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.note.includes(
+            "Customer waiting charge: $15 per block",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.note.includes(
+            "Driver waiting payout: $10 per block",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.note.includes(
+            "Waiting time remains separate from extra stops internally",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.note.includes(
+            "remains internally distinct from extra stops",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.note.includes(
+            "Extra Charges display may group waiting time and extra stops",
+          ),
+        true,
+        `${viewport.label}: expected waiting-time rule and internal separation note`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.generation.includes(
+          "No customer charge record generated",
+        ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes(
+            "No driver payout record generated",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes(
+            "No waiting-time record generated",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes(
+            "No extra-charge record generated",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes("No invoice number generated") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes("No PDF generated") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes("No payment link generated") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes(
+            "No receivables record generated",
+          ) &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes("No collection action created") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes("No credit note generated") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes("No write-off record generated") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.generation.includes(
+            "No accounting record generated",
+          ),
+        true,
+        `${viewport.label}: expected no waiting-time/extra-charge/customer-charge/driver-payout generation`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("Mock/local only.") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("No billing automation") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("customer charge") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("driver payout") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("waiting-time persistence") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("extra-charge persistence") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("customer-charge persistence") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("driver-payout persistence") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("storage") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("API call") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("fetch") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("XHR") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("sendBeacon") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("WebSocket") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("Supabase") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("calculate-real-price") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("pay") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("bill") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("notification") &&
+          mockWaitingTimeExtraChargesPlanningReviewState.boundary.includes("send behavior"),
+        true,
+        `${viewport.label}: expected waiting-time no billing/payout/storage/API boundary`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.actionCount,
+        0,
+        `${viewport.label}: expected waiting-time extra-charges planning review to stay display-only`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.rows.length,
+        4,
+        `${viewport.label}: expected four static mock waiting-time extra-charges planning rows`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.height <=
+          (viewport.width < 640 ? 1520 : viewport.width < 1024 ? 980 : viewport.width < 1200 ? 800 : 700),
+        true,
+        `${viewport.label}: expected compact waiting-time extra-charges planning review, got ${mockWaitingTimeExtraChargesPlanningReviewState.height}px`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected waiting-time extra-charges planning rows to stay readable`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewState.docScrollWidth <=
+          mockWaitingTimeExtraChargesPlanningReviewState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected waiting-time extra-charges planning review not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -3904,6 +4138,9 @@ async function runChromeTest() {
       );
       const mockCloseCycleExceptionResolutionAuditHandoffReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-close-cycle-exception-resolution-audit-handoff-review]"))`,
+      );
+      const mockWaitingTimeExtraChargesPlanningReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -4058,6 +4295,11 @@ async function runChromeTest() {
         mockCloseCycleExceptionResolutionAuditHandoffReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock close-cycle exception resolution audit handoff review`,
+      );
+      assert.equal(
+        mockWaitingTimeExtraChargesPlanningReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock waiting-time extra-charges planning review`,
       );
       if (context === "driver job demo") {
         assert.equal(

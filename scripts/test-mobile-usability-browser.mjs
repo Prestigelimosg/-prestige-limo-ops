@@ -528,6 +528,28 @@ async function runChromeTest() {
       const mockWaitingTimeExtraChargesPlanningReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
       );
+      const mockExtraChargesVarianceApprovalReconciliationReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]"))`,
+      );
+      const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
+        `(() => {
+          const text = (document.body.innerText || "").toLowerCase();
+
+          return [
+            "extra charges variance / approval qa",
+            "extra charges variance review",
+            "static/mock extra-charge variance",
+            "dispatcher approval handoff",
+            "driver payout reconciliation",
+            "waiting-time variance status",
+            "customer charge review status",
+            "driver payout reconciliation status",
+            "not approved / not billed / not paid / not saved",
+            "no dispatcher approval record generated",
+            "no driver payout reconciliation record generated",
+          ].filter((value) => text.includes(value));
+        })()`,
+      );
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${route.label}`);
       assert.equal(
@@ -660,6 +682,16 @@ async function runChromeTest() {
         mockWaitingTimeExtraChargesPlanningReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock waiting-time extra-charges planning review`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock extra charges variance approval reconciliation review`,
+      );
+      assert.deepEqual(
+        mockExtraChargesVarianceApprovalReconciliationTextLeaks,
+        [],
+        `${viewport.label} ${route.label}: expected no internal extra charges variance approval text leak`,
       );
     };
 
@@ -4045,6 +4077,251 @@ async function runChromeTest() {
         `${viewport.label}: expected waiting-time extra-charges planning review not to create horizontal overflow`,
       );
 
+      const mockExtraChargesVarianceApprovalReconciliationReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const waitingReview = document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]");
+            const review = document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]");
+            if (!group || !dashboard || !waitingReview || !review) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const waitingRect = waitingReview.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-extra-charges-variance-approval-reconciliation-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-extra-charges-variance-approval-reconciliation-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-extra-charges-variance-approval-reconciliation-review-column]")].map(
+                  (column) =>
+                    column.getAttribute("data-mock-extra-charges-variance-approval-reconciliation-review-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionCount: review.querySelectorAll("button, a, input, select, textarea, form").length,
+              boundary:
+                document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              copy:
+                document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-copy]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              note:
+                document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              sectionTop: Math.round(rect.top),
+              text: review.innerText,
+              waitingBottom: Math.round(waitingRect.bottom),
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock extra charges variance approval reconciliation review`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.groupTop >=
+          mockExtraChargesVarianceApprovalReconciliationReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected extra charges variance approval review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.sectionTop >=
+          mockExtraChargesVarianceApprovalReconciliationReviewState.waitingBottom,
+        true,
+        `${viewport.label}: expected extra charges variance approval review after waiting-time planning review`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.text.toLowerCase().includes("extra charges") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.toLowerCase().includes("variance / approval qa"),
+        true,
+        `${viewport.label}: expected mock extra charges variance approval review`,
+      );
+      assert.deepEqual(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.columns,
+        [
+          "Customer/account",
+          "Statement month or job reference",
+          "Charge source",
+          "Waiting block rule",
+          "Customer waiting charge per block",
+          "Driver waiting payout per block",
+          "Extra-stop review status",
+          "Waiting-time variance status",
+          "Customer charge review status",
+          "Driver payout reconciliation status",
+          "Dispatcher approval handoff status",
+          "Not-approved/not-billed/not-paid/not-saved status",
+        ],
+        `${viewport.label}: expected extra charges variance approval columns`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.copy.includes(
+          "Static/mock extra-charge variance, dispatcher approval handoff, and driver payout reconciliation QA data only",
+        ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.copy.includes("internal review") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.copy.includes(
+            "Nothing is billed, paid, approved, posted, saved, reconciled, generated, exported, or sent",
+          ),
+        true,
+        `${viewport.label}: expected static no-persistence extra charges variance copy`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("No waiting / no extra stop") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("Waiting time only") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("Extra stop only") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("Waiting time + extra stop") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("15 minutes per block") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("$15 per block") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("$10 per block") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("2 waiting blocks need review") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes("3 waiting blocks need review") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes(
+            "Driver waiting payout reconciliation pending",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes(
+            "Dispatcher approval handoff pending",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.text.includes(
+            "Not approved / not billed / not paid / not saved",
+          ),
+        true,
+        `${viewport.label}: expected static extra charges variance approval scenarios`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+          "Extra charges variance review - mock only",
+        ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+            "1 waiting block = 15 minutes",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+            "Customer waiting charge: $15 per block",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+            "Driver waiting payout: $10 per block",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+            "Waiting time remains separate from extra stops internally",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+            "remains internally distinct from extra stops",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+            "Extra Charges display may group waiting time and extra stops",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.note.includes(
+            "variance review keeps waiting-time and extra-stop sources separate",
+          ),
+        true,
+        `${viewport.label}: expected extra charges variance rule and internal separation note`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes(
+          "No dispatcher approval record generated",
+        ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes(
+            "No driver payout reconciliation record generated",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes(
+            "No customer charge record generated",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes(
+            "No waiting-time record generated",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes(
+            "No extra-charge record generated",
+          ) &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes("No invoice number generated") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes("No PDF generated") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes("No payment link generated") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.generation.includes(
+            "No accounting record generated",
+          ),
+        true,
+        `${viewport.label}: expected no extra-charge/customer-charge/driver-payout reconciliation generation`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("Mock/local only.") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("No billing automation") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("monthly invoice") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("payment link") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("PDF") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("accounting integration") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("customer auth") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("waiting-time persistence") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("extra-charge persistence") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("customer-charge persistence") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("driver-payout persistence") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("storage") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("localStorage") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("sessionStorage") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("API call") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("fetch") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("XHR") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("sendBeacon") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("WebSocket") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("Supabase") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("message-channel delivery") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("customer notification") &&
+          mockExtraChargesVarianceApprovalReconciliationReviewState.boundary.includes("send behavior"),
+        true,
+        `${viewport.label}: expected extra charges variance no billing/payout/storage/API boundary`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.actionCount,
+        0,
+        `${viewport.label}: expected extra charges variance approval review to stay display-only`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.rows.length,
+        4,
+        `${viewport.label}: expected four static mock extra charges variance rows`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.height <=
+          (viewport.width < 640 ? 1520 : viewport.width < 1024 ? 980 : viewport.width < 1200 ? 800 : 700),
+        true,
+        `${viewport.label}: expected compact extra charges variance approval review, got ${mockExtraChargesVarianceApprovalReconciliationReviewState.height}px`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.rows.every(
+          (row) => row.height >= 28 && row.width >= 240,
+        ),
+        true,
+        `${viewport.label}: expected extra charges variance rows to stay readable`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewState.docScrollWidth <=
+          mockExtraChargesVarianceApprovalReconciliationReviewState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected extra charges variance review not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -4141,6 +4418,28 @@ async function runChromeTest() {
       );
       const mockWaitingTimeExtraChargesPlanningReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
+      );
+      const mockExtraChargesVarianceApprovalReconciliationReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]"))`,
+      );
+      const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
+        `(() => {
+          const text = (document.body.innerText || "").toLowerCase();
+
+          return [
+            "extra charges variance / approval qa",
+            "extra charges variance review",
+            "static/mock extra-charge variance",
+            "dispatcher approval handoff",
+            "driver payout reconciliation",
+            "waiting-time variance status",
+            "customer charge review status",
+            "driver payout reconciliation status",
+            "not approved / not billed / not paid / not saved",
+            "no dispatcher approval record generated",
+            "no driver payout reconciliation record generated",
+          ].filter((value) => text.includes(value));
+        })()`,
       );
       const driverDemoDetailWorkflowState = await evaluate(`(() => {
         const workflow = document.querySelector("[data-driver-demo-detail-workflow]");
@@ -4300,6 +4599,16 @@ async function runChromeTest() {
         mockWaitingTimeExtraChargesPlanningReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock waiting-time extra-charges planning review`,
+      );
+      assert.equal(
+        mockExtraChargesVarianceApprovalReconciliationReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock extra charges variance approval reconciliation review`,
+      );
+      assert.deepEqual(
+        mockExtraChargesVarianceApprovalReconciliationTextLeaks,
+        [],
+        `${viewport.label} ${context}: expected no internal extra charges variance approval text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

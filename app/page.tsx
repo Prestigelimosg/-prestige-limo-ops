@@ -9485,6 +9485,158 @@ export default function Home() {
             calculate-real-price, pay, bill, export, notification, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock extra charges variance dispatcher approval and driver payout reconciliation QA review"
+          className="rounded-lg border border-teal-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-extra-charges-variance-approval-reconciliation-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-teal-700">Extra Charges</span>{" "}
+                <span className="text-slate-600">Variance / Approval QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-extra-charges-variance-approval-reconciliation-review-copy="true"
+              >
+                Static/mock extra-charge variance, dispatcher approval handoff, and driver payout reconciliation QA
+                data only for internal review. Nothing is billed, paid, approved, posted, saved, reconciled,
+                generated, exported, or sent.
+              </p>
+              <div
+                className="grid min-w-0 gap-1.5"
+                data-mock-extra-charges-variance-approval-reconciliation-review-rows="true"
+              >
+                {[
+                  {
+                    account: "UBS Priority",
+                    chargeSource: "No waiting / no extra stop",
+                    customerChargeReview: "No customer charge variance",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherApprovalHandoff: "No approval handoff needed",
+                    driverPayoutReconciliation: "No driver payout variance",
+                    driverWaitingPayout: "$10 per block",
+                    extraStopReview: "No extra-stop review",
+                    jobRef: "May 2026 / JOB-UBS-042",
+                    status: "Not approved / not billed / not paid / not saved",
+                    waitingBlockRule: "15 minutes per block",
+                    waitingVariance: "No waiting-time variance",
+                  },
+                  {
+                    account: "Ritz-Carlton",
+                    chargeSource: "Waiting time only",
+                    customerChargeReview: "Customer waiting charge review pending",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherApprovalHandoff: "Dispatcher approval handoff pending",
+                    driverPayoutReconciliation: "Driver waiting payout reconciliation pending",
+                    driverWaitingPayout: "$10 per block",
+                    extraStopReview: "Extra stops separate / none",
+                    jobRef: "May 2026 / JOB-RITZ-118",
+                    status: "Not approved / not billed / not paid / not saved",
+                    waitingBlockRule: "15 minutes per block",
+                    waitingVariance: "2 waiting blocks need review",
+                  },
+                  {
+                    account: "VIP Customer",
+                    chargeSource: "Extra stop only",
+                    customerChargeReview: "Extra-stop customer charge review pending",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherApprovalHandoff: "Route extra handoff pending",
+                    driverPayoutReconciliation: "Extra-stop payout reconciliation not paid",
+                    driverWaitingPayout: "$10 per block",
+                    extraStopReview: "Extra stop reviewed separately",
+                    jobRef: "May 2026 / JOB-VIP-207",
+                    status: "Not approved / not billed / not paid / not saved",
+                    waitingBlockRule: "15 minutes per block",
+                    waitingVariance: "No waiting-time variance",
+                  },
+                  {
+                    account: "UBS Priority",
+                    chargeSource: "Waiting time + extra stop",
+                    customerChargeReview: "Combined Extra Charges display needs review",
+                    customerWaitingCharge: "$15 per block",
+                    dispatcherApprovalHandoff: "Dispatcher approval handoff needs confirmation",
+                    driverPayoutReconciliation: "Waiting payout plus stop payout reconciliation pending",
+                    driverWaitingPayout: "$10 per block",
+                    extraStopReview: "Extra stop kept separate internally",
+                    jobRef: "May 2026 / JOB-UBS-209",
+                    status: "Not approved / not billed / not paid / not saved",
+                    waitingBlockRule: "15 minutes per block",
+                    waitingVariance: "3 waiting blocks need review",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-teal-200 bg-teal-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-4 xl:grid-cols-[repeat(12,minmax(0,1fr))]"
+                    data-mock-extra-charges-variance-approval-reconciliation-review-row={`${row.account}-${row.jobRef}`}
+                    key={`${row.account}-${row.jobRef}`}
+                  >
+                    {[
+                      ["Customer/account", "Acct", row.account],
+                      ["Statement month or job reference", "Job ref", row.jobRef],
+                      ["Charge source", "Source", row.chargeSource],
+                      ["Waiting block rule", "Block rule", row.waitingBlockRule],
+                      ["Customer waiting charge per block", "Cust wait", row.customerWaitingCharge],
+                      ["Driver waiting payout per block", "Driver wait", row.driverWaitingPayout],
+                      ["Extra-stop review status", "Stop review", row.extraStopReview],
+                      ["Waiting-time variance status", "Wait variance", row.waitingVariance],
+                      ["Customer charge review status", "Cust review", row.customerChargeReview],
+                      ["Driver payout reconciliation status", "Driver recon", row.driverPayoutReconciliation],
+                      ["Dispatcher approval handoff status", "Approval handoff", row.dispatcherApprovalHandoff],
+                      ["Not-approved/not-billed/not-paid/not-saved status", "Status", row.status],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-teal-700"
+                          data-mock-extra-charges-variance-approval-reconciliation-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-extra-charges-variance-approval-reconciliation-review-note="true"
+                >
+                  Extra charges variance review - mock only. 1 waiting block = 15 minutes. Customer waiting charge:
+                  $15 per block. Driver waiting payout: $10 per block. Waiting time remains separate from extra stops
+                  internally and remains internally distinct from extra stops. Extra Charges display may group waiting
+                  time and extra stops, but variance review keeps waiting-time and extra-stop sources separate before
+                  any future billing or payout work. Not approved / not billed / not paid / not saved.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-extra-charges-variance-approval-reconciliation-review-generation="true"
+                >
+                  No dispatcher approval record generated. No driver payout reconciliation record generated. No
+                  customer charge record generated. No waiting-time record generated. No extra-charge record generated.
+                  No invoice number generated. No PDF generated. No payment link generated. No accounting record
+                  generated. No invoice/payment/PDF generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-extra-charges-variance-approval-reconciliation-review-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, monthly invoice, payment, payment link, PDF, accounting
+            integration, customer account, customer auth, waiting-time persistence, extra-charge persistence,
+            customer-charge persistence, driver-payout persistence, approval persistence, reconciliation persistence,
+            customer charge record, driver payout record, waiting-time record, extra-charge record, dispatcher approval
+            record, storage, localStorage, sessionStorage, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, save,
+            load, post, reconcile, approve, pay, bill, export, message-channel delivery, customer notification,
+            notification, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

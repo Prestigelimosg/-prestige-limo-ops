@@ -679,6 +679,7 @@ async function runChromeTest() {
         "[data-mock-close-cycle-evidence-response-retention-review]",
         "[data-mock-close-cycle-exception-resolution-audit-handoff-review]",
         "[data-mock-waiting-time-extra-charges-planning-review]",
+        "[data-mock-extra-charges-variance-approval-reconciliation-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -730,7 +731,8 @@ async function runChromeTest() {
             state.text.includes("Accounting Handoff") &&
             state.text.includes("Audit Evidence") &&
             state.text.includes("Exception / Handoff QA") &&
-            state.text.includes("Waiting Time"),
+            state.text.includes("Waiting Time") &&
+            state.text.includes("Variance / Approval QA"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -7397,6 +7399,327 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockExtraChargesVarianceApprovalReconciliationReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1120,
+          label: "mobile mock extra charges variance approval reconciliation review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock extra charges variance approval reconciliation review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const waitingSection = document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]");
+              const section = document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]");
+              if (!group || !dashboard || !waitingSection || !section) {
+                return false;
+              }
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const waitingRect = waitingSection.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-extra-charges-variance-approval-reconciliation-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-extra-charges-variance-approval-reconciliation-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-extra-charges-variance-approval-reconciliation-review-column]")].map(
+                    (column) =>
+                      column.getAttribute("data-mock-extra-charges-variance-approval-reconciliation-review-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionCount: section.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                copy:
+                  document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "bill now",
+                  "calculate real price",
+                  "create charge",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "export now",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "notify customer",
+                  "pay now",
+                  "post now",
+                  "reconcile now",
+                  "save charge",
+                  "save payout",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                forbiddenPrivateText: [
+                  "proof",
+                  "replacement",
+                  "private driver",
+                  "paynow",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                sectionTop: Math.round(sectionRect.top),
+                text,
+                waitingBottom: Math.round(waitingRect.bottom),
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock extra charges variance approval reconciliation review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected extra charges variance approval review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.sectionTop >= state.waitingBottom,
+          true,
+          `${viewport.label}: expected extra charges variance approval review after waiting-time planning review`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("extra charges") &&
+            state.text.toLowerCase().includes("variance / approval qa"),
+          true,
+          `${viewport.label}: expected extra charges variance approval heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Customer/account",
+            "Statement month or job reference",
+            "Charge source",
+            "Waiting block rule",
+            "Customer waiting charge per block",
+            "Driver waiting payout per block",
+            "Extra-stop review status",
+            "Waiting-time variance status",
+            "Customer charge review status",
+            "Driver payout reconciliation status",
+            "Dispatcher approval handoff status",
+            "Not-approved/not-billed/not-paid/not-saved status",
+          ],
+          `${viewport.label}: expected mock extra charges variance approval columns`,
+        );
+        assert.equal(state.rows.length, 4, `${viewport.label}: expected four static mock variance rows`);
+        for (const expectedText of [
+          "UBS Priority",
+          "Ritz-Carlton",
+          "VIP Customer",
+          "May 2026 / JOB-UBS-042",
+          "May 2026 / JOB-RITZ-118",
+          "May 2026 / JOB-VIP-207",
+          "May 2026 / JOB-UBS-209",
+          "No waiting / no extra stop",
+          "Waiting time only",
+          "Extra stop only",
+          "Waiting time + extra stop",
+          "15 minutes per block",
+          "$15 per block",
+          "$10 per block",
+          "No waiting-time variance",
+          "2 waiting blocks need review",
+          "3 waiting blocks need review",
+          "Extra stop reviewed separately",
+          "Extra stop kept separate internally",
+          "Customer waiting charge review pending",
+          "Driver waiting payout reconciliation pending",
+          "Waiting payout plus stop payout reconciliation pending",
+          "Dispatcher approval handoff pending",
+          "Not approved / not billed / not paid / not saved",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock extra charges variance text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes(
+            "Static/mock extra-charge variance, dispatcher approval handoff, and driver payout reconciliation QA data only",
+          ) &&
+            state.copy.includes("internal review") &&
+            state.copy.includes(
+              "Nothing is billed, paid, approved, posted, saved, reconciled, generated, exported, or sent",
+            ),
+          true,
+          `${viewport.label}: expected static/mock no-persistence extra charges variance copy`,
+        );
+        assert.equal(
+          state.note.includes("Extra charges variance review - mock only") &&
+            state.note.includes("1 waiting block = 15 minutes") &&
+            state.note.includes("Customer waiting charge: $15 per block") &&
+            state.note.includes("Driver waiting payout: $10 per block") &&
+            state.note.includes("Waiting time remains separate from extra stops internally") &&
+            state.note.includes("remains internally distinct from extra stops") &&
+            state.note.includes("Extra Charges display may group waiting time and extra stops") &&
+            state.note.includes("variance review keeps waiting-time and extra-stop sources separate") &&
+            state.note.includes("before any future billing or payout work") &&
+            state.note.includes("Not approved / not billed / not paid / not saved"),
+          true,
+          `${viewport.label}: expected extra charges variance rule and separation note`,
+        );
+        assert.equal(
+          state.generation.includes("No dispatcher approval record generated") &&
+            state.generation.includes("No driver payout reconciliation record generated") &&
+            state.generation.includes("No customer charge record generated") &&
+            state.generation.includes("No waiting-time record generated") &&
+            state.generation.includes("No extra-charge record generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No accounting record generated") &&
+            state.generation.includes("No invoice/payment/PDF generated"),
+          true,
+          `${viewport.label}: expected no extra-charge variance/customer-charge/driver-payout/invoice/PDF generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "monthly invoice",
+          "payment",
+          "payment link",
+          "PDF",
+          "accounting integration",
+          "customer account",
+          "customer auth",
+          "waiting-time persistence",
+          "extra-charge persistence",
+          "customer-charge persistence",
+          "driver-payout persistence",
+          "approval persistence",
+          "reconciliation persistence",
+          "customer charge record",
+          "driver payout record",
+          "waiting-time record",
+          "extra-charge record",
+          "dispatcher approval record",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "save",
+          "load",
+          "post",
+          "reconcile",
+          "approve",
+          "pay",
+          "bill",
+          "export",
+          "message-channel delivery",
+          "customer notification",
+          "notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected extra charges variance boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected extra charges variance approval review to stay display-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active extra-charge approval/reconciliation controls wording`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no proof/replacement/private/PayNow details in extra charges variance review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1520 : viewport.width < 1024 ? 980 : viewport.width < 1200 ? 800 : 700),
+          true,
+          `${viewport.label}: expected compact extra charges variance approval review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected extra charges variance rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected extra charges variance review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -7432,6 +7755,45 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal waiting-time/extra-charge/customer-charge/driver-payout data leak`,
+      );
+    };
+
+    const assertNoMockExtraChargesVarianceApprovalReconciliationLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "extra charges variance / approval qa",
+            "extra charges variance review",
+            "static/mock extra-charge variance",
+            "dispatcher approval handoff",
+            "driver payout reconciliation",
+            "waiting-time variance status",
+            "customer charge review status",
+            "driver payout reconciliation status",
+            "not approved / not billed / not paid / not saved",
+            "variance review keeps waiting-time and extra-stop sources separate",
+            "no dispatcher approval record generated",
+            "no driver payout reconciliation record generated",
+            "customer waiting charge: $15 per block",
+            "driver waiting payout: $10 per block",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(
+            document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]"),
+          ),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock extra charges variance approval reconciliation review`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal extra-charge/customer-charge/driver-payout variance or approval data leak`,
       );
     };
 
@@ -8021,6 +8383,7 @@ async function runChromeTest() {
         );
         await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak(routeName);
         await assertNoMockWaitingTimeExtraChargesPlanningLeak(routeName);
+        await assertNoMockExtraChargesVarianceApprovalReconciliationLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -8087,6 +8450,9 @@ async function runChromeTest() {
             ),
             mockCloseCycleEvidenceResponseRetentionReviewVisible: Boolean(
               document.querySelector("[data-mock-close-cycle-evidence-response-retention-review]"),
+            ),
+            mockExtraChargesVarianceApprovalReconciliationReviewVisible: Boolean(
+              document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]"),
             ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
@@ -8225,6 +8591,16 @@ async function runChromeTest() {
               "response packet persistence",
               "close-cycle evidence index persistence",
               "not indexed / not approved / not exported / not billed",
+              "extra charges variance / approval qa",
+              "static/mock extra-charge variance",
+              "dispatcher approval handoff",
+              "waiting-time variance status",
+              "customer charge review status",
+              "driver payout reconciliation status",
+              "extra charges variance review - mock only",
+              "no dispatcher approval record generated",
+              "no driver payout reconciliation record generated",
+              "not approved / not billed / not paid / not saved",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -8334,6 +8710,11 @@ async function runChromeTest() {
           routeState.mockCloseCycleEvidenceResponseRetentionReviewVisible,
           false,
           `${routeName}: expected no internal mock close-cycle evidence response retention review`,
+        );
+        assert.equal(
+          routeState.mockExtraChargesVarianceApprovalReconciliationReviewVisible,
+          false,
+          `${routeName}: expected no internal mock extra charges variance approval reconciliation review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -8887,6 +9268,7 @@ async function runChromeTest() {
       );
       await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak("/customers desktop");
       await assertNoMockWaitingTimeExtraChargesPlanningLeak("/customers desktop");
+      await assertNoMockExtraChargesVarianceApprovalReconciliationLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -14538,6 +14920,7 @@ async function runChromeTest() {
       );
       await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak("/customers mobile");
       await assertNoMockWaitingTimeExtraChargesPlanningLeak("/customers mobile");
+      await assertNoMockExtraChargesVarianceApprovalReconciliationLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -20425,6 +20808,8 @@ async function runChromeTest() {
       await checkAdminMockCloseCycleExceptionResolutionAuditHandoffReview();
     state.adminMockWaitingTimeExtraChargesPlanningReview =
       await checkAdminMockWaitingTimeExtraChargesPlanningReview();
+    state.adminMockExtraChargesVarianceApprovalReconciliationReview =
+      await checkAdminMockExtraChargesVarianceApprovalReconciliationReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

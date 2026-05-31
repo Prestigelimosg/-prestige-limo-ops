@@ -11482,6 +11482,321 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockFleetDriverReadinessWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock fleet driver readiness workbench",
+          mobile: true,
+          scale: 2,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock fleet driver readiness workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const customerRecoveryWorkbench = document.querySelector("[data-mock-customer-service-recovery-communication-workbench]");
+              const section = document.querySelector("[data-mock-fleet-driver-readiness-workbench]");
+              if (!group || !dashboard || !customerRecoveryWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const customerRecoveryRect = customerRecoveryWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-fleet-driver-readiness-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-fleet-driver-readiness-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-fleet-driver-readiness-workbench-column]")].map(
+                    (column) => column.getAttribute("data-mock-fleet-driver-readiness-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-fleet-driver-readiness-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-fleet-driver-readiness-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                customerRecoveryBottom: Math.round(customerRecoveryRect.bottom),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-fleet-driver-readiness-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-fleet-driver-readiness-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "assign driver now",
+                  "assign vehicle now",
+                  "change schedule now",
+                  "create dispatch record",
+                  "create maintenance record",
+                  "notify driver now",
+                  "save readiness",
+                  "send customer update",
+                  "start fleet tracking",
+                  "start live location",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                readinessNote:
+                  document.querySelector("[data-mock-fleet-driver-readiness-workbench-readiness-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                safety:
+                  document.querySelector("[data-mock-fleet-driver-readiness-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock fleet driver readiness workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected fleet driver readiness workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before fleet driver readiness workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.customerRecoveryBottom,
+          true,
+          `${viewport.label}: expected fleet driver readiness workbench after customer communication workbench`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("fleet & driver readiness workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected fleet driver readiness heading`,
+        );
+        assert.equal(
+          state.copy.includes("fleet and driver readiness preview") &&
+            state.copy.includes("Static/mock/local display data only") &&
+            state.copy.includes("no real driver assignment") &&
+            state.copy.includes("vehicle assignment") &&
+            state.copy.includes("schedule change") &&
+            state.copy.includes("fleet tracking") &&
+            state.copy.includes("notification") &&
+            state.copy.includes("storage, API") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected fleet driver readiness boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Readiness reference driver vehicle plate",
+            "Service class next job window",
+            "Driver readiness status vehicle readiness status",
+            "Schedule conflict status maintenance documentation status",
+            "Backup coverage status dispatch readiness",
+            "Next internal action",
+          ],
+          `${viewport.label}: expected fleet driver readiness workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three fleet/driver readiness rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Readiness scope") &&
+            state.filterSummary.includes("Drivers, vehicles, schedule conflicts, backup coverage") &&
+            state.filterSummary.includes("Mock operations readiness review before dispatch") &&
+            state.filterSummary.includes("3 fleet/driver readiness rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only fleet readiness filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-FLEET-2026-05-READY"].includes("Arun Lim") &&
+            rowByRef["PLO-FLEET-2026-05-READY"].includes("Mercedes E-Class / SGM101A") &&
+            rowByRef["PLO-FLEET-2026-05-READY"].includes("No schedule conflict") &&
+            rowByRef["PLO-FLEET-2026-05-READY"].includes("Dispatch ready - no assignment created"),
+          true,
+          `${viewport.label}: expected ready fleet/driver row`,
+        );
+        assert.equal(
+          rowByRef["PLO-FLEET-2026-05-DOCS"].includes("Vehicle documentation check pending") &&
+            rowByRef["PLO-FLEET-2026-05-DOCS"].includes("Backup vehicle watch needed") &&
+            rowByRef["PLO-FLEET-2026-05-DOCS"].includes("Dispatch hold until documents are reviewed"),
+          true,
+          `${viewport.label}: expected documentation/maintenance pending row`,
+        );
+        assert.equal(
+          rowByRef["PLO-FLEET-2026-05-CONFLICT"].includes("Driver schedule conflict risk") &&
+            rowByRef["PLO-FLEET-2026-05-CONFLICT"].includes("Schedule conflict risk with earlier job") &&
+            rowByRef["PLO-FLEET-2026-05-CONFLICT"].includes("Backup driver review needed"),
+          true,
+          `${viewport.label}: expected schedule conflict backup driver row`,
+        );
+        assert.equal(
+          state.readinessNote.includes("Driver readiness") &&
+            state.readinessNote.includes("vehicle readiness") &&
+            state.readinessNote.includes("schedule conflict") &&
+            state.readinessNote.includes("maintenance/documentation") &&
+            state.readinessNote.includes("backup coverage") &&
+            state.readinessNote.includes("dispatch readiness") &&
+            state.readinessNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected fleet readiness workflow coverage`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("pre-dispatch fleet and driver readiness only"),
+          true,
+          `${viewport.label}: expected fleet readiness workbench not to repeat recovery/completion scopes`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No driver assigned") &&
+            state.safety.includes("no vehicle assigned") &&
+            state.safety.includes("no schedule changed") &&
+            state.safety.includes("no live location activated") &&
+            state.safety.includes("no driver acknowledgement sent") &&
+            state.safety.includes("no customer update sent") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no job status saved") &&
+            state.safety.includes("no dispatch record created") &&
+            state.safety.includes("no maintenance record created") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting, or finance export created") &&
+            state.safety.includes("No save/load and no API/storage/Supabase behavior"),
+          true,
+          `${viewport.label}: expected no fleet scheduling/assignment/tracking/finance behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real fleet scheduling workflow",
+          "driver assignment",
+          "vehicle assignment",
+          "backup driver assignment",
+          "backup vehicle assignment",
+          "schedule update",
+          "maintenance record",
+          "driver acknowledgement behavior",
+          "customer update sending",
+          "notification sending",
+          "live location behavior",
+          "job status persistence",
+          "dispatch workflow",
+          "dispatch record",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account",
+          "customer auth",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "fleet tracking",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected fleet readiness boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no fleet readiness action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no fleet readiness form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active fleet readiness controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1700 : viewport.width < 1024 ? 1000 : 860),
+          true,
+          `${viewport.label}: expected compact fleet driver readiness workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected fleet driver readiness rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected fleet driver readiness workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -11954,6 +12269,56 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal customer recovery communication/goodwill/message-channel data leak`,
+      );
+    };
+
+    const assertNoMockFleetDriverReadinessWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "fleet & driver readiness workbench",
+            "internal/admin-only fleet and driver readiness preview",
+            "drivers, vehicles, schedule conflicts, backup coverage",
+            "mock operations readiness review before dispatch",
+            "3 fleet/driver readiness rows maximum",
+            "readiness reference",
+            "driver readiness status",
+            "vehicle readiness status",
+            "schedule conflict status",
+            "maintenance/documentation status",
+            "backup coverage status",
+            "dispatch readiness",
+            "driver ready for dispatch review",
+            "vehicle documentation check pending",
+            "backup vehicle watch needed",
+            "driver schedule conflict risk",
+            "backup driver review needed",
+            "no driver assigned",
+            "no vehicle assigned",
+            "no schedule changed",
+            "no dispatch record created",
+            "no maintenance record created",
+            "no real fleet scheduling workflow",
+            "fleet tracking",
+            "schedule update",
+            "maintenance record",
+            "dispatch workflow",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-fleet-driver-readiness-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock fleet driver readiness workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal fleet/driver readiness/schedule/dispatch data leak`,
       );
     };
 
@@ -12554,6 +12919,7 @@ async function runChromeTest() {
         await assertNoMockDriverJobCompletionExceptionIntakeWorkbenchLeak(routeName);
         await assertNoMockReplacementVehicleServiceRecoveryWorkbenchLeak(routeName);
         await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak(routeName);
+        await assertNoMockFleetDriverReadinessWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -13552,6 +13918,7 @@ async function runChromeTest() {
       await assertNoMockDriverJobCompletionExceptionIntakeWorkbenchLeak("/customers desktop");
       await assertNoMockReplacementVehicleServiceRecoveryWorkbenchLeak("/customers desktop");
       await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak("/customers desktop");
+      await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -19214,6 +19581,7 @@ async function runChromeTest() {
       await assertNoMockDriverJobCompletionExceptionIntakeWorkbenchLeak("/customers mobile");
       await assertNoMockReplacementVehicleServiceRecoveryWorkbenchLeak("/customers mobile");
       await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak("/customers mobile");
+      await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -25142,6 +25510,7 @@ async function runChromeTest() {
       await checkAdminMockReplacementVehicleServiceRecoveryWorkbench();
     state.adminMockCustomerServiceRecoveryCommunicationWorkbench =
       await checkAdminMockCustomerServiceRecoveryCommunicationWorkbench();
+    state.adminMockFleetDriverReadinessWorkbench = await checkAdminMockFleetDriverReadinessWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

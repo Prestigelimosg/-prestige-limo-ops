@@ -11550,6 +11550,203 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Fleet Driver Readiness Workbench Mock Only"
+          className="rounded-lg border border-emerald-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-fleet-driver-readiness-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-emerald-700">Fleet &amp; Driver Readiness Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-fleet-driver-readiness-workbench-copy="true"
+                >
+                  Internal/admin-only fleet and driver readiness preview before dispatch. Static/mock/local display data
+                  only; no real driver assignment, vehicle assignment, schedule change, fleet tracking, notification,
+                  storage, API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase text-emerald-700">
+                Display-only readiness workbench
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-fleet-driver-readiness-workbench-filter-summary="true"
+            >
+              {[
+                ["Readiness scope", "Drivers, vehicles, schedule conflicts, backup coverage"],
+                ["Source", "Mock operations readiness review before dispatch"],
+                ["Mock results", "3 fleet/driver readiness rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-emerald-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-fleet-driver-readiness-workbench-rows="true">
+              {[
+                {
+                  backupCoverageStatus: "Backup coverage not needed",
+                  dispatchReadiness: "Dispatch ready - no assignment created",
+                  driver: "Arun Lim",
+                  driverReadinessStatus: "Driver ready for dispatch review",
+                  maintenanceDocumentationStatus: "Documentation current / maintenance clear",
+                  nextInternalAction: "Keep on ready list for future dispatcher assignment",
+                  nextJobWindow: "Today 14:30-16:00",
+                  readinessReference: "PLO-FLEET-2026-05-READY",
+                  scheduleConflictStatus: "No schedule conflict",
+                  serviceClass: "Arrival",
+                  vehiclePlate: "Mercedes E-Class / SGM101A",
+                  vehicleReadinessStatus: "Vehicle readiness checked - mock only",
+                },
+                {
+                  backupCoverageStatus: "Backup vehicle watch needed",
+                  dispatchReadiness: "Dispatch hold until documents are reviewed",
+                  driver: "Nadia Tan",
+                  driverReadinessStatus: "Driver ready; vehicle review pending",
+                  maintenanceDocumentationStatus: "Vehicle documentation check pending",
+                  nextInternalAction: "Review maintenance/documentation before future dispatch",
+                  nextJobWindow: "Today 18:00-22:00",
+                  readinessReference: "PLO-FLEET-2026-05-DOCS",
+                  scheduleConflictStatus: "No driver schedule conflict",
+                  serviceClass: "Hourly",
+                  vehiclePlate: "Toyota Alphard / SJA8822K",
+                  vehicleReadinessStatus: "Maintenance check pending - display only",
+                },
+                {
+                  backupCoverageStatus: "Backup driver review needed",
+                  dispatchReadiness: "Dispatch readiness blocked in mock review",
+                  driver: "Marcus Lee",
+                  driverReadinessStatus: "Driver schedule conflict risk",
+                  maintenanceDocumentationStatus: "Vehicle documentation ready; driver timing needs review",
+                  nextInternalAction: "Review backup driver before future dispatch",
+                  nextJobWindow: "Tomorrow 06:30-08:30",
+                  readinessReference: "PLO-FLEET-2026-05-CONFLICT",
+                  scheduleConflictStatus: "Schedule conflict risk with earlier job",
+                  serviceClass: "Departure",
+                  vehiclePlate: "Mercedes V-Class / SKX7408D",
+                  vehicleReadinessStatus: "Vehicle ready; schedule risk remains",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-emerald-200 bg-emerald-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.2fr_1.15fr_1.1fr_1.2fr_1.2fr_1.25fr]"
+                  data-mock-fleet-driver-readiness-workbench-row={row.readinessReference}
+                  key={row.readinessReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-fleet-driver-readiness-workbench-column="Readiness reference driver vehicle plate"
+                    >
+                      Readiness / Driver
+                    </span>
+                    <span className="block">{row.readinessReference}</span>
+                    <span className="block">{row.driver}</span>
+                    <span className="block">{row.vehiclePlate}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-fleet-driver-readiness-workbench-column="Service class next job window"
+                    >
+                      Service / Window
+                    </span>
+                    <span className="block">{row.serviceClass}</span>
+                    <span>{row.nextJobWindow}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-fleet-driver-readiness-workbench-column="Driver readiness status vehicle readiness status"
+                    >
+                      Driver / Vehicle
+                    </span>
+                    <span className="block">{row.driverReadinessStatus}</span>
+                    <span>{row.vehicleReadinessStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-fleet-driver-readiness-workbench-column="Schedule conflict status maintenance documentation status"
+                    >
+                      Conflict / Docs
+                    </span>
+                    <span className="block">{row.scheduleConflictStatus}</span>
+                    <span>{row.maintenanceDocumentationStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-fleet-driver-readiness-workbench-column="Backup coverage status dispatch readiness"
+                    >
+                      Backup / Dispatch
+                    </span>
+                    <span className="block">{row.backupCoverageStatus}</span>
+                    <span>{row.dispatchReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-fleet-driver-readiness-workbench-column="Next internal action"
+                    >
+                      Next Internal Action
+                    </span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-fleet-driver-readiness-workbench-readiness-note="true"
+              >
+                Fleet readiness - mock only. Driver readiness, vehicle readiness, schedule conflict,
+                maintenance/documentation, backup coverage, dispatch readiness, and next internal action stay as static
+                review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-fleet-driver-readiness-workbench-distinction="true"
+              >
+                This is separate from Customer Service Recovery, Replacement Vehicle Recovery, and Driver Job
+                Completion: it reviews pre-dispatch fleet and driver readiness only.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-fleet-driver-readiness-workbench-safety="true"
+              >
+                Mock Only. No driver assigned, no vehicle assigned, no schedule changed, no live location activated, no
+                driver acknowledgement sent, no customer update sent, no notification sent, no job status saved, no
+                dispatch record created, no maintenance record created, no billing, invoice, payment, PDF, payout,
+                accounting, or finance export created. No save/load and no API/storage/Supabase behavior.
+              </p>
+            </div>
+
+            <p className="text-[10px] leading-[1.15] text-slate-500" data-mock-fleet-driver-readiness-workbench-boundary="true">
+              Future workflow boundary: Mock/local only. No real fleet scheduling workflow, driver assignment, vehicle
+              assignment, backup driver assignment, backup vehicle assignment, schedule update, maintenance record,
+              driver acknowledgement behavior, customer update sending, notification sending, live location behavior,
+              job status persistence, dispatch workflow, dispatch record, billing, invoice, statement, payment, payment
+              link, PDF, payout, accounting posting, finance export, customer account, customer auth, save/load
+              behavior, storage, localStorage, sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon,
+              WebSocket, Supabase, parser file changes, package script changes, test:safe membership changes,
+              message-channel delivery, customer notification, notification, fleet tracking, or send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

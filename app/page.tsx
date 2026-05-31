@@ -11347,6 +11347,209 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Customer Service Recovery Communication Workbench Mock Only"
+          className="rounded-lg border border-cyan-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-customer-service-recovery-communication-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-cyan-700">Customer Service Recovery Communication Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-customer-service-recovery-communication-workbench-copy="true"
+                >
+                  Internal/admin-only customer recovery communication preview after service recovery review.
+                  Static/mock/local display data only; no real customer update, notification, goodwill credit,
+                  invoice adjustment, payment link, PDF, closeout record, storage, API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-semibold uppercase text-cyan-700">
+                Display-only communication workbench
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-customer-service-recovery-communication-workbench-filter-summary="true"
+            >
+              {[
+                ["Communication scope", "Late driver / replacement used / missed job recovery"],
+                ["Source", "Service recovery rows and customer impact review"],
+                ["Mock results", "3 customer recovery rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-cyan-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5"
+              data-mock-customer-service-recovery-communication-workbench-rows="true"
+            >
+              {[
+                {
+                  closeoutHandoffReadiness: "Ready after dispatcher confirms customer impact",
+                  communicationReadiness: "Customer update prepared for internal review",
+                  communicationReference: "PLO-COMM-2026-05-LATE",
+                  customerAccount: "UBS Priority",
+                  customerImpact: "Pickup timing risk; customer impact reviewed",
+                  goodwillNoChargeReviewStatus: "No goodwill/no-charge review needed",
+                  managerApprovalStatus: "Manager approval not required",
+                  messageChannelReadiness: "Message-channel readiness pending - not delivered",
+                  nextInternalAction: "Review customer wording before any future update",
+                  proposedCustomerUpdate: "Delay update prepared - not sent",
+                  relatedRecoveryJobReference: "PLO-REC-2026-05-LATE / PLO-DRV-COMP-118",
+                  serviceIssue: "Late driver risk",
+                },
+                {
+                  closeoutHandoffReadiness: "Hold closeout until goodwill review is decided",
+                  communicationReadiness: "Customer impact reviewed; update draft held",
+                  communicationReference: "PLO-COMM-2026-05-REPLACE",
+                  customerAccount: "Ritz-Carlton",
+                  customerImpact: "Replacement vehicle used; arrival timing impact reviewed",
+                  goodwillNoChargeReviewStatus: "Goodwill/no-charge review pending",
+                  managerApprovalStatus: "Manager approval pending for goodwill review",
+                  messageChannelReadiness: "Message-channel readiness held - not delivered",
+                  nextInternalAction: "Confirm goodwill/no-charge review before future message",
+                  proposedCustomerUpdate: "Replacement vehicle explanation prepared - not sent",
+                  relatedRecoveryJobReference: "PLO-REC-2026-05-BREAKDOWN / PLO-DRV-COMP-207",
+                  serviceIssue: "Replacement vehicle used",
+                },
+                {
+                  closeoutHandoffReadiness: "Closeout handoff blocked until manager approval",
+                  communicationReadiness: "Customer update blocked pending manager review",
+                  communicationReference: "PLO-COMM-2026-05-MISSED",
+                  customerAccount: "VIP Customer",
+                  customerImpact: "Missed job/service recovery impact needs manager review",
+                  goodwillNoChargeReviewStatus: "No-charge review required before future closeout",
+                  managerApprovalStatus: "Manager approval required before customer update",
+                  messageChannelReadiness: "Message-channel readiness blocked - not delivered",
+                  nextInternalAction: "Get manager approval before future update and closeout",
+                  proposedCustomerUpdate: "Service recovery apology draft held - not sent",
+                  relatedRecoveryJobReference: "PLO-REC-2026-05-MISSED / PLO-CLOSE-207",
+                  serviceIssue: "Missed job / service recovery",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-cyan-200 bg-cyan-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.2fr_1.15fr_1.2fr_1.25fr_1.2fr_1.25fr]"
+                  data-mock-customer-service-recovery-communication-workbench-row={row.communicationReference}
+                  key={row.communicationReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-customer-service-recovery-communication-workbench-column="Communication reference related recovery job reference customer account"
+                    >
+                      Communication / Recovery
+                    </span>
+                    <span className="block">{row.communicationReference}</span>
+                    <span className="block">{row.relatedRecoveryJobReference}</span>
+                    <span className="block">{row.customerAccount}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-customer-service-recovery-communication-workbench-column="Service issue customer impact"
+                    >
+                      Issue / Impact
+                    </span>
+                    <span className="block">{row.serviceIssue}</span>
+                    <span className="block">{row.customerImpact}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-customer-service-recovery-communication-workbench-column="Proposed customer update"
+                    >
+                      Proposed Update
+                    </span>
+                    <span>{row.proposedCustomerUpdate}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-customer-service-recovery-communication-workbench-column="Manager approval status goodwill no-charge review status"
+                    >
+                      Approval / Goodwill
+                    </span>
+                    <span className="block">{row.managerApprovalStatus}</span>
+                    <span className="block">{row.goodwillNoChargeReviewStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-customer-service-recovery-communication-workbench-column="Communication readiness message-channel readiness"
+                    >
+                      Communication / Channel
+                    </span>
+                    <span className="block">{row.communicationReadiness}</span>
+                    <span className="block">{row.messageChannelReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-customer-service-recovery-communication-workbench-column="Closeout handoff readiness next internal action"
+                    >
+                      Closeout / Next
+                    </span>
+                    <span className="block">{row.closeoutHandoffReadiness}</span>
+                    <span className="block">{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-customer-service-recovery-communication-workbench-communication-note="true"
+              >
+                Customer recovery communication - mock only. Customer impact, proposed customer update, manager
+                approval, goodwill/no-charge review, communication readiness, message-channel readiness, and closeout
+                handoff readiness stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-customer-service-recovery-communication-workbench-distinction="true"
+              >
+                This is separate from Replacement Vehicle &amp; Service Recovery: it reviews customer-facing wording,
+                goodwill/no-charge status, manager approval, and message-channel readiness before future closeout.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-customer-service-recovery-communication-workbench-safety="true"
+              >
+                Mock Only. No customer update sent, no message-channel delivery, no customer notification sent, no
+                goodwill credit created, no no-charge billing decision saved, no invoice adjusted, no payment link
+                created, no PDF generated, no accounting posting, no finance export, no closeout record created.
+              </p>
+            </div>
+
+            <p
+              className="text-[10px] leading-[1.15] text-slate-500"
+              data-mock-customer-service-recovery-communication-workbench-boundary="true"
+            >
+              Future workflow boundary: Mock/local only. No real customer update sending, message-channel delivery,
+              customer notification sending, goodwill credit creation, no-charge billing decision persistence, invoice
+              adjustment, payment link, PDF generation, accounting integration, accounting posting, finance export,
+              customer account, customer auth, closeout workflow, closeout record, replacement vehicle dispatch, backup
+              driver assignment, driver acknowledgement behavior, live location behavior, proof/photo upload, job status
+              persistence, billing, invoice, statement, payment, payout, save/load behavior, storage, localStorage,
+              sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, parser file
+              changes, package script changes, test:safe membership changes, customer notification, notification, or
+              send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

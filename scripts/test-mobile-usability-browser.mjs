@@ -665,6 +665,9 @@ async function runChromeTest() {
       const mockReplacementVehicleServiceRecoveryWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench]"))`,
       );
+      const mockCustomerServiceRecoveryCommunicationWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-customer-service-recovery-communication-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -791,6 +794,29 @@ async function runChromeTest() {
             "no backup driver assigned",
             "no customer update sent",
             "job status persistence",
+            "customer service recovery communication workbench",
+            "internal/admin-only customer recovery communication preview",
+            "late driver / replacement used / missed job recovery",
+            "service recovery rows and customer impact review",
+            "3 customer recovery rows maximum",
+            "communication reference",
+            "proposed customer update",
+            "manager approval status",
+            "goodwill/no-charge review status",
+            "message-channel readiness",
+            "delay update prepared - not sent",
+            "replacement vehicle explanation prepared - not sent",
+            "service recovery apology draft held - not sent",
+            "goodwill/no-charge review pending",
+            "no-charge review required before future closeout",
+            "no message-channel delivery",
+            "no customer notification sent",
+            "no goodwill credit created",
+            "no no-charge billing decision saved",
+            "no invoice adjusted",
+            "no real customer update sending",
+            "no-charge billing decision persistence",
+            "invoice adjustment",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -977,10 +1003,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${route.label}: expected no internal mock replacement vehicle service recovery workbench`,
       );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock customer service recovery communication workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, or replacement recovery workbench text leak`,
+        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, or customer recovery communication text leak`,
       );
     };
 
@@ -6552,6 +6583,191 @@ async function runChromeTest() {
         `${viewport.label}: expected replacement recovery workbench not to create horizontal overflow`,
       );
 
+      const mockCustomerServiceRecoveryCommunicationWorkbenchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const replacementWorkbench = document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench]");
+            const workbench = document.querySelector("[data-mock-customer-service-recovery-communication-workbench]");
+            if (!group || !dashboard || !replacementWorkbench || !workbench) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const replacementRect = replacementWorkbench.getBoundingClientRect();
+            const rect = workbench.getBoundingClientRect();
+            const rows = [...workbench.querySelectorAll("[data-mock-customer-service-recovery-communication-workbench-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-customer-service-recovery-communication-workbench-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...workbench.querySelectorAll("[data-mock-customer-service-recovery-communication-workbench-column]")].map(
+                  (column) => column.getAttribute("data-mock-customer-service-recovery-communication-workbench-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: workbench.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-customer-service-recovery-communication-workbench-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: workbench.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              filterSummary:
+                document.querySelector("[data-mock-customer-service-recovery-communication-workbench-filter-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              replacementBottom: Math.round(replacementRect.bottom),
+              rows,
+              safety:
+                document.querySelector("[data-mock-customer-service-recovery-communication-workbench-safety]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              text: workbench.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock customer service recovery communication workbench`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.groupTop >=
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.dashboardBottom,
+        true,
+        `${viewport.label}: expected customer communication workbench to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.sectionTop >=
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.replacementBottom,
+        true,
+        `${viewport.label}: expected customer communication workbench after replacement recovery workbench`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.text
+          .toLowerCase()
+          .includes("customer service recovery communication workbench") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected customer recovery communication workbench heading`,
+      );
+      assert.deepEqual(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.columns,
+        [
+          "Communication reference related recovery job reference customer account",
+          "Service issue customer impact",
+          "Proposed customer update",
+          "Manager approval status goodwill no-charge review status",
+          "Communication readiness message-channel readiness",
+          "Closeout handoff readiness next internal action",
+        ],
+        `${viewport.label}: expected customer communication workflow columns`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.filterSummary.includes(
+          "Late driver / replacement used / missed job recovery",
+        ) &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.filterSummary.includes(
+            "Service recovery rows and customer impact review",
+          ) &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.filterSummary.includes(
+            "3 customer recovery rows maximum",
+          ) &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.filterSummary.includes("display-only / no actions"),
+        true,
+        `${viewport.label}: expected compact display-only customer communication filter summary`,
+      );
+      const customerRecoveryRowsByRef = Object.fromEntries(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        customerRecoveryRowsByRef["PLO-COMM-2026-05-LATE"].includes("Late driver risk") &&
+          customerRecoveryRowsByRef["PLO-COMM-2026-05-LATE"].includes("Delay update prepared - not sent") &&
+          customerRecoveryRowsByRef["PLO-COMM-2026-05-REPLACE"].includes("Replacement vehicle used") &&
+          customerRecoveryRowsByRef["PLO-COMM-2026-05-REPLACE"].includes("Goodwill/no-charge review pending") &&
+          customerRecoveryRowsByRef["PLO-COMM-2026-05-MISSED"].includes("Missed job / service recovery") &&
+          customerRecoveryRowsByRef["PLO-COMM-2026-05-MISSED"].includes("Manager approval required"),
+        true,
+        `${viewport.label}: expected late-driver, replacement, and missed-job customer communication rows`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("No customer update sent") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no message-channel delivery") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes(
+            "no customer notification sent",
+          ) &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no goodwill credit created") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes(
+            "no no-charge billing decision saved",
+          ) &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no invoice adjusted") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no payment link created") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no PDF generated") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no accounting posting") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no finance export") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.safety.includes("no closeout record created") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes("No real customer update sending") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes("message-channel delivery") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes(
+            "no-charge billing decision persistence",
+          ) &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes("API call") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes("storage") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes("Supabase") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes("parser file changes") &&
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected customer communication no update/notification/goodwill/API boundary`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.actionControlCount,
+        0,
+        `${viewport.label}: expected customer communication workbench to have no action controls`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.controlCount,
+        0,
+        `${viewport.label}: expected customer communication workbench to have no form controls`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.rows.length,
+        3,
+        `${viewport.label}: expected three customer communication rows`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.height <=
+          (viewport.width < 640 ? 1650 : viewport.width < 1024 ? 980 : viewport.width < 1200 ? 900 : 840),
+        true,
+        `${viewport.label}: expected compact customer communication workbench, got ${mockCustomerServiceRecoveryCommunicationWorkbenchState.height}px`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.rows.every(
+          (row) => row.height >= 48 && row.width >= 240,
+        ),
+        true,
+        `${viewport.label}: expected customer communication rows to stay readable`,
+      );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchState.docScrollWidth <=
+          mockCustomerServiceRecoveryCommunicationWorkbenchState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected customer communication workbench not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -6680,6 +6896,9 @@ async function runChromeTest() {
       const mockReplacementVehicleServiceRecoveryWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench]"))`,
       );
+      const mockCustomerServiceRecoveryCommunicationWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-customer-service-recovery-communication-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -6806,6 +7025,29 @@ async function runChromeTest() {
             "no backup driver assigned",
             "no customer update sent",
             "job status persistence",
+            "customer service recovery communication workbench",
+            "internal/admin-only customer recovery communication preview",
+            "late driver / replacement used / missed job recovery",
+            "service recovery rows and customer impact review",
+            "3 customer recovery rows maximum",
+            "communication reference",
+            "proposed customer update",
+            "manager approval status",
+            "goodwill/no-charge review status",
+            "message-channel readiness",
+            "delay update prepared - not sent",
+            "replacement vehicle explanation prepared - not sent",
+            "service recovery apology draft held - not sent",
+            "goodwill/no-charge review pending",
+            "no-charge review required before future closeout",
+            "no message-channel delivery",
+            "no customer notification sent",
+            "no goodwill credit created",
+            "no no-charge billing decision saved",
+            "no invoice adjusted",
+            "no real customer update sending",
+            "no-charge billing decision persistence",
+            "invoice adjustment",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -7018,10 +7260,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock replacement vehicle service recovery workbench`,
       );
+      assert.equal(
+        mockCustomerServiceRecoveryCommunicationWorkbenchVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock customer service recovery communication workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, or replacement recovery workbench text leak`,
+        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, or customer recovery communication text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

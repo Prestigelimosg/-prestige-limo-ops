@@ -689,6 +689,9 @@ async function runChromeTest() {
       const mockDriverAssignmentDispatchReadinessWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench]"))`,
       );
+      const mockBookingLifecycleAuditReadinessWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -1006,6 +1009,28 @@ async function runChromeTest() {
             "no schedule changed",
             "no real driver assignment",
             "driver acknowledgement behavior",
+            "booking lifecycle timeline & internal audit readiness workbench",
+            "internal/admin-only booking lifecycle timeline",
+            "mock dispatcher/admin lifecycle timeline",
+            "3 lifecycle rows maximum",
+            "plo-life-audit-airport",
+            "plo-life-audit-vip-multi",
+            "plo-life-audit-recovery",
+            "lifecycle reference",
+            "current lifecycle stage",
+            "intake/account status",
+            "route/itinerary status",
+            "driver assignment status",
+            "dispatch/customer update status",
+            "completion/closeout status",
+            "service recovery/exception status",
+            "internal audit readiness",
+            "audit readiness mock-ready",
+            "no audit trail created",
+            "no booking lifecycle saved",
+            "no real booking lifecycle workflow",
+            "audit trail creation",
+            "audit logging",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -1232,10 +1257,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${route.label}: expected no internal mock driver assignment dispatch readiness workbench`,
       );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock booking lifecycle audit readiness workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, or driver assignment dispatch text leak`,
+        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, driver assignment dispatch, or booking lifecycle audit text leak`,
       );
     };
 
@@ -8379,6 +8409,228 @@ async function runChromeTest() {
         `${viewport.label}: expected driver assignment dispatch readiness workbench not to create horizontal overflow`,
       );
 
+      const mockBookingLifecycleAuditReadinessWorkbenchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const previousWorkbench = document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench]");
+            const workbench = document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench]");
+            if (!group || !dashboard || !previousWorkbench || !workbench) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const previousRect = previousWorkbench.getBoundingClientRect();
+            const rect = workbench.getBoundingClientRect();
+            const rows = [
+              ...workbench.querySelectorAll("[data-mock-booking-lifecycle-audit-readiness-workbench-row]"),
+            ].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-booking-lifecycle-audit-readiness-workbench-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [
+                  ...workbench.querySelectorAll("[data-mock-booking-lifecycle-audit-readiness-workbench-column]"),
+                ].map(
+                  (column) =>
+                    column.getAttribute("data-mock-booking-lifecycle-audit-readiness-workbench-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: workbench.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: workbench.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              filterSummary:
+                document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-filter-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              previousBottom: Math.round(previousRect.bottom),
+              rows,
+              rules:
+                document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-rules]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              safety:
+                document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-safety]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              text: workbench.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock booking lifecycle audit readiness workbench`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.groupTop >=
+          mockBookingLifecycleAuditReadinessWorkbenchState.dashboardBottom,
+        true,
+        `${viewport.label}: expected booking lifecycle audit readiness workbench to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.sectionTop >=
+          mockBookingLifecycleAuditReadinessWorkbenchState.previousBottom,
+        true,
+        `${viewport.label}: expected booking lifecycle audit readiness workbench after driver assignment dispatch readiness workbench`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.text
+          .toLowerCase()
+          .includes("booking lifecycle timeline & internal audit readiness workbench") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected booking lifecycle audit readiness workbench heading`,
+      );
+      assert.deepEqual(
+        mockBookingLifecycleAuditReadinessWorkbenchState.columns,
+        [
+          "Lifecycle reference job reference",
+          "Customer account current lifecycle stage",
+          "Intake account status route itinerary status",
+          "Driver assignment status dispatch customer update status",
+          "Completion closeout status service recovery exception status",
+          "Internal audit readiness next internal action",
+        ],
+        `${viewport.label}: expected booking lifecycle audit workflow columns`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.filterSummary.includes(
+          "Mock booking lifecycle and audit readiness review",
+        ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.filterSummary.includes(
+            "Mock dispatcher/admin lifecycle timeline",
+          ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.filterSummary.includes(
+            "3 lifecycle rows maximum",
+          ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.filterSummary.includes("display-only / no actions"),
+        true,
+        `${viewport.label}: expected compact display-only booking lifecycle filter summary`,
+      );
+      const lifecycleRowsByRef = Object.fromEntries(
+        mockBookingLifecycleAuditReadinessWorkbenchState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        lifecycleRowsByRef["PLO-LIFE-AUDIT-AIRPORT"].includes("Dispatch handoff pending") &&
+          lifecycleRowsByRef["PLO-LIFE-AUDIT-AIRPORT"].includes(
+            "Proposed driver/vehicle ready - no assignment created",
+          ) &&
+          lifecycleRowsByRef["PLO-LIFE-AUDIT-AIRPORT"].includes(
+            "Audit readiness mock-ready; no audit trail created",
+          ) &&
+          lifecycleRowsByRef["PLO-LIFE-AUDIT-VIP-MULTI"].includes("Multi-stop waypoint review pending") &&
+          lifecycleRowsByRef["PLO-LIFE-AUDIT-VIP-MULTI"].includes(
+            "Driver assignment status not active - no driver assigned",
+          ) &&
+          lifecycleRowsByRef["PLO-LIFE-AUDIT-RECOVERY"].includes(
+            "Driver completion received; closeout review needed",
+          ) &&
+          lifecycleRowsByRef["PLO-LIFE-AUDIT-RECOVERY"].includes("Customer recovery note pending - not sent"),
+        true,
+        `${viewport.label}: expected lifecycle rows with airport, multi-stop hold, and recovery closeout cases`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.rules.includes(
+          "lifecycle readiness stays separate from real booking save/load behavior",
+        ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.rules.includes(
+            "internal audit readiness creates no audit records",
+          ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.rules.includes(
+            "driver assignment status creates no driver or vehicle assignment",
+          ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.rules.includes(
+            "dispatch/customer update status sends nothing",
+          ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.rules.includes(
+            "completion/closeout status saves no proof",
+          ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.rules.includes(
+            "parser/manual review stays separate from parser behavior",
+          ),
+        true,
+        `${viewport.label}: expected protected lifecycle/audit business rules`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("No booking lifecycle saved") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no audit trail created") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no booking saved") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no account linked") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no dispatch job created") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no driver assigned") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no vehicle assigned") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no customer update sent") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no notification sent") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no live location activated") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no proof/photo uploaded") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no job status changed") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.safety.includes("no closeout record") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes(
+            "No real booking lifecycle workflow",
+          ) &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("audit trail creation") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("booking save/load behavior") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("dispatch workflow") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("parser behavior changes") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("audit logging") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("API call") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("Supabase") &&
+          mockBookingLifecycleAuditReadinessWorkbenchState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected lifecycle audit no API/dispatch/parser/audit boundary`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.actionControlCount,
+        0,
+        `${viewport.label}: expected booking lifecycle audit workbench to have no action controls`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.controlCount,
+        0,
+        `${viewport.label}: expected booking lifecycle audit workbench to have no form controls`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.rows.length,
+        3,
+        `${viewport.label}: expected three booking lifecycle audit readiness rows`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.height <=
+          (viewport.width < 640 ? 2140 : viewport.width < 1024 ? 1260 : viewport.width < 1200 ? 1120 : 1080),
+        true,
+        `${viewport.label}: expected compact booking lifecycle audit readiness workbench, got ${mockBookingLifecycleAuditReadinessWorkbenchState.height}px`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.rows.every((row) => row.height >= 48 && row.width >= 240),
+        true,
+        `${viewport.label}: expected booking lifecycle audit readiness rows to stay readable`,
+      );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchState.docScrollWidth <=
+          mockBookingLifecycleAuditReadinessWorkbenchState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected booking lifecycle audit readiness workbench not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -8530,6 +8782,9 @@ async function runChromeTest() {
       );
       const mockDriverAssignmentDispatchReadinessWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench]"))`,
+      );
+      const mockBookingLifecycleAuditReadinessWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench]"))`,
       );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
@@ -8848,6 +9103,28 @@ async function runChromeTest() {
             "no schedule changed",
             "no real driver assignment",
             "driver acknowledgement behavior",
+            "booking lifecycle timeline & internal audit readiness workbench",
+            "internal/admin-only booking lifecycle timeline",
+            "mock dispatcher/admin lifecycle timeline",
+            "3 lifecycle rows maximum",
+            "plo-life-audit-airport",
+            "plo-life-audit-vip-multi",
+            "plo-life-audit-recovery",
+            "lifecycle reference",
+            "current lifecycle stage",
+            "intake/account status",
+            "route/itinerary status",
+            "driver assignment status",
+            "dispatch/customer update status",
+            "completion/closeout status",
+            "service recovery/exception status",
+            "internal audit readiness",
+            "audit readiness mock-ready",
+            "no audit trail created",
+            "no booking lifecycle saved",
+            "no real booking lifecycle workflow",
+            "audit trail creation",
+            "audit logging",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -9100,10 +9377,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock driver assignment dispatch readiness workbench`,
       );
+      assert.equal(
+        mockBookingLifecycleAuditReadinessWorkbenchVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock booking lifecycle audit readiness workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, or driver assignment dispatch text leak`,
+        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, driver assignment dispatch, or booking lifecycle audit text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

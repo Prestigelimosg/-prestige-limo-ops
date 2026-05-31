@@ -13020,6 +13020,230 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section
+          aria-label="Booking Lifecycle Timeline Internal Audit Readiness Workbench Mock Only"
+          className="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-booking-lifecycle-audit-readiness-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-indigo-700">
+                    Booking Lifecycle Timeline &amp; Internal Audit Readiness Workbench
+                  </span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-booking-lifecycle-audit-readiness-workbench-copy="true"
+                >
+                  Internal/admin-only booking lifecycle timeline and internal audit readiness preview for intake,
+                  account matching, route readiness, airport/itinerary readiness, driver assignment readiness, dispatch
+                  handoff, driver completion, service recovery, closeout, and audit readiness. Static/mock/local display
+                  data only; no real audit trail, persistence, dispatch automation, storage, API, parser, or Supabase
+                  behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-semibold uppercase text-indigo-700">
+                Display-only lifecycle timeline
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-booking-lifecycle-audit-readiness-workbench-filter-summary="true"
+            >
+              {[
+                ["Lifecycle/date scope", "Mock booking lifecycle and audit readiness review"],
+                ["Source", "Mock dispatcher/admin lifecycle timeline"],
+                ["Mock results", "3 lifecycle rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-indigo-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5"
+              data-mock-booking-lifecycle-audit-readiness-workbench-rows="true"
+            >
+              {[
+                {
+                  completionCloseoutStatus: "Not completed; closeout not created",
+                  currentLifecycleStage: "Dispatch handoff pending",
+                  customerAccount: "UBS Priority",
+                  dispatchCustomerUpdateStatus: "Customer update draft reviewed - not sent",
+                  driverAssignmentStatus: "Proposed driver/vehicle ready - no assignment created",
+                  intakeAccountStatus: "Intake complete; UBS account matched",
+                  internalAuditReadiness: "Audit readiness mock-ready; no audit trail created",
+                  jobReference: "PLO-ARR-2026-05-LIFE1",
+                  lifecycleReference: "PLO-LIFE-AUDIT-AIRPORT",
+                  nextInternalAction: "Review dispatch handoff before future operational release",
+                  routeItineraryStatus: "Route and airport timing ready",
+                  serviceRecoveryExceptionStatus: "No service recovery issue",
+                },
+                {
+                  completionCloseoutStatus: "Not completed; closeout not created",
+                  currentLifecycleStage: "Route confirmation hold",
+                  customerAccount: "VIP Private Customer",
+                  dispatchCustomerUpdateStatus: "Dispatch/customer update held until route confirmation",
+                  driverAssignmentStatus: "Driver assignment status not active - no driver assigned",
+                  intakeAccountStatus: "VIP profile reviewed; manager note pending",
+                  internalAuditReadiness: "Audit readiness waiting on route review",
+                  jobReference: "PLO-DSP-2026-05-LIFE2",
+                  lifecycleReference: "PLO-LIFE-AUDIT-VIP-MULTI",
+                  nextInternalAction: "Confirm all waypoints before future dispatch handoff",
+                  routeItineraryStatus: "Multi-stop waypoint review pending",
+                  serviceRecoveryExceptionStatus: "No service recovery issue",
+                },
+                {
+                  completionCloseoutStatus: "Driver completion received; closeout review needed",
+                  currentLifecycleStage: "Service recovery / closeout review",
+                  customerAccount: "Ritz-Carlton Concierge",
+                  dispatchCustomerUpdateStatus: "Customer recovery note pending - not sent",
+                  driverAssignmentStatus: "Completed driver noted; no new assignment created",
+                  intakeAccountStatus: "Account matched; contact ready",
+                  internalAuditReadiness: "Audit readiness needs recovery and closeout review",
+                  jobReference: "PLO-REC-2026-05-LIFE3",
+                  lifecycleReference: "PLO-LIFE-AUDIT-RECOVERY",
+                  nextInternalAction: "Review customer recovery note before closeout/audit handoff",
+                  routeItineraryStatus: "Route complete; recovery exception carried forward",
+                  serviceRecoveryExceptionStatus: "Service recovery note pending manager review",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-indigo-200 bg-indigo-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.05fr_1.05fr_1.15fr_1.15fr_1.15fr_1.2fr]"
+                  data-mock-booking-lifecycle-audit-readiness-workbench-row={row.lifecycleReference}
+                  key={row.lifecycleReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-booking-lifecycle-audit-readiness-workbench-column="Lifecycle reference job reference"
+                    >
+                      Lifecycle / Job
+                    </span>
+                    <span className="block">{row.lifecycleReference}</span>
+                    <span>{row.jobReference}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-booking-lifecycle-audit-readiness-workbench-column="Customer account current lifecycle stage"
+                    >
+                      Customer / Stage
+                    </span>
+                    <span className="block">{row.customerAccount}</span>
+                    <span>{row.currentLifecycleStage}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-booking-lifecycle-audit-readiness-workbench-column="Intake account status route itinerary status"
+                    >
+                      Intake / Route
+                    </span>
+                    <span className="block">{row.intakeAccountStatus}</span>
+                    <span>{row.routeItineraryStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-booking-lifecycle-audit-readiness-workbench-column="Driver assignment status dispatch customer update status"
+                    >
+                      Assignment / Dispatch
+                    </span>
+                    <span className="block">{row.driverAssignmentStatus}</span>
+                    <span>{row.dispatchCustomerUpdateStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-booking-lifecycle-audit-readiness-workbench-column="Completion closeout status service recovery exception status"
+                    >
+                      Completion / Recovery
+                    </span>
+                    <span className="block">{row.completionCloseoutStatus}</span>
+                    <span>{row.serviceRecoveryExceptionStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-booking-lifecycle-audit-readiness-workbench-column="Internal audit readiness next internal action"
+                    >
+                      Audit Readiness / Next Action
+                    </span>
+                    <span className="block">{row.internalAuditReadiness}</span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-lifecycle-audit-readiness-workbench-coverage-note="true"
+              >
+                Lifecycle timeline review - mock only. Lifecycle reference, job reference, customer/account, current
+                lifecycle stage, intake/account status, route/itinerary status, driver assignment status,
+                dispatch/customer update status, completion/closeout status, service recovery/exception status,
+                internal audit readiness, and next internal action stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-lifecycle-audit-readiness-workbench-rules="true"
+              >
+                Lifecycle rules preserved: lifecycle readiness stays separate from real booking save/load behavior,
+                internal audit readiness creates no audit records, driver assignment status creates no driver or vehicle
+                assignment, dispatch/customer update status sends nothing, completion/closeout status saves no proof,
+                closeout, billing, payout, or finance record, and parser/manual review stays separate from parser
+                behavior.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-lifecycle-audit-readiness-workbench-safety="true"
+              >
+                Mock Only. No booking lifecycle saved, no audit trail created, no booking saved, no account linked, no
+                dispatch job created, no driver assigned, no vehicle assigned, no customer update sent, no notification
+                sent, no live location activated, no proof/photo uploaded, no job status changed, no closeout record
+                created, and no billing, invoice, payment, PDF, payout, accounting, or finance export created. No
+                save/load, no API/storage/Supabase behavior, and no parser change.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-[1fr_2fr]">
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-lifecycle-audit-readiness-workbench-distinction="true"
+              >
+                This is separate from Driver Assignment, Route &amp; Itinerary Readiness, Airport Flight Monitoring,
+                Booking Intake, Customer Account Profile, Operations Handover, Fleet Readiness, Customer Service
+                Recovery, Replacement Vehicle Recovery, and Driver Job Completion: it reviews the full lifecycle
+                timeline and internal audit readiness before any future audit trail or automation only.
+              </p>
+              <p
+                className="text-[10px] leading-[1.15] text-slate-500"
+                data-mock-booking-lifecycle-audit-readiness-workbench-boundary="true"
+              >
+                Future workflow boundary: Mock/local only. No real booking lifecycle workflow, audit trail creation,
+                booking save/load behavior, account linking, dispatch workflow, driver assignment, vehicle assignment,
+                customer update sending, notification sending, live location behavior, proof/photo upload, job status
+                persistence, closeout workflow, parser behavior changes, parser file changes, parser test changes,
+                maps, scheduling, route optimization, audit logging, billing, invoice, statement, payment, payment link,
+                PDF, payout, accounting posting, finance export, customer account/auth behavior, localStorage,
+                sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, package
+                script changes, test:safe membership changes, message-channel delivery, customer notification,
+                notification, or send behavior.
+              </p>
+            </div>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

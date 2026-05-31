@@ -693,6 +693,7 @@ async function runChromeTest() {
         "[data-mock-airport-flight-pickup-readiness-workbench]",
         "[data-mock-route-itinerary-readiness-workbench]",
         "[data-mock-driver-assignment-dispatch-readiness-workbench]",
+        "[data-mock-booking-lifecycle-audit-readiness-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -752,7 +753,8 @@ async function runChromeTest() {
             state.text.includes("Customer Account & Service Profile Workbench") &&
             state.text.includes("Booking Intake Quality & Account Matching Workbench") &&
             state.text.includes("Airport Flight Monitoring & Pickup Readiness Workbench") &&
-            state.text.includes("Route & Itinerary Readiness Workbench"),
+            state.text.includes("Route & Itinerary Readiness Workbench") &&
+            state.text.includes("Booking Lifecycle Timeline & Internal Audit Readiness Workbench"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -13820,6 +13822,373 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockBookingLifecycleAuditReadinessWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock booking lifecycle audit readiness workbench",
+          mobile: true,
+          scale: 3,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock booking lifecycle audit readiness workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const previousWorkbench = document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench]");
+              const section = document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench]");
+              if (!group || !dashboard || !previousWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const previousRect = previousWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [
+                ...section.querySelectorAll("[data-mock-booking-lifecycle-audit-readiness-workbench-row]"),
+              ].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-booking-lifecycle-audit-readiness-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [
+                    ...section.querySelectorAll("[data-mock-booking-lifecycle-audit-readiness-workbench-column]"),
+                  ].map(
+                    (column) =>
+                      column.getAttribute("data-mock-booking-lifecycle-audit-readiness-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "save lifecycle now",
+                  "create audit trail now",
+                  "save booking now",
+                  "link account now",
+                  "create dispatch job now",
+                  "assign driver now",
+                  "assign vehicle now",
+                  "send customer update now",
+                  "change job status now",
+                  "create closeout now",
+                  "generate invoice now",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                previousBottom: Math.round(previousRect.bottom),
+                coverageNote:
+                  document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-coverage-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                rules:
+                  document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-rules]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                safety:
+                  document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock booking lifecycle audit readiness workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected booking lifecycle audit readiness workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before booking lifecycle audit readiness workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.previousBottom,
+          true,
+          `${viewport.label}: expected booking lifecycle audit readiness workbench after driver assignment dispatch readiness`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("booking lifecycle timeline & internal audit readiness workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected booking lifecycle audit readiness heading`,
+        );
+        assert.equal(
+          state.copy.includes("booking lifecycle timeline and internal audit readiness preview") &&
+            state.copy.includes("intake") &&
+            state.copy.includes("account matching") &&
+            state.copy.includes("route readiness") &&
+            state.copy.includes("airport/itinerary readiness") &&
+            state.copy.includes("driver assignment readiness") &&
+            state.copy.includes("dispatch handoff") &&
+            state.copy.includes("driver completion") &&
+            state.copy.includes("service recovery") &&
+            state.copy.includes("closeout") &&
+            state.copy.includes("audit readiness") &&
+            state.copy.includes("no real audit trail") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected booking lifecycle audit boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Lifecycle reference job reference",
+            "Customer account current lifecycle stage",
+            "Intake account status route itinerary status",
+            "Driver assignment status dispatch customer update status",
+            "Completion closeout status service recovery exception status",
+            "Internal audit readiness next internal action",
+          ],
+          `${viewport.label}: expected booking lifecycle audit workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three lifecycle rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Mock booking lifecycle and audit readiness review") &&
+            state.filterSummary.includes("Mock dispatcher/admin lifecycle timeline") &&
+            state.filterSummary.includes("3 lifecycle rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only booking lifecycle filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-LIFE-AUDIT-AIRPORT"].includes("Dispatch handoff pending") &&
+            rowByRef["PLO-LIFE-AUDIT-AIRPORT"].includes("Intake complete; UBS account matched") &&
+            rowByRef["PLO-LIFE-AUDIT-AIRPORT"].includes("Proposed driver/vehicle ready - no assignment created") &&
+            rowByRef["PLO-LIFE-AUDIT-AIRPORT"].includes("Audit readiness mock-ready; no audit trail created"),
+          true,
+          `${viewport.label}: expected corporate airport lifecycle audit row`,
+        );
+        assert.equal(
+          rowByRef["PLO-LIFE-AUDIT-VIP-MULTI"].includes("Route confirmation hold") &&
+            rowByRef["PLO-LIFE-AUDIT-VIP-MULTI"].includes("Multi-stop waypoint review pending") &&
+            rowByRef["PLO-LIFE-AUDIT-VIP-MULTI"].includes("Driver assignment status not active - no driver assigned") &&
+            rowByRef["PLO-LIFE-AUDIT-VIP-MULTI"].includes("Confirm all waypoints"),
+          true,
+          `${viewport.label}: expected VIP multi-stop lifecycle hold row`,
+        );
+        assert.equal(
+          rowByRef["PLO-LIFE-AUDIT-RECOVERY"].includes("Service recovery / closeout review") &&
+            rowByRef["PLO-LIFE-AUDIT-RECOVERY"].includes("Driver completion received; closeout review needed") &&
+            rowByRef["PLO-LIFE-AUDIT-RECOVERY"].includes("Customer recovery note pending - not sent") &&
+            rowByRef["PLO-LIFE-AUDIT-RECOVERY"].includes("Audit readiness needs recovery and closeout review"),
+          true,
+          `${viewport.label}: expected service recovery closeout lifecycle row`,
+        );
+        assert.equal(
+          state.coverageNote.includes("Lifecycle reference") &&
+            state.coverageNote.includes("job reference") &&
+            state.coverageNote.includes("customer/account") &&
+            state.coverageNote.includes("current lifecycle stage") &&
+            state.coverageNote.includes("intake/account status") &&
+            state.coverageNote.includes("route/itinerary status") &&
+            state.coverageNote.includes("driver assignment status") &&
+            state.coverageNote.includes("dispatch/customer update status") &&
+            state.coverageNote.includes("completion/closeout status") &&
+            state.coverageNote.includes("service recovery/exception status") &&
+            state.coverageNote.includes("internal audit readiness") &&
+            state.coverageNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected booking lifecycle audit workflow coverage`,
+        );
+        assert.equal(
+          state.rules.includes("lifecycle readiness stays separate from real booking save/load behavior") &&
+            state.rules.includes("internal audit readiness creates no audit records") &&
+            state.rules.includes("driver assignment status creates no driver or vehicle assignment") &&
+            state.rules.includes("dispatch/customer update status sends nothing") &&
+            state.rules.includes("completion/closeout status saves no proof") &&
+            state.rules.includes("parser/manual review stays separate from parser behavior"),
+          true,
+          `${viewport.label}: expected protected lifecycle audit business rules`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Driver Assignment") &&
+            state.distinction.includes("Route & Itinerary Readiness") &&
+            state.distinction.includes("Airport Flight Monitoring") &&
+            state.distinction.includes("Booking Intake") &&
+            state.distinction.includes("Customer Account Profile") &&
+            state.distinction.includes("Operations Handover") &&
+            state.distinction.includes("Fleet Readiness") &&
+            state.distinction.includes("Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("full lifecycle timeline and internal audit readiness"),
+          true,
+          `${viewport.label}: expected booking lifecycle audit workbench not to repeat recent workbenches`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No booking lifecycle saved") &&
+            state.safety.includes("no audit trail created") &&
+            state.safety.includes("no booking saved") &&
+            state.safety.includes("no account linked") &&
+            state.safety.includes("no dispatch job created") &&
+            state.safety.includes("no driver assigned") &&
+            state.safety.includes("no vehicle assigned") &&
+            state.safety.includes("no customer update sent") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no live location activated") &&
+            state.safety.includes("no proof/photo uploaded") &&
+            state.safety.includes("no job status changed") &&
+            state.safety.includes("no closeout record") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting") &&
+            state.safety.includes("finance export created") &&
+            state.safety.includes("No save/load") &&
+            state.safety.includes("API/storage/Supabase behavior") &&
+            state.safety.includes("no parser change"),
+          true,
+          `${viewport.label}: expected no lifecycle/audit/API/dispatch/parser/billing behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real booking lifecycle workflow",
+          "audit trail creation",
+          "booking save/load behavior",
+          "account linking",
+          "dispatch workflow",
+          "driver assignment",
+          "vehicle assignment",
+          "customer update sending",
+          "notification sending",
+          "live location behavior",
+          "proof/photo upload",
+          "job status persistence",
+          "closeout workflow",
+          "parser behavior changes",
+          "parser file changes",
+          "parser test changes",
+          "maps",
+          "scheduling",
+          "route optimization",
+          "audit logging",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account/auth behavior",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected booking lifecycle audit boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionControlCount,
+          0,
+          `${viewport.label}: expected no booking lifecycle audit action controls`,
+        );
+        assert.equal(
+          state.controlCount,
+          0,
+          `${viewport.label}: expected no booking lifecycle audit form controls`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active booking lifecycle audit controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 2140 : viewport.width < 1024 ? 1260 : 1080),
+          true,
+          `${viewport.label}: expected compact booking lifecycle audit workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected booking lifecycle audit rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected booking lifecycle audit workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -14637,6 +15006,54 @@ async function runChromeTest() {
       );
     };
 
+    const assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "booking lifecycle timeline & internal audit readiness workbench",
+            "internal/admin-only booking lifecycle timeline",
+            "mock dispatcher/admin lifecycle timeline",
+            "3 lifecycle rows maximum",
+            "plo-life-audit-airport",
+            "plo-life-audit-vip-multi",
+            "plo-life-audit-recovery",
+            "lifecycle reference",
+            "current lifecycle stage",
+            "intake/account status",
+            "route/itinerary status",
+            "driver assignment status",
+            "dispatch/customer update status",
+            "completion/closeout status",
+            "service recovery/exception status",
+            "internal audit readiness",
+            "audit readiness mock-ready",
+            "no audit trail created",
+            "driver assignment status not active",
+            "customer recovery note pending",
+            "closeout/audit handoff",
+            "no booking lifecycle saved",
+            "no real booking lifecycle workflow",
+            "audit trail creation",
+            "audit logging",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock booking lifecycle audit readiness workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal booking lifecycle/audit/dispatch/closeout data leak`,
+      );
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -15241,6 +15658,7 @@ async function runChromeTest() {
         await assertNoMockAirportFlightPickupReadinessWorkbenchLeak(routeName);
         await assertNoMockRouteItineraryReadinessWorkbenchLeak(routeName);
         await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak(routeName);
+        await assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -16246,6 +16664,7 @@ async function runChromeTest() {
       await assertNoMockAirportFlightPickupReadinessWorkbenchLeak("/customers desktop");
       await assertNoMockRouteItineraryReadinessWorkbenchLeak("/customers desktop");
       await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak("/customers desktop");
+      await assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -21915,6 +22334,7 @@ async function runChromeTest() {
       await assertNoMockAirportFlightPickupReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockRouteItineraryReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak("/customers mobile");
+      await assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -27856,6 +28276,8 @@ async function runChromeTest() {
       await checkAdminMockRouteItineraryReadinessWorkbench();
     state.adminMockDriverAssignmentDispatchReadinessWorkbench =
       await checkAdminMockDriverAssignmentDispatchReadinessWorkbench();
+    state.adminMockBookingLifecycleAuditReadinessWorkbench =
+      await checkAdminMockBookingLifecycleAuditReadinessWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

@@ -11140,6 +11140,213 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Replacement Vehicle and Service Recovery Workbench Mock Only"
+          className="rounded-lg border border-rose-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-replacement-vehicle-service-recovery-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-rose-700">Replacement Vehicle &amp; Service Recovery Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-replacement-vehicle-service-recovery-workbench-copy="true"
+                >
+                  Internal/admin-only service recovery preview for late driver, car breakdown, missed job, and
+                  replacement vehicle situations. Static/mock/local display data only; no real replacement dispatch,
+                  backup driver assignment, customer update, live location, proof/photo upload, closeout, storage, API,
+                  or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-semibold uppercase text-rose-700">
+                Display-only recovery workbench
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-replacement-vehicle-service-recovery-workbench-filter-summary="true"
+            >
+              {[
+                ["Recovery scope", "Late driver / breakdown / missed job / replacement need"],
+                ["Source", "Driver exception and dispatcher escalation review"],
+                ["Mock results", "3 recovery rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-rose-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5"
+              data-mock-replacement-vehicle-service-recovery-workbench-rows="true"
+            >
+              {[
+                {
+                  backupDriverStatus: "Backup driver pending confirmation",
+                  closeoutHandoffReadiness: "Hold closeout until replacement details are reviewed",
+                  customerAccount: "Ritz-Carlton",
+                  customerImpact: "Pickup delay risk; customer update readiness pending",
+                  customerUpdateReadiness: "Draft customer update not sent",
+                  dispatcherEscalationStatus: "Dispatcher escalation open in mock review",
+                  exceptionType: "Car breakdown reported",
+                  nextInternalAction: "Confirm backup driver before future service recovery handoff",
+                  originalDriver: "Marcus Lee",
+                  originalVehiclePlate: "Mercedes V-Class / SKX7408D",
+                  recoveryReference: "PLO-REC-2026-05-BREAKDOWN",
+                  relatedJobReference: "PLO-DRV-COMP-207",
+                  replacementVehicleStatus: "Replacement vehicle identified - mock review only",
+                },
+                {
+                  backupDriverStatus: "Backup driver on standby - not assigned",
+                  closeoutHandoffReadiness: "Closeout handoff waiting on customer-impact review",
+                  customerAccount: "UBS Priority",
+                  customerImpact: "Late driver risk; customer update needed",
+                  customerUpdateReadiness: "Customer update readiness requires dispatcher review",
+                  dispatcherEscalationStatus: "Dispatcher escalation in progress - display only",
+                  exceptionType: "Late driver risk",
+                  nextInternalAction: "Review customer impact before any future update",
+                  originalDriver: "Nadia Tan",
+                  originalVehiclePlate: "Toyota Alphard / SJA8822K",
+                  recoveryReference: "PLO-REC-2026-05-LATE",
+                  relatedJobReference: "PLO-DRV-COMP-118",
+                  replacementVehicleStatus: "Replacement car not needed yet",
+                },
+                {
+                  backupDriverStatus: "Backup driver review blocked by manager approval",
+                  closeoutHandoffReadiness: "Closeout handoff blocked until service recovery review",
+                  customerAccount: "VIP Customer",
+                  customerImpact: "Missed job / service recovery review required",
+                  customerUpdateReadiness: "Manager approval required before customer update",
+                  dispatcherEscalationStatus: "Manager escalation required - mock only",
+                  exceptionType: "Missed job / service recovery review",
+                  nextInternalAction: "Get manager approval before future closeout handoff",
+                  originalDriver: "Arun Lim",
+                  originalVehiclePlate: "Mercedes E-Class / SGM101A",
+                  recoveryReference: "PLO-REC-2026-05-MISSED",
+                  relatedJobReference: "PLO-CLOSE-207",
+                  replacementVehicleStatus: "Replacement vehicle status under review",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-rose-200 bg-rose-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.15fr_1.1fr_1.15fr_1.15fr_1.25fr_1.25fr]"
+                  data-mock-replacement-vehicle-service-recovery-workbench-row={row.recoveryReference}
+                  key={row.recoveryReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-replacement-vehicle-service-recovery-workbench-column="Recovery reference related job reference customer account"
+                    >
+                      Recovery / Job
+                    </span>
+                    <span className="block">{row.recoveryReference}</span>
+                    <span className="block">{row.relatedJobReference}</span>
+                    <span className="block">{row.customerAccount}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-replacement-vehicle-service-recovery-workbench-column="Original driver original vehicle plate exception type"
+                    >
+                      Original Driver / Exception
+                    </span>
+                    <span className="block">{row.originalDriver}</span>
+                    <span className="block">{row.originalVehiclePlate}</span>
+                    <span className="block">{row.exceptionType}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-replacement-vehicle-service-recovery-workbench-column="Replacement vehicle status backup driver status"
+                    >
+                      Replacement / Backup
+                    </span>
+                    <span className="block">{row.replacementVehicleStatus}</span>
+                    <span className="block">{row.backupDriverStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-replacement-vehicle-service-recovery-workbench-column="Customer impact customer update readiness"
+                    >
+                      Customer Impact
+                    </span>
+                    <span className="block">{row.customerImpact}</span>
+                    <span className="block">{row.customerUpdateReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-replacement-vehicle-service-recovery-workbench-column="Dispatcher escalation status closeout handoff readiness"
+                    >
+                      Escalation / Closeout
+                    </span>
+                    <span className="block">{row.dispatcherEscalationStatus}</span>
+                    <span className="block">{row.closeoutHandoffReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-replacement-vehicle-service-recovery-workbench-column="Next internal action"
+                    >
+                      Next Internal Action
+                    </span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-replacement-vehicle-service-recovery-workbench-recovery-note="true"
+              >
+                Service recovery - mock only. Replacement vehicle status, backup driver status, customer impact,
+                dispatcher escalation, customer update readiness, and closeout handoff readiness stay as static review
+                labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-replacement-vehicle-service-recovery-workbench-distinction="true"
+              >
+                This is separate from Driver Job Completion intake: it focuses on recovery triage, replacement car
+                readiness, backup driver readiness, customer impact, and dispatcher escalation before closeout handoff.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-replacement-vehicle-service-recovery-workbench-safety="true"
+              >
+                Mock Only. No replacement car dispatch created, no backup driver assigned, no customer update sent, no
+                driver acknowledgement sent, no live location activated, no proof/photo uploaded, no job status saved,
+                no closeout record created, no billing, invoice, payment, PDF, payout, accounting, or finance export
+                created.
+              </p>
+            </div>
+
+            <p
+              className="text-[10px] leading-[1.15] text-slate-500"
+              data-mock-replacement-vehicle-service-recovery-workbench-boundary="true"
+            >
+              Future workflow boundary: Mock/local only. No real replacement vehicle dispatch, backup driver assignment,
+              driver acknowledgement behavior, customer update sending, notification sending, live location behavior,
+              proof/photo upload, job status persistence, closeout workflow, closeout record, billing, invoice,
+              statement, payment, payment link, PDF, payout, accounting posting, finance export, customer account,
+              customer auth, save/load behavior, storage, localStorage, sessionStorage, cookies, IndexedDB, API call,
+              fetch, XHR, sendBeacon, WebSocket, Supabase, parser file changes, package script changes, test:safe
+              membership changes, message-channel delivery, customer notification, notification, or send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

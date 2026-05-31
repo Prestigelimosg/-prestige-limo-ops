@@ -662,6 +662,9 @@ async function runChromeTest() {
       const mockDriverJobCompletionExceptionIntakeWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench]"))`,
       );
+      const mockReplacementVehicleServiceRecoveryWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -774,6 +777,20 @@ async function runChromeTest() {
             "no real driver job completion workflow",
             "ots/pob/completed persistence",
             "replacement vehicle dispatch",
+            "replacement vehicle & service recovery workbench",
+            "internal/admin-only service recovery preview",
+            "late driver / breakdown / missed job / replacement need",
+            "driver exception and dispatcher escalation review",
+            "3 recovery rows maximum",
+            "car breakdown reported",
+            "replacement vehicle identified - mock review only",
+            "backup driver pending confirmation",
+            "customer update needed",
+            "dispatcher escalation in progress",
+            "missed job / service recovery review",
+            "no backup driver assigned",
+            "no customer update sent",
+            "job status persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -955,10 +972,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${route.label}: expected no internal mock driver job completion exception intake workbench`,
       );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock replacement vehicle service recovery workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${route.label}: expected no internal extra charges, finance, or driver completion workbench text leak`,
+        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, or replacement recovery workbench text leak`,
       );
     };
 
@@ -6339,6 +6361,197 @@ async function runChromeTest() {
         `${viewport.label}: expected driver completion workbench not to create horizontal overflow`,
       );
 
+      const mockReplacementVehicleServiceRecoveryWorkbenchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const driverWorkbench = document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench]");
+            const workbench = document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench]");
+            if (!group || !dashboard || !driverWorkbench || !workbench) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const driverRect = driverWorkbench.getBoundingClientRect();
+            const rect = workbench.getBoundingClientRect();
+            const rows = [...workbench.querySelectorAll("[data-mock-replacement-vehicle-service-recovery-workbench-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-replacement-vehicle-service-recovery-workbench-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...workbench.querySelectorAll("[data-mock-replacement-vehicle-service-recovery-workbench-column]")].map(
+                  (column) => column.getAttribute("data-mock-replacement-vehicle-service-recovery-workbench-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: workbench.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: workbench.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              driverBottom: Math.round(driverRect.bottom),
+              filterSummary:
+                document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench-filter-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              rows,
+              safety:
+                document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench-safety]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              text: workbench.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock replacement vehicle service recovery workbench`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.groupTop >=
+          mockReplacementVehicleServiceRecoveryWorkbenchState.dashboardBottom,
+        true,
+        `${viewport.label}: expected replacement recovery workbench to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.sectionTop >=
+          mockReplacementVehicleServiceRecoveryWorkbenchState.driverBottom,
+        true,
+        `${viewport.label}: expected replacement recovery workbench after driver completion workbench`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.text
+          .toLowerCase()
+          .includes("replacement vehicle & service recovery workbench") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected replacement recovery workbench heading`,
+      );
+      assert.deepEqual(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.columns,
+        [
+          "Recovery reference related job reference customer account",
+          "Original driver original vehicle plate exception type",
+          "Replacement vehicle status backup driver status",
+          "Customer impact customer update readiness",
+          "Dispatcher escalation status closeout handoff readiness",
+          "Next internal action",
+        ],
+        `${viewport.label}: expected replacement recovery workflow columns`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.filterSummary.includes(
+          "Late driver / breakdown / missed job / replacement need",
+        ) &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.filterSummary.includes(
+            "Driver exception and dispatcher escalation review",
+          ) &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.filterSummary.includes("3 recovery rows maximum") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.filterSummary.includes("display-only / no actions"),
+        true,
+        `${viewport.label}: expected compact display-only replacement recovery filter summary`,
+      );
+      const replacementRecoveryRowsByRef = Object.fromEntries(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        replacementRecoveryRowsByRef["PLO-REC-2026-05-BREAKDOWN"].includes("Car breakdown reported") &&
+          replacementRecoveryRowsByRef["PLO-REC-2026-05-BREAKDOWN"].includes(
+            "Replacement vehicle identified - mock review only",
+          ) &&
+          replacementRecoveryRowsByRef["PLO-REC-2026-05-BREAKDOWN"].includes(
+            "Backup driver pending confirmation",
+          ) &&
+          replacementRecoveryRowsByRef["PLO-REC-2026-05-LATE"].includes("Late driver risk") &&
+          replacementRecoveryRowsByRef["PLO-REC-2026-05-LATE"].includes("customer update needed") &&
+          replacementRecoveryRowsByRef["PLO-REC-2026-05-MISSED"].includes(
+            "Missed job / service recovery review",
+          ) &&
+          replacementRecoveryRowsByRef["PLO-REC-2026-05-MISSED"].includes("Manager approval required"),
+        true,
+        `${viewport.label}: expected breakdown, late-driver, and missed-job recovery rows`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes(
+          "No replacement car dispatch created",
+        ) &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes("no backup driver assigned") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes("no customer update sent") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes(
+            "no driver acknowledgement sent",
+          ) &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes("no live location activated") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes("no proof/photo uploaded") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes("no job status saved") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes("no closeout record created") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.safety.includes(
+            "no billing, invoice, payment, PDF, payout, accounting, or finance export created",
+          ) &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes(
+            "No real replacement vehicle dispatch",
+          ) &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("backup driver assignment") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("customer update sending") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("job status persistence") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("API call") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("storage") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("Supabase") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("parser file changes") &&
+          mockReplacementVehicleServiceRecoveryWorkbenchState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected replacement recovery no dispatch/update/persistence/API boundary`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.actionControlCount,
+        0,
+        `${viewport.label}: expected replacement recovery workbench to have no action controls`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.controlCount,
+        0,
+        `${viewport.label}: expected replacement recovery workbench to have no form controls`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.rows.length,
+        3,
+        `${viewport.label}: expected three replacement recovery rows`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.height <=
+          (viewport.width < 640 ? 1600 : viewport.width < 1024 ? 960 : viewport.width < 1200 ? 900 : 820),
+        true,
+        `${viewport.label}: expected compact replacement recovery workbench, got ${mockReplacementVehicleServiceRecoveryWorkbenchState.height}px`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.rows.every(
+          (row) => row.height >= 48 && row.width >= 240,
+        ),
+        true,
+        `${viewport.label}: expected replacement recovery rows to stay readable`,
+      );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchState.docScrollWidth <=
+          mockReplacementVehicleServiceRecoveryWorkbenchState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected replacement recovery workbench not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -6464,6 +6677,9 @@ async function runChromeTest() {
       const mockDriverJobCompletionExceptionIntakeWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench]"))`,
       );
+      const mockReplacementVehicleServiceRecoveryWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-replacement-vehicle-service-recovery-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -6576,6 +6792,20 @@ async function runChromeTest() {
             "no real driver job completion workflow",
             "ots/pob/completed persistence",
             "replacement vehicle dispatch",
+            "replacement vehicle & service recovery workbench",
+            "internal/admin-only service recovery preview",
+            "late driver / breakdown / missed job / replacement need",
+            "driver exception and dispatcher escalation review",
+            "3 recovery rows maximum",
+            "car breakdown reported",
+            "replacement vehicle identified - mock review only",
+            "backup driver pending confirmation",
+            "customer update needed",
+            "dispatcher escalation in progress",
+            "missed job / service recovery review",
+            "no backup driver assigned",
+            "no customer update sent",
+            "job status persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -6783,10 +7013,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock driver job completion exception intake workbench`,
       );
+      assert.equal(
+        mockReplacementVehicleServiceRecoveryWorkbenchVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock replacement vehicle service recovery workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${context}: expected no internal extra charges, finance, or driver completion workbench text leak`,
+        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, or replacement recovery workbench text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

@@ -682,6 +682,7 @@ async function runChromeTest() {
         "[data-mock-extra-charges-variance-approval-reconciliation-review]",
         "[data-mock-midnight-charge-auto-detection-override-review]",
         "[data-mock-combined-extra-charges-summary-separation-review]",
+        "[data-mock-extra-charges-approval-decision-separation-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -8600,6 +8601,326 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockExtraChargesApprovalDecisionSeparationReview = async () => {
+      const reviewViewports = [
+        {
+          height: 980,
+          label: "mobile mock extra charges approval decision separation review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock extra charges approval decision separation review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const combinedSection = document.querySelector("[data-mock-combined-extra-charges-summary-separation-review]");
+              const section = document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]");
+              if (!group || !dashboard || !combinedSection || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const combinedRect = combinedSection.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-extra-charges-approval-decision-separation-review-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-extra-charges-approval-decision-separation-review-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-extra-charges-approval-decision-separation-review-column]")].map(
+                    (column) =>
+                      column.getAttribute("data-mock-extra-charges-approval-decision-separation-review-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-extra-charges-approval-decision-separation-review-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-extra-charges-approval-decision-separation-review-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                combinedBottom: Math.round(combinedRect.bottom),
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "bill now",
+                  "calculate now",
+                  "create approval",
+                  "create charge",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "export now",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "notify customer",
+                  "pay now",
+                  "post now",
+                  "reconcile now",
+                  "save approval",
+                  "save charge",
+                  "save payout",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-extra-charges-approval-decision-separation-review-generation]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                note:
+                  document.querySelector("[data-mock-extra-charges-approval-decision-separation-review-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rows,
+                rule:
+                  document.querySelector("[data-mock-extra-charges-approval-decision-separation-review-rule]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock extra charges approval decision separation review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected extra charges approval decision review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.sectionTop >= state.combinedBottom,
+          true,
+          `${viewport.label}: expected extra charges approval decision review after combined extra charges summary`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("extra charges approval decision") &&
+            state.text.toLowerCase().includes("billing & payout separation qa"),
+          true,
+          `${viewport.label}: expected extra charges approval decision billing payout separation heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Charge type",
+            "Display group",
+            "Customer billing decision",
+            "Driver payout decision",
+            "Dispatcher review status",
+            "Separation note",
+          ],
+          `${viewport.label}: expected extra charges approval decision columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three approval decision charge rows`);
+        const rowByType = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByType["Waiting Time"].includes("Waiting Time") &&
+            rowByType["Waiting Time"].includes("Extra Charges") &&
+            rowByType["Waiting Time"].includes("Customer billing approved in mock review") &&
+            rowByType["Waiting Time"].includes("Driver payout approved in mock review") &&
+            rowByType["Waiting Time"].includes("Waiting Time source stays separate"),
+          true,
+          `${viewport.label}: expected waiting time approval row with separate billing and payout decisions`,
+        );
+        assert.equal(
+          rowByType["Extra Stops"].includes("Extra Stops") &&
+            rowByType["Extra Stops"].includes("Extra Charges") &&
+            rowByType["Extra Stops"].includes("Hold for dispatcher confirmation") &&
+            rowByType["Extra Stops"].includes("no billing or payout created") &&
+            rowByType["Extra Stops"].includes("Extra Stops source stays separate"),
+          true,
+          `${viewport.label}: expected extra stops approval row held for dispatcher confirmation`,
+        );
+        assert.equal(
+          rowByType["Midnight Charge"].includes("Midnight Charge") &&
+            rowByType["Midnight Charge"].includes("Extra Charges") &&
+            rowByType["Midnight Charge"].includes("Customer billing waived in mock example") &&
+            rowByType["Midnight Charge"].includes("Driver payout still reviewed separately") &&
+            rowByType["Midnight Charge"].includes("Midnight Charge source stays separate"),
+          true,
+          `${viewport.label}: expected midnight charge waiver row to keep driver payout review separate`,
+        );
+        assert.equal(
+          state.copy.includes("Static/mock Extra Charges approval decision") &&
+            state.copy.includes("billing/payout separation QA") &&
+            state.copy.includes("not active real billing or payout") &&
+            state.copy.includes("Nothing is approved as a real workflow"),
+          true,
+          `${viewport.label}: expected static mock approval decision copy`,
+        );
+        assert.equal(
+          state.note.includes("Extra Charges approval decision review - mock only") &&
+            state.note.includes("Waiting Time, Extra Stops, and Midnight Charge may display together under Extra Charges") &&
+            state.note.includes("each charge type remains internally distinct") &&
+            state.note.includes("Customer billing approval and driver payout approval are separate decisions"),
+          true,
+          `${viewport.label}: expected approval decision separation note`,
+        );
+        assert.equal(
+          state.rule.includes("1 waiting block = 15 minutes") &&
+            state.rule.includes("customer waiting charge $15 per waiting block") &&
+            state.rule.includes("driver waiting payout $10 per waiting block") &&
+            state.rule.includes("customer charge $15") &&
+            state.rule.includes("driver payout $10") &&
+            state.rule.includes("11:00pm to 6:59am") &&
+            state.rule.includes("11:00pm and 6:59am are included") &&
+            state.rule.includes("7:00am and 10:59pm are not included"),
+          true,
+          `${viewport.label}: expected waiting-time and midnight locked rules in approval decision review`,
+        );
+        assert.equal(
+          state.generation.includes("Waived customer charge does not automatically cancel driver payout review") &&
+            state.generation.includes("No invoice generated") &&
+            state.generation.includes("No payout created") &&
+            state.generation.includes("No accounting posting") &&
+            state.generation.includes("Not saved") &&
+            state.generation.includes("No real approval workflow") &&
+            state.generation.includes("combined charge calculation") &&
+            state.generation.includes("customer charge record") &&
+            state.generation.includes("driver payout record") &&
+            state.generation.includes("approval-decision record") &&
+            state.generation.includes("waiting-time record") &&
+            state.generation.includes("extra-stop record") &&
+            state.generation.includes("midnight-charge record") &&
+            state.generation.includes("invoice/payment/PDF"),
+          true,
+          `${viewport.label}: expected no invoice/payout/accounting/save approval generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real approval workflow",
+          "real combined charge calculation",
+          "billing automation",
+          "monthly invoice",
+          "invoice",
+          "payment",
+          "payment link",
+          "PDF",
+          "accounting integration",
+          "customer account",
+          "customer auth",
+          "waiting-time persistence",
+          "extra-stop persistence",
+          "midnight-charge persistence",
+          "approval-decision persistence",
+          "extra-charge persistence",
+          "customer-charge persistence",
+          "driver-payout persistence",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "save",
+          "load",
+          "calculate",
+          "reconcile",
+          "approve",
+          "pay",
+          "bill",
+          "export",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected approval decision boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionControlCount,
+          0,
+          `${viewport.label}: expected extra charges approval decision review to have no action controls`,
+        );
+        assert.equal(
+          state.controlCount,
+          0,
+          `${viewport.label}: expected extra charges approval decision review to have no form controls`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active approval/bill/pay/invoice/PDF/post/export controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1250 : viewport.width < 1024 ? 760 : 620),
+          true,
+          `${viewport.label}: expected compact extra charges approval decision review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected approval decision rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected extra charges approval decision review not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -8751,6 +9072,44 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal combined extra-charge/customer-charge/driver-payout/accounting data leak`,
+      );
+    };
+
+    const assertNoMockExtraChargesApprovalDecisionSeparationLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "extra charges approval decision",
+            "billing & payout separation qa",
+            "static/mock extra charges approval decision",
+            "billing/payout separation qa",
+            "customer billing decision",
+            "driver payout decision",
+            "customer billing approval and driver payout approval are separate decisions",
+            "waived customer charge does not automatically cancel driver payout review",
+            "customer billing waived in mock example",
+            "driver payout still reviewed separately",
+            "approval-decision persistence",
+            "approval-decision record",
+            "no real approval workflow",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(
+            document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]"),
+          ),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock extra charges approval decision separation review`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal approval-decision/extra-charge/customer-charge/driver-payout data leak`,
       );
     };
 
@@ -9343,6 +9702,7 @@ async function runChromeTest() {
         await assertNoMockExtraChargesVarianceApprovalReconciliationLeak(routeName);
         await assertNoMockMidnightChargeAutoDetectionOverrideLeak(routeName);
         await assertNoMockCombinedExtraChargesSummarySeparationLeak(routeName);
+        await assertNoMockExtraChargesApprovalDecisionSeparationLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -9418,6 +9778,9 @@ async function runChromeTest() {
             ),
             mockCombinedExtraChargesSummarySeparationReviewVisible: Boolean(
               document.querySelector("[data-mock-combined-extra-charges-summary-separation-review]"),
+            ),
+            mockExtraChargesApprovalDecisionSeparationReviewVisible: Boolean(
+              document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]"),
             ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
@@ -9575,6 +9938,15 @@ async function runChromeTest() {
               "override reason mock only",
               "no midnight-charge record generated",
               "manual override persistence",
+              "extra charges approval decision",
+              "billing & payout separation qa",
+              "static/mock extra charges approval decision",
+              "customer billing decision",
+              "driver payout decision",
+              "customer billing approval and driver payout approval are separate decisions",
+              "waived customer charge does not automatically cancel driver payout review",
+              "approval-decision persistence",
+              "approval-decision record",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -9699,6 +10071,11 @@ async function runChromeTest() {
           routeState.mockCombinedExtraChargesSummarySeparationReviewVisible,
           false,
           `${routeName}: expected no internal mock combined extra charges summary separation review`,
+        );
+        assert.equal(
+          routeState.mockExtraChargesApprovalDecisionSeparationReviewVisible,
+          false,
+          `${routeName}: expected no internal mock extra charges approval decision separation review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -10255,6 +10632,7 @@ async function runChromeTest() {
       await assertNoMockExtraChargesVarianceApprovalReconciliationLeak("/customers desktop");
       await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers desktop");
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers desktop");
+      await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -15909,6 +16287,7 @@ async function runChromeTest() {
       await assertNoMockExtraChargesVarianceApprovalReconciliationLeak("/customers mobile");
       await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers mobile");
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers mobile");
+      await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -21802,6 +22181,8 @@ async function runChromeTest() {
       await checkAdminMockMidnightChargeAutoDetectionOverrideReview();
     state.adminMockCombinedExtraChargesSummarySeparationReview =
       await checkAdminMockCombinedExtraChargesSummarySeparationReview();
+    state.adminMockExtraChargesApprovalDecisionSeparationReview =
+      await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

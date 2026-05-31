@@ -9958,6 +9958,130 @@ export default function Home() {
             notification, notification, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock extra charges approval decision billing and payout separation QA review"
+          className="rounded-lg border border-cyan-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-extra-charges-approval-decision-separation-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-cyan-700">Extra Charges Approval Decision</span>{" "}
+                <span className="text-slate-600">Billing &amp; Payout Separation QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-extra-charges-approval-decision-separation-review-copy="true"
+              >
+                Static/mock Extra Charges approval decision and billing/payout separation QA data only for internal
+                review. This is not active real billing or payout. Nothing is approved as a real workflow, billed,
+                paid, posted, saved, persisted, generated, exported, or sent.
+              </p>
+              <div
+                className="grid min-w-0 gap-1.5"
+                data-mock-extra-charges-approval-decision-separation-review-rows="true"
+              >
+                {[
+                  {
+                    chargeType: "Waiting Time",
+                    customerBillingDecision: "Customer billing approved in mock review",
+                    dispatcherReviewStatus: "Dispatcher reviewed waiting blocks",
+                    displayGroup: "Extra Charges",
+                    driverPayoutDecision: "Driver payout approved in mock review",
+                    separationNote: "Waiting Time source stays separate from Extra Stops and Midnight Charge",
+                  },
+                  {
+                    chargeType: "Extra Stops",
+                    customerBillingDecision: "Hold for dispatcher confirmation",
+                    dispatcherReviewStatus: "Route extra confirmation pending",
+                    displayGroup: "Extra Charges",
+                    driverPayoutDecision: "Hold separately; no billing or payout created",
+                    separationNote: "Extra Stops source stays separate from Waiting Time and Midnight Charge",
+                  },
+                  {
+                    chargeType: "Midnight Charge",
+                    customerBillingDecision: "Customer billing waived in mock example",
+                    dispatcherReviewStatus: "Waiver reviewed as billing-only decision",
+                    displayGroup: "Extra Charges",
+                    driverPayoutDecision: "Driver payout still reviewed separately",
+                    separationNote: "Midnight Charge source stays separate from Waiting Time and Extra Stops",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-cyan-200 bg-cyan-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-3 xl:grid-cols-6"
+                    data-mock-extra-charges-approval-decision-separation-review-row={row.chargeType}
+                    key={row.chargeType}
+                  >
+                    {[
+                      ["Charge type", "Type", row.chargeType],
+                      ["Display group", "Group", row.displayGroup],
+                      ["Customer billing decision", "Cust bill", row.customerBillingDecision],
+                      ["Driver payout decision", "Driver pay", row.driverPayoutDecision],
+                      ["Dispatcher review status", "Review", row.dispatcherReviewStatus],
+                      ["Separation note", "Separate", row.separationNote],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-cyan-700"
+                          data-mock-extra-charges-approval-decision-separation-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+                <p
+                  className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-extra-charges-approval-decision-separation-review-note="true"
+                >
+                  Extra Charges approval decision review - mock only. Waiting Time, Extra Stops, and Midnight Charge
+                  may display together under Extra Charges, but each charge type remains internally distinct. Customer
+                  billing approval and driver payout approval are separate decisions for future review.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-extra-charges-approval-decision-separation-review-rule="true"
+                >
+                  Locked rules preview - mock only. Waiting Time: 1 waiting block = 15 minutes, customer waiting
+                  charge $15 per waiting block, driver waiting payout $10 per waiting block. Midnight Charge:
+                  customer charge $15, driver payout $10, applies from 11:00pm to 6:59am; 11:00pm and 6:59am are
+                  included, 7:00am and 10:59pm are not included.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-extra-charges-approval-decision-separation-review-generation="true"
+                >
+                  Waived customer charge does not automatically cancel driver payout review. No invoice generated. No
+                  payout created. No accounting posting. Not saved. No real approval workflow, combined charge
+                  calculation, customer charge record, driver payout record, approval-decision record, waiting-time
+                  record, extra-stop record, midnight-charge record, invoice/payment/PDF, or accounting record
+                  generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-extra-charges-approval-decision-separation-review-boundary="true"
+          >
+            Mock/local only. No real approval workflow, real combined charge calculation, billing automation, monthly
+            invoice, invoice, payment, payment link, PDF, accounting integration, customer account, customer auth,
+            waiting-time persistence, extra-stop persistence, midnight-charge persistence, approval-decision
+            persistence, extra-charge persistence, customer-charge persistence, driver-payout persistence, customer
+            charge record, driver payout record, approval-decision record, waiting-time record, extra-stop record,
+            midnight-charge record, extra-charge record, storage, localStorage, sessionStorage, cookies, IndexedDB,
+            API call, fetch, XHR, sendBeacon, WebSocket, Supabase, save, load, post, calculate, reconcile, approve,
+            pay, bill, export, parser file changes, package script changes, test:safe membership changes,
+            message-channel delivery, customer notification, notification, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

@@ -10285,6 +10285,207 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Month-End Closeout Workbench Mock Only"
+          className="rounded-lg border border-cyan-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-month-end-closeout-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-cyan-700">Month-End Closeout Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-month-end-closeout-workbench-copy="true"
+                >
+                  Internal/admin-only month-end grouping preview for completed jobs after the Completed Job Closeout
+                  Center. Static/mock/local display data only; no real month-end closeout, statement, invoice, payment,
+                  payout, PDF, accounting posting, storage, API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-semibold uppercase text-cyan-700">
+                Display-only workbench
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-month-end-closeout-workbench-filter-summary="true"
+            >
+              {[
+                ["Closeout month", "May 2026"],
+                ["Account filter", "All mock accounts with completed jobs"],
+                ["Grouping source", "Completed Job Closeout Center rows grouped by account/month"],
+                ["Mock results", "3 account/month groups maximum / display-only"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-cyan-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-month-end-closeout-workbench-rows="true">
+              {[
+                {
+                  account: "UBS Priority",
+                  billingReadiness: "Customer billing ready for future month-end handoff",
+                  closeoutMonth: "May 2026",
+                  completedJobsCount: "18 completed jobs",
+                  driverPayoutReadiness: "Driver payout handoff ready - mock review only",
+                  exceptionStatus: "0 exceptions / clean month-end closeout group",
+                  extraChargesStatus:
+                    "Extra Charges: Waiting Time reviewed; Extra Stops none; Midnight Charge reviewed; all charge types separate",
+                  financeHandoffStatus: "Finance/month-end handoff ready",
+                  groupReference: "PLO-ME-2026-05-UBS",
+                  nextInternalAction: "Queue finance QA handoff - display only",
+                  statementInvoiceReadiness: "Statement/invoice readiness reviewed - not generated",
+                },
+                {
+                  account: "Ritz-Carlton",
+                  billingReadiness: "Customer billing blocked pending extra-charge exception review",
+                  closeoutMonth: "May 2026",
+                  completedJobsCount: "7 completed jobs",
+                  driverPayoutReadiness: "Driver payout review pending for waiting time and extra stop",
+                  exceptionStatus: "2 exceptions / dispatcher review required",
+                  extraChargesStatus:
+                    "Extra Charges: Waiting Time 2 blocks; Extra Stops 1; Midnight Charge not detected; sources separate",
+                  financeHandoffStatus: "Finance/month-end handoff blocked in mock",
+                  groupReference: "PLO-ME-2026-05-RITZ",
+                  nextInternalAction: "Resolve Extra Charges exception review before future billing or payout",
+                  statementInvoiceReadiness: "Statement/invoice readiness not ready",
+                },
+                {
+                  account: "VIP Customer",
+                  billingReadiness: "Customer charge waived in mock month-end example",
+                  closeoutMonth: "May 2026",
+                  completedJobsCount: "3 completed jobs",
+                  driverPayoutReadiness: "Driver payout still pending review separately",
+                  exceptionStatus: "1 waiver exception / payout review still open",
+                  extraChargesStatus:
+                    "Extra Charges: Waiting Time none; Extra Stops none; Midnight Charge detected; midnight source separate",
+                  financeHandoffStatus: "Finance/month-end handoff pending driver payout review",
+                  groupReference: "PLO-ME-2026-05-VIP",
+                  nextInternalAction: "Review driver payout even though customer charge is waived",
+                  statementInvoiceReadiness: "Statement/invoice waiver note only - not generated",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-cyan-200 bg-cyan-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.25fr_1.25fr_1.25fr_1.25fr]"
+                  data-mock-month-end-closeout-workbench-row={row.groupReference}
+                  key={row.groupReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-month-end-closeout-workbench-column="Closeout month customer account completed jobs count"
+                    >
+                      Month / Account
+                    </span>
+                    <span className="block">{row.groupReference}</span>
+                    <span className="block">{row.closeoutMonth}</span>
+                    <span className="block">{row.account}</span>
+                    <span className="block">{row.completedJobsCount}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-month-end-closeout-workbench-column="Billing readiness driver payout readiness"
+                    >
+                      Billing / Payout
+                    </span>
+                    <span className="block">{row.billingReadiness}</span>
+                    <span className="block">{row.driverPayoutReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-month-end-closeout-workbench-column="Exception count status"
+                    >
+                      Exceptions
+                    </span>
+                    <span>{row.exceptionStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words" data-mock-month-end-closeout-workbench-extra-charges="true">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-month-end-closeout-workbench-column="Extra charges review status"
+                    >
+                      Extra Charges
+                    </span>
+                    <span>{row.extraChargesStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-month-end-closeout-workbench-column="Finance month-end handoff status statement invoice readiness"
+                    >
+                      Finance / Statement
+                    </span>
+                    <span className="block">{row.financeHandoffStatus}</span>
+                    <span className="block">{row.statementInvoiceReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-month-end-closeout-workbench-column="Next internal action"
+                    >
+                      Next
+                    </span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-month-end-closeout-workbench-rule="true"
+              >
+                Locked rules - mock only. Waiting Time: 1 waiting block = 15 minutes, customer charge $15 per waiting
+                block, driver payout $10 per waiting block. Midnight Charge: customer charge $15, driver payout $10,
+                applies from 11:00pm / 23:00 through 6:59am / 06:59 inclusive; 7:00am / 07:00 and 10:59pm / 22:59 are
+                excluded.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-month-end-closeout-workbench-separation="true"
+              >
+                Extra Charges month-end grouping - mock only. Waiting Time, Extra Stops, and Midnight Charge may display
+                together under Extra Charges, but each charge type remains internally distinct for future billing,
+                driver payout, audit, and dispute review.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-month-end-closeout-workbench-decision="true"
+              >
+                Customer billing approval and driver payout approval are separate decisions. Waived customer charge does
+                not automatically cancel driver payout review. No invoice generated, no statement generated, no payment
+                link created, no PDF generated, no payout created, no accounting posting, not saved.
+              </p>
+            </div>
+
+            <p
+              className="text-[10px] leading-[1.15] text-slate-500"
+              data-mock-month-end-closeout-workbench-boundary="true"
+            >
+              Future workflow boundary: Mock/local only. No real month-end closeout workflow, completed-job persistence,
+              monthly billing persistence, statement generation, invoice generation, real combined charge calculation,
+              billing automation, monthly invoice, payment link, PDF generation, accounting integration, accounting
+              posting, finance export, customer account, customer auth, driver payout creation, waiting-time persistence,
+              extra-stop persistence, midnight-charge persistence, approval-decision persistence, extra-charge
+              persistence, customer-charge persistence, driver-payout persistence, save/load behavior, storage,
+              localStorage, sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase,
+              parser file changes, package script changes, test:safe membership changes, message-channel delivery,
+              customer notification, notification, or send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

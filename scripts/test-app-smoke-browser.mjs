@@ -684,6 +684,7 @@ async function runChromeTest() {
         "[data-mock-combined-extra-charges-summary-separation-review]",
         "[data-mock-extra-charges-approval-decision-separation-review]",
         "[data-mock-completed-job-closeout-center]",
+        "[data-mock-month-end-closeout-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -739,7 +740,8 @@ async function runChromeTest() {
             state.text.includes("Variance / Approval QA") &&
             state.text.includes("Auto-detection / Override QA") &&
             state.text.includes("Summary / Charge Type Separation QA") &&
-            state.text.includes("Completed Job Closeout Center"),
+            state.text.includes("Completed Job Closeout Center") &&
+            state.text.includes("Month-End Closeout Workbench"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -9239,6 +9241,339 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockMonthEndCloseoutWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 980,
+          label: "mobile mock month-end closeout workbench",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock month-end closeout workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const closeoutCenter = document.querySelector("[data-mock-completed-job-closeout-center]");
+              const section = document.querySelector("[data-mock-month-end-closeout-workbench]");
+              if (!group || !dashboard || !closeoutCenter || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const closeoutRect = closeoutCenter.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-month-end-closeout-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-month-end-closeout-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-month-end-closeout-workbench-column]")].map(
+                    (column) => column.getAttribute("data-mock-month-end-closeout-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-month-end-closeout-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                closeoutBottom: Math.round(closeoutRect.bottom),
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-month-end-closeout-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                decision:
+                  document.querySelector("[data-mock-month-end-closeout-workbench-decision]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-month-end-closeout-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "approve now",
+                  "bill now",
+                  "close month",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "create statement",
+                  "export pdf",
+                  "export to finance",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "generate statement",
+                  "pay now",
+                  "post now",
+                  "save closeout",
+                  "save month-end",
+                  "send invoice",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                rowCount: rows.length,
+                rows,
+                rule:
+                  document.querySelector("[data-mock-month-end-closeout-workbench-rule]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                separation:
+                  document.querySelector("[data-mock-month-end-closeout-workbench-separation]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock month-end closeout workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected month-end closeout workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before month-end closeout workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.closeoutBottom,
+          true,
+          `${viewport.label}: expected month-end closeout workbench after completed job closeout center`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("month-end closeout workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected month-end closeout workbench heading`,
+        );
+        assert.equal(
+          state.copy.includes("completed jobs after the Completed Job Closeout Center") &&
+            state.copy.includes("Static/mock/local display data only") &&
+            state.copy.includes("no real month-end closeout"),
+          true,
+          `${viewport.label}: expected month-end workbench to connect to completed job closeout center`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Closeout month customer account completed jobs count",
+            "Billing readiness driver payout readiness",
+            "Exception count status",
+            "Extra charges review status",
+            "Finance month-end handoff status statement invoice readiness",
+            "Next internal action",
+          ],
+          `${viewport.label}: expected month-end closeout workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three month-end workbench rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Closeout month") &&
+            state.filterSummary.includes("May 2026") &&
+            state.filterSummary.includes("Account filter") &&
+            state.filterSummary.includes("All mock accounts with completed jobs") &&
+            state.filterSummary.includes("Completed Job Closeout Center rows grouped by account/month") &&
+            state.filterSummary.includes("3 account/month groups maximum") &&
+            state.filterSummary.includes("display-only"),
+          true,
+          `${viewport.label}: expected display-only month/account filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-ME-2026-05-UBS"].includes("May 2026") &&
+            rowByRef["PLO-ME-2026-05-UBS"].includes("UBS Priority") &&
+            rowByRef["PLO-ME-2026-05-UBS"].includes("18 completed jobs") &&
+            rowByRef["PLO-ME-2026-05-UBS"].includes("Customer billing ready") &&
+            rowByRef["PLO-ME-2026-05-UBS"].includes("Driver payout handoff ready") &&
+            rowByRef["PLO-ME-2026-05-UBS"].includes("0 exceptions") &&
+            rowByRef["PLO-ME-2026-05-UBS"].includes("Finance/month-end handoff ready"),
+          true,
+          `${viewport.label}: expected ready account/month closeout row`,
+        );
+        assert.equal(
+          rowByRef["PLO-ME-2026-05-RITZ"].includes("Ritz-Carlton") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("7 completed jobs") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("Customer billing blocked") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("Driver payout review pending") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("2 exceptions") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("Waiting Time 2 blocks") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("Extra Stops 1") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("Midnight Charge not detected") &&
+            rowByRef["PLO-ME-2026-05-RITZ"].includes("Statement/invoice readiness not ready"),
+          true,
+          `${viewport.label}: expected blocked extra-charge exception account/month row`,
+        );
+        assert.equal(
+          rowByRef["PLO-ME-2026-05-VIP"].includes("VIP Customer") &&
+            rowByRef["PLO-ME-2026-05-VIP"].includes("3 completed jobs") &&
+            rowByRef["PLO-ME-2026-05-VIP"].includes("Customer charge waived in mock month-end example") &&
+            rowByRef["PLO-ME-2026-05-VIP"].includes("Driver payout still pending review separately") &&
+            rowByRef["PLO-ME-2026-05-VIP"].includes("Midnight Charge detected") &&
+            rowByRef["PLO-ME-2026-05-VIP"].includes("Review driver payout even though customer charge is waived"),
+          true,
+          `${viewport.label}: expected waived customer charge month-end row to preserve driver payout review`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("month / account") &&
+            state.text.toLowerCase().includes("billing / payout") &&
+            state.text.toLowerCase().includes("exceptions") &&
+            state.text.toLowerCase().includes("extra charges") &&
+            state.text.toLowerCase().includes("finance / statement") &&
+            state.text.toLowerCase().includes("next"),
+          true,
+          `${viewport.label}: expected complete month-end closeout workflow pieces`,
+        );
+        assert.equal(
+          state.separation.includes("Waiting Time, Extra Stops, and Midnight Charge may display") &&
+            state.separation.includes("under Extra Charges") &&
+            state.separation.includes("each charge type remains internally distinct"),
+          true,
+          `${viewport.label}: expected Extra Charges grouping with internal charge-type separation`,
+        );
+        assert.equal(
+          state.decision.includes("Customer billing approval and driver payout approval are separate decisions") &&
+            state.decision.includes("Waived customer charge does not automatically cancel driver payout review") &&
+            state.decision.includes("No invoice generated") &&
+            state.decision.includes("no statement generated") &&
+            state.decision.includes("no payment link created") &&
+            state.decision.includes("no PDF generated") &&
+            state.decision.includes("no payout created") &&
+            state.decision.includes("no accounting posting") &&
+            state.decision.includes("not saved"),
+          true,
+          `${viewport.label}: expected separate billing/payout decisions and no generated month-end artifacts`,
+        );
+        assert.equal(
+          state.rule.includes("1 waiting block = 15 minutes") &&
+            state.rule.includes("customer charge $15 per waiting block") &&
+            state.rule.includes("driver payout $10 per waiting block") &&
+            state.rule.includes("Midnight Charge: customer charge $15") &&
+            state.rule.includes("driver payout $10") &&
+            state.rule.includes("11:00pm / 23:00 through 6:59am / 06:59 inclusive") &&
+            state.rule.includes("7:00am / 07:00 and 10:59pm / 22:59 are excluded"),
+          true,
+          `${viewport.label}: expected waiting-time and midnight locked rules in month-end workbench`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real month-end closeout workflow",
+          "completed-job persistence",
+          "monthly billing persistence",
+          "statement generation",
+          "invoice generation",
+          "real combined charge calculation",
+          "billing automation",
+          "monthly invoice",
+          "payment link",
+          "PDF generation",
+          "accounting integration",
+          "accounting posting",
+          "finance export",
+          "customer account",
+          "customer auth",
+          "driver payout creation",
+          "waiting-time persistence",
+          "extra-stop persistence",
+          "midnight-charge persistence",
+          "approval-decision persistence",
+          "customer-charge persistence",
+          "driver-payout persistence",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected month-end closeout boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no month-end action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no month-end form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active month-end closeout/bill/pay/invoice/statement/PDF/post controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1550 : viewport.width < 1024 ? 900 : 760),
+          true,
+          `${viewport.label}: expected compact month-end closeout workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected month-end closeout rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected month-end closeout workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -9465,6 +9800,41 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal completed-job closeout/billing/payout/finance handoff data leak`,
+      );
+    };
+
+    const assertNoMockMonthEndCloseoutWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "month-end closeout workbench",
+            "internal/admin-only month-end grouping preview",
+            "all mock accounts with completed jobs",
+            "completed job closeout center rows grouped by account/month",
+            "3 account/month groups maximum",
+            "statement/invoice readiness",
+            "customer billing blocked",
+            "driver payout still pending review separately",
+            "finance/month-end handoff blocked",
+            "no real month-end closeout workflow",
+            "monthly billing persistence",
+            "finance export",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-month-end-closeout-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock month-end closeout workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal month-end closeout/billing/payout/statement/finance handoff data leak`,
       );
     };
 
@@ -10059,6 +10429,7 @@ async function runChromeTest() {
         await assertNoMockCombinedExtraChargesSummarySeparationLeak(routeName);
         await assertNoMockExtraChargesApprovalDecisionSeparationLeak(routeName);
         await assertNoMockCompletedJobCloseoutCenterLeak(routeName);
+        await assertNoMockMonthEndCloseoutWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -10140,6 +10511,9 @@ async function runChromeTest() {
             ),
             mockCompletedJobCloseoutCenterVisible: Boolean(
               document.querySelector("[data-mock-completed-job-closeout-center]"),
+            ),
+            mockMonthEndCloseoutWorkbenchVisible: Boolean(
+              document.querySelector("[data-mock-month-end-closeout-workbench]"),
             ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
@@ -10318,6 +10692,18 @@ async function runChromeTest() {
               "no real job closeout workflow",
               "completed-job persistence",
               "driver payout creation",
+              "month-end closeout workbench",
+              "internal/admin-only month-end grouping preview",
+              "all mock accounts with completed jobs",
+              "completed job closeout center rows grouped by account/month",
+              "3 account/month groups maximum",
+              "statement/invoice readiness",
+              "customer billing blocked",
+              "driver payout still pending review separately",
+              "finance/month-end handoff blocked",
+              "no real month-end closeout workflow",
+              "monthly billing persistence",
+              "finance export",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -10452,6 +10838,11 @@ async function runChromeTest() {
           routeState.mockCompletedJobCloseoutCenterVisible,
           false,
           `${routeName}: expected no internal mock completed job closeout center`,
+        );
+        assert.equal(
+          routeState.mockMonthEndCloseoutWorkbenchVisible,
+          false,
+          `${routeName}: expected no internal mock month-end closeout workbench`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -11010,6 +11401,7 @@ async function runChromeTest() {
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers desktop");
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers desktop");
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers desktop");
+      await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -16666,6 +17058,7 @@ async function runChromeTest() {
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers mobile");
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers mobile");
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers mobile");
+      await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -22562,6 +22955,7 @@ async function runChromeTest() {
     state.adminMockExtraChargesApprovalDecisionSeparationReview =
       await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
     state.adminMockCompletedJobCloseoutCenter = await checkAdminMockCompletedJobCloseoutCenter();
+    state.adminMockMonthEndCloseoutWorkbench = await checkAdminMockMonthEndCloseoutWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

@@ -683,6 +683,7 @@ async function runChromeTest() {
         "[data-mock-midnight-charge-auto-detection-override-review]",
         "[data-mock-combined-extra-charges-summary-separation-review]",
         "[data-mock-extra-charges-approval-decision-separation-review]",
+        "[data-mock-completed-job-closeout-center]",
       ];
 
       for (const viewport of placementViewports) {
@@ -737,7 +738,8 @@ async function runChromeTest() {
             state.text.includes("Waiting Time") &&
             state.text.includes("Variance / Approval QA") &&
             state.text.includes("Auto-detection / Override QA") &&
-            state.text.includes("Summary / Charge Type Separation QA"),
+            state.text.includes("Summary / Charge Type Separation QA") &&
+            state.text.includes("Completed Job Closeout Center"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -8921,6 +8923,322 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockCompletedJobCloseoutCenter = async () => {
+      const reviewViewports = [
+        {
+          height: 980,
+          label: "mobile mock completed job closeout center",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock completed job closeout center",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const approvalSection = document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]");
+              const section = document.querySelector("[data-mock-completed-job-closeout-center]");
+              if (!group || !dashboard || !approvalSection || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const approvalRect = approvalSection.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-completed-job-closeout-center-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-completed-job-closeout-center-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-completed-job-closeout-center-column]")].map(
+                    (column) => column.getAttribute("data-mock-completed-job-closeout-center-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                approvalBottom: Math.round(approvalRect.bottom),
+                boundary:
+                  document.querySelector("[data-mock-completed-job-closeout-center-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-completed-job-closeout-center-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                decision:
+                  document.querySelector("[data-mock-completed-job-closeout-center-decision]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "bill now",
+                  "close out now",
+                  "create closeout",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "export pdf",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "pay now",
+                  "post now",
+                  "save closeout",
+                  "send invoice",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                rowCount: rows.length,
+                rows,
+                rule:
+                  document.querySelector("[data-mock-completed-job-closeout-center-rule]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                searchSummary:
+                  document.querySelector("[data-mock-completed-job-closeout-center-search-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                separation:
+                  document.querySelector("[data-mock-completed-job-closeout-center-separation]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock completed job closeout center`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected completed job closeout center inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before completed job closeout center`,
+        );
+        assert.equal(
+          state.sectionTop >= state.approvalBottom,
+          true,
+          `${viewport.label}: expected completed job closeout center after extra charges approval decision review`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("completed job closeout center") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected completed job closeout center heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Job reference customer service",
+            "Completion status closeout readiness",
+            "Extra charges status",
+            "Customer billing and driver payout readiness",
+            "Dispatcher exception and finance handoff status",
+            "Next internal action",
+          ],
+          `${viewport.label}: expected completed job closeout center workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three completed closeout rows maximum`);
+        assert.equal(
+          state.searchSummary.includes("Search scope") &&
+            state.searchSummary.includes("Completed jobs ready for closeout QA") &&
+            state.searchSummary.includes("Filter summary") &&
+            state.searchSummary.includes("Clean / extra-charge review / waived billing") &&
+            state.searchSummary.includes("3 completed jobs maximum") &&
+            state.searchSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only search/filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-CLOSE-101"].includes("Completed cleanly") &&
+            rowByRef["PLO-CLOSE-101"].includes("Ready for mock closeout") &&
+            rowByRef["PLO-CLOSE-101"].includes("Waiting Time none") &&
+            rowByRef["PLO-CLOSE-101"].includes("Extra Stops none") &&
+            rowByRef["PLO-CLOSE-101"].includes("Midnight Charge none") &&
+            rowByRef["PLO-CLOSE-101"].includes("Customer billing ready") &&
+            rowByRef["PLO-CLOSE-101"].includes("Driver payout ready") &&
+            rowByRef["PLO-CLOSE-101"].includes("Finance/month-end handoff ready"),
+          true,
+          `${viewport.label}: expected clean completed job closeout row`,
+        );
+        assert.equal(
+          rowByRef["PLO-CLOSE-118"].includes("Completed with route and time review") &&
+            rowByRef["PLO-CLOSE-118"].includes("Hold for dispatcher closeout review") &&
+            rowByRef["PLO-CLOSE-118"].includes("Waiting Time 2 blocks") &&
+            rowByRef["PLO-CLOSE-118"].includes("Extra Stops 1") &&
+            rowByRef["PLO-CLOSE-118"].includes("Midnight Charge not detected") &&
+            rowByRef["PLO-CLOSE-118"].includes("Customer billing held") &&
+            rowByRef["PLO-CLOSE-118"].includes("Driver payout review pending") &&
+            rowByRef["PLO-CLOSE-118"].includes("Finance/month-end handoff blocked"),
+          true,
+          `${viewport.label}: expected extra-charge dispatcher review closeout row`,
+        );
+        assert.equal(
+          rowByRef["PLO-CLOSE-207"].includes("Completed with customer charge waiver") &&
+            rowByRef["PLO-CLOSE-207"].includes("Customer charge waived in mock example") &&
+            rowByRef["PLO-CLOSE-207"].includes("Driver payout still under review separately") &&
+            rowByRef["PLO-CLOSE-207"].includes("Midnight Charge detected") &&
+            rowByRef["PLO-CLOSE-207"].includes("payout review still separate") &&
+            rowByRef["PLO-CLOSE-207"].includes("Review driver payout even though customer charge is waived"),
+          true,
+          `${viewport.label}: expected waived customer charge row to preserve driver payout review`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("status / closeout") &&
+            state.text.toLowerCase().includes("extra charges") &&
+            state.text.toLowerCase().includes("billing / payout") &&
+            state.text.toLowerCase().includes("exception / finance") &&
+            state.text.toLowerCase().includes("next"),
+          true,
+          `${viewport.label}: expected complete closeout workflow pieces`,
+        );
+        assert.equal(
+          state.separation.includes("Waiting Time, Extra Stops, and Midnight Charge may display together") &&
+            state.separation.includes("under Extra Charges") &&
+            state.separation.includes("each charge type remains internally distinct"),
+          true,
+          `${viewport.label}: expected Extra Charges grouping with internal charge-type separation`,
+        );
+        assert.equal(
+          state.decision.includes("Customer billing approval and driver payout approval are separate decisions") &&
+            state.decision.includes("Waived customer charge does not automatically cancel driver payout review") &&
+            state.decision.includes("No invoice generated") &&
+            state.decision.includes("no payment link created") &&
+            state.decision.includes("no PDF generated") &&
+            state.decision.includes("no payout created") &&
+            state.decision.includes("no accounting posting") &&
+            state.decision.includes("not saved"),
+          true,
+          `${viewport.label}: expected separate billing/payout decisions and no generated finance artifacts`,
+        );
+        assert.equal(
+          state.rule.includes("1 waiting block = 15 minutes") &&
+            state.rule.includes("customer charge $15 per waiting block") &&
+            state.rule.includes("driver payout $10 per waiting block") &&
+            state.rule.includes("Midnight Charge: customer charge $15") &&
+            state.rule.includes("driver payout $10") &&
+            state.rule.includes("11:00pm / 23:00 through 6:59am / 06:59 inclusive") &&
+            state.rule.includes("7:00am / 07:00 and 10:59pm / 22:59 are excluded"),
+          true,
+          `${viewport.label}: expected waiting-time and midnight locked rules in closeout center`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real job closeout workflow",
+          "completed-job persistence",
+          "real combined charge calculation",
+          "billing automation",
+          "monthly invoice",
+          "invoice generation",
+          "payment link",
+          "PDF generation",
+          "accounting integration",
+          "accounting posting",
+          "customer account",
+          "customer auth",
+          "driver payout creation",
+          "waiting-time persistence",
+          "extra-stop persistence",
+          "midnight-charge persistence",
+          "approval-decision persistence",
+          "customer-charge persistence",
+          "driver-payout persistence",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected completed job closeout boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no closeout action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no closeout form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active closeout/bill/pay/invoice/PDF/post controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1550 : viewport.width < 1024 ? 900 : 760),
+          true,
+          `${viewport.label}: expected compact completed job closeout center, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected completed job closeout rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected completed job closeout center not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -9110,6 +9428,43 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal approval-decision/extra-charge/customer-charge/driver-payout data leak`,
+      );
+    };
+
+    const assertNoMockCompletedJobCloseoutCenterLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "completed job closeout center",
+            "internal/admin-only completed-job closeout preview",
+            "completed jobs ready for closeout qa",
+            "clean / extra-charge review / waived billing",
+            "completion status",
+            "closeout readiness",
+            "customer billing readiness",
+            "driver payout readiness",
+            "finance/month-end handoff",
+            "customer charge waived in mock example",
+            "driver payout still under review separately",
+            "no real job closeout workflow",
+            "completed-job persistence",
+            "driver payout creation",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-completed-job-closeout-center]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock completed job closeout center`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal completed-job closeout/billing/payout/finance handoff data leak`,
       );
     };
 
@@ -9703,6 +10058,7 @@ async function runChromeTest() {
         await assertNoMockMidnightChargeAutoDetectionOverrideLeak(routeName);
         await assertNoMockCombinedExtraChargesSummarySeparationLeak(routeName);
         await assertNoMockExtraChargesApprovalDecisionSeparationLeak(routeName);
+        await assertNoMockCompletedJobCloseoutCenterLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -9781,6 +10137,9 @@ async function runChromeTest() {
             ),
             mockExtraChargesApprovalDecisionSeparationReviewVisible: Boolean(
               document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]"),
+            ),
+            mockCompletedJobCloseoutCenterVisible: Boolean(
+              document.querySelector("[data-mock-completed-job-closeout-center]"),
             ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
@@ -9947,6 +10306,18 @@ async function runChromeTest() {
               "waived customer charge does not automatically cancel driver payout review",
               "approval-decision persistence",
               "approval-decision record",
+              "completed job closeout center",
+              "internal/admin-only completed-job closeout preview",
+              "completed jobs ready for closeout qa",
+              "clean / extra-charge review / waived billing",
+              "completion status",
+              "closeout readiness",
+              "customer billing readiness",
+              "driver payout readiness",
+              "finance/month-end handoff",
+              "no real job closeout workflow",
+              "completed-job persistence",
+              "driver payout creation",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -10076,6 +10447,11 @@ async function runChromeTest() {
           routeState.mockExtraChargesApprovalDecisionSeparationReviewVisible,
           false,
           `${routeName}: expected no internal mock extra charges approval decision separation review`,
+        );
+        assert.equal(
+          routeState.mockCompletedJobCloseoutCenterVisible,
+          false,
+          `${routeName}: expected no internal mock completed job closeout center`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -10633,6 +11009,7 @@ async function runChromeTest() {
       await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers desktop");
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers desktop");
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers desktop");
+      await assertNoMockCompletedJobCloseoutCenterLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -16288,6 +16665,7 @@ async function runChromeTest() {
       await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers mobile");
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers mobile");
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers mobile");
+      await assertNoMockCompletedJobCloseoutCenterLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -22183,6 +22561,7 @@ async function runChromeTest() {
       await checkAdminMockCombinedExtraChargesSummarySeparationReview();
     state.adminMockExtraChargesApprovalDecisionSeparationReview =
       await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
+    state.adminMockCompletedJobCloseoutCenter = await checkAdminMockCompletedJobCloseoutCenter();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

@@ -540,6 +540,9 @@ async function runChromeTest() {
       const mockExtraChargesApprovalDecisionSeparationReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]"))`,
       );
+      const mockCompletedJobCloseoutCenterVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-completed-job-closeout-center]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -586,6 +589,18 @@ async function runChromeTest() {
             "waived customer charge does not automatically cancel driver payout review",
             "approval-decision persistence",
             "approval-decision record",
+            "completed job closeout center",
+            "internal/admin-only completed-job closeout preview",
+            "completed jobs ready for closeout qa",
+            "clean / extra-charge review / waived billing",
+            "completion status",
+            "closeout readiness",
+            "customer billing readiness",
+            "driver payout readiness",
+            "finance/month-end handoff",
+            "no real job closeout workflow",
+            "completed-job persistence",
+            "driver payout creation",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -741,6 +756,11 @@ async function runChromeTest() {
         mockExtraChargesApprovalDecisionSeparationReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock extra charges approval decision separation review`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock completed job closeout center`,
       );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
@@ -5061,6 +5081,207 @@ async function runChromeTest() {
         `${viewport.label}: expected extra charges approval decision review not to create horizontal overflow`,
       );
 
+      const mockCompletedJobCloseoutCenterState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const approvalReview = document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]");
+            const review = document.querySelector("[data-mock-completed-job-closeout-center]");
+            if (!group || !dashboard || !approvalReview || !review) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const approvalRect = approvalReview.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-completed-job-closeout-center-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-completed-job-closeout-center-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-completed-job-closeout-center-column]")].map(
+                  (column) => column.getAttribute("data-mock-completed-job-closeout-center-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: review.querySelectorAll("button, a, form").length,
+              approvalBottom: Math.round(approvalRect.bottom),
+              boundary:
+                document.querySelector("[data-mock-completed-job-closeout-center-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: review.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              decision:
+                document.querySelector("[data-mock-completed-job-closeout-center-decision]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              rows,
+              rule:
+                document.querySelector("[data-mock-completed-job-closeout-center-rule]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              searchSummary:
+                document.querySelector("[data-mock-completed-job-closeout-center-search-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              separation:
+                document.querySelector("[data-mock-completed-job-closeout-center-separation]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock completed job closeout center`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.groupTop >= mockCompletedJobCloseoutCenterState.dashboardBottom,
+        true,
+        `${viewport.label}: expected completed job closeout center to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.sectionTop >= mockCompletedJobCloseoutCenterState.approvalBottom,
+        true,
+        `${viewport.label}: expected completed job closeout center after extra charges approval decision review`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.text.toLowerCase().includes("completed job closeout center") &&
+          mockCompletedJobCloseoutCenterState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected completed job closeout center heading`,
+      );
+      assert.deepEqual(
+        mockCompletedJobCloseoutCenterState.columns,
+        [
+          "Job reference customer service",
+          "Completion status closeout readiness",
+          "Extra charges status",
+          "Customer billing and driver payout readiness",
+          "Dispatcher exception and finance handoff status",
+          "Next internal action",
+        ],
+        `${viewport.label}: expected completed job closeout workflow columns`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.searchSummary.includes("Completed jobs ready for closeout QA") &&
+          mockCompletedJobCloseoutCenterState.searchSummary.includes("Clean / extra-charge review / waived billing") &&
+          mockCompletedJobCloseoutCenterState.searchSummary.includes("3 completed jobs maximum") &&
+          mockCompletedJobCloseoutCenterState.searchSummary.includes("display-only / no actions"),
+        true,
+        `${viewport.label}: expected compact display-only search summary`,
+      );
+      const closeoutRowsByRef = Object.fromEntries(
+        mockCompletedJobCloseoutCenterState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        closeoutRowsByRef["PLO-CLOSE-101"].includes("Completed cleanly") &&
+          closeoutRowsByRef["PLO-CLOSE-101"].includes("Customer billing ready") &&
+          closeoutRowsByRef["PLO-CLOSE-101"].includes("Driver payout ready") &&
+          closeoutRowsByRef["PLO-CLOSE-118"].includes("Waiting Time 2 blocks") &&
+          closeoutRowsByRef["PLO-CLOSE-118"].includes("Extra Stops 1") &&
+          closeoutRowsByRef["PLO-CLOSE-118"].includes("Driver payout review pending") &&
+          closeoutRowsByRef["PLO-CLOSE-207"].includes("Customer charge waived in mock example") &&
+          closeoutRowsByRef["PLO-CLOSE-207"].includes("Driver payout still under review separately") &&
+          closeoutRowsByRef["PLO-CLOSE-207"].includes("Midnight Charge detected"),
+        true,
+        `${viewport.label}: expected clean, extra-charge review, and waived-charge closeout rows`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.separation.includes(
+          "Waiting Time, Extra Stops, and Midnight Charge may display together",
+        ) &&
+          mockCompletedJobCloseoutCenterState.separation.includes("under Extra Charges") &&
+          mockCompletedJobCloseoutCenterState.separation.includes(
+            "each charge type remains internally distinct",
+          ) &&
+          mockCompletedJobCloseoutCenterState.decision.includes(
+            "Customer billing approval and driver payout approval are separate decisions",
+          ) &&
+          mockCompletedJobCloseoutCenterState.decision.includes(
+            "Waived customer charge does not automatically cancel driver payout review",
+          ),
+        true,
+        `${viewport.label}: expected closeout charge separation and billing/payout decision rules`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.rule.includes("1 waiting block = 15 minutes") &&
+          mockCompletedJobCloseoutCenterState.rule.includes("customer charge $15 per waiting block") &&
+          mockCompletedJobCloseoutCenterState.rule.includes("driver payout $10 per waiting block") &&
+          mockCompletedJobCloseoutCenterState.rule.includes("Midnight Charge: customer charge $15") &&
+          mockCompletedJobCloseoutCenterState.rule.includes("11:00pm / 23:00 through 6:59am / 06:59 inclusive") &&
+          mockCompletedJobCloseoutCenterState.rule.includes(
+            "7:00am / 07:00 and 10:59pm / 22:59 are excluded",
+          ),
+        true,
+        `${viewport.label}: expected closeout waiting-time and midnight locked rules`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.decision.includes("No invoice generated") &&
+          mockCompletedJobCloseoutCenterState.decision.includes("no payment link created") &&
+          mockCompletedJobCloseoutCenterState.decision.includes("no PDF generated") &&
+          mockCompletedJobCloseoutCenterState.decision.includes("no payout created") &&
+          mockCompletedJobCloseoutCenterState.decision.includes("no accounting posting") &&
+          mockCompletedJobCloseoutCenterState.decision.includes("not saved") &&
+          mockCompletedJobCloseoutCenterState.boundary.includes("No real job closeout workflow") &&
+          mockCompletedJobCloseoutCenterState.boundary.includes("completed-job persistence") &&
+          mockCompletedJobCloseoutCenterState.boundary.includes("API call") &&
+          mockCompletedJobCloseoutCenterState.boundary.includes("storage") &&
+          mockCompletedJobCloseoutCenterState.boundary.includes("Supabase") &&
+          mockCompletedJobCloseoutCenterState.boundary.includes("parser file changes") &&
+          mockCompletedJobCloseoutCenterState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected closeout no invoice/payment/PDF/payout/accounting/storage/API boundary`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.actionControlCount,
+        0,
+        `${viewport.label}: expected completed job closeout center to have no action controls`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.controlCount,
+        0,
+        `${viewport.label}: expected completed job closeout center to have no form controls`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.rows.length,
+        3,
+        `${viewport.label}: expected three completed job closeout rows`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.height <=
+          (viewport.width < 640 ? 1550 : viewport.width < 1024 ? 900 : viewport.width < 1200 ? 840 : 760),
+        true,
+        `${viewport.label}: expected compact completed job closeout center, got ${mockCompletedJobCloseoutCenterState.height}px`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.rows.every((row) => row.height >= 48 && row.width >= 240),
+        true,
+        `${viewport.label}: expected completed job closeout rows to stay readable`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterState.docScrollWidth <=
+          mockCompletedJobCloseoutCenterState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected completed job closeout center not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -5170,6 +5391,9 @@ async function runChromeTest() {
       const mockExtraChargesApprovalDecisionSeparationReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]"))`,
       );
+      const mockCompletedJobCloseoutCenterVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-completed-job-closeout-center]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -5216,6 +5440,18 @@ async function runChromeTest() {
             "waived customer charge does not automatically cancel driver payout review",
             "approval-decision persistence",
             "approval-decision record",
+            "completed job closeout center",
+            "internal/admin-only completed-job closeout preview",
+            "completed jobs ready for closeout qa",
+            "clean / extra-charge review / waived billing",
+            "completion status",
+            "closeout readiness",
+            "customer billing readiness",
+            "driver payout readiness",
+            "finance/month-end handoff",
+            "no real job closeout workflow",
+            "completed-job persistence",
+            "driver payout creation",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -5397,6 +5633,11 @@ async function runChromeTest() {
         mockExtraChargesApprovalDecisionSeparationReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock extra charges approval decision separation review`,
+      );
+      assert.equal(
+        mockCompletedJobCloseoutCenterVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock completed job closeout center`,
       );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,

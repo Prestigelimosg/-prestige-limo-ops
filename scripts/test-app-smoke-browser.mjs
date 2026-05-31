@@ -12116,6 +12116,314 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockCustomerAccountServiceProfileWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock customer account service profile workbench",
+          mobile: true,
+          scale: 2,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock customer account service profile workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const operationsWorkbench = document.querySelector("[data-mock-operations-handover-shift-briefing-workbench]");
+              const section = document.querySelector("[data-mock-customer-account-service-profile-workbench]");
+              if (!group || !dashboard || !operationsWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const operationsRect = operationsWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-customer-account-service-profile-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-customer-account-service-profile-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-customer-account-service-profile-workbench-column]")].map(
+                    (column) => column.getAttribute("data-mock-customer-account-service-profile-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-customer-account-service-profile-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-customer-account-service-profile-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-customer-account-service-profile-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-customer-account-service-profile-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "save customer profile now",
+                  "create crm record now",
+                  "save billing contact now",
+                  "activate monthly billing now",
+                  "generate invoice now",
+                  "generate statement now",
+                  "create payment link now",
+                  "send customer notification now",
+                  "deliver message now",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                operationsBottom: Math.round(operationsRect.bottom),
+                coverageNote:
+                  document.querySelector("[data-mock-customer-account-service-profile-workbench-coverage-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                safety:
+                  document.querySelector("[data-mock-customer-account-service-profile-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock customer account service profile workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected customer account service profile workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before customer account service profile workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.operationsBottom,
+          true,
+          `${viewport.label}: expected customer account service profile workbench after operations handover workbench`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("customer account & service profile workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected customer account service profile heading`,
+        );
+        assert.equal(
+          state.copy.includes("regular customer/account service profile preview") &&
+            state.copy.includes("Static/mock/local display data only") &&
+            state.copy.includes("no real CRM/account profile") &&
+            state.copy.includes("customer database") &&
+            state.copy.includes("billing") &&
+            state.copy.includes("notification") &&
+            state.copy.includes("storage, API") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected customer account service profile boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Account reference customer account",
+            "Primary booker contact billing contact readiness",
+            "Service preference summary usual service pattern",
+            "VIP special handling notes monthly billing readiness",
+            "Open operations note internal review status",
+            "Next internal action",
+          ],
+          `${viewport.label}: expected customer account service profile workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three customer account rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Account scope") &&
+            state.filterSummary.includes("Regular customer/account service profiles") &&
+            state.filterSummary.includes("Mock service preference and billing-readiness review") &&
+            state.filterSummary.includes("3 account rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only customer account filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-ACCT-PROFILE-UBS"].includes("UBS Priority") &&
+            rowByRef["PLO-ACCT-PROFILE-UBS"].includes("Billing contact confirmed") &&
+            rowByRef["PLO-ACCT-PROFILE-UBS"].includes("Monthly billing ready in mock review"),
+          true,
+          `${viewport.label}: expected corporate account ready row`,
+        );
+        assert.equal(
+          rowByRef["PLO-ACCT-PROFILE-RITZ"].includes("Ritz-Carlton Concierge") &&
+            rowByRef["PLO-ACCT-PROFILE-RITZ"].includes("Billing contact needs confirmation") &&
+            rowByRef["PLO-ACCT-PROFILE-RITZ"].includes("Concierge service notes reviewed"),
+          true,
+          `${viewport.label}: expected hotel concierge account row`,
+        );
+        assert.equal(
+          rowByRef["PLO-ACCT-PROFILE-VIP"].includes("VIP Private Customer") &&
+            rowByRef["PLO-ACCT-PROFILE-VIP"].includes("VIP/special handling notes pending manager review") &&
+            rowByRef["PLO-ACCT-PROFILE-VIP"].includes("Monthly billing handoff pending manager review"),
+          true,
+          `${viewport.label}: expected VIP private customer account row`,
+        );
+        assert.equal(
+          state.coverageNote.includes("Account reference") &&
+            state.coverageNote.includes("customer/account") &&
+            state.coverageNote.includes("primary booker/contact") &&
+            state.coverageNote.includes("billing contact readiness") &&
+            state.coverageNote.includes("service preference summary") &&
+            state.coverageNote.includes("usual service pattern") &&
+            state.coverageNote.includes("VIP/special handling") &&
+            state.coverageNote.includes("monthly billing readiness") &&
+            state.coverageNote.includes("open operations note") &&
+            state.coverageNote.includes("internal review status") &&
+            state.coverageNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected customer account workflow coverage`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Operations Handover") &&
+            state.distinction.includes("Fleet & Driver Readiness") &&
+            state.distinction.includes("Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("customer/account service profile readiness only"),
+          true,
+          `${viewport.label}: expected customer account workbench not to repeat recent workbenches`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No customer profile saved") &&
+            state.safety.includes("no CRM/account record created") &&
+            state.safety.includes("no billing contact saved") &&
+            state.safety.includes("no monthly billing activated") &&
+            state.safety.includes("no invoice generated") &&
+            state.safety.includes("no statement generated") &&
+            state.safety.includes("no payment link created") &&
+            state.safety.includes("no PDF generated") &&
+            state.safety.includes("no customer notification sent") &&
+            state.safety.includes("no message-channel delivery") &&
+            state.safety.includes("No save/load and no API/storage/Supabase behavior"),
+          true,
+          `${viewport.label}: expected no customer account/CRM/billing/notification behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real customer account/profile workflow",
+          "CRM record creation",
+          "billing contact persistence",
+          "monthly billing activation",
+          "invoice generation",
+          "statement generation",
+          "payment links",
+          "PDF generation",
+          "customer notification sending",
+          "message-channel delivery",
+          "customer account behavior",
+          "customer auth",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected customer account boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no account profile action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no account profile form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active customer account controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1750 : viewport.width < 1024 ? 1020 : 890),
+          true,
+          `${viewport.label}: expected compact customer account service profile workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected customer account service profile rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected customer account service profile workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -12683,6 +12991,55 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal operations handover/shift briefing/impact data leak`,
+      );
+    };
+
+    const assertNoMockCustomerAccountServiceProfileWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "customer account & service profile workbench",
+            "internal/admin-only regular customer/account service profile preview",
+            "regular customer/account service profiles",
+            "mock service preference and billing-readiness review",
+            "3 account rows maximum",
+            "account reference",
+            "primary booker/contact",
+            "billing contact readiness",
+            "service preference summary",
+            "usual service pattern",
+            "vip/special handling notes",
+            "monthly billing readiness",
+            "open operations note",
+            "internal review status",
+            "billing contact confirmed",
+            "monthly billing ready in mock review",
+            "billing contact needs confirmation",
+            "vip/special handling notes pending manager review",
+            "no customer profile saved",
+            "no crm/account record created",
+            "no billing contact saved",
+            "no monthly billing activated",
+            "no real customer account/profile workflow",
+            "crm record creation",
+            "billing contact persistence",
+            "monthly billing activation",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-customer-account-service-profile-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock customer account service profile workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal customer account/profile/billing contact/monthly billing data leak`,
       );
     };
 
@@ -13285,6 +13642,7 @@ async function runChromeTest() {
         await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak(routeName);
         await assertNoMockFleetDriverReadinessWorkbenchLeak(routeName);
         await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak(routeName);
+        await assertNoMockCustomerAccountServiceProfileWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -14285,6 +14643,7 @@ async function runChromeTest() {
       await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak("/customers desktop");
       await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers desktop");
       await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers desktop");
+      await assertNoMockCustomerAccountServiceProfileWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -19949,6 +20308,7 @@ async function runChromeTest() {
       await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak("/customers mobile");
       await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers mobile");
+      await assertNoMockCustomerAccountServiceProfileWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -25880,6 +26240,8 @@ async function runChromeTest() {
     state.adminMockFleetDriverReadinessWorkbench = await checkAdminMockFleetDriverReadinessWorkbench();
     state.adminMockOperationsHandoverShiftBriefingWorkbench =
       await checkAdminMockOperationsHandoverShiftBriefingWorkbench();
+    state.adminMockCustomerAccountServiceProfileWorkbench =
+      await checkAdminMockCustomerAccountServiceProfileWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

@@ -11947,6 +11947,204 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Customer Account Service Profile Workbench Mock Only"
+          className="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-customer-account-service-profile-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-indigo-700">Customer Account &amp; Service Profile Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-customer-account-service-profile-workbench-copy="true"
+                >
+                  Internal/admin-only regular customer/account service profile preview for service preferences, billing
+                  contact readiness, VIP notes, and monthly billing readiness. Static/mock/local display data only; no
+                  real CRM/account profile, customer database, billing, notification, storage, API, or Supabase behavior
+                  is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-semibold uppercase text-indigo-700">
+                Display-only account review
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-customer-account-service-profile-workbench-filter-summary="true"
+            >
+              {[
+                ["Account scope", "Regular customer/account service profiles"],
+                ["Source", "Mock service preference and billing-readiness review"],
+                ["Mock results", "3 account rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-indigo-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-customer-account-service-profile-workbench-rows="true">
+              {[
+                {
+                  accountReference: "PLO-ACCT-PROFILE-UBS",
+                  billingContactReadiness: "Billing contact confirmed for mock review",
+                  customerAccount: "UBS Priority",
+                  internalReviewStatus: "Profile review ready",
+                  monthlyBillingReadiness: "Monthly billing ready in mock review - not activated",
+                  nextInternalAction: "Keep account profile ready for future dispatcher reference",
+                  openOperationsNote: "Confirm flight timing preference before future booking review",
+                  primaryBookerContact: "Sarah Lim / Corporate travel desk",
+                  servicePreferenceSummary: "Airport arrivals, departures, and VIP transfers",
+                  usualServicePattern: "Weekday executive airport movement",
+                  vipSpecialHandlingNotes: "VIP meet-and-greet preference noted",
+                },
+                {
+                  accountReference: "PLO-ACCT-PROFILE-RITZ",
+                  billingContactReadiness: "Billing contact needs confirmation",
+                  customerAccount: "Ritz-Carlton Concierge",
+                  internalReviewStatus: "Needs billing contact review",
+                  monthlyBillingReadiness: "Monthly billing held in mock review",
+                  nextInternalAction: "Confirm billing contact before future monthly handoff",
+                  openOperationsNote: "Concierge service notes reviewed; billing contact still pending",
+                  primaryBookerContact: "Concierge desk / Hotel travel desk",
+                  servicePreferenceSummary: "Guest transfers, luggage handling, and concierge notes",
+                  usualServicePattern: "Airport and hourly concierge requests",
+                  vipSpecialHandlingNotes: "Guest privacy and concierge handoff notes reviewed",
+                },
+                {
+                  accountReference: "PLO-ACCT-PROFILE-VIP",
+                  billingContactReadiness: "Private billing contact not saved",
+                  customerAccount: "VIP Private Customer",
+                  internalReviewStatus: "Manager review pending",
+                  monthlyBillingReadiness: "Monthly billing handoff pending manager review",
+                  nextInternalAction: "Review special handling notes before future account handoff",
+                  openOperationsNote: "Special handling notes pending manager review before billing handoff",
+                  primaryBookerContact: "Personal assistant / private contact",
+                  servicePreferenceSummary: "Private airport transfer and standby preference",
+                  usualServicePattern: "Ad hoc VIP movements with privacy handling",
+                  vipSpecialHandlingNotes: "VIP/special handling notes pending manager review",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-indigo-200 bg-indigo-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.15fr_1.2fr_1.15fr_1.15fr_1.15fr_1.2fr]"
+                  data-mock-customer-account-service-profile-workbench-row={row.accountReference}
+                  key={row.accountReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-customer-account-service-profile-workbench-column="Account reference customer account"
+                    >
+                      Account / Customer
+                    </span>
+                    <span className="block">{row.accountReference}</span>
+                    <span>{row.customerAccount}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-customer-account-service-profile-workbench-column="Primary booker contact billing contact readiness"
+                    >
+                      Booker / Billing
+                    </span>
+                    <span className="block">{row.primaryBookerContact}</span>
+                    <span>{row.billingContactReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-customer-account-service-profile-workbench-column="Service preference summary usual service pattern"
+                    >
+                      Service Pattern
+                    </span>
+                    <span className="block">{row.servicePreferenceSummary}</span>
+                    <span>{row.usualServicePattern}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-customer-account-service-profile-workbench-column="VIP special handling notes monthly billing readiness"
+                    >
+                      VIP / Billing
+                    </span>
+                    <span className="block">{row.vipSpecialHandlingNotes}</span>
+                    <span>{row.monthlyBillingReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-customer-account-service-profile-workbench-column="Open operations note internal review status"
+                    >
+                      Ops Note / Review
+                    </span>
+                    <span className="block">{row.openOperationsNote}</span>
+                    <span>{row.internalReviewStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-customer-account-service-profile-workbench-column="Next internal action"
+                    >
+                      Next Internal Action
+                    </span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-customer-account-service-profile-workbench-coverage-note="true"
+              >
+                Customer profile review - mock only. Account reference, customer/account, primary booker/contact,
+                billing contact readiness, service preference summary, usual service pattern, VIP/special handling
+                notes, monthly billing readiness, open operations note, internal review status, and next internal action
+                stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-customer-account-service-profile-workbench-distinction="true"
+              >
+                This is separate from Operations Handover, Fleet &amp; Driver Readiness, Customer Service Recovery,
+                Replacement Vehicle Recovery, and Driver Job Completion: it reviews customer/account service profile
+                readiness only.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-customer-account-service-profile-workbench-safety="true"
+              >
+                Mock Only. No customer profile saved, no CRM/account record created, no billing contact saved, no
+                monthly billing activated, no invoice generated, no statement generated, no payment link created, no PDF
+                generated, no customer notification sent, and no message-channel delivery. No save/load and no
+                API/storage/Supabase behavior.
+              </p>
+            </div>
+
+            <p
+              className="text-[10px] leading-[1.15] text-slate-500"
+              data-mock-customer-account-service-profile-workbench-boundary="true"
+            >
+              Future workflow boundary: Mock/local only. No real customer account/profile workflow, CRM record
+              creation, billing contact persistence, monthly billing activation, invoice generation, statement
+              generation, payment links, PDF generation, customer notification sending, message-channel delivery,
+              customer account behavior, customer auth, save/load behavior, storage, localStorage, sessionStorage,
+              cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, parser file changes, package
+              script changes, test:safe membership changes, billing, invoice, statement, payment, payout, accounting
+              posting, finance export, or send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

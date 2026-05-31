@@ -683,6 +683,9 @@ async function runChromeTest() {
       const mockAirportFlightPickupReadinessWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench]"))`,
       );
+      const mockRouteItineraryReadinessWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-route-itinerary-readiness-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -949,6 +952,31 @@ async function runChromeTest() {
             "no real flight api behavior",
             "maps/traffic api behavior",
             "airport/fbo confirmation sending",
+            "route & itinerary readiness workbench",
+            "internal/admin-only route and itinerary readiness preview",
+            "mock dispatcher route and itinerary review",
+            "3 route/itinerary rows maximum",
+            "plo-route-ready-airport",
+            "plo-route-ready-multistop",
+            "plo-route-ready-vip-child",
+            "route readiness reference",
+            "pickup readiness",
+            "drop-off readiness",
+            "route/waypoint summary",
+            "timing readiness",
+            "passenger/contact readiness",
+            "special handling/child seat note",
+            "route exception risk",
+            "dispatch handoff readiness",
+            "ritz-carlton > gardens by the bay > national gallery > raffles hotel",
+            "preserve all later waypoints",
+            "extra stops shown as itinerary context only",
+            "child seat note pending final confirmation",
+            "no route optimization",
+            "no maps or geocoding api connected",
+            "no traffic api connected",
+            "no real route optimization behavior",
+            "maps/geocoding/traffic api behavior",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -1165,10 +1193,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${route.label}: expected no internal mock airport flight pickup readiness workbench`,
       );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock route itinerary readiness workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, or airport readiness text leak`,
+        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, or route itinerary text leak`,
       );
     };
 
@@ -7883,6 +7916,208 @@ async function runChromeTest() {
         `${viewport.label}: expected airport flight pickup readiness workbench not to create horizontal overflow`,
       );
 
+      const mockRouteItineraryReadinessWorkbenchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const previousWorkbench = document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench]");
+            const workbench = document.querySelector("[data-mock-route-itinerary-readiness-workbench]");
+            if (!group || !dashboard || !previousWorkbench || !workbench) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const previousRect = previousWorkbench.getBoundingClientRect();
+            const rect = workbench.getBoundingClientRect();
+            const rows = [...workbench.querySelectorAll("[data-mock-route-itinerary-readiness-workbench-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-route-itinerary-readiness-workbench-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...workbench.querySelectorAll("[data-mock-route-itinerary-readiness-workbench-column]")].map(
+                  (column) => column.getAttribute("data-mock-route-itinerary-readiness-workbench-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: workbench.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-route-itinerary-readiness-workbench-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: workbench.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              filterSummary:
+                document.querySelector("[data-mock-route-itinerary-readiness-workbench-filter-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              previousBottom: Math.round(previousRect.bottom),
+              rows,
+              rules:
+                document.querySelector("[data-mock-route-itinerary-readiness-workbench-rules]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              safety:
+                document.querySelector("[data-mock-route-itinerary-readiness-workbench-safety]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              text: workbench.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock route itinerary readiness workbench`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.groupTop >=
+          mockRouteItineraryReadinessWorkbenchState.dashboardBottom,
+        true,
+        `${viewport.label}: expected route itinerary readiness workbench to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.sectionTop >=
+          mockRouteItineraryReadinessWorkbenchState.previousBottom,
+        true,
+        `${viewport.label}: expected route itinerary readiness workbench after airport flight pickup readiness workbench`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.text
+          .toLowerCase()
+          .includes("route & itinerary readiness workbench") &&
+          mockRouteItineraryReadinessWorkbenchState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected route itinerary readiness workbench heading`,
+      );
+      assert.deepEqual(
+        mockRouteItineraryReadinessWorkbenchState.columns,
+        [
+          "Route readiness reference job reference",
+          "Customer account pickup readiness drop-off readiness",
+          "Route waypoint summary timing readiness",
+          "Passenger contact readiness special handling child seat note",
+          "Route exception risk dispatch handoff readiness",
+          "Next internal action",
+        ],
+        `${viewport.label}: expected route itinerary readiness workflow columns`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.filterSummary.includes(
+          "Mock pickup, drop-off, and waypoint readiness",
+        ) &&
+          mockRouteItineraryReadinessWorkbenchState.filterSummary.includes(
+            "Mock dispatcher route and itinerary review",
+          ) &&
+          mockRouteItineraryReadinessWorkbenchState.filterSummary.includes("3 route/itinerary rows maximum") &&
+          mockRouteItineraryReadinessWorkbenchState.filterSummary.includes("display-only / no actions"),
+        true,
+        `${viewport.label}: expected compact display-only route itinerary filter summary`,
+      );
+      const routeRowsByRef = Object.fromEntries(
+        mockRouteItineraryReadinessWorkbenchState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        routeRowsByRef["PLO-ROUTE-READY-AIRPORT"].includes("Changi Airport T3 pickup confirmed") &&
+          routeRowsByRef["PLO-ROUTE-READY-MULTISTOP"].includes(
+            "Ritz-Carlton > Gardens by the Bay > National Gallery > Raffles Hotel",
+          ) &&
+          routeRowsByRef["PLO-ROUTE-READY-MULTISTOP"].includes("Raffles Hotel final drop-off retained") &&
+          routeRowsByRef["PLO-ROUTE-READY-MULTISTOP"].includes("preserve all later waypoints") &&
+          routeRowsByRef["PLO-ROUTE-READY-MULTISTOP"].includes(
+            "Extra Stops shown as itinerary context only - not billed",
+          ) &&
+          routeRowsByRef["PLO-ROUTE-READY-VIP-CHILD"].includes(
+            "Child seat note pending final confirmation - service handling only",
+          ),
+        true,
+        `${viewport.label}: expected route itinerary rows with airport, multi-stop, and child-seat examples`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.rules.includes(
+          "route and itinerary readiness stays separate from parser behavior",
+        ) &&
+          mockRouteItineraryReadinessWorkbenchState.rules.includes("preserves all waypoints") &&
+          mockRouteItineraryReadinessWorkbenchState.rules.includes("must not drop later waypoints") &&
+          mockRouteItineraryReadinessWorkbenchState.rules.includes(
+            "Extra Stops appear as route/itinerary context only",
+          ) &&
+          mockRouteItineraryReadinessWorkbenchState.rules.includes("not calculated or billed") &&
+          mockRouteItineraryReadinessWorkbenchState.rules.includes("Child seat notes are service-handling context only") &&
+          mockRouteItineraryReadinessWorkbenchState.rules.includes("no pricing, billing, or inventory behavior") &&
+          mockRouteItineraryReadinessWorkbenchState.rules.includes("Manual route review stays separate"),
+        true,
+        `${viewport.label}: expected protected route and waypoint business rules`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.safety.includes("No route optimization") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no maps or geocoding API connected") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no traffic API connected") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no booking saved") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no dispatch job created") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no driver assigned") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no vehicle assigned") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no customer update sent") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no notification sent") &&
+          mockRouteItineraryReadinessWorkbenchState.safety.includes("no job status changed") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("No real route optimization behavior") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("maps/geocoding/traffic API behavior") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("booking save/load behavior") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("dispatch workflow") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("parser behavior changes") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("parser file changes") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("parser test changes") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("API call") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("Supabase") &&
+          mockRouteItineraryReadinessWorkbenchState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected route itinerary no API/dispatch/parser boundary`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.actionControlCount,
+        0,
+        `${viewport.label}: expected route itinerary readiness workbench to have no action controls`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.controlCount,
+        0,
+        `${viewport.label}: expected route itinerary readiness workbench to have no form controls`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.rows.length,
+        3,
+        `${viewport.label}: expected three route itinerary readiness rows`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.height <=
+          (viewport.width < 640 ? 2050 : viewport.width < 1024 ? 1220 : viewport.width < 1200 ? 1100 : 1030),
+        true,
+        `${viewport.label}: expected compact route itinerary readiness workbench, got ${mockRouteItineraryReadinessWorkbenchState.height}px`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.rows.every((row) => row.height >= 48 && row.width >= 240),
+        true,
+        `${viewport.label}: expected route itinerary readiness rows to stay readable`,
+      );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchState.docScrollWidth <=
+          mockRouteItineraryReadinessWorkbenchState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected route itinerary readiness workbench not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -8028,6 +8263,9 @@ async function runChromeTest() {
       );
       const mockAirportFlightPickupReadinessWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench]"))`,
+      );
+      const mockRouteItineraryReadinessWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-route-itinerary-readiness-workbench]"))`,
       );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
@@ -8295,6 +8533,31 @@ async function runChromeTest() {
             "no real flight api behavior",
             "maps/traffic api behavior",
             "airport/fbo confirmation sending",
+            "route & itinerary readiness workbench",
+            "internal/admin-only route and itinerary readiness preview",
+            "mock dispatcher route and itinerary review",
+            "3 route/itinerary rows maximum",
+            "plo-route-ready-airport",
+            "plo-route-ready-multistop",
+            "plo-route-ready-vip-child",
+            "route readiness reference",
+            "pickup readiness",
+            "drop-off readiness",
+            "route/waypoint summary",
+            "timing readiness",
+            "passenger/contact readiness",
+            "special handling/child seat note",
+            "route exception risk",
+            "dispatch handoff readiness",
+            "ritz-carlton > gardens by the bay > national gallery > raffles hotel",
+            "preserve all later waypoints",
+            "extra stops shown as itinerary context only",
+            "child seat note pending final confirmation",
+            "no route optimization",
+            "no maps or geocoding api connected",
+            "no traffic api connected",
+            "no real route optimization behavior",
+            "maps/geocoding/traffic api behavior",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -8537,10 +8800,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock airport flight pickup readiness workbench`,
       );
+      assert.equal(
+        mockRouteItineraryReadinessWorkbenchVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock route itinerary readiness workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, or airport readiness text leak`,
+        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, or route itinerary text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

@@ -12579,6 +12579,222 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section
+          aria-label="Route Itinerary Readiness Workbench Mock Only"
+          className="rounded-lg border border-emerald-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-route-itinerary-readiness-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-emerald-700">Route &amp; Itinerary Readiness Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-route-itinerary-readiness-workbench-copy="true"
+                >
+                  Internal/admin-only route and itinerary readiness preview for pickup/drop-off readiness, route
+                  completeness, multi-stop clarity, passenger/contact readiness, timing risk, special handling, and
+                  dispatch handoff. Static/mock/local display data only; no real route optimization, maps/geocoding API,
+                  dispatch workflow, storage, API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase text-emerald-700">
+                Display-only route readiness
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-route-itinerary-readiness-workbench-filter-summary="true"
+            >
+              {[
+                ["Route/date scope", "Mock pickup, drop-off, and waypoint readiness"],
+                ["Source", "Mock dispatcher route and itinerary review"],
+                ["Mock results", "3 route/itinerary rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-emerald-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-route-itinerary-readiness-workbench-rows="true">
+              {[
+                {
+                  customerAccount: "UBS Priority",
+                  dispatchHandoffReadiness: "Dispatch handoff ready in mock review",
+                  dropoffReadiness: "Marina Bay Sands drop-off confirmed",
+                  jobReference: "PLO-ARR-2026-05-ROUTE1",
+                  nextInternalAction: "Keep airport transfer route ready for future dispatcher handoff",
+                  passengerContactReadiness: "Passenger/contact ready",
+                  pickupReadiness: "Changi Airport T3 pickup confirmed",
+                  routeExceptionRisk: "Low route risk; no route optimization",
+                  routeReadinessReference: "PLO-ROUTE-READY-AIRPORT",
+                  routeWaypointSummary: "Changi Airport T3 > Marina Bay Sands",
+                  specialHandlingChildSeatNote: "No child seat; arrival meet note reviewed",
+                  timingReadiness: "Pickup window and arrival buffer reviewed",
+                },
+                {
+                  customerAccount: "Ritz-Carlton Concierge",
+                  dispatchHandoffReadiness: "Dispatcher confirmation needed",
+                  dropoffReadiness: "Raffles Hotel final drop-off retained",
+                  jobReference: "PLO-DSP-2026-05-MULTI",
+                  nextInternalAction: "Confirm full stop order before future dispatch handoff",
+                  passengerContactReadiness: "Passenger/contact ready",
+                  pickupReadiness: "Ritz-Carlton lobby pickup confirmed",
+                  routeExceptionRisk: "Multi-stop sequence review; preserve all later waypoints",
+                  routeReadinessReference: "PLO-ROUTE-READY-MULTISTOP",
+                  routeWaypointSummary: "Ritz-Carlton > Gardens by the Bay > National Gallery > Raffles Hotel",
+                  specialHandlingChildSeatNote: "Extra Stops shown as itinerary context only - not billed",
+                  timingReadiness: "Stop sequence timing needs dispatcher confirmation",
+                },
+                {
+                  customerAccount: "VIP Private Customer",
+                  dispatchHandoffReadiness: "Dispatch handoff held in mock review",
+                  dropoffReadiness: "Marina Bay event entrance confirmed",
+                  jobReference: "PLO-VIP-2026-05-CHILD",
+                  nextInternalAction: "Confirm child seat note before future dispatch handoff",
+                  passengerContactReadiness: "Passenger ready; contact pending manager check",
+                  pickupReadiness: "Private residence gate pickup reviewed",
+                  routeExceptionRisk: "Special handling and child seat confirmation risk",
+                  routeReadinessReference: "PLO-ROUTE-READY-VIP-CHILD",
+                  routeWaypointSummary: "Private residence > school pickup waypoint > Marina Bay event entrance",
+                  specialHandlingChildSeatNote: "Child seat note pending final confirmation - service handling only",
+                  timingReadiness: "VIP timing buffer reviewed manually",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-emerald-200 bg-emerald-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.05fr_1.15fr_1.25fr_1.15fr_1.15fr_1.25fr]"
+                  data-mock-route-itinerary-readiness-workbench-row={row.routeReadinessReference}
+                  key={row.routeReadinessReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-route-itinerary-readiness-workbench-column="Route readiness reference job reference"
+                    >
+                      Route / Job
+                    </span>
+                    <span className="block">{row.routeReadinessReference}</span>
+                    <span>{row.jobReference}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-route-itinerary-readiness-workbench-column="Customer account pickup readiness drop-off readiness"
+                    >
+                      Customer / Pickup / Drop-off
+                    </span>
+                    <span className="block">{row.customerAccount}</span>
+                    <span className="block">{row.pickupReadiness}</span>
+                    <span>{row.dropoffReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-route-itinerary-readiness-workbench-column="Route waypoint summary timing readiness"
+                    >
+                      Waypoints / Timing
+                    </span>
+                    <span className="block">{row.routeWaypointSummary}</span>
+                    <span>{row.timingReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-route-itinerary-readiness-workbench-column="Passenger contact readiness special handling child seat note"
+                    >
+                      Passenger / Handling
+                    </span>
+                    <span className="block">{row.passengerContactReadiness}</span>
+                    <span>{row.specialHandlingChildSeatNote}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-route-itinerary-readiness-workbench-column="Route exception risk dispatch handoff readiness"
+                    >
+                      Risk / Handoff
+                    </span>
+                    <span className="block">{row.routeExceptionRisk}</span>
+                    <span>{row.dispatchHandoffReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-emerald-700"
+                      data-mock-route-itinerary-readiness-workbench-column="Next internal action"
+                    >
+                      Next Internal Action
+                    </span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-route-itinerary-readiness-workbench-coverage-note="true"
+              >
+                Route readiness review - mock only. Route readiness reference, job reference, customer/account, pickup
+                readiness, drop-off readiness, route/waypoint summary, timing readiness, passenger/contact readiness,
+                special handling/child seat note, route exception risk, dispatch handoff readiness, and next internal
+                action stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-route-itinerary-readiness-workbench-rules="true"
+              >
+                Route rules preserved: route and itinerary readiness stays separate from parser behavior; multi-stop
+                route review preserves all waypoints and must not drop later waypoints. Extra Stops appear as
+                route/itinerary context only and are not calculated or billed. Child seat notes are service-handling
+                context only, with no pricing, billing, or inventory behavior. Manual route review stays separate from
+                automatic parser behavior.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-route-itinerary-readiness-workbench-safety="true"
+              >
+                Mock Only. No route optimization, no maps or geocoding API connected, no traffic API connected, no
+                booking saved, no dispatch job created, no driver assigned, no vehicle assigned, no customer update
+                sent, no notification sent, no job status changed, and no billing, invoice, payment, PDF, payout,
+                accounting, or finance export created. No save/load, no API/storage/Supabase behavior, and no parser
+                change.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-[1fr_2fr]">
+              <p
+                className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-route-itinerary-readiness-workbench-distinction="true"
+              >
+                This is separate from Airport Flight Monitoring, Booking Intake, Customer Account Profile, Operations
+                Handover, Fleet Readiness, Customer Service Recovery, Replacement Vehicle Recovery, and Driver Job
+                Completion: it reviews route and itinerary readiness before any future dispatch handoff only.
+              </p>
+              <p
+                className="text-[10px] leading-[1.15] text-slate-500"
+                data-mock-route-itinerary-readiness-workbench-boundary="true"
+              >
+                Future workflow boundary: Mock/local only. No real route optimization behavior,
+                maps/geocoding/traffic API behavior, booking save/load behavior, dispatch workflow, driver assignment,
+                vehicle assignment, schedule update, customer update sending, notification sending, live location
+                behavior, job status persistence, parser behavior changes, parser file changes, parser test changes,
+                billing, invoice, statement, payment, payment link, PDF, payout, accounting posting, finance export,
+                customer account/auth behavior, localStorage, sessionStorage, cookies, IndexedDB, API call, fetch, XHR,
+                sendBeacon, WebSocket, Supabase, package script changes, test:safe membership changes, message-channel
+                delivery, customer notification, notification, or send behavior.
+              </p>
+            </div>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

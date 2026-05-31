@@ -678,11 +678,7 @@ async function runChromeTest() {
         "[data-mock-post-close-audit-retention-review]",
         "[data-mock-close-cycle-evidence-response-retention-review]",
         "[data-mock-close-cycle-exception-resolution-audit-handoff-review]",
-        "[data-mock-waiting-time-extra-charges-planning-review]",
-        "[data-mock-extra-charges-variance-approval-reconciliation-review]",
-        "[data-mock-midnight-charge-auto-detection-override-review]",
-        "[data-mock-combined-extra-charges-summary-separation-review]",
-        "[data-mock-extra-charges-approval-decision-separation-review]",
+        "[data-mock-extra-charges-control-center]",
         "[data-mock-completed-job-closeout-center]",
         "[data-mock-month-end-closeout-workbench]",
         "[data-mock-finance-exception-resolution-workbench]",
@@ -737,10 +733,7 @@ async function runChromeTest() {
             state.text.includes("Accounting Handoff") &&
             state.text.includes("Audit Evidence") &&
             state.text.includes("Exception / Handoff QA") &&
-            state.text.includes("Waiting Time") &&
-            state.text.includes("Variance / Approval QA") &&
-            state.text.includes("Auto-detection / Override QA") &&
-            state.text.includes("Summary / Charge Type Separation QA") &&
+            state.text.includes("Extra Charges Control Center") &&
             state.text.includes("Completed Job Closeout Center") &&
             state.text.includes("Month-End Closeout Workbench") &&
             state.text.includes("Finance Exception Resolution Workbench"),
@@ -8927,6 +8920,611 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockExtraChargesControlCenter = async () => {
+      const reviewViewports = [
+        {
+          height: 1280,
+          label: "mobile mock extra charges control center",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1040,
+          label: "desktop mock extra charges control center",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const legacySelectors = [
+        "[data-mock-waiting-time-extra-charges-planning-review]",
+        "[data-mock-extra-charges-variance-approval-reconciliation-review]",
+        "[data-mock-midnight-charge-auto-detection-override-review]",
+        "[data-mock-combined-extra-charges-summary-separation-review]",
+        "[data-mock-extra-charges-approval-decision-separation-review]",
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const section = document.querySelector("[data-mock-extra-charges-control-center]");
+              if (!group || !dashboard || !section) {
+                return false;
+              }
+
+              const legacySelectors = ${JSON.stringify(legacySelectors)};
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-extra-charges-control-center-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-extra-charges-control-center-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const detectionRows = [
+                ...section.querySelectorAll("[data-mock-extra-charges-control-center-detection-row]"),
+              ].map((row) => ({
+                key: row.getAttribute("data-mock-extra-charges-control-center-detection-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+              }));
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-extra-charges-control-center-column]")].map(
+                    (column) => column.getAttribute("data-mock-extra-charges-control-center-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-extra-charges-control-center-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-extra-charges-control-center-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                detection:
+                  document.querySelector("[data-mock-extra-charges-control-center-detection]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                detectionRows,
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenActionText: [
+                  "approve now",
+                  "bill now",
+                  "calculate now",
+                  "close out now",
+                  "create charge",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "export now",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "notify customer",
+                  "pay now",
+                  "post now",
+                  "reconcile now",
+                  "save charge",
+                  "save payout",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-extra-charges-control-center-generation]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                legacyVisibleSelectors: legacySelectors.filter((selector) => document.querySelector(selector)),
+                modeOptionTexts: [
+                  ...section.querySelectorAll("[data-mock-midnight-charge-override-mode] option"),
+                ].map((option) => option.textContent.replace(/\\s+/g, " ").trim()),
+                modeValue: section.querySelector("[data-mock-midnight-charge-override-mode]")?.value || "",
+                overrideLabels: [...section.querySelectorAll("label > span")].map((label) =>
+                  label.textContent.replace(/\\s+/g, " ").trim(),
+                ),
+                previewStatus:
+                  section.querySelector("[data-mock-midnight-charge-override-preview-status]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                reasonValue: section.querySelector("[data-mock-midnight-charge-override-reason]")?.value || "",
+                rows,
+                rules:
+                  document.querySelector("[data-mock-extra-charges-control-center-rules]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                separation:
+                  document.querySelector("[data-mock-extra-charges-control-center-separation]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                summary:
+                  document.querySelector("[data-mock-extra-charges-control-center-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock extra charges control center`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected extra charges control center inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before extra charges control center`,
+        );
+        assert.deepEqual(
+          state.legacyVisibleSelectors,
+          [],
+          `${viewport.label}: expected old extra-charge QA strips to be consolidated out of the rendered dashboard`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("extra charges control center") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected consolidated extra charges control center heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Charge type",
+            "Display group",
+            "Customer charge rule",
+            "Driver payout rule",
+            "Detection / review status",
+            "Billing decision",
+            "Payout decision",
+            "Dispatcher handoff / reconciliation status",
+            "Internal separation status",
+            "Next internal action",
+          ],
+          `${viewport.label}: expected consolidated extra charges control center columns`,
+        );
+        assert.equal(state.rows.length, 3, `${viewport.label}: expected three consolidated charge type rows`);
+        const rowByType = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByType["Waiting Time"].includes("Extra Charges") &&
+            rowByType["Waiting Time"].includes("$15 customer per 15-minute waiting block") &&
+            rowByType["Waiting Time"].includes("$10 driver per 15-minute waiting block") &&
+            rowByType["Waiting Time"].includes("2 waiting blocks need dispatcher variance review") &&
+            rowByType["Waiting Time"].includes("Customer billing approved in mock review") &&
+            rowByType["Waiting Time"].includes("Driver payout approved in mock review") &&
+            rowByType["Waiting Time"].includes("Waiting Time source stays separate"),
+          true,
+          `${viewport.label}: expected waiting time row with locked pricing and separation`,
+        );
+        assert.equal(
+          rowByType["Extra Stops"].includes("Extra Charges") &&
+            rowByType["Extra Stops"].includes("Extra-stop customer charge reviewed separately") &&
+            rowByType["Extra Stops"].includes("Extra-stop driver payout reviewed separately") &&
+            rowByType["Extra Stops"].includes("Hold for dispatcher confirmation") &&
+            rowByType["Extra Stops"].includes("Route variance and dispatcher approval handoff pending") &&
+            rowByType["Extra Stops"].includes("Extra Stops source stays separate"),
+          true,
+          `${viewport.label}: expected extra stops row with dispatcher review and internal separation`,
+        );
+        assert.equal(
+          rowByType["Midnight Charge"].includes("Extra Charges") &&
+            rowByType["Midnight Charge"].includes("$15 customer midnight charge") &&
+            rowByType["Midnight Charge"].includes("$10 driver midnight payout") &&
+            rowByType["Midnight Charge"].includes("Customer billing waived in mock example") &&
+            rowByType["Midnight Charge"].includes("Driver payout still reviewed separately") &&
+            rowByType["Midnight Charge"].includes("Midnight Charge source stays separate"),
+          true,
+          `${viewport.label}: expected midnight charge row with waiver and separate driver payout review`,
+        );
+        const detectionByTime = Object.fromEntries(state.detectionRows.map((row) => [row.key, row.text]));
+        assert.equal(
+          detectionByTime["23:00"].includes("23:00 / 11:00pm") &&
+            detectionByTime["23:00"].includes("Detected") &&
+            !detectionByTime["23:00"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 23:00 / 11:00pm to be detected`,
+        );
+        assert.equal(
+          detectionByTime["06:59"].includes("06:59 / 6:59am") &&
+            detectionByTime["06:59"].includes("Detected") &&
+            !detectionByTime["06:59"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 06:59 / 6:59am to be detected`,
+        );
+        assert.equal(
+          detectionByTime["07:00"].includes("07:00 / 7:00am") &&
+            detectionByTime["07:00"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 07:00 / 7:00am not to be detected`,
+        );
+        assert.equal(
+          detectionByTime["22:59"].includes("22:59 / 10:59pm") &&
+            detectionByTime["22:59"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 22:59 / 10:59pm not to be detected`,
+        );
+        assert.equal(
+          state.rules.includes("1 waiting block = 15 minutes") &&
+            state.rules.includes("customer waiting charge $15 per waiting block") &&
+            state.rules.includes("driver waiting payout $10 per waiting block") &&
+            state.rules.includes("Midnight Charge: customer charge $15") &&
+            state.rules.includes("driver payout $10") &&
+            state.rules.includes("11:00pm / 23:00 through 6:59am / 06:59 inclusive") &&
+            state.rules.includes("7:00am / 07:00") &&
+            state.rules.includes("10:59pm / 22:59 are excluded"),
+          true,
+          `${viewport.label}: expected locked waiting-time and midnight charge rules`,
+        );
+        assert.equal(
+          state.separation.includes("Waiting Time, Extra Stops, and Midnight Charge may display") &&
+            state.separation.includes("under Extra Charges") &&
+            state.separation.includes("each charge type remains internally distinct") &&
+            state.separation.includes("Customer billing approval and driver payout approval are separate decisions") &&
+            state.separation.includes("waived customer charge does not automatically cancel driver payout review"),
+          true,
+          `${viewport.label}: expected display grouping and decision separation rules`,
+        );
+        assert.equal(
+          state.generation.includes("No real extra-charge workflow") &&
+            state.generation.includes("approval workflow") &&
+            state.generation.includes("combined charge calculation") &&
+            state.generation.includes("invoice") &&
+            state.generation.includes("payment link") &&
+            state.generation.includes("PDF") &&
+            state.generation.includes("payout") &&
+            state.generation.includes("accounting posting") &&
+            state.generation.includes("finance export") &&
+            state.generation.includes("customer notification"),
+          true,
+          `${viewport.label}: expected consolidated no-generation note`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real extra-charge workflow",
+          "approval workflow",
+          "combined charge calculation",
+          "billing automation",
+          "monthly invoice",
+          "invoice generation",
+          "payment link",
+          "PDF generation",
+          "accounting integration",
+          "finance export",
+          "customer account",
+          "customer auth",
+          "driver payout creation",
+          "waiting-time persistence",
+          "extra-stop persistence",
+          "midnight-charge persistence",
+          "approval-decision persistence",
+          "customer-charge persistence",
+          "driver-payout persistence",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected consolidated boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.overrideLabels,
+          ["Manual Override Mock Only", "Override Reason Mock Only"],
+          `${viewport.label}: expected mock-only override labels`,
+        );
+        assert.equal(
+          state.modeOptionTexts.every((label) => label.includes("Mock Only")),
+          true,
+          `${viewport.label}: expected every override option label to say Mock Only`,
+        );
+        assert.equal(state.modeValue, "auto", `${viewport.label}: expected override mode to default to auto`);
+        assert.equal(state.reasonValue, "", `${viewport.label}: expected Override Reason to be blank by default`);
+        assert.equal(
+          state.previewStatus.includes("Auto sample: 22:59 / 10:59pm is not detected") &&
+            state.previewStatus.includes("No Midnight Charge shown - Mock Only") &&
+            state.previewStatus.includes("current reason is blank"),
+          true,
+          `${viewport.label}: expected default local-only override preview`,
+        );
+        assert.equal(
+          state.actionControlCount,
+          0,
+          `${viewport.label}: expected no action controls in the consolidated control center`,
+        );
+        assert.equal(
+          state.controlCount,
+          2,
+          `${viewport.label}: expected only the mock local midnight override select/input controls`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active billing/payout/invoice/PDF/post/export action wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1800 : viewport.width < 1024 ? 1180 : 920),
+          true,
+          `${viewport.label}: expected compact consolidated extra charges control center, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected consolidated extra charges rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected consolidated extra charges control center not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      await setViewportAndReload({
+        height: 1080,
+        label: "desktop mock extra charges override local-only behavior",
+        mobile: false,
+        scale: 1,
+        width: 1440,
+      });
+      await clickTab("Dashboard");
+      await waitForSelector(
+        evaluate,
+        "[data-mock-extra-charges-control-center]",
+        "admin mock extra charges override local-only behavior",
+      );
+
+      await evaluate(`(() => {
+        window.__mockExtraChargesControlCenterIntegrationCalls = [];
+        const originalFetch = window.__mockExtraChargesControlCenterOriginalFetch || window.fetch.bind(window);
+        window.__mockExtraChargesControlCenterOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const [target, options = {}] = args;
+          const method = options?.method || "GET";
+          window.__mockExtraChargesControlCenterIntegrationCalls.push(\`\${method} \${String(target)}\`);
+          return originalFetch(...args);
+        };
+
+        const originalOpen =
+          window.__mockExtraChargesControlCenterOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__mockExtraChargesControlCenterOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function(method, url, ...args) {
+          window.__mockExtraChargesControlCenterIntegrationCalls.push(\`\${method || "GET"} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...args);
+        };
+
+        if (navigator.sendBeacon && !window.__mockExtraChargesControlCenterOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__mockExtraChargesControlCenterOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            window.__mockExtraChargesControlCenterIntegrationCalls.push(\`BEACON \${String(args[0])}\`);
+            return originalSendBeacon(...args);
+          };
+        }
+
+        if (window.WebSocket && !window.__mockExtraChargesControlCenterOriginalWebSocket) {
+          const OriginalWebSocket = window.WebSocket;
+          window.__mockExtraChargesControlCenterOriginalWebSocket = OriginalWebSocket;
+          window.WebSocket = function MockExtraChargesControlCenterWebSocket(url, protocols) {
+            window.__mockExtraChargesControlCenterIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            return protocols === undefined
+              ? new OriginalWebSocket(url)
+              : new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+        }
+      })()`);
+
+      const readMockExtraChargesStorageLeaks = async (sentinels) =>
+        evaluate(`(async () => {
+          const sentinels = ${JSON.stringify(sentinels)};
+          const matchingSentinels = (text) => {
+            const value = String(text || "");
+            return sentinels.filter((sentinel) => value.includes(sentinel));
+          };
+          const readStorageLeaks = (storage) => {
+            const rows = [];
+            try {
+              for (let index = 0; index < storage.length; index += 1) {
+                const key = storage.key(index) || "";
+                rows.push(\`\${key}=\${storage.getItem(key) || ""}\`);
+              }
+            } catch (error) {
+              rows.push(\`storage-read-error:\${error?.message || String(error)}\`);
+            }
+            return matchingSentinels(rows.join("\\n"));
+          };
+          let indexedDbText = "";
+          try {
+            const databases =
+              typeof window.indexedDB?.databases === "function" ? await window.indexedDB.databases() : [];
+            indexedDbText = (databases || []).map((database) => database.name || "").join("\\n");
+          } catch (error) {
+            indexedDbText = \`indexeddb-read-error:\${error?.message || String(error)}\`;
+          }
+
+          return {
+            cookieLeaks: matchingSentinels(document.cookie || ""),
+            indexedDbLeaks: matchingSentinels(indexedDbText),
+            localStorageLeaks: readStorageLeaks(window.localStorage),
+            sessionStorageLeaks: readStorageLeaks(window.sessionStorage),
+          };
+        })()`);
+
+      const setMockMidnightOverride = async (mode, reason) =>
+        evaluate(`(() => {
+          const modeControl = document.querySelector("[data-mock-midnight-charge-override-mode]");
+          const reasonControl = document.querySelector("[data-mock-midnight-charge-override-reason]");
+          if (!modeControl || !reasonControl) {
+            return { missing: true };
+          }
+          const modeDescriptor = Object.getOwnPropertyDescriptor(modeControl.constructor.prototype, "value");
+          modeDescriptor?.set?.call(modeControl, ${JSON.stringify(mode)});
+          modeControl.dispatchEvent(new Event("input", { bubbles: true }));
+          modeControl.dispatchEvent(new Event("change", { bubbles: true }));
+
+          const reasonDescriptor = Object.getOwnPropertyDescriptor(reasonControl.constructor.prototype, "value");
+          reasonDescriptor?.set?.call(reasonControl, ${JSON.stringify(reason)});
+          reasonControl.dispatchEvent(new Event("input", { bubbles: true }));
+          reasonControl.dispatchEvent(new Event("change", { bubbles: true }));
+
+          return { mode: modeControl.value, reason: reasonControl.value };
+        })()`);
+
+      const overrideSentinels = ["EXTRA_CHARGES_OVERRIDE_REASON_SENTINEL_4250"];
+      const beforeCallCount = await evaluate(
+        `(window.__mockExtraChargesControlCenterIntegrationCalls || []).length`,
+      );
+      const overrideState = await setMockMidnightOverride("force-on", overrideSentinels[0]);
+      assert.deepEqual(
+        overrideState,
+        { mode: "force-on", reason: overrideSentinels[0] },
+        "Expected consolidated extra charges override fields to update locally",
+      );
+      const forceOnState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const preview = document.querySelector("[data-mock-midnight-charge-override-preview-status]");
+            return preview?.textContent.includes("Midnight Charge shown under Extra Charges - Mock Only") &&
+              preview?.textContent.includes("entered locally only")
+              ? {
+                  callCount: (window.__mockExtraChargesControlCenterIntegrationCalls || []).length,
+                  preview: preview.textContent.replace(/\\s+/g, " ").trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "extra charges control center local force-on override preview",
+      );
+      assert.equal(
+        forceOnState.callCount,
+        beforeCallCount,
+        "Expected consolidated mock override not to call fetch, XHR, sendBeacon, or WebSocket",
+      );
+      const storageState = await readMockExtraChargesStorageLeaks(overrideSentinels);
+      assert.deepEqual(
+        storageState.localStorageLeaks,
+        [],
+        "Expected consolidated mock override reason not to be written to localStorage",
+      );
+      assert.deepEqual(
+        storageState.sessionStorageLeaks,
+        [],
+        "Expected consolidated mock override reason not to be written to sessionStorage",
+      );
+      assert.deepEqual(
+        storageState.cookieLeaks,
+        [],
+        "Expected consolidated mock override reason not to be written to cookies",
+      );
+      assert.deepEqual(
+        storageState.indexedDbLeaks,
+        [],
+        "Expected consolidated mock override reason not to be written to IndexedDB",
+      );
+
+      const reloadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.reload", { ignoreCache: true });
+      await reloadEvent;
+      await waitForSelector(
+        evaluate,
+        "[data-mock-extra-charges-control-center]",
+        "extra charges control center override after reload",
+      );
+      const postReloadState = await evaluate(`(() => ({
+        mode: document.querySelector("[data-mock-midnight-charge-override-mode]")?.value || "",
+        reason: document.querySelector("[data-mock-midnight-charge-override-reason]")?.value || "",
+        text: document.querySelector("[data-mock-midnight-charge-override-preview-status]")?.textContent || "",
+      }))()`);
+      assert.equal(postReloadState.mode, "auto", "Expected mock override mode to reset after reload");
+      assert.equal(postReloadState.reason, "", "Expected mock override reason to reset after reload");
+      assert.equal(
+        postReloadState.text.includes(overrideSentinels[0]),
+        false,
+        "Expected consolidated mock override sentinel not to persist after reload",
+      );
+
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        customerBookingUrl,
+        "Booking Request",
+        "extra charges control center override navigation away",
+      );
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        appUrl,
+        "Prestige Limo Ops Dispatch",
+        "extra charges control center override navigation back",
+      );
+      await clickTab("Dashboard");
+      await waitForSelector(
+        evaluate,
+        "[data-mock-extra-charges-control-center]",
+        "extra charges control center override after navigation back",
+      );
+      const postNavigationState = await evaluate(`(() => ({
+        mode: document.querySelector("[data-mock-midnight-charge-override-mode]")?.value || "",
+        reason: document.querySelector("[data-mock-midnight-charge-override-reason]")?.value || "",
+        visible: Boolean(document.querySelector("[data-mock-extra-charges-control-center]")),
+      }))()`);
+      assert.deepEqual(
+        postNavigationState,
+        { mode: "auto", reason: "", visible: true },
+        "Expected consolidated mock override preview to reset after navigation away and back",
+      );
+
+      return states;
+    };
+
     const checkAdminMockCompletedJobCloseoutCenter = async () => {
       const reviewViewports = [
         {
@@ -8955,15 +9553,15 @@ async function runChromeTest() {
             evaluate(`(() => {
               const group = document.querySelector("[data-mock-workflow-review-group]");
               const dashboard = document.querySelector("[data-operations-dashboard]");
-              const approvalSection = document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]");
+              const controlCenter = document.querySelector("[data-mock-extra-charges-control-center]");
               const section = document.querySelector("[data-mock-completed-job-closeout-center]");
-              if (!group || !dashboard || !approvalSection || !section) {
+              if (!group || !dashboard || !controlCenter || !section) {
                 return false;
               }
 
               const groupRect = group.getBoundingClientRect();
               const dashboardRect = dashboard.getBoundingClientRect();
-              const approvalRect = approvalSection.getBoundingClientRect();
+              const controlCenterRect = controlCenter.getBoundingClientRect();
               const sectionRect = section.getBoundingClientRect();
               const text = section.innerText;
               const lowerText = text.toLowerCase();
@@ -8986,7 +9584,7 @@ async function runChromeTest() {
 
               return {
                 actionControlCount: section.querySelectorAll("button, a, form").length,
-                approvalBottom: Math.round(approvalRect.bottom),
+                controlCenterBottom: Math.round(controlCenterRect.bottom),
                 boundary:
                   document.querySelector("[data-mock-completed-job-closeout-center-boundary]")
                     ?.textContent.replace(/\\s+/g, " ")
@@ -9057,9 +9655,9 @@ async function runChromeTest() {
           `${viewport.label}: expected operations dashboard before completed job closeout center`,
         );
         assert.equal(
-          state.sectionTop >= state.approvalBottom,
+          state.sectionTop >= state.controlCenterBottom,
           true,
-          `${viewport.label}: expected completed job closeout center after extra charges approval decision review`,
+          `${viewport.label}: expected completed job closeout center after extra charges control center`,
         );
         assert.equal(
           state.text.toLowerCase().includes("completed job closeout center") &&
@@ -10100,6 +10698,45 @@ async function runChromeTest() {
       );
     };
 
+    const assertNoMockExtraChargesControlCenterLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "extra charges control center",
+            "consolidated extra charges qa",
+            "manual override mock only",
+            "override reason mock only",
+            "23:00 / 11:00pm",
+            "06:59 / 6:59am",
+            "07:00 / 7:00am",
+            "22:59 / 10:59pm",
+            "customer billing approved in mock review",
+            "driver payout approved in mock review",
+            "driver payout still reviewed separately",
+            "waived customer charge does not automatically cancel driver payout review",
+            "dispatcher handoff pending",
+            "driver payout reconciliation pending",
+            "no real extra-charge workflow",
+            "approval-decision persistence",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-extra-charges-control-center]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock extra charges control center`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal consolidated extra-charge control center data leak`,
+      );
+    };
+
     const assertNoMockCompletedJobCloseoutCenterLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -10799,6 +11436,7 @@ async function runChromeTest() {
         await assertNoMockMidnightChargeAutoDetectionOverrideLeak(routeName);
         await assertNoMockCombinedExtraChargesSummarySeparationLeak(routeName);
         await assertNoMockExtraChargesApprovalDecisionSeparationLeak(routeName);
+        await assertNoMockExtraChargesControlCenterLeak(routeName);
         await assertNoMockCompletedJobCloseoutCenterLeak(routeName);
         await assertNoMockMonthEndCloseoutWorkbenchLeak(routeName);
         await assertNoMockFinanceExceptionResolutionWorkbenchLeak(routeName);
@@ -11789,6 +12427,7 @@ async function runChromeTest() {
       await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers desktop");
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers desktop");
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers desktop");
+      await assertNoMockExtraChargesControlCenterLeak("/customers desktop");
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers desktop");
       await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers desktop");
       await assertNoMockFinanceExceptionResolutionWorkbenchLeak("/customers desktop");
@@ -17447,6 +18086,7 @@ async function runChromeTest() {
       await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers mobile");
       await assertNoMockCombinedExtraChargesSummarySeparationLeak("/customers mobile");
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers mobile");
+      await assertNoMockExtraChargesControlCenterLeak("/customers mobile");
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers mobile");
       await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers mobile");
       await assertNoMockFinanceExceptionResolutionWorkbenchLeak("/customers mobile");
@@ -23335,16 +23975,23 @@ async function runChromeTest() {
       await checkAdminMockCloseCycleEvidenceResponseRetentionReview();
     state.adminMockCloseCycleExceptionResolutionAuditHandoffReview =
       await checkAdminMockCloseCycleExceptionResolutionAuditHandoffReview();
-    state.adminMockWaitingTimeExtraChargesPlanningReview =
-      await checkAdminMockWaitingTimeExtraChargesPlanningReview();
-    state.adminMockExtraChargesVarianceApprovalReconciliationReview =
-      await checkAdminMockExtraChargesVarianceApprovalReconciliationReview();
-    state.adminMockMidnightChargeAutoDetectionOverrideReview =
-      await checkAdminMockMidnightChargeAutoDetectionOverrideReview();
-    state.adminMockCombinedExtraChargesSummarySeparationReview =
-      await checkAdminMockCombinedExtraChargesSummarySeparationReview();
-    state.adminMockExtraChargesApprovalDecisionSeparationReview =
-      await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
+    state.adminMockExtraChargesControlCenter = await checkAdminMockExtraChargesControlCenter();
+    if (
+      await evaluate(
+        `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
+      )
+    ) {
+      state.adminMockWaitingTimeExtraChargesPlanningReview =
+        await checkAdminMockWaitingTimeExtraChargesPlanningReview();
+      state.adminMockExtraChargesVarianceApprovalReconciliationReview =
+        await checkAdminMockExtraChargesVarianceApprovalReconciliationReview();
+      state.adminMockMidnightChargeAutoDetectionOverrideReview =
+        await checkAdminMockMidnightChargeAutoDetectionOverrideReview();
+      state.adminMockCombinedExtraChargesSummarySeparationReview =
+        await checkAdminMockCombinedExtraChargesSummarySeparationReview();
+      state.adminMockExtraChargesApprovalDecisionSeparationReview =
+        await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
+    }
     state.adminMockCompletedJobCloseoutCenter = await checkAdminMockCompletedJobCloseoutCenter();
     state.adminMockMonthEndCloseoutWorkbench = await checkAdminMockMonthEndCloseoutWorkbench();
     state.adminMockFinanceExceptionResolutionWorkbench =

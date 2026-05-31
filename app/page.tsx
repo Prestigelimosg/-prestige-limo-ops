@@ -6943,6 +6943,7 @@ export default function Home() {
   const mockMidnightChargeOverrideStatus = mockMidnightChargeOverrideDetected
     ? "Midnight Charge shown under Extra Charges - Mock Only"
     : "No Midnight Charge shown - Mock Only";
+  const showLegacyExtraChargeQaSections = false;
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -9365,6 +9366,236 @@ export default function Home() {
         </section>
 
         <section
+          aria-label="Extra Charges Control Center Mock Only"
+          className="rounded-lg border border-teal-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-extra-charges-control-center="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-teal-700">Extra Charges Control Center</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-extra-charges-control-center-copy="true"
+                >
+                  Internal/admin-only consolidated Extra Charges QA preview for Waiting Time, Extra Stops, Midnight
+                  Charge, grouping, separation, variance, reconciliation, dispatcher handoff, billing decisions, payout
+                  decisions, and the local-only midnight override preview. Static/mock/local only.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-[10px] font-semibold uppercase text-teal-700">
+                Mock Only / no actions
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5 rounded-md border border-teal-200 bg-teal-50/70 p-2 text-[10px] leading-[1.15] text-slate-800 sm:grid-cols-2 lg:grid-cols-4"
+              data-mock-extra-charges-control-center-summary="true"
+            >
+              {[
+                ["Display group", "Extra Charges"],
+                ["Scope", "Waiting Time / Extra Stops / Midnight Charge"],
+                ["Review mode", "Mock/local/static with local-only override preview"],
+                ["Workflow boundary", "No billing, invoice, payment, PDF, payout, accounting, storage, API, Supabase, or notifications"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 break-words" key={label}>
+                  <span className="block font-semibold uppercase text-teal-700">{label}</span>
+                  <span>{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-extra-charges-control-center-rows="true">
+              {[
+                {
+                  billingDecision: "Customer billing approved in mock review",
+                  chargeType: "Waiting Time",
+                  customerChargeRule: "$15 customer per 15-minute waiting block",
+                  detectionReviewStatus: "2 waiting blocks need dispatcher variance review",
+                  dispatcherHandoff: "Dispatcher handoff pending / driver payout reconciliation pending",
+                  displayGroup: "Extra Charges",
+                  driverPayoutRule: "$10 driver per 15-minute waiting block",
+                  internalSeparation: "Waiting Time source stays separate from Extra Stops and Midnight Charge",
+                  nextAction: "Confirm waiting block evidence before future billing or payout review",
+                  payoutDecision: "Driver payout approved in mock review",
+                },
+                {
+                  billingDecision: "Hold for dispatcher confirmation; no billing created",
+                  chargeType: "Extra Stops",
+                  customerChargeRule: "Extra-stop customer charge reviewed separately",
+                  detectionReviewStatus: "Route extra review pending",
+                  dispatcherHandoff: "Route variance and dispatcher approval handoff pending",
+                  displayGroup: "Extra Charges",
+                  driverPayoutRule: "Extra-stop driver payout reviewed separately",
+                  internalSeparation: "Extra Stops source stays separate from Waiting Time and Midnight Charge",
+                  nextAction: "Confirm route extra before any future billing or payout review",
+                  payoutDecision: "Hold separately; no payout created",
+                },
+                {
+                  billingDecision: "Customer billing waived in mock example",
+                  chargeType: "Midnight Charge",
+                  customerChargeRule: "$15 customer midnight charge",
+                  detectionReviewStatus: "Detected for 23:00 / 11:00pm and 06:59 / 6:59am; not detected for 07:00 / 7:00am and 22:59 / 10:59pm",
+                  dispatcherHandoff: "Waiver note and driver payout reconciliation reviewed separately",
+                  displayGroup: "Extra Charges",
+                  driverPayoutRule: "$10 driver midnight payout",
+                  internalSeparation: "Midnight Charge source stays separate from Waiting Time and Extra Stops",
+                  nextAction: "Review driver payout even though customer charge is waived",
+                  payoutDecision: "Driver payout still reviewed separately",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-teal-200 bg-white p-1.5 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-3 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+                  data-mock-extra-charges-control-center-row={row.chargeType}
+                  key={row.chargeType}
+                >
+                  {[
+                    ["Charge type", "Type", row.chargeType],
+                    ["Display group", "Group", row.displayGroup],
+                    ["Customer charge rule", "Customer", row.customerChargeRule],
+                    ["Driver payout rule", "Driver", row.driverPayoutRule],
+                    ["Detection / review status", "Detect / QA", row.detectionReviewStatus],
+                    ["Billing decision", "Billing", row.billingDecision],
+                    ["Payout decision", "Payout", row.payoutDecision],
+                    ["Dispatcher handoff / reconciliation status", "Handoff", row.dispatcherHandoff],
+                    ["Internal separation status", "Separate", row.internalSeparation],
+                    ["Next internal action", "Next", row.nextAction],
+                  ].map(([label, shortLabel, value]) => (
+                    <p className="min-w-0 break-words" key={label}>
+                      <span
+                        className="block font-semibold uppercase text-teal-700"
+                        data-mock-extra-charges-control-center-column={label}
+                      >
+                        {shortLabel}
+                      </span>
+                      <span>{value}</span>
+                    </p>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+              <div
+                className="grid min-w-0 gap-1.5 rounded-md border border-sky-200 bg-sky-50/75 p-2"
+                data-mock-extra-charges-control-center-detection="true"
+              >
+                <p className="text-[10px] font-semibold uppercase leading-[1.1] text-sky-700">
+                  Midnight detection examples
+                </p>
+                <div className="grid min-w-0 gap-1 sm:grid-cols-2">
+                  {[
+                    { boundary: "11:00pm included", time: "23:00 / 11:00pm", value: "23:00" },
+                    { boundary: "6:59am included", time: "06:59 / 6:59am", value: "06:59" },
+                    { boundary: "7:00am excluded", time: "07:00 / 7:00am", value: "07:00" },
+                    { boundary: "10:59pm excluded", time: "22:59 / 10:59pm", value: "22:59" },
+                  ].map((row) => {
+                    const detected = isMockMidnightChargeDetected(row.value);
+                    return (
+                      <p
+                        className="min-w-0 rounded-md border border-sky-200 bg-white px-2 py-1 text-[10px] font-medium leading-[1.15] text-slate-800"
+                        data-mock-extra-charges-control-center-detection-row={row.value}
+                        key={row.value}
+                      >
+                        <span className="block font-semibold uppercase text-sky-700">{row.time}</span>
+                        <span>{detected ? "Detected" : "Not detected"} - {row.boundary}</span>
+                      </p>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div
+                className="grid min-w-0 gap-1.5 rounded-md border border-sky-200 bg-sky-50/75 p-2 text-[10px] leading-[1.15] text-slate-700 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)]"
+                data-mock-extra-charges-control-center-override-preview="true"
+              >
+                <label className="grid min-w-0 gap-1">
+                  <span className="font-semibold uppercase text-sky-700">Manual Override Mock Only</span>
+                  <select
+                    className="min-h-9 w-full rounded-md border border-sky-200 bg-white px-2 text-[11px] text-slate-800"
+                    data-mock-midnight-charge-override-mode="true"
+                    value={mockMidnightChargeOverrideMode}
+                    onChange={(event) =>
+                      setMockMidnightChargeOverrideMode(event.target.value as "auto" | "force-on" | "force-off")
+                    }
+                  >
+                    <option value="auto">Use auto-detection - Mock Only</option>
+                    <option value="force-on">Override to apply Midnight Charge - Mock Only</option>
+                    <option value="force-off">Override to remove Midnight Charge - Mock Only</option>
+                  </select>
+                </label>
+                <label className="grid min-w-0 gap-1">
+                  <span className="font-semibold uppercase text-sky-700">Override Reason Mock Only</span>
+                  <input
+                    className="min-h-9 w-full rounded-md border border-sky-200 bg-white px-2 text-[11px] text-slate-800"
+                    data-mock-midnight-charge-override-reason="true"
+                    placeholder="Blank by default"
+                    type="text"
+                    value={mockMidnightChargeOverrideReason}
+                    onChange={(event) => setMockMidnightChargeOverrideReason(event.target.value)}
+                  />
+                </label>
+                <p
+                  className="min-w-0 rounded-md border border-sky-200 bg-white px-2 py-1.5 font-medium"
+                  data-mock-midnight-charge-override-preview-status="true"
+                >
+                  Staff override preview - mock only and local-only. Auto sample: 22:59 / 10:59pm is not detected.
+                  Current preview: {mockMidnightChargeOverrideStatus}. Override Reason blank by default; current
+                  reason is {mockMidnightChargeOverrideReason ? "entered locally only" : "blank"}.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-extra-charges-control-center-rules="true"
+              >
+                Locked rules - mock only. Waiting Time: 1 waiting block = 15 minutes, customer waiting charge $15 per
+                waiting block, driver waiting payout $10 per waiting block. Midnight Charge: customer charge $15,
+                driver payout $10, applies from 11:00pm / 23:00 through 6:59am / 06:59 inclusive; 7:00am / 07:00 and
+                10:59pm / 22:59 are excluded.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-extra-charges-control-center-separation="true"
+              >
+                Display and decision separation - mock only. Waiting Time, Extra Stops, and Midnight Charge may display
+                together under Extra Charges, but each charge type remains internally distinct. Customer billing
+                approval and driver payout approval are separate decisions. A waived customer charge does not
+                automatically cancel driver payout review.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-extra-charges-control-center-generation="true"
+              >
+                Consolidated control center only. No real extra-charge workflow, approval workflow, combined charge
+                calculation, invoice, payment link, PDF, payout, accounting posting, finance export, customer charge
+                record, driver payout record, override record, audit record, or customer notification is created.
+              </p>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-extra-charges-control-center-boundary="true"
+          >
+            Mock/local only. No real extra-charge workflow, approval workflow, combined charge calculation, billing
+            automation, monthly invoice, invoice generation, payment link, PDF generation, accounting integration,
+            finance export, customer account, customer auth, or driver payout creation. No waiting-time persistence,
+            extra-stop persistence, midnight-charge persistence, approval-decision persistence, customer-charge
+            persistence, or driver-payout persistence. No save/load behavior,
+            storage/localStorage/sessionStorage/cookies/IndexedDB, API call/fetch/XHR/sendBeacon/WebSocket, Supabase,
+            parser file changes, package script changes, test:safe membership changes, message-channel delivery,
+            customer notification, notification, or send behavior.
+          </p>
+        </section>
+
+        {showLegacyExtraChargeQaSections ? (
+          <>
+        <section
           aria-label="Mock waiting time extra charges pricing and driver payout planning QA review"
           className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 shadow-sm"
           data-mock-waiting-time-extra-charges-planning-review="true"
@@ -10082,6 +10313,9 @@ export default function Home() {
             message-channel delivery, customer notification, notification, or send behavior.
           </p>
         </section>
+
+          </>
+        ) : null}
 
         <section
           aria-label="Completed Job Closeout Center Mock Only"

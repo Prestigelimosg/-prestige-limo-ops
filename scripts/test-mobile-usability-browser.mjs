@@ -540,6 +540,9 @@ async function runChromeTest() {
       const mockExtraChargesApprovalDecisionSeparationReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]"))`,
       );
+      const mockExtraChargesControlCenterVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-extra-charges-control-center]"))`,
+      );
       const mockCompletedJobCloseoutCenterVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-completed-job-closeout-center]"))`,
       );
@@ -595,6 +598,16 @@ async function runChromeTest() {
             "waived customer charge does not automatically cancel driver payout review",
             "approval-decision persistence",
             "approval-decision record",
+            "extra charges control center",
+            "consolidated extra charges qa",
+            "manual override mock only",
+            "override reason mock only",
+            "customer billing approved in mock review",
+            "driver payout approved in mock review",
+            "driver payout still reviewed separately",
+            "dispatcher handoff pending",
+            "driver payout reconciliation pending",
+            "no real extra-charge workflow",
             "completed job closeout center",
             "internal/admin-only completed-job closeout preview",
             "completed jobs ready for closeout qa",
@@ -783,6 +796,11 @@ async function runChromeTest() {
         mockExtraChargesApprovalDecisionSeparationReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock extra charges approval decision separation review`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock extra charges control center`,
       );
       assert.equal(
         mockCompletedJobCloseoutCenterVisible,
@@ -3962,6 +3980,255 @@ async function runChromeTest() {
         `${viewport.label}: expected close-cycle exception resolution audit handoff review not to create horizontal overflow`,
       );
 
+      const mockExtraChargesControlCenterState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const review = document.querySelector("[data-mock-extra-charges-control-center]");
+            if (!group || !dashboard || !review) {
+              return false;
+            }
+
+            const legacySelectors = [
+              "[data-mock-waiting-time-extra-charges-planning-review]",
+              "[data-mock-extra-charges-variance-approval-reconciliation-review]",
+              "[data-mock-midnight-charge-auto-detection-override-review]",
+              "[data-mock-combined-extra-charges-summary-separation-review]",
+              "[data-mock-extra-charges-approval-decision-separation-review]",
+            ];
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-extra-charges-control-center-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-extra-charges-control-center-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const detectionRows = [
+              ...review.querySelectorAll("[data-mock-extra-charges-control-center-detection-row]"),
+            ].map((row) => ({
+              key: row.getAttribute("data-mock-extra-charges-control-center-detection-row") || "",
+              text: row.textContent.replace(/\\s+/g, " ").trim(),
+            }));
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-extra-charges-control-center-column]")].map(
+                  (column) => column.getAttribute("data-mock-extra-charges-control-center-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: review.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-extra-charges-control-center-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: review.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              detectionRows,
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-extra-charges-control-center-generation]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              legacyVisibleSelectors: legacySelectors.filter((selector) => document.querySelector(selector)),
+              modeValue: review.querySelector("[data-mock-midnight-charge-override-mode]")?.value || "",
+              previewStatus:
+                review.querySelector("[data-mock-midnight-charge-override-preview-status]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              reasonValue: review.querySelector("[data-mock-midnight-charge-override-reason]")?.value || "",
+              rows,
+              rules:
+                document.querySelector("[data-mock-extra-charges-control-center-rules]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              separation:
+                document.querySelector("[data-mock-extra-charges-control-center-separation]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock extra charges control center`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.groupTop >= mockExtraChargesControlCenterState.dashboardBottom,
+        true,
+        `${viewport.label}: expected extra charges control center to remain in bottom mock workflow group`,
+      );
+      assert.deepEqual(
+        mockExtraChargesControlCenterState.legacyVisibleSelectors,
+        [],
+        `${viewport.label}: expected old extra-charge QA strips to be consolidated out of the rendered dashboard`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.text.toLowerCase().includes("extra charges control center") &&
+          mockExtraChargesControlCenterState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected consolidated extra charges control center`,
+      );
+      assert.deepEqual(
+        mockExtraChargesControlCenterState.columns,
+        [
+          "Charge type",
+          "Display group",
+          "Customer charge rule",
+          "Driver payout rule",
+          "Detection / review status",
+          "Billing decision",
+          "Payout decision",
+          "Dispatcher handoff / reconciliation status",
+          "Internal separation status",
+          "Next internal action",
+        ],
+        `${viewport.label}: expected consolidated control center columns`,
+      );
+      const controlRowsByType = Object.fromEntries(
+        mockExtraChargesControlCenterState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        controlRowsByType["Waiting Time"].includes("Extra Charges") &&
+          controlRowsByType["Waiting Time"].includes("$15 customer per 15-minute waiting block") &&
+          controlRowsByType["Waiting Time"].includes("$10 driver per 15-minute waiting block") &&
+          controlRowsByType["Waiting Time"].includes("Waiting Time source stays separate") &&
+          controlRowsByType["Extra Stops"].includes("Extra Charges") &&
+          controlRowsByType["Extra Stops"].includes("Extra Stops source stays separate") &&
+          controlRowsByType["Midnight Charge"].includes("Extra Charges") &&
+          controlRowsByType["Midnight Charge"].includes("$15 customer midnight charge") &&
+          controlRowsByType["Midnight Charge"].includes("$10 driver midnight payout") &&
+          controlRowsByType["Midnight Charge"].includes("Driver payout still reviewed separately"),
+        true,
+        `${viewport.label}: expected all consolidated charge rows under Extra Charges with separation`,
+      );
+      const detectionRowsByTime = Object.fromEntries(
+        mockExtraChargesControlCenterState.detectionRows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        detectionRowsByTime["23:00"].includes("Detected") &&
+          detectionRowsByTime["06:59"].includes("Detected") &&
+          detectionRowsByTime["07:00"].includes("Not detected") &&
+          detectionRowsByTime["22:59"].includes("Not detected"),
+        true,
+        `${viewport.label}: expected protected midnight detection boundaries in control center`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.rules.includes("1 waiting block = 15 minutes") &&
+          mockExtraChargesControlCenterState.rules.includes("customer waiting charge $15 per waiting block") &&
+          mockExtraChargesControlCenterState.rules.includes("driver waiting payout $10 per waiting block") &&
+          mockExtraChargesControlCenterState.rules.includes("Midnight Charge: customer charge $15") &&
+          mockExtraChargesControlCenterState.rules.includes("11:00pm / 23:00 through 6:59am / 06:59 inclusive") &&
+          mockExtraChargesControlCenterState.rules.includes("7:00am / 07:00") &&
+          mockExtraChargesControlCenterState.rules.includes("10:59pm / 22:59 are excluded"),
+        true,
+        `${viewport.label}: expected waiting-time and midnight locked rules in control center`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.separation.includes("under Extra Charges") &&
+          mockExtraChargesControlCenterState.separation.includes("each charge type remains internally distinct") &&
+          mockExtraChargesControlCenterState.separation.includes(
+            "Customer billing approval and driver payout approval are separate decisions",
+          ) &&
+          mockExtraChargesControlCenterState.separation.includes(
+            "waived customer charge does not automatically cancel driver payout review",
+          ),
+        true,
+        `${viewport.label}: expected display grouping and decision separation in control center`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.generation.includes("No real extra-charge workflow") &&
+          mockExtraChargesControlCenterState.generation.includes("approval workflow") &&
+          mockExtraChargesControlCenterState.generation.includes("combined charge calculation") &&
+          mockExtraChargesControlCenterState.generation.includes("invoice") &&
+          mockExtraChargesControlCenterState.generation.includes("payment link") &&
+          mockExtraChargesControlCenterState.generation.includes("PDF") &&
+          mockExtraChargesControlCenterState.generation.includes("payout") &&
+          mockExtraChargesControlCenterState.generation.includes("accounting posting") &&
+          mockExtraChargesControlCenterState.generation.includes("finance export") &&
+          mockExtraChargesControlCenterState.boundary.includes("save/load behavior") &&
+          mockExtraChargesControlCenterState.boundary.includes("localStorage") &&
+          mockExtraChargesControlCenterState.boundary.includes("sessionStorage") &&
+          mockExtraChargesControlCenterState.boundary.includes("cookies") &&
+          mockExtraChargesControlCenterState.boundary.includes("IndexedDB") &&
+          mockExtraChargesControlCenterState.boundary.includes("API call") &&
+          mockExtraChargesControlCenterState.boundary.includes("fetch") &&
+          mockExtraChargesControlCenterState.boundary.includes("XHR") &&
+          mockExtraChargesControlCenterState.boundary.includes("sendBeacon") &&
+          mockExtraChargesControlCenterState.boundary.includes("WebSocket") &&
+          mockExtraChargesControlCenterState.boundary.includes("Supabase") &&
+          mockExtraChargesControlCenterState.boundary.includes("customer notification"),
+        true,
+        `${viewport.label}: expected control center no persistence/storage/API boundary`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.modeValue,
+        "auto",
+        `${viewport.label}: expected mock midnight override mode to default to auto`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.reasonValue,
+        "",
+        `${viewport.label}: expected mock midnight Override Reason to be blank by default`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.previewStatus.includes("mock only") ||
+          mockExtraChargesControlCenterState.previewStatus.includes("Mock Only"),
+        true,
+        `${viewport.label}: expected mock-only midnight override preview`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.actionControlCount,
+        0,
+        `${viewport.label}: expected extra charges control center to have no action controls`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.controlCount,
+        2,
+        `${viewport.label}: expected only local mock override select/input controls`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.rows.length,
+        3,
+        `${viewport.label}: expected three consolidated charge rows`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.detectionRows.length,
+        4,
+        `${viewport.label}: expected four midnight detection examples`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.height <=
+          (viewport.width < 640 ? 1950 : viewport.width < 1024 ? 1180 : viewport.width < 1200 ? 980 : 880),
+        true,
+        `${viewport.label}: expected compact extra charges control center, got ${mockExtraChargesControlCenterState.height}px`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.rows.every((row) => row.height >= 28 && row.width >= 240),
+        true,
+        `${viewport.label}: expected extra charges control center rows to stay readable`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterState.docScrollWidth <=
+          mockExtraChargesControlCenterState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected extra charges control center not to create horizontal overflow`,
+      );
+
+      const legacyExtraChargeQaStripsVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
+      );
+      if (legacyExtraChargeQaStripsVisible) {
       const mockWaitingTimeExtraChargesPlanningReviewState = await waitForCondition(
         () =>
           evaluate(`(() => {
@@ -5117,21 +5384,22 @@ async function runChromeTest() {
         true,
         `${viewport.label}: expected extra charges approval decision review not to create horizontal overflow`,
       );
+      }
 
       const mockCompletedJobCloseoutCenterState = await waitForCondition(
         () =>
           evaluate(`(() => {
             const group = document.querySelector("[data-mock-workflow-review-group]");
             const dashboard = document.querySelector("[data-operations-dashboard]");
-            const approvalReview = document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]");
+            const controlCenter = document.querySelector("[data-mock-extra-charges-control-center]");
             const review = document.querySelector("[data-mock-completed-job-closeout-center]");
-            if (!group || !dashboard || !approvalReview || !review) {
+            if (!group || !dashboard || !controlCenter || !review) {
               return false;
             }
 
             const groupRect = group.getBoundingClientRect();
             const dashboardRect = dashboard.getBoundingClientRect();
-            const approvalRect = approvalReview.getBoundingClientRect();
+            const controlCenterRect = controlCenter.getBoundingClientRect();
             const rect = review.getBoundingClientRect();
             const rows = [...review.querySelectorAll("[data-mock-completed-job-closeout-center-row]")].map((row) => {
               const rowRect = row.getBoundingClientRect();
@@ -5152,7 +5420,7 @@ async function runChromeTest() {
 
             return {
               actionControlCount: review.querySelectorAll("button, a, form").length,
-              approvalBottom: Math.round(approvalRect.bottom),
+              controlCenterBottom: Math.round(controlCenterRect.bottom),
               boundary:
                 document.querySelector("[data-mock-completed-job-closeout-center-boundary]")
                   ?.textContent.replace(/\\s+/g, " ")
@@ -5194,9 +5462,9 @@ async function runChromeTest() {
         `${viewport.label}: expected completed job closeout center to remain in bottom mock workflow group`,
       );
       assert.equal(
-        mockCompletedJobCloseoutCenterState.sectionTop >= mockCompletedJobCloseoutCenterState.approvalBottom,
+        mockCompletedJobCloseoutCenterState.sectionTop >= mockCompletedJobCloseoutCenterState.controlCenterBottom,
         true,
-        `${viewport.label}: expected completed job closeout center after extra charges approval decision review`,
+        `${viewport.label}: expected completed job closeout center after extra charges control center`,
       );
       assert.equal(
         mockCompletedJobCloseoutCenterState.text.toLowerCase().includes("completed job closeout center") &&
@@ -5854,6 +6122,9 @@ async function runChromeTest() {
       const mockExtraChargesApprovalDecisionSeparationReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-extra-charges-approval-decision-separation-review]"))`,
       );
+      const mockExtraChargesControlCenterVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-extra-charges-control-center]"))`,
+      );
       const mockCompletedJobCloseoutCenterVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-completed-job-closeout-center]"))`,
       );
@@ -5909,6 +6180,16 @@ async function runChromeTest() {
             "waived customer charge does not automatically cancel driver payout review",
             "approval-decision persistence",
             "approval-decision record",
+            "extra charges control center",
+            "consolidated extra charges qa",
+            "manual override mock only",
+            "override reason mock only",
+            "customer billing approved in mock review",
+            "driver payout approved in mock review",
+            "driver payout still reviewed separately",
+            "dispatcher handoff pending",
+            "driver payout reconciliation pending",
+            "no real extra-charge workflow",
             "completed job closeout center",
             "internal/admin-only completed-job closeout preview",
             "completed jobs ready for closeout qa",
@@ -6123,6 +6404,11 @@ async function runChromeTest() {
         mockExtraChargesApprovalDecisionSeparationReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock extra charges approval decision separation review`,
+      );
+      assert.equal(
+        mockExtraChargesControlCenterVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock extra charges control center`,
       );
       assert.equal(
         mockCompletedJobCloseoutCenterVisible,

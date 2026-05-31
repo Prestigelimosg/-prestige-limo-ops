@@ -1521,7 +1521,8 @@ function assertBookingUiState(state) {
   assert.equal(state.manualExtraChargesReviewPreview.amount, "$0.00");
   assert.equal(state.manualExtraChargesReviewPreview.note, "Blank");
   assert.deepEqual(state.manualExtraChargesReviewPreview.buttons, []);
-  assert.match(state.manualExtraChargesReviewPreview.boundary, /Manual staff entry only - not billed or saved/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /Manual staff entry only/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /Not billed, not saved, no total calculated/);
   assert.match(state.manualExtraChargesReviewPreview.boundary, /No invoice/);
   assert.match(state.manualExtraChargesReviewPreview.boundary, /payment/);
   assert.match(state.manualExtraChargesReviewPreview.boundary, /PDF/);
@@ -2518,7 +2519,8 @@ async function runChromeTest() {
       [],
       "Expected manual Extra Charges review preview to add no action controls",
     );
-    assert.match(manualExtraChargePreviewDefaultState.boundary, /Manual staff entry only - not billed or saved/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /Manual staff entry only/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /Not billed, not saved, no total calculated/);
     assert.match(manualExtraChargePreviewDefaultState.boundary, /No invoice/);
     assert.match(manualExtraChargePreviewDefaultState.boundary, /statement/);
     assert.match(manualExtraChargePreviewDefaultState.boundary, /payment/);
@@ -2658,7 +2660,8 @@ async function runChromeTest() {
       [],
       "Expected manual Extra Charges review preview to remain display-only",
     );
-    assert.match(manualExtraChargeEditedState.previewBoundary, /Manual staff entry only - not billed or saved/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /Manual staff entry only/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /Not billed, not saved, no total calculated/);
     assert.match(manualExtraChargeEditedState.previewBoundary, /No invoice/);
     assert.match(manualExtraChargeEditedState.previewBoundary, /statement/);
     assert.match(manualExtraChargeEditedState.previewBoundary, /payment/);

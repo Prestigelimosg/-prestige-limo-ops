@@ -11950,19 +11950,27 @@ export default function Home() {
                 </div>
               </div>
               <div
-                className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                className="mb-3 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2.5 text-sm text-amber-950"
                 data-manual-extra-charges-review-preview="true"
               >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                    Manual Extra Charges Review
+                  </p>
+                  <span className="rounded-full border border-amber-200 bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase text-amber-800">
+                    Manual staff entry only
+                  </span>
+                </div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-amber-800">Manual Extra Charges</p>
-                    <p className="mt-0.5 font-semibold" data-manual-extra-charges-review-amount="true">
+                  <div className="rounded-md border border-amber-100 bg-white/65 px-2.5 py-2">
+                    <p className="text-[11px] font-semibold uppercase text-amber-800">Manual Extra Charges</p>
+                    <p className="mt-1 font-semibold text-slate-950" data-manual-extra-charges-review-amount="true">
                       {manualExtraChargesAmountPreview}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-amber-800">Manual Extra Charges note</p>
-                    <p className="mt-0.5 break-words" data-manual-extra-charges-review-note="true">
+                  <div className="rounded-md border border-amber-100 bg-white/65 px-2.5 py-2">
+                    <p className="text-[11px] font-semibold uppercase text-amber-800">Manual Extra Charges note</p>
+                    <p className="mt-1 break-words text-slate-950" data-manual-extra-charges-review-note="true">
                       {manualExtraChargesNotePreview}
                     </p>
                   </div>
@@ -11971,8 +11979,9 @@ export default function Home() {
                   className="mt-2 border-t border-amber-200 pt-2 text-xs leading-5 text-amber-900"
                   data-manual-extra-charges-review-boundary="true"
                 >
-                  Manual staff entry only - not billed or saved. No invoice, statement, payment,
-                  PDF, payout, accounting, finance export, storage, API, Supabase, or notification behavior.
+                  Manual staff entry only. Not billed, not saved, no total calculated. No invoice,
+                  statement, payment, PDF, payout, accounting, finance export, storage, API, Supabase,
+                  or notification behavior.
                 </p>
               </div>
               {jobCardCopyEditState.isEditing ? (

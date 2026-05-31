@@ -515,7 +515,8 @@ async function runChromeTest() {
       assert.equal(
         normalizedPreviewText.includes("manual extra charges") &&
           normalizedPreviewText.includes("manual extra charges note") &&
-          state.previewBoundary.includes("Manual staff entry only - not billed or saved") &&
+          state.previewBoundary.includes("Manual staff entry only") &&
+          state.previewBoundary.includes("Not billed, not saved, no total calculated") &&
           state.previewBoundary.includes("No invoice") &&
           state.previewBoundary.includes("payment") &&
           state.previewBoundary.includes("PDF") &&

@@ -683,6 +683,7 @@ async function runChromeTest() {
         "[data-mock-completed-job-closeout-center]",
         "[data-mock-month-end-closeout-workbench]",
         "[data-mock-finance-exception-resolution-workbench]",
+        "[data-mock-driver-job-completion-exception-intake-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -737,7 +738,8 @@ async function runChromeTest() {
             state.text.includes("Extra Charges Control Center") &&
             state.text.includes("Completed Job Closeout Center") &&
             state.text.includes("Month-End Closeout Workbench") &&
-            state.text.includes("Finance Exception Resolution Workbench"),
+            state.text.includes("Finance Exception Resolution Workbench") &&
+            state.text.includes("Driver Job Completion & Exception Intake Workbench"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -10507,6 +10509,331 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockDriverJobCompletionExceptionIntakeWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 980,
+          label: "mobile mock driver job completion exception intake workbench",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock driver job completion exception intake workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const financeWorkbench = document.querySelector("[data-mock-finance-exception-resolution-workbench]");
+              const section = document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench]");
+              if (!group || !dashboard || !financeWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const financeRect = financeWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-driver-job-completion-exception-intake-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-driver-job-completion-exception-intake-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-driver-job-completion-exception-intake-workbench-column]")].map(
+                    (column) => column.getAttribute("data-mock-driver-job-completion-exception-intake-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                exceptionNote:
+                  document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench-exception-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                filterSummary:
+                  document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                financeBottom: Math.round(financeRect.bottom),
+                forbiddenActionText: [
+                  "activate live location",
+                  "acknowledge driver",
+                  "create closeout",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "dispatch replacement",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "pay now",
+                  "post now",
+                  "save completion",
+                  "send notification",
+                  "upload proof",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                progression:
+                  document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench-progression]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                safety:
+                  document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock driver job completion exception intake workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected driver completion workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before driver completion workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.financeBottom,
+          true,
+          `${viewport.label}: expected driver completion workbench after finance exception workbench`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("driver job completion & exception intake workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected driver completion workbench heading`,
+        );
+        assert.equal(
+          state.copy.includes("driver completion and exception intake preview") &&
+            state.copy.includes("Static/mock/local display data only") &&
+            state.copy.includes("no real completion") &&
+            state.copy.includes("live location") &&
+            state.copy.includes("proof/photo upload") &&
+            state.copy.includes("replacement dispatch") &&
+            state.copy.includes("storage, API, or Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected driver completion workbench boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Job reference driver vehicle plate service type",
+            "Completion status",
+            "OTS POB completed status",
+            "Proof photo status",
+            "Exception type replacement vehicle status",
+            "Dispatcher follow-up status closeout handoff readiness next internal action",
+          ],
+          `${viewport.label}: expected driver completion workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three driver job rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Review scope") &&
+            state.filterSummary.includes("Completed and exception driver jobs") &&
+            state.filterSummary.includes("Status filter") &&
+            state.filterSummary.includes("Clean / proof pending / exception reported") &&
+            state.filterSummary.includes("3 driver job rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only driver completion filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-DRV-COMP-101"].includes("Arun Lim") &&
+            rowByRef["PLO-DRV-COMP-101"].includes("Mercedes E-Class / SGM101A") &&
+            rowByRef["PLO-DRV-COMP-101"].includes("Completed cleanly") &&
+            rowByRef["PLO-DRV-COMP-101"].includes("OTS confirmed; POB confirmed; Job Completed confirmed") &&
+            rowByRef["PLO-DRV-COMP-101"].includes("Proof/photo received") &&
+            rowByRef["PLO-DRV-COMP-101"].includes("Ready for completed-job closeout handoff"),
+          true,
+          `${viewport.label}: expected clean driver completion row`,
+        );
+        assert.equal(
+          rowByRef["PLO-DRV-COMP-118"].includes("Nadia Tan") &&
+            rowByRef["PLO-DRV-COMP-118"].includes("Completed; proof pending") &&
+            rowByRef["PLO-DRV-COMP-118"].includes("Proof/photo pending - not uploaded here") &&
+            rowByRef["PLO-DRV-COMP-118"].includes("Dispatcher follow-up pending for proof/photo") &&
+            rowByRef["PLO-DRV-COMP-118"].includes("Hold closeout handoff until proof/photo is reviewed"),
+          true,
+          `${viewport.label}: expected proof/photo pending driver completion row`,
+        );
+        assert.equal(
+          rowByRef["PLO-DRV-COMP-207"].includes("Marcus Lee") &&
+            rowByRef["PLO-DRV-COMP-207"].includes("Driver exception reported") &&
+            rowByRef["PLO-DRV-COMP-207"].includes("Late driver / car breakdown") &&
+            rowByRef["PLO-DRV-COMP-207"].includes("Replacement vehicle needed - mock review only") &&
+            rowByRef["PLO-DRV-COMP-207"].includes("Closeout handoff blocked until exception review"),
+          true,
+          `${viewport.label}: expected driver exception and replacement vehicle row`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("job / driver") &&
+            state.text.toLowerCase().includes("completion") &&
+            state.text.toLowerCase().includes("ots / pob / completed") &&
+            state.text.toLowerCase().includes("proof / photo") &&
+            state.text.toLowerCase().includes("exception / replacement") &&
+            state.text.toLowerCase().includes("follow-up / closeout"),
+          true,
+          `${viewport.label}: expected complete driver completion intake workflow pieces`,
+        );
+        assert.equal(
+          state.progression.includes("OTS, POB, and Job Completed status") &&
+            state.progression.includes("nothing is acknowledged") &&
+            state.progression.includes("persisted") &&
+            state.progression.includes("saved"),
+          true,
+          `${viewport.label}: expected OTS/POB/completed progression boundary`,
+        );
+        assert.equal(
+          state.exceptionNote.includes("Proof/photo pending") &&
+            state.exceptionNote.includes("late driver") &&
+            state.exceptionNote.includes("car breakdown") &&
+            state.exceptionNote.includes("missed job") &&
+            state.exceptionNote.includes("replacement vehicle need") &&
+            state.exceptionNote.includes("dispatcher follow-up") &&
+            state.exceptionNote.includes("closeout handoff readiness") &&
+            state.exceptionNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected driver exception intake statuses`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No live location activated") &&
+            state.safety.includes("no proof/photo uploaded") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no driver acknowledgement sent") &&
+            state.safety.includes("no job completion saved") &&
+            state.safety.includes("no replacement car dispatch created") &&
+            state.safety.includes("no closeout record created") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting, or finance export created"),
+          true,
+          `${viewport.label}: expected no live/proof/notification/completion/closeout/finance behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real driver job completion workflow",
+          "OTS/POB/completed persistence",
+          "proof/photo upload",
+          "live location behavior",
+          "driver acknowledgement behavior",
+          "replacement vehicle dispatch",
+          "closeout workflow",
+          "closeout record",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account",
+          "customer auth",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected driver completion boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no driver completion action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no driver completion form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active live-location/proof/notification/closeout/billing controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1500 : viewport.width < 1024 ? 900 : 760),
+          true,
+          `${viewport.label}: expected compact driver completion workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected driver completion rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected driver completion workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -10848,6 +11175,48 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal finance exception/billing/payout/statement/finance export data leak`,
+      );
+    };
+
+    const assertNoMockDriverJobCompletionExceptionIntakeWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "driver job completion & exception intake workbench",
+            "internal/admin-only driver completion and exception intake preview",
+            "completed and exception driver jobs",
+            "clean / proof pending / exception reported",
+            "ots confirmed; pob confirmed",
+            "proof/photo received in mock review",
+            "proof/photo pending - not uploaded here",
+            "driver exception reported",
+            "late driver / car breakdown",
+            "replacement vehicle needed - mock review only",
+            "ready for completed-job closeout handoff",
+            "no live location activated",
+            "no proof/photo uploaded",
+            "no driver acknowledgement sent",
+            "no job completion saved",
+            "no replacement car dispatch created",
+            "no real driver job completion workflow",
+            "ots/pob/completed persistence",
+            "replacement vehicle dispatch",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-driver-job-completion-exception-intake-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock driver job completion exception intake workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal driver completion/exception/proof/replacement/closeout data leak`,
       );
     };
 
@@ -11445,6 +11814,7 @@ async function runChromeTest() {
         await assertNoMockCompletedJobCloseoutCenterLeak(routeName);
         await assertNoMockMonthEndCloseoutWorkbenchLeak(routeName);
         await assertNoMockFinanceExceptionResolutionWorkbenchLeak(routeName);
+        await assertNoMockDriverJobCompletionExceptionIntakeWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -12440,6 +12810,7 @@ async function runChromeTest() {
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers desktop");
       await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers desktop");
       await assertNoMockFinanceExceptionResolutionWorkbenchLeak("/customers desktop");
+      await assertNoMockDriverJobCompletionExceptionIntakeWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -18099,6 +18470,7 @@ async function runChromeTest() {
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers mobile");
       await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers mobile");
       await assertNoMockFinanceExceptionResolutionWorkbenchLeak("/customers mobile");
+      await assertNoMockDriverJobCompletionExceptionIntakeWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -24021,6 +24393,8 @@ async function runChromeTest() {
     state.adminMockMonthEndCloseoutWorkbench = await checkAdminMockMonthEndCloseoutWorkbench();
     state.adminMockFinanceExceptionResolutionWorkbench =
       await checkAdminMockFinanceExceptionResolutionWorkbench();
+    state.adminMockDriverJobCompletionExceptionIntakeWorkbench =
+      await checkAdminMockDriverJobCompletionExceptionIntakeWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

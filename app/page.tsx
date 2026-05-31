@@ -10940,6 +10940,206 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Driver Job Completion and Exception Intake Workbench Mock Only"
+          className="rounded-lg border border-amber-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-driver-job-completion-exception-intake-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-amber-700">Driver Job Completion &amp; Exception Intake Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-driver-job-completion-exception-intake-workbench-copy="true"
+                >
+                  Internal/admin-only driver completion and exception intake preview for dispatch review after driver
+                  status updates. Static/mock/local display data only; no real completion, live location, proof/photo
+                  upload, notification, replacement dispatch, closeout, storage, API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase text-amber-700">
+                Display-only intake
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-driver-job-completion-exception-intake-workbench-filter-summary="true"
+            >
+              {[
+                ["Review scope", "Completed and exception driver jobs"],
+                ["Status filter", "Clean / proof pending / exception reported"],
+                ["Mock results", "3 driver job rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-amber-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5"
+              data-mock-driver-job-completion-exception-intake-workbench-rows="true"
+            >
+              {[
+                {
+                  closeoutHandoffReadiness: "Ready for completed-job closeout handoff",
+                  completionStatus: "Completed cleanly",
+                  dispatcherFollowUpStatus: "No dispatcher follow-up required",
+                  driver: "Arun Lim",
+                  exceptionType: "None",
+                  jobReference: "PLO-DRV-COMP-101",
+                  nextInternalAction: "Move to closeout review - display only",
+                  otsPobCompletedStatus: "OTS confirmed; POB confirmed; Job Completed confirmed",
+                  proofPhotoStatus: "Proof/photo received in mock review",
+                  replacementVehicleStatus: "No replacement vehicle needed",
+                  serviceType: "Arrival",
+                  vehiclePlate: "Mercedes E-Class / SGM101A",
+                },
+                {
+                  closeoutHandoffReadiness: "Hold closeout handoff until proof/photo is reviewed",
+                  completionStatus: "Completed; proof pending",
+                  dispatcherFollowUpStatus: "Dispatcher follow-up pending for proof/photo",
+                  driver: "Nadia Tan",
+                  exceptionType: "Proof/photo pending",
+                  jobReference: "PLO-DRV-COMP-118",
+                  nextInternalAction: "Request proof review in future workflow - display only",
+                  otsPobCompletedStatus: "OTS confirmed; POB confirmed; Job Completed confirmed",
+                  proofPhotoStatus: "Proof/photo pending - not uploaded here",
+                  replacementVehicleStatus: "No replacement vehicle needed",
+                  serviceType: "Hourly",
+                  vehiclePlate: "Toyota Alphard / SJA8822K",
+                },
+                {
+                  closeoutHandoffReadiness: "Closeout handoff blocked until exception review",
+                  completionStatus: "Driver exception reported",
+                  dispatcherFollowUpStatus: "Dispatcher follow-up required",
+                  driver: "Marcus Lee",
+                  exceptionType: "Late driver / car breakdown",
+                  jobReference: "PLO-DRV-COMP-207",
+                  nextInternalAction: "Review replacement need before closeout - display only",
+                  otsPobCompletedStatus: "OTS delayed; POB pending review; Job Completed not confirmed",
+                  proofPhotoStatus: "Proof/photo not required until exception is reviewed",
+                  replacementVehicleStatus: "Replacement vehicle needed - mock review only",
+                  serviceType: "Departure",
+                  vehiclePlate: "Mercedes V-Class / SKX7408D",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-amber-200 bg-amber-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.1fr_1fr_1.1fr_1.05fr_1.15fr_1.35fr]"
+                  data-mock-driver-job-completion-exception-intake-workbench-row={row.jobReference}
+                  key={row.jobReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-amber-700"
+                      data-mock-driver-job-completion-exception-intake-workbench-column="Job reference driver vehicle plate service type"
+                    >
+                      Job / Driver
+                    </span>
+                    <span className="block">{row.jobReference}</span>
+                    <span className="block">{row.driver}</span>
+                    <span className="block">{row.vehiclePlate}</span>
+                    <span className="block">{row.serviceType}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-amber-700"
+                      data-mock-driver-job-completion-exception-intake-workbench-column="Completion status"
+                    >
+                      Completion
+                    </span>
+                    <span>{row.completionStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-amber-700"
+                      data-mock-driver-job-completion-exception-intake-workbench-column="OTS POB completed status"
+                    >
+                      OTS / POB / Completed
+                    </span>
+                    <span>{row.otsPobCompletedStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-amber-700"
+                      data-mock-driver-job-completion-exception-intake-workbench-column="Proof photo status"
+                    >
+                      Proof / Photo
+                    </span>
+                    <span>{row.proofPhotoStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-amber-700"
+                      data-mock-driver-job-completion-exception-intake-workbench-column="Exception type replacement vehicle status"
+                    >
+                      Exception / Replacement
+                    </span>
+                    <span className="block">{row.exceptionType}</span>
+                    <span className="block">{row.replacementVehicleStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-amber-700"
+                      data-mock-driver-job-completion-exception-intake-workbench-column="Dispatcher follow-up status closeout handoff readiness next internal action"
+                    >
+                      Follow-up / Closeout
+                    </span>
+                    <span className="block">{row.dispatcherFollowUpStatus}</span>
+                    <span className="block">{row.closeoutHandoffReadiness}</span>
+                    <span className="block">{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-driver-job-completion-exception-intake-workbench-progression="true"
+              >
+                Completion progression - mock only. OTS, POB, and Job Completed status are shown for review only;
+                nothing is acknowledged, completed, persisted, dispatched, or saved from this preview.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-driver-job-completion-exception-intake-workbench-exception-note="true"
+              >
+                Exception intake - mock only. Proof/photo pending, late driver, car breakdown, missed job, replacement
+                vehicle need, dispatcher follow-up, and closeout handoff readiness stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-amber-200 bg-amber-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-driver-job-completion-exception-intake-workbench-safety="true"
+              >
+                Mock Only. No live location activated, no proof/photo uploaded, no notification sent, no driver
+                acknowledgement sent, no job completion saved, no replacement car dispatch created, no closeout record
+                created, no billing, invoice, payment, PDF, payout, accounting, or finance export created.
+              </p>
+            </div>
+
+            <p
+              className="text-[10px] leading-[1.15] text-slate-500"
+              data-mock-driver-job-completion-exception-intake-workbench-boundary="true"
+            >
+              Future workflow boundary: Mock/local only. No real driver job completion workflow, OTS/POB/completed
+              persistence, proof/photo upload, live location behavior, driver acknowledgement behavior, replacement
+              vehicle dispatch, closeout workflow, closeout record, billing, invoice, statement, payment, payment link,
+              PDF, payout, accounting posting, finance export, customer account, customer auth, save/load behavior,
+              storage, localStorage, sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket,
+              Supabase, parser file changes, package script changes, test:safe membership changes, message-channel
+              delivery, customer notification, notification, or send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

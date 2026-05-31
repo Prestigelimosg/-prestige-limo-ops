@@ -1506,10 +1506,15 @@ function assertBookingUiState(state) {
   );
   assert.equal(state.fields.extraStopLocation, "Marina Bay Sands");
   assert.equal(state.fields.extraStopCount, "1");
+  assert.equal(state.fields.manualExtraCharges, "");
+  assert.equal(state.fields.manualExtraChargesNote, "");
   assert.equal(state.fields.dropoff, "Raffles Hotel Singapore");
   assert.match(state.visibleText, /Route Extras & Child Seat/);
   assert.match(state.visibleText, /Extra stop location/);
   assert.match(state.visibleText, /Extra Stops/);
+  assert.match(state.visibleText, /Extra Charges/);
+  assert.match(state.visibleText, /Extra Charges note \/ reason/);
+  assert.match(state.visibleText, /Manual staff entry only/);
   assert.match(state.visibleText, /Child seat count/);
   assert.equal(state.fields.childSeatCount, "2");
   assert.match(state.fields.childSeatType, /booster seat/);
@@ -2314,6 +2319,8 @@ async function runChromeTest() {
         pickup: fieldValue("Pickup"),
         extraStopLocation: fieldValue("Extra stop location"),
         extraStopCount: fieldValue("Extra Stops"),
+        manualExtraCharges: fieldValue("Extra Charges"),
+        manualExtraChargesNote: fieldValue("Extra Charges note / reason"),
         dropoff: fieldValue("Drop-off"),
         booker: fieldValue("Booker"),
         bookerContact: fieldValue("Booker WhatsApp / Contact"),
@@ -2386,6 +2393,257 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertBookingUiState(state);
+
+    const manualExtraChargeDefaultState = await evaluate(`(() => {
+      const section = document.querySelector("[data-route-extras-child-seat-section='true']");
+      const amount = section?.querySelector("[data-manual-extra-charges-amount='true']");
+      const note = section?.querySelector("[data-manual-extra-charges-note='true']");
+      const boundary = section?.querySelector("[data-manual-extra-charges-boundary='true']");
+      const amountRect = amount?.getBoundingClientRect();
+      const noteRect = note?.getBoundingClientRect();
+
+      return {
+        amountPlaceholder: amount?.getAttribute("placeholder") || "",
+        amountValue: amount?.value ?? null,
+        boundaryText: boundary?.textContent.replace(/\\s+/g, " ").trim() || "",
+        buttons: [...(section?.querySelectorAll("button, a[href]") || [])].map((control) =>
+          control.textContent.trim(),
+        ),
+        notePlaceholder: note?.getAttribute("placeholder") || "",
+        noteValue: note?.value ?? null,
+        sectionText: section?.innerText || "",
+        amountVisible: Boolean(amountRect && amountRect.width > 0 && amountRect.height >= 40),
+        noteVisible: Boolean(noteRect && noteRect.width > 0 && noteRect.height >= 40),
+      };
+    })()`);
+    assert.equal(
+      manualExtraChargeDefaultState.sectionText.includes("Route Extras & Child Seat"),
+      true,
+      "Expected manual Extra Charges field inside Route Extras & Child Seat",
+    );
+    assert.equal(manualExtraChargeDefaultState.amountValue, "");
+    assert.equal(manualExtraChargeDefaultState.amountPlaceholder, "0");
+    assert.equal(manualExtraChargeDefaultState.noteValue, "");
+    assert.equal(
+      manualExtraChargeDefaultState.notePlaceholder,
+      "Add manual extra charge reason, if any",
+    );
+    assert.equal(manualExtraChargeDefaultState.amountVisible, true);
+    assert.equal(manualExtraChargeDefaultState.noteVisible, true);
+    assert.deepEqual(
+      manualExtraChargeDefaultState.buttons,
+      [],
+      "Expected manual Extra Charges UI to add no action controls",
+    );
+    assert.match(manualExtraChargeDefaultState.boundaryText, /Manual staff entry only/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /not included in totals/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /invoice/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /payment/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /payout/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /PDF/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /accounting/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /storage/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /API/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /Supabase/);
+    assert.match(manualExtraChargeDefaultState.boundaryText, /notification/);
+
+    await evaluate(`(() => {
+      window.__manualExtraChargesCalls = {
+        beacon: [],
+        fetch: [],
+        storage: [],
+        websocket: [],
+        xhr: [],
+      };
+      if (!window.__manualExtraChargesOriginals) {
+        window.__manualExtraChargesOriginals = {
+          fetch: window.fetch,
+          sendBeacon: navigator.sendBeacon || null,
+          storageClear: Storage.prototype.clear,
+          storageRemoveItem: Storage.prototype.removeItem,
+          storageSetItem: Storage.prototype.setItem,
+          webSocket: window.WebSocket || null,
+          xhrOpen: XMLHttpRequest.prototype.open,
+        };
+      }
+      const originals = window.__manualExtraChargesOriginals;
+      window.fetch = (...args) => {
+        const target = args[0]?.url || args[0];
+        window.__manualExtraChargesCalls.fetch.push(String(target));
+        return originals.fetch.apply(window, args);
+      };
+      XMLHttpRequest.prototype.open = function patchedManualExtraChargeOpen(method, url, ...rest) {
+        window.__manualExtraChargesCalls.xhr.push(\`\${method} \${String(url)}\`);
+        return originals.xhrOpen.call(this, method, url, ...rest);
+      };
+      if (navigator.sendBeacon && originals.sendBeacon) {
+        navigator.sendBeacon = (...args) => {
+          window.__manualExtraChargesCalls.beacon.push(String(args[0]));
+          return originals.sendBeacon.apply(navigator, args);
+        };
+      }
+      if (window.WebSocket && originals.webSocket) {
+        const OriginalWebSocket = originals.webSocket;
+        window.WebSocket = function ManualExtraChargeWebSocket(url, protocols) {
+          window.__manualExtraChargesCalls.websocket.push(String(url));
+          return protocols === undefined ? new OriginalWebSocket(url) : new OriginalWebSocket(url, protocols);
+        };
+        window.WebSocket.prototype = OriginalWebSocket.prototype;
+        Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+      }
+      Storage.prototype.setItem = function patchedManualExtraChargeSetItem(key, value) {
+        window.__manualExtraChargesCalls.storage.push(\`setItem:\${String(key)}=\${String(value)}\`);
+        return originals.storageSetItem.call(this, key, value);
+      };
+      Storage.prototype.removeItem = function patchedManualExtraChargeRemoveItem(key) {
+        window.__manualExtraChargesCalls.storage.push(\`removeItem:\${String(key)}\`);
+        return originals.storageRemoveItem.call(this, key);
+      };
+      Storage.prototype.clear = function patchedManualExtraChargeClear() {
+        window.__manualExtraChargesCalls.storage.push("clear");
+        return originals.storageClear.call(this);
+      };
+    })()`);
+
+    const manualExtraChargeAmount = "47.25";
+    const manualExtraChargeReason = "Airport parking fee test only";
+    await setFieldValueByLabel("Extra Charges", manualExtraChargeAmount, "manual Extra Charges amount");
+    await setFieldValueByLabel(
+      "Extra Charges note / reason",
+      manualExtraChargeReason,
+      "manual Extra Charges note",
+    );
+
+    const manualExtraChargeEditedState = await evaluate(`(async () => {
+      const readStorage = (storage) =>
+        Array.from({ length: storage.length }, (_, index) => {
+          const key = storage.key(index);
+          return [key, key ? storage.getItem(key) : ""].join("=");
+        });
+      const amountSentinel = ${JSON.stringify(manualExtraChargeAmount)};
+      const reasonSentinel = ${JSON.stringify(manualExtraChargeReason)};
+      const sentinels = [amountSentinel, reasonSentinel];
+      const matchesSentinel = (value) =>
+        sentinels.some((sentinel) => String(value || "").includes(sentinel));
+      const section = document.querySelector("[data-route-extras-child-seat-section='true']");
+      const amount = section?.querySelector("[data-manual-extra-charges-amount='true']");
+      const note = section?.querySelector("[data-manual-extra-charges-note='true']");
+      const pricing = [...document.querySelectorAll("section, div")].find((candidate) =>
+        candidate.querySelector("h3")?.textContent.trim() === "Pricing",
+      );
+      const pres = [...document.querySelectorAll("pre")].map((pre) => pre.innerText);
+      const indexedDbNames = globalThis.indexedDB?.databases
+        ? (await indexedDB.databases()).map((database) => database.name || "")
+        : [];
+
+      return {
+        amountValue: amount?.value || "",
+        calls: window.__manualExtraChargesCalls,
+        cookieLeaks: matchesSentinel(document.cookie || ""),
+        indexedDbLeaks: indexedDbNames.filter((name) => matchesSentinel(name)),
+        localStorageLeaks: readStorage(localStorage).filter((value) => matchesSentinel(value)),
+        noteValue: note?.value || "",
+        previewLeaks: pres.filter((text) => matchesSentinel(text)),
+        pricingText: pricing?.innerText || "",
+        sessionStorageLeaks: readStorage(sessionStorage).filter((value) => matchesSentinel(value)),
+      };
+    })()`);
+    assert.equal(manualExtraChargeEditedState.amountValue, manualExtraChargeAmount);
+    assert.equal(manualExtraChargeEditedState.noteValue, manualExtraChargeReason);
+    assert.deepEqual(
+      manualExtraChargeEditedState.calls.fetch,
+      [],
+      "Expected manual Extra Charges edits not to call fetch",
+    );
+    assert.deepEqual(
+      manualExtraChargeEditedState.calls.xhr,
+      [],
+      "Expected manual Extra Charges edits not to call XHR",
+    );
+    assert.deepEqual(
+      manualExtraChargeEditedState.calls.beacon,
+      [],
+      "Expected manual Extra Charges edits not to call sendBeacon",
+    );
+    assert.deepEqual(
+      manualExtraChargeEditedState.calls.websocket,
+      [],
+      "Expected manual Extra Charges edits not to open WebSocket",
+    );
+    assert.deepEqual(
+      manualExtraChargeEditedState.calls.storage,
+      [],
+      "Expected manual Extra Charges edits not to write localStorage/sessionStorage",
+    );
+    assert.deepEqual(manualExtraChargeEditedState.localStorageLeaks, []);
+    assert.deepEqual(manualExtraChargeEditedState.sessionStorageLeaks, []);
+    assert.deepEqual(manualExtraChargeEditedState.indexedDbLeaks, []);
+    assert.equal(manualExtraChargeEditedState.cookieLeaks, false);
+    assert.deepEqual(
+      manualExtraChargeEditedState.previewLeaks,
+      [],
+      "Expected manual Extra Charges amount/note not to enter job card, customer copy, or driver dispatch",
+    );
+    assert.equal(
+      manualExtraChargeEditedState.pricingText.includes(manualExtraChargeAmount),
+      false,
+      "Expected manual Extra Charges amount not to auto-calculate into Pricing",
+    );
+
+    await setFieldValueByLabel("Extra Charges", "", "manual Extra Charges amount reset");
+    await setFieldValueByLabel("Extra Charges note / reason", "", "manual Extra Charges note reset");
+    const manualExtraChargeResetState = await evaluate(`(() => {
+      const section = document.querySelector("[data-route-extras-child-seat-section='true']");
+      return {
+        amountValue: section?.querySelector("[data-manual-extra-charges-amount='true']")?.value || "",
+        calls: window.__manualExtraChargesCalls,
+        noteValue: section?.querySelector("[data-manual-extra-charges-note='true']")?.value || "",
+      };
+    })()`);
+    assert.equal(manualExtraChargeResetState.amountValue, "");
+    assert.equal(manualExtraChargeResetState.noteValue, "");
+    assert.deepEqual(
+      manualExtraChargeResetState.calls.fetch,
+      [],
+      "Expected clearing manual Extra Charges not to call fetch",
+    );
+    assert.deepEqual(
+      manualExtraChargeResetState.calls.xhr,
+      [],
+      "Expected clearing manual Extra Charges not to call XHR",
+    );
+    assert.deepEqual(
+      manualExtraChargeResetState.calls.beacon,
+      [],
+      "Expected clearing manual Extra Charges not to call sendBeacon",
+    );
+    assert.deepEqual(
+      manualExtraChargeResetState.calls.websocket,
+      [],
+      "Expected clearing manual Extra Charges not to open WebSocket",
+    );
+    assert.deepEqual(
+      manualExtraChargeResetState.calls.storage,
+      [],
+      "Expected clearing manual Extra Charges not to write storage",
+    );
+    await evaluate(`(() => {
+      const originals = window.__manualExtraChargesOriginals;
+      if (!originals) {
+        return;
+      }
+      window.fetch = originals.fetch;
+      XMLHttpRequest.prototype.open = originals.xhrOpen;
+      if (originals.sendBeacon) {
+        navigator.sendBeacon = originals.sendBeacon;
+      }
+      if (originals.webSocket) {
+        window.WebSocket = originals.webSocket;
+      }
+      Storage.prototype.setItem = originals.storageSetItem;
+      Storage.prototype.removeItem = originals.storageRemoveItem;
+      Storage.prototype.clear = originals.storageClear;
+    })()`);
 
     await evaluate(`(() => {
       window.__prestigeCopiedTexts = [];
@@ -9268,6 +9526,8 @@ async function runChromeTest() {
               pickup: fieldValue("Pickup"),
               extraStopLocation: fieldValue("Extra stop location"),
               extraStopCount: fieldValue("Extra Stops"),
+              manualExtraCharges: fieldValue("Extra Charges"),
+              manualExtraChargesNote: fieldValue("Extra Charges note / reason"),
               dropoff: fieldValue("Drop-off"),
               booker: fieldValue("Booker"),
               bookerContact: fieldValue("Booker WhatsApp / Contact"),
@@ -9308,6 +9568,8 @@ async function runChromeTest() {
     assert.equal(crmReloadState.fields.pickup, "Changi Airport T3");
     assert.equal(crmReloadState.fields.extraStopLocation, "Marina Bay Sands");
     assert.equal(crmReloadState.fields.extraStopCount, "1");
+    assert.equal(crmReloadState.fields.manualExtraCharges, "");
+    assert.equal(crmReloadState.fields.manualExtraChargesNote, "");
     assert.equal(crmReloadState.fields.dropoff, "Raffles Hotel Singapore");
     assert.match(crmReloadState.fields.childSeatRequired, /Yes/i);
     assert.equal(crmReloadState.fields.childSeatCount, "2");

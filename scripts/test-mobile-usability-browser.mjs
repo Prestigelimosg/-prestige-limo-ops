@@ -448,6 +448,68 @@ async function runChromeTest() {
       );
     };
 
+    const checkManualExtraChargesBookingFields = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-route-extras-child-seat-section='true']");
+        const amount = section?.querySelector("[data-manual-extra-charges-amount='true']");
+        const note = section?.querySelector("[data-manual-extra-charges-note='true']");
+        const boundary = section?.querySelector("[data-manual-extra-charges-boundary='true']");
+        const amountRect = amount?.getBoundingClientRect();
+        const noteRect = note?.getBoundingClientRect();
+        const sectionRect = section?.getBoundingClientRect();
+
+        return {
+          amountLabel: amount?.closest("label")?.innerText.replace(/\\s+/g, " ").trim() || "",
+          amountValue: amount?.value ?? null,
+          amountVisible: Boolean(amountRect && amountRect.width > 0 && amountRect.height >= 40),
+          boundaryText: boundary?.textContent.replace(/\\s+/g, " ").trim() || "",
+          noteLabel: note?.closest("label")?.innerText.replace(/\\s+/g, " ").trim() || "",
+          noteValue: note?.value ?? null,
+          noteVisible: Boolean(noteRect && noteRect.width > 0 && noteRect.height >= 40),
+          sectionText: section?.innerText || "",
+          sectionVisible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+          sectionRight: Math.round(sectionRect?.right || 0),
+          viewportWidth: document.documentElement.clientWidth,
+        };
+      })()`);
+
+      assert.equal(
+        state.sectionVisible,
+        true,
+        `${viewport.label}: expected Route Extras & Child Seat section to stay visible`,
+      );
+      assert.equal(
+        state.sectionText.includes("Route Extras & Child Seat") &&
+          state.amountLabel.includes("Extra Charges") &&
+          state.noteLabel.includes("Extra Charges note / reason"),
+        true,
+        `${viewport.label}: expected manual Extra Charges amount and note in Route Extras & Child Seat`,
+      );
+      assert.equal(state.amountValue, "", `${viewport.label}: expected manual Extra Charges to default blank`);
+      assert.equal(state.noteValue, "", `${viewport.label}: expected manual Extra Charges note to default blank`);
+      assert.equal(state.amountVisible, true, `${viewport.label}: expected manual Extra Charges field to be touch-friendly`);
+      assert.equal(state.noteVisible, true, `${viewport.label}: expected manual Extra Charges note to be touch-friendly`);
+      assert.equal(
+        state.boundaryText.includes("Manual staff entry only") &&
+          state.boundaryText.includes("local UI field") &&
+          state.boundaryText.includes("not included in totals") &&
+          state.boundaryText.includes("invoice") &&
+          state.boundaryText.includes("payment") &&
+          state.boundaryText.includes("payout") &&
+          state.boundaryText.includes("storage") &&
+          state.boundaryText.includes("API") &&
+          state.boundaryText.includes("Supabase") &&
+          state.boundaryText.includes("notification"),
+        true,
+        `${viewport.label}: expected manual Extra Charges local-only boundary`,
+      );
+      assert.equal(
+        state.sectionRight <= state.viewportWidth + 2,
+        true,
+        `${viewport.label}: expected manual Extra Charges section not to overflow`,
+      );
+    };
+
     const checkResponsiveRouteViewport = async (viewport, route) => {
       await setViewport(viewport);
       await navigate(new URL(route.path, appUrl).toString(), route.expectedText);
@@ -600,6 +662,10 @@ async function runChromeTest() {
             "approval-decision record",
             "extra charges control center",
             "consolidated extra charges qa",
+            "manual staff entry only",
+            "manual extra charges",
+            "extra charges note / reason",
+            "manual extra charge reason",
             "manual override mock only",
             "override reason mock only",
             "customer billing approved in mock review",
@@ -6025,6 +6091,7 @@ async function runChromeTest() {
 
         if (tabLabel === "Dispatch") {
           await checkDispatcherIntakeControls(viewport);
+          await checkManualExtraChargesBookingFields(viewport);
         }
       }
     };
@@ -6182,6 +6249,10 @@ async function runChromeTest() {
             "approval-decision record",
             "extra charges control center",
             "consolidated extra charges qa",
+            "manual staff entry only",
+            "manual extra charges",
+            "extra charges note / reason",
+            "manual extra charge reason",
             "manual override mock only",
             "override reason mock only",
             "customer billing approved in mock review",

@@ -51,6 +51,8 @@ type BookingForm = {
   childSeatType: string;
   extraStopCount: string;
   extraStopLocation: string;
+  manualExtraCharges: string;
+  manualExtraChargesNote: string;
   driverId: string;
   driverName: string;
   driverContact: string;
@@ -801,6 +803,8 @@ function createInitialBooking(): BookingForm {
     childSeatType: "",
     extraStopCount: "",
     extraStopLocation: "",
+    manualExtraCharges: "",
+    manualExtraChargesNote: "",
     driverId: "",
     driverName: "",
     driverContact: "",
@@ -834,6 +838,8 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   childSeatType: "Child seat type",
   extraStopCount: "Extra stops",
   extraStopLocation: "Extra stop location",
+  manualExtraCharges: "Extra Charges",
+  manualExtraChargesNote: "Extra Charges note / reason",
   driverId: "Driver",
   driverName: "Driver Name",
   driverContact: "Driver Contact",
@@ -11331,12 +11337,15 @@ export default function Home() {
               {pricingPanel}
             </div>
 
-            <div className="mt-5 rounded-md border border-stone-200 bg-stone-50 p-3">
+            <div
+              className="mt-5 rounded-md border border-stone-200 bg-stone-50 p-3"
+              data-route-extras-child-seat-section="true"
+            >
               <div className="mb-3">
                 <h3 className="text-base font-semibold text-slate-900">Route Extras & Child Seat</h3>
                 <p className="text-sm text-slate-600">Review extra stops and child seat requirements together.</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                 <label className="sm:col-span-2 lg:col-span-2">
                   <span className="mb-1 block text-sm font-medium text-slate-700">Extra stop location</span>
                   <input
@@ -11357,6 +11366,20 @@ export default function Home() {
                     step={1}
                     type="number"
                     value={booking.extraStopCount}
+                  />
+                </label>
+                <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra Charges</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    data-manual-extra-charges-amount="true"
+                    inputMode="decimal"
+                    min={0}
+                    onChange={(event) => update("manualExtraCharges", event.target.value)}
+                    placeholder="0"
+                    step="0.01"
+                    type="number"
+                    value={booking.manualExtraCharges}
                   />
                 </label>
                 <label>
@@ -11396,7 +11419,7 @@ export default function Home() {
                     value={booking.childSeatCount}
                   />
                 </label>
-                <label className="sm:col-span-2 lg:col-span-5">
+                <label className="sm:col-span-2 lg:col-span-3">
                   <span className="mb-1 block text-sm font-medium text-slate-700">Child seat type / note</span>
                   <select
                     className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -11411,7 +11434,24 @@ export default function Home() {
                     ))}
                   </select>
                 </label>
+                <label className="sm:col-span-2 lg:col-span-3">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">Extra Charges note / reason</span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    data-manual-extra-charges-note="true"
+                    onChange={(event) => update("manualExtraChargesNote", event.target.value)}
+                    placeholder="Add manual extra charge reason, if any"
+                    value={booking.manualExtraChargesNote}
+                  />
+                </label>
               </div>
+              <p
+                className="mt-2 text-xs text-slate-600"
+                data-manual-extra-charges-boundary="true"
+              >
+                Manual staff entry only. This local UI field is not included in totals, save behavior,
+                invoice, payment, payout, PDF, accounting, storage, API, Supabase, or notification workflows.
+              </p>
               {isDspItinerary ? (
                 <div className="mt-3 border-t border-stone-200 pt-3 text-sm text-slate-800">
                   <p className="font-medium text-slate-900">Itinerary preview</p>

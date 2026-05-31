@@ -534,6 +534,9 @@ async function runChromeTest() {
       const mockMidnightChargeAutoDetectionOverrideReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]"))`,
       );
+      const mockCombinedExtraChargesSummarySeparationReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-combined-extra-charges-summary-separation-review]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -559,6 +562,18 @@ async function runChromeTest() {
             "override reason mock only",
             "no midnight-charge record generated",
             "manual override persistence",
+            "combined extra charges",
+            "summary / charge type separation qa",
+            "static/mock combined extra charges summary",
+            "charge-type separation qa",
+            "waiting time, extra stops, and midnight charge may display together",
+            "each charge type remains internally distinct",
+            "no real combined charge calculation",
+            "no invoice generated",
+            "no payout created",
+            "no accounting posting",
+            "extra-stop record",
+            "charge grouping persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -705,10 +720,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${route.label}: expected no internal mock midnight charge auto-detection override review`,
       );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock combined extra charges summary separation review`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${route.label}: expected no internal extra charges variance approval text leak`,
+        `${viewport.label} ${route.label}: expected no internal extra charges or midnight charge QA text leak`,
       );
     };
 
@@ -4582,6 +4602,221 @@ async function runChromeTest() {
         `${viewport.label}: expected midnight charge review not to create horizontal overflow`,
       );
 
+      const mockCombinedExtraChargesSummarySeparationReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const midnightReview = document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]");
+            const review = document.querySelector("[data-mock-combined-extra-charges-summary-separation-review]");
+            if (!group || !dashboard || !midnightReview || !review) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const midnightRect = midnightReview.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-combined-extra-charges-summary-separation-review-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-combined-extra-charges-summary-separation-review-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-combined-extra-charges-summary-separation-review-column]")].map(
+                  (column) =>
+                    column.getAttribute("data-mock-combined-extra-charges-summary-separation-review-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: review.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-combined-extra-charges-summary-separation-review-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: review.querySelectorAll("input, select, textarea").length,
+              copy:
+                document.querySelector("[data-mock-combined-extra-charges-summary-separation-review-copy]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-combined-extra-charges-summary-separation-review-generation]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              midnightBottom: Math.round(midnightRect.bottom),
+              note:
+                document.querySelector("[data-mock-combined-extra-charges-summary-separation-review-note]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              rows,
+              rule:
+                document.querySelector("[data-mock-combined-extra-charges-summary-separation-review-rule]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              text: review.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock combined extra charges summary separation review`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.groupTop >=
+          mockCombinedExtraChargesSummarySeparationReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected combined extra charges summary to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.sectionTop >=
+          mockCombinedExtraChargesSummarySeparationReviewState.midnightBottom,
+        true,
+        `${viewport.label}: expected combined extra charges summary after midnight charge review`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.text
+          .toLowerCase()
+          .includes("combined extra charges") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.text
+            .toLowerCase()
+            .includes("summary / charge type separation qa"),
+        true,
+        `${viewport.label}: expected mock combined extra charges summary review`,
+      );
+      assert.deepEqual(
+        mockCombinedExtraChargesSummarySeparationReviewState.columns,
+        [
+          "Charge type",
+          "Display group",
+          "Customer charge",
+          "Driver payout",
+          "Internal separation status",
+          "Review status",
+        ],
+        `${viewport.label}: expected combined extra charges summary columns`,
+      );
+      const combinedRowsByType = Object.fromEntries(
+        mockCombinedExtraChargesSummarySeparationReviewState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        combinedRowsByType["Waiting Time"].includes("Extra Charges") &&
+          combinedRowsByType["Waiting Time"].includes("$15 customer per 15-minute block") &&
+          combinedRowsByType["Waiting Time"].includes("$10 driver per 15-minute block") &&
+          combinedRowsByType["Extra Stops"].includes("Extra Charges") &&
+          combinedRowsByType["Extra Stops"].includes("Separate extra-stop source") &&
+          combinedRowsByType["Midnight Charge"].includes("Extra Charges") &&
+          combinedRowsByType["Midnight Charge"].includes("$15 customer midnight charge") &&
+          combinedRowsByType["Midnight Charge"].includes("$10 driver midnight payout") &&
+          combinedRowsByType["Midnight Charge"].includes("11:00pm to 6:59am"),
+        true,
+        `${viewport.label}: expected all extra charge types under Extra Charges with separate rows`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.note.includes(
+          "Waiting Time, Extra Stops, and Midnight Charge may display together under Extra Charges",
+        ) &&
+          mockCombinedExtraChargesSummarySeparationReviewState.note.includes(
+            "each charge type remains internally distinct",
+          ) &&
+          mockCombinedExtraChargesSummarySeparationReviewState.rule.includes(
+            "1 waiting block = 15 minutes",
+          ) &&
+          mockCombinedExtraChargesSummarySeparationReviewState.rule.includes(
+            "customer waiting charge $15 per waiting block",
+          ) &&
+          mockCombinedExtraChargesSummarySeparationReviewState.rule.includes(
+            "driver waiting payout $10 per waiting block",
+          ) &&
+          mockCombinedExtraChargesSummarySeparationReviewState.rule.includes("11:00pm to 6:59am") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.rule.includes(
+            "7:00am and 10:59pm are not included",
+          ),
+        true,
+        `${viewport.label}: expected combined summary locked charge rules and separation note`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.generation.includes("Combined display only") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.generation.includes("No invoice generated") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.generation.includes("No payout created") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.generation.includes("No accounting posting") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.generation.includes("Not saved") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.generation.includes(
+            "No real combined charge calculation",
+          ),
+        true,
+        `${viewport.label}: expected no invoice/payout/accounting/save combined summary generation`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("Mock/local only.") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes(
+            "No real combined charge calculation",
+          ) &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("waiting-time persistence") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("extra-stop persistence") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("midnight-charge persistence") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("customer-charge persistence") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("driver-payout persistence") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("localStorage") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("sessionStorage") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("cookies") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("IndexedDB") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("API call") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("fetch") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("XHR") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("sendBeacon") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("WebSocket") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("Supabase") &&
+          mockCombinedExtraChargesSummarySeparationReviewState.boundary.includes("send behavior"),
+        true,
+        `${viewport.label}: expected combined summary no persistence/storage/API boundary`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.actionControlCount,
+        0,
+        `${viewport.label}: expected combined summary to have no action controls`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.controlCount,
+        0,
+        `${viewport.label}: expected combined summary to have no form controls`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.rows.length,
+        3,
+        `${viewport.label}: expected three combined extra charge rows`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.height <=
+          (viewport.width < 640 ? 1250 : viewport.width < 1024 ? 760 : viewport.width < 1200 ? 700 : 620),
+        true,
+        `${viewport.label}: expected compact combined extra charges summary, got ${mockCombinedExtraChargesSummarySeparationReviewState.height}px`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.rows.every(
+          (row) => row.height >= 28 && row.width >= 240,
+        ),
+        true,
+        `${viewport.label}: expected combined extra charges rows to stay readable`,
+      );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewState.docScrollWidth <=
+          mockCombinedExtraChargesSummarySeparationReviewState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected combined extra charges summary not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -4685,6 +4920,9 @@ async function runChromeTest() {
       const mockMidnightChargeAutoDetectionOverrideReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]"))`,
       );
+      const mockCombinedExtraChargesSummarySeparationReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-combined-extra-charges-summary-separation-review]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -4710,6 +4948,18 @@ async function runChromeTest() {
             "override reason mock only",
             "no midnight-charge record generated",
             "manual override persistence",
+            "combined extra charges",
+            "summary / charge type separation qa",
+            "static/mock combined extra charges summary",
+            "charge-type separation qa",
+            "waiting time, extra stops, and midnight charge may display together",
+            "each charge type remains internally distinct",
+            "no real combined charge calculation",
+            "no invoice generated",
+            "no payout created",
+            "no accounting posting",
+            "extra-stop record",
+            "charge grouping persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -4882,10 +5132,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock midnight charge auto-detection override review`,
       );
+      assert.equal(
+        mockCombinedExtraChargesSummarySeparationReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock combined extra charges summary separation review`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${context}: expected no internal extra charges variance approval text leak`,
+        `${viewport.label} ${context}: expected no internal extra charges or midnight charge QA text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

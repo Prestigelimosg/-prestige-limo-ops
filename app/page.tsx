@@ -9833,6 +9833,131 @@ export default function Home() {
             notification, or send behavior.
           </p>
         </section>
+
+        <section
+          aria-label="Mock combined extra charges summary and charge type separation QA review"
+          className="rounded-lg border border-lime-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-combined-extra-charges-summary-separation-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-lime-700">Combined Extra Charges</span>{" "}
+                <span className="text-slate-600">Summary / Charge Type Separation QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-lime-200 bg-lime-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-combined-extra-charges-summary-separation-review-copy="true"
+              >
+                Static/mock combined Extra Charges summary and charge-type separation QA data only for internal
+                review. This is a future QA preview for grouping charge display while keeping each charge type
+                separate. Nothing is calculated as a real combined charge, billed, paid, posted, saved, persisted,
+                generated, exported, or sent.
+              </p>
+              <div
+                className="grid min-w-0 gap-1.5"
+                data-mock-combined-extra-charges-summary-separation-review-rows="true"
+              >
+                {[
+                  {
+                    chargeType: "Waiting Time",
+                    customerCharge: "$15 customer per 15-minute block",
+                    displayGroup: "Extra Charges",
+                    driverPayout: "$10 driver per 15-minute block",
+                    internalSeparation: "Separate waiting-time source, not extra stops or midnight charge",
+                    reviewStatus: "15-minute block rule protected / display-only",
+                  },
+                  {
+                    chargeType: "Extra Stops",
+                    customerCharge: "Extra-stop customer charge reviewed separately",
+                    displayGroup: "Extra Charges",
+                    driverPayout: "Extra-stop driver payout reviewed separately",
+                    internalSeparation: "Separate extra-stop source, not waiting time or midnight charge",
+                    reviewStatus: "Route extra reviewed separately / display-only",
+                  },
+                  {
+                    chargeType: "Midnight Charge",
+                    customerCharge: "$15 customer midnight charge",
+                    displayGroup: "Extra Charges",
+                    driverPayout: "$10 driver midnight payout",
+                    internalSeparation: "Separate midnight-charge source, not waiting time or extra stops",
+                    reviewStatus: "11:00pm to 6:59am rule protected / display-only",
+                  },
+                ].map((row) => (
+                  <div
+                    className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-lime-200 bg-lime-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-3 xl:grid-cols-6"
+                    data-mock-combined-extra-charges-summary-separation-review-row={row.chargeType}
+                    key={row.chargeType}
+                  >
+                    {[
+                      ["Charge type", "Type", row.chargeType],
+                      ["Display group", "Group", row.displayGroup],
+                      ["Customer charge", "Customer", row.customerCharge],
+                      ["Driver payout", "Driver", row.driverPayout],
+                      ["Internal separation status", "Separate", row.internalSeparation],
+                      ["Review status", "Review", row.reviewStatus],
+                    ].map(([label, shortLabel, value]) => (
+                      <p className="min-w-0 break-words" key={label}>
+                        <span
+                          className="block font-semibold uppercase text-lime-700"
+                          data-mock-combined-extra-charges-summary-separation-review-column={label}
+                        >
+                          {shortLabel}
+                        </span>
+                        <span>{value}</span>
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+                <p
+                  className="min-w-0 rounded-md border border-lime-200 bg-lime-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-combined-extra-charges-summary-separation-review-note="true"
+                >
+                  Combined Extra Charges summary - mock only. Waiting Time, Extra Stops, and Midnight Charge may
+                  display together under Extra Charges, but each charge type remains internally distinct for future
+                  billing, driver payout, audit, and dispute review. Waiting time remains internally distinct from
+                  extra stops. Midnight Charge remains internally distinct from waiting time, extra stops, and other
+                  extra charges.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-lime-200 bg-lime-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-combined-extra-charges-summary-separation-review-rule="true"
+                >
+                  Locked rules preview - mock only. Waiting Time: 1 waiting block = 15 minutes, customer waiting
+                  charge $15 per waiting block, driver waiting payout $10 per waiting block. Midnight Charge:
+                  customer charge $15, driver payout $10, applies from 11:00pm to 6:59am; 11:00pm and 6:59am are
+                  included, 7:00am and 10:59pm are not included.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-lime-200 bg-lime-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-combined-extra-charges-summary-separation-review-generation="true"
+                >
+                  Combined display only. No invoice generated. No payout created. No accounting posting. Not saved. No
+                  real combined charge calculation, customer charge record, driver payout record, waiting-time record,
+                  extra-stop record, midnight-charge record, extra-charge record, invoice/payment/PDF, or accounting
+                  record generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-combined-extra-charges-summary-separation-review-boundary="true"
+          >
+            Mock/local only. No real combined charge calculation, billing automation, monthly invoice, invoice,
+            payment, payment link, PDF, accounting integration, customer account, customer auth, waiting-time
+            persistence, extra-stop persistence, midnight-charge persistence, extra-charge persistence, customer-charge
+            persistence, driver-payout persistence, charge grouping persistence, customer charge record, driver payout
+            record, waiting-time record, extra-stop record, midnight-charge record, extra-charge record, storage,
+            localStorage, sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase,
+            save, load, post, calculate, reconcile, approve, pay, bill, export, message-channel delivery, customer
+            notification, notification, or send behavior.
+          </p>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

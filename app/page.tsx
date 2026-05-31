@@ -12358,6 +12358,227 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section
+          aria-label="Airport Flight Monitoring Pickup Readiness Workbench Mock Only"
+          className="rounded-lg border border-cyan-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-airport-flight-pickup-readiness-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-cyan-700">
+                    Airport Flight Monitoring &amp; Pickup Readiness Workbench
+                  </span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-airport-flight-pickup-readiness-workbench-copy="true"
+                >
+                  Internal/admin-only airport pickup readiness preview for flight timing, terminal/FBO readiness,
+                  driver staging, meet-and-greet, customer contact, delay risk, and dispatch readiness. Static/mock/local
+                  display data only; no real flight API, maps API, live tracking, dispatch automation, storage, API, or
+                  Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-semibold uppercase text-cyan-700">
+                Display-only airport readiness
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-airport-flight-pickup-readiness-workbench-filter-summary="true"
+            >
+              {[
+                ["Airport/date scope", "Mock Changi and Seletar/WSSL airport pickup readiness"],
+                ["Source", "Mock dispatcher airport timing and FBO review"],
+                ["Mock results", "3 airport pickup rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-cyan-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-airport-flight-pickup-readiness-workbench-rows="true">
+              {[
+                {
+                  airportReadinessReference: "PLO-AIR-READY-CHANGI-ARR",
+                  airportTerminalFbo: "Changi Airport T3 arrival belt",
+                  customerAccount: "UBS Priority",
+                  customerContactReadiness: "Customer contact ready",
+                  delayExceptionRisk: "Low delay risk; monitor landing time manually",
+                  dispatchReadiness: "Dispatch readiness ready in mock review",
+                  driverStagingStatus: "Driver staging ready; no dispatch created",
+                  flightTailNumber: "SQ333",
+                  flightTimingStatus: "Flight on time - mock review only",
+                  jobReference: "PLO-ARR-2026-05-CHG1",
+                  meetGreetReadiness: "Meet-and-greet ready",
+                  nextInternalAction: "Keep airport pickup ready for future dispatcher review",
+                  scheduledPickupWindow: "27 May 2026 15:30-16:00",
+                },
+                {
+                  airportReadinessReference: "PLO-AIR-READY-CHANGI-DEP",
+                  airportTerminalFbo: "Changi Airport T1 departure curb",
+                  customerAccount: "Ritz-Carlton Concierge",
+                  customerContactReadiness: "Customer contact ready; update not sent",
+                  delayExceptionRisk: "Monitor traffic/timing manually; no maps API",
+                  dispatchReadiness: "Dispatch readiness monitor only",
+                  driverStagingStatus: "Driver staging watch pending traffic review",
+                  flightTailNumber: "SQ326",
+                  flightTimingStatus: "Pickup window confirmed - no live flight tracking",
+                  jobReference: "PLO-DEP-2026-05-CHG2",
+                  meetGreetReadiness: "Meet-and-greet not required",
+                  nextInternalAction: "Keep departure timing on manual dispatcher watch",
+                  scheduledPickupWindow: "28 May 2026 09:10-09:40",
+                },
+                {
+                  airportReadinessReference: "PLO-AIR-READY-SELETAR-FBO",
+                  airportTerminalFbo: "Seletar Airport / WSSL / Jet Aviation FBO",
+                  customerAccount: "VIP Private Customer",
+                  customerContactReadiness: "Customer contact pending manager check",
+                  delayExceptionRisk: "FBO/tail confirmation risk; do not convert to Changi",
+                  dispatchReadiness: "Dispatch handoff held in mock review",
+                  driverStagingStatus: "Driver staging held until manual FBO confirmation",
+                  flightTailNumber: "Tail 9V-PJT / manual confirmation pending",
+                  flightTimingStatus: "Private-jet timing requires manual confirmation",
+                  jobReference: "PLO-PJ-2026-05-WSSL",
+                  meetGreetReadiness: "FBO meet-and-greet readiness checked",
+                  nextInternalAction: "Confirm tail/FBO manually; keep Seletar/WSSL/Jet Aviation",
+                  scheduledPickupWindow: "29 May 2026 20:00-20:30",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-cyan-200 bg-cyan-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.05fr_1.15fr_1.1fr_1.15fr_1.15fr_1.25fr]"
+                  data-mock-airport-flight-pickup-readiness-workbench-row={row.airportReadinessReference}
+                  key={row.airportReadinessReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-airport-flight-pickup-readiness-workbench-column="Airport readiness reference job reference"
+                    >
+                      Airport / Job
+                    </span>
+                    <span className="block">{row.airportReadinessReference}</span>
+                    <span>{row.jobReference}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-airport-flight-pickup-readiness-workbench-column="Customer account airport terminal FBO"
+                    >
+                      Customer / Location
+                    </span>
+                    <span className="block">{row.customerAccount}</span>
+                    <span>{row.airportTerminalFbo}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-airport-flight-pickup-readiness-workbench-column="Flight tail number scheduled pickup window"
+                    >
+                      Flight / Window
+                    </span>
+                    <span className="block">{row.flightTailNumber}</span>
+                    <span>{row.scheduledPickupWindow}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-airport-flight-pickup-readiness-workbench-column="Flight timing status driver staging status"
+                    >
+                      Timing / Staging
+                    </span>
+                    <span className="block">{row.flightTimingStatus}</span>
+                    <span>{row.driverStagingStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-airport-flight-pickup-readiness-workbench-column="Meet and greet readiness customer contact readiness"
+                    >
+                      Meet / Contact
+                    </span>
+                    <span className="block">{row.meetGreetReadiness}</span>
+                    <span>{row.customerContactReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-cyan-700"
+                      data-mock-airport-flight-pickup-readiness-workbench-column="Delay exception risk dispatch readiness next internal action"
+                    >
+                      Risk / Dispatch / Next
+                    </span>
+                    <span className="block">{row.delayExceptionRisk}</span>
+                    <span className="block">{row.dispatchReadiness}</span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-airport-flight-pickup-readiness-workbench-coverage-note="true"
+              >
+                Airport pickup review - mock only. Airport readiness reference, job reference, customer/account,
+                airport/terminal/FBO, flight/tail number, scheduled pickup window, flight timing status, driver staging
+                status, meet-and-greet readiness, customer contact readiness, delay/exception risk, dispatch readiness,
+                and next internal action stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-airport-flight-pickup-readiness-workbench-rules="true"
+              >
+                Airport rules preserved: Seletar Airport / WSSL / Jet Aviation FBO is a private-jet airport location;
+                Seletar/WSSL/Jet Aviation is airport arrival/departure evidence like Changi but remains
+                Seletar/WSSL/Jet Aviation and is not converted to Changi. Pickup from Seletar/WSSL to hotel/location is
+                private-jet arrival-style readiness; drop-off to Seletar/WSSL is private-jet departure-style readiness.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-airport-flight-pickup-readiness-workbench-safety="true"
+              >
+                Mock Only. No flight API connected, no live flight tracking activated, no maps or traffic API connected,
+                no driver dispatch created, no driver assigned, no live location activated, no customer update sent, no
+                notification sent, no airport/FBO confirmation sent, no booking saved, no job status changed, and no
+                billing, invoice, payment, PDF, payout, accounting, or finance export created. No save/load, no
+                API/storage/Supabase behavior, and no parser change.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-[1fr_2fr]">
+              <p
+                className="min-w-0 rounded-md border border-cyan-200 bg-cyan-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-airport-flight-pickup-readiness-workbench-distinction="true"
+              >
+                This is separate from Booking Intake, Fleet Readiness, Operations Handover, Customer Account Profile,
+                Customer Service Recovery, Replacement Vehicle Recovery, and Driver Job Completion: it reviews airport
+                flight monitoring and pickup readiness before any future dispatch automation only.
+              </p>
+              <p
+                className="text-[10px] leading-[1.15] text-slate-500"
+                data-mock-airport-flight-pickup-readiness-workbench-boundary="true"
+              >
+                Future workflow boundary: Mock/local only. No real flight API behavior, live flight tracking,
+                maps/traffic API behavior, airport/FBO confirmation sending, driver dispatch workflow, driver
+                assignment, vehicle assignment, live location behavior, customer update sending, notification sending,
+                booking save/load behavior, job status persistence, parser behavior changes, parser file changes,
+                parser test changes, billing, invoice, statement, payment, payment link, PDF, payout, accounting
+                posting, finance export, customer account/auth behavior, localStorage, sessionStorage, cookies,
+                IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, package script changes, test:safe
+                membership changes, message-channel delivery, customer notification, notification, or send behavior.
+              </p>
+            </div>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

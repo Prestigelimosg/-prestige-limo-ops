@@ -690,6 +690,7 @@ async function runChromeTest() {
         "[data-mock-operations-handover-shift-briefing-workbench]",
         "[data-mock-customer-account-service-profile-workbench]",
         "[data-mock-booking-intake-account-matching-workbench]",
+        "[data-mock-airport-flight-pickup-readiness-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -747,7 +748,8 @@ async function runChromeTest() {
             state.text.includes("Finance Exception Resolution Workbench") &&
             state.text.includes("Driver Job Completion & Exception Intake Workbench") &&
             state.text.includes("Customer Account & Service Profile Workbench") &&
-            state.text.includes("Booking Intake Quality & Account Matching Workbench"),
+            state.text.includes("Booking Intake Quality & Account Matching Workbench") &&
+            state.text.includes("Airport Flight Monitoring & Pickup Readiness Workbench"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -12767,6 +12769,351 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockAirportFlightPickupReadinessWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock airport flight pickup readiness workbench",
+          mobile: true,
+          scale: 2,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock airport flight pickup readiness workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const previousWorkbench = document.querySelector("[data-mock-booking-intake-account-matching-workbench]");
+              const section = document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench]");
+              if (!group || !dashboard || !previousWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const previousRect = previousWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-airport-flight-pickup-readiness-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-airport-flight-pickup-readiness-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-airport-flight-pickup-readiness-workbench-column]")].map(
+                    (column) => column.getAttribute("data-mock-airport-flight-pickup-readiness-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "connect flight api now",
+                  "activate flight tracking now",
+                  "connect maps api now",
+                  "dispatch driver now",
+                  "assign driver now",
+                  "send customer update now",
+                  "send airport confirmation now",
+                  "save booking now",
+                  "change job status now",
+                  "generate invoice now",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                previousBottom: Math.round(previousRect.bottom),
+                coverageNote:
+                  document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench-coverage-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                rules:
+                  document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench-rules]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                safety:
+                  document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock airport flight pickup readiness workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected airport flight pickup readiness workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before airport flight pickup readiness workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.previousBottom,
+          true,
+          `${viewport.label}: expected airport flight pickup readiness workbench after booking intake workbench`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("airport flight monitoring & pickup readiness workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected airport flight pickup readiness heading`,
+        );
+        assert.equal(
+          state.copy.includes("airport pickup readiness preview") &&
+            state.copy.includes("flight timing") &&
+            state.copy.includes("terminal/FBO readiness") &&
+            state.copy.includes("driver staging") &&
+            state.copy.includes("meet-and-greet") &&
+            state.copy.includes("customer contact") &&
+            state.copy.includes("delay risk") &&
+            state.copy.includes("no real flight API") &&
+            state.copy.includes("maps API") &&
+            state.copy.includes("live tracking") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected airport readiness boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Airport readiness reference job reference",
+            "Customer account airport terminal FBO",
+            "Flight tail number scheduled pickup window",
+            "Flight timing status driver staging status",
+            "Meet and greet readiness customer contact readiness",
+            "Delay exception risk dispatch readiness next internal action",
+          ],
+          `${viewport.label}: expected airport readiness workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three airport pickup rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Mock Changi and Seletar/WSSL airport pickup readiness") &&
+            state.filterSummary.includes("Mock dispatcher airport timing and FBO review") &&
+            state.filterSummary.includes("3 airport pickup rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only airport readiness filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-AIR-READY-CHANGI-ARR"].includes("Changi Airport T3 arrival") &&
+            rowByRef["PLO-AIR-READY-CHANGI-ARR"].includes("SQ333") &&
+            rowByRef["PLO-AIR-READY-CHANGI-ARR"].includes("Flight on time") &&
+            rowByRef["PLO-AIR-READY-CHANGI-ARR"].includes("Meet-and-greet ready"),
+          true,
+          `${viewport.label}: expected Changi arrival readiness row`,
+        );
+        assert.equal(
+          rowByRef["PLO-AIR-READY-CHANGI-DEP"].includes("Changi Airport T1 departure") &&
+            rowByRef["PLO-AIR-READY-CHANGI-DEP"].includes("Pickup window confirmed") &&
+            rowByRef["PLO-AIR-READY-CHANGI-DEP"].includes("Customer contact ready") &&
+            rowByRef["PLO-AIR-READY-CHANGI-DEP"].includes("no maps API"),
+          true,
+          `${viewport.label}: expected Changi departure readiness row`,
+        );
+        assert.equal(
+          rowByRef["PLO-AIR-READY-SELETAR-FBO"].includes("Seletar Airport / WSSL / Jet Aviation FBO") &&
+            rowByRef["PLO-AIR-READY-SELETAR-FBO"].includes("Tail 9V-PJT") &&
+            rowByRef["PLO-AIR-READY-SELETAR-FBO"].includes("manual confirmation pending") &&
+            rowByRef["PLO-AIR-READY-SELETAR-FBO"].includes("do not convert to Changi") &&
+            rowByRef["PLO-AIR-READY-SELETAR-FBO"].includes("keep Seletar/WSSL/Jet Aviation"),
+          true,
+          `${viewport.label}: expected Seletar private-jet FBO readiness row`,
+        );
+        assert.equal(
+          state.coverageNote.includes("Airport readiness reference") &&
+            state.coverageNote.includes("job reference") &&
+            state.coverageNote.includes("customer/account") &&
+            state.coverageNote.includes("airport/terminal/FBO") &&
+            state.coverageNote.includes("flight/tail number") &&
+            state.coverageNote.includes("scheduled pickup window") &&
+            state.coverageNote.includes("flight timing status") &&
+            state.coverageNote.includes("driver staging status") &&
+            state.coverageNote.includes("meet-and-greet readiness") &&
+            state.coverageNote.includes("customer contact readiness") &&
+            state.coverageNote.includes("delay/exception risk") &&
+            state.coverageNote.includes("dispatch readiness") &&
+            state.coverageNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected airport readiness workflow coverage`,
+        );
+        assert.equal(
+          state.rules.includes("Seletar Airport / WSSL / Jet Aviation FBO is a private-jet airport location") &&
+            state.rules.includes("airport arrival/departure evidence like Changi") &&
+            state.rules.includes("remains Seletar/WSSL/Jet Aviation") &&
+            state.rules.includes("not converted to Changi") &&
+            state.rules.includes("Pickup from Seletar/WSSL to hotel/location") &&
+            state.rules.includes("private-jet arrival-style readiness") &&
+            state.rules.includes("drop-off to Seletar/WSSL") &&
+            state.rules.includes("private-jet departure-style readiness"),
+          true,
+          `${viewport.label}: expected protected airport/FBO business rules`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Booking Intake") &&
+            state.distinction.includes("Fleet Readiness") &&
+            state.distinction.includes("Operations Handover") &&
+            state.distinction.includes("Customer Account Profile") &&
+            state.distinction.includes("Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("airport flight monitoring and pickup readiness"),
+          true,
+          `${viewport.label}: expected airport readiness workbench not to repeat recent workbenches`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No flight API connected") &&
+            state.safety.includes("no live flight tracking activated") &&
+            state.safety.includes("no maps or traffic API connected") &&
+            state.safety.includes("no driver dispatch created") &&
+            state.safety.includes("no driver assigned") &&
+            state.safety.includes("no live location activated") &&
+            state.safety.includes("no customer update sent") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no airport/FBO confirmation sent") &&
+            state.safety.includes("no booking saved") &&
+            state.safety.includes("no job status changed") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting") &&
+            state.safety.includes("finance export created") &&
+            state.safety.includes("No save/load") &&
+            state.safety.includes("API/storage/Supabase behavior") &&
+            state.safety.includes("no parser change"),
+          true,
+          `${viewport.label}: expected no airport API/dispatch/parser/billing behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real flight API behavior",
+          "live flight tracking",
+          "maps/traffic API behavior",
+          "airport/FBO confirmation sending",
+          "driver dispatch workflow",
+          "driver assignment",
+          "vehicle assignment",
+          "live location behavior",
+          "customer update sending",
+          "notification sending",
+          "booking save/load behavior",
+          "job status persistence",
+          "parser behavior changes",
+          "parser file changes",
+          "parser test changes",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account/auth behavior",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected airport readiness boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no airport readiness action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no airport readiness form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active airport readiness controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 2000 : viewport.width < 1024 ? 1180 : 1020),
+          true,
+          `${viewport.label}: expected compact airport flight pickup readiness workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected airport readiness rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected airport readiness workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -13435,6 +13782,57 @@ async function runChromeTest() {
       );
     };
 
+    const assertNoMockAirportFlightPickupReadinessWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "airport flight monitoring & pickup readiness workbench",
+            "internal/admin-only airport pickup readiness preview",
+            "mock dispatcher airport timing and fbo review",
+            "3 airport pickup rows maximum",
+            "plo-air-ready-changi-arr",
+            "plo-air-ready-changi-dep",
+            "plo-air-ready-seletar-fbo",
+            "airport readiness reference",
+            "flight/tail number",
+            "scheduled pickup window",
+            "flight timing status",
+            "driver staging status",
+            "meet-and-greet readiness",
+            "customer contact readiness",
+            "delay/exception risk",
+            "dispatch readiness",
+            "seletar airport / wssl / jet aviation fbo",
+            "private-jet airport location",
+            "not converted to changi",
+            "tail 9v-pjt",
+            "no flight api connected",
+            "no live flight tracking activated",
+            "no maps or traffic api connected",
+            "no airport/fbo confirmation sent",
+            "no parser change",
+            "no real flight api behavior",
+            "maps/traffic api behavior",
+            "airport/fbo confirmation sending",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-airport-flight-pickup-readiness-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock airport flight pickup readiness workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal airport flight/FBO/driver staging/dispatch readiness data leak`,
+      );
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -14036,6 +14434,7 @@ async function runChromeTest() {
         await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak(routeName);
         await assertNoMockCustomerAccountServiceProfileWorkbenchLeak(routeName);
         await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak(routeName);
+        await assertNoMockAirportFlightPickupReadinessWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -15038,6 +15437,7 @@ async function runChromeTest() {
       await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers desktop");
       await assertNoMockCustomerAccountServiceProfileWorkbenchLeak("/customers desktop");
       await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak("/customers desktop");
+      await assertNoMockAirportFlightPickupReadinessWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -20704,6 +21104,7 @@ async function runChromeTest() {
       await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers mobile");
       await assertNoMockCustomerAccountServiceProfileWorkbenchLeak("/customers mobile");
       await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak("/customers mobile");
+      await assertNoMockAirportFlightPickupReadinessWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -26639,6 +27040,8 @@ async function runChromeTest() {
       await checkAdminMockCustomerAccountServiceProfileWorkbench();
     state.adminMockBookingIntakeAccountMatchingWorkbench =
       await checkAdminMockBookingIntakeAccountMatchingWorkbench();
+    state.adminMockAirportFlightPickupReadinessWorkbench =
+      await checkAdminMockAirportFlightPickupReadinessWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

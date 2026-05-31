@@ -11797,6 +11797,325 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockOperationsHandoverShiftBriefingWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock operations handover shift briefing workbench",
+          mobile: true,
+          scale: 2,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock operations handover shift briefing workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const fleetWorkbench = document.querySelector("[data-mock-fleet-driver-readiness-workbench]");
+              const section = document.querySelector("[data-mock-operations-handover-shift-briefing-workbench]");
+              if (!group || !dashboard || !fleetWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const fleetRect = fleetWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-operations-handover-shift-briefing-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-operations-handover-shift-briefing-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-operations-handover-shift-briefing-workbench-column]")].map(
+                    (column) =>
+                      column.getAttribute("data-mock-operations-handover-shift-briefing-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-operations-handover-shift-briefing-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-operations-handover-shift-briefing-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-operations-handover-shift-briefing-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-operations-handover-shift-briefing-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                fleetBottom: Math.round(fleetRect.bottom),
+                forbiddenActionText: [
+                  "save handover now",
+                  "change job status now",
+                  "assign driver now",
+                  "assign vehicle now",
+                  "change schedule now",
+                  "send customer update now",
+                  "send notification now",
+                  "create dispatch record now",
+                  "create closeout record now",
+                  "start live location now",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                coverageNote:
+                  document.querySelector("[data-mock-operations-handover-shift-briefing-workbench-coverage-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                safety:
+                  document.querySelector("[data-mock-operations-handover-shift-briefing-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock operations handover shift briefing workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected operations handover workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before operations handover workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.fleetBottom,
+          true,
+          `${viewport.label}: expected operations handover workbench after fleet driver readiness workbench`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("operations handover & shift briefing workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected operations handover heading`,
+        );
+        assert.equal(
+          state.copy.includes("shift handover and daily briefing preview") &&
+            state.copy.includes("Static/mock/local display data only") &&
+            state.copy.includes("no real scheduling") &&
+            state.copy.includes("customer update") &&
+            state.copy.includes("notification") &&
+            state.copy.includes("persistence") &&
+            state.copy.includes("storage, API") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected operations handover boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Handover reference shift handover window",
+            "Priority area related job account",
+            "Current status risk exception summary",
+            "Owner next shift assignee customer impact",
+            "Driver fleet impact finance closeout impact",
+            "Handover readiness next internal action",
+          ],
+          `${viewport.label}: expected operations handover workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three handover rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Shift/date scope") &&
+            state.filterSummary.includes("Today shift handover / daily operations briefing") &&
+            state.filterSummary.includes("Mock cross-workbench operations review") &&
+            state.filterSummary.includes("3 handover rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only operations handover filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-HANDOVER-2026-05-MORNING"].includes("VIP airport job confirmed") &&
+            rowByRef["PLO-HANDOVER-2026-05-MORNING"].includes("Driver/fleet ready") &&
+            rowByRef["PLO-HANDOVER-2026-05-MORNING"].includes("Monitor flight timing"),
+          true,
+          `${viewport.label}: expected morning VIP handover row`,
+        );
+        assert.equal(
+          rowByRef["PLO-HANDOVER-2026-05-RECOVERY"].includes("Service recovery") &&
+            rowByRef["PLO-HANDOVER-2026-05-RECOVERY"].includes("Manager/customer update review pending") &&
+            rowByRef["PLO-HANDOVER-2026-05-RECOVERY"].includes("update not sent"),
+          true,
+          `${viewport.label}: expected recovery handover row`,
+        );
+        assert.equal(
+          rowByRef["PLO-HANDOVER-2026-05-CLOSEOUT"].includes("Finance closeout") &&
+            rowByRef["PLO-HANDOVER-2026-05-CLOSEOUT"].includes("Evidence pending before billing handoff") &&
+            rowByRef["PLO-HANDOVER-2026-05-CLOSEOUT"].includes("Finance/closeout blocked pending evidence"),
+          true,
+          `${viewport.label}: expected finance closeout handover row`,
+        );
+        assert.equal(
+          state.coverageNote.includes("Handover reference") &&
+            state.coverageNote.includes("shift window") &&
+            state.coverageNote.includes("priority area") &&
+            state.coverageNote.includes("related job/account") &&
+            state.coverageNote.includes("risk summary") &&
+            state.coverageNote.includes("owner/next shift assignee") &&
+            state.coverageNote.includes("customer impact") &&
+            state.coverageNote.includes("driver/fleet impact") &&
+            state.coverageNote.includes("finance/closeout impact") &&
+            state.coverageNote.includes("handover readiness") &&
+            state.coverageNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected operations handover workflow coverage`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Fleet & Driver Readiness") &&
+            state.distinction.includes("Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("cross-shift priorities and handover readiness only"),
+          true,
+          `${viewport.label}: expected operations handover not to repeat previous workbenches`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No shift handover saved") &&
+            state.safety.includes("no job status changed") &&
+            state.safety.includes("no driver assigned") &&
+            state.safety.includes("no vehicle assigned") &&
+            state.safety.includes("no schedule changed") &&
+            state.safety.includes("no customer update sent") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no live location activated") &&
+            state.safety.includes("no dispatch record created") &&
+            state.safety.includes("no closeout record created") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting, or finance export created") &&
+            state.safety.includes("No save/load and no API/storage/Supabase behavior"),
+          true,
+          `${viewport.label}: expected no operations handover/scheduling/notification/finance behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real operations handover workflow",
+          "shift scheduling workflow",
+          "driver assignment",
+          "vehicle assignment",
+          "backup driver assignment",
+          "backup vehicle assignment",
+          "schedule update",
+          "job status persistence",
+          "dispatch workflow",
+          "dispatch record",
+          "customer update sending",
+          "notification sending",
+          "live location behavior",
+          "closeout workflow",
+          "closeout record",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account",
+          "customer auth",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected operations handover boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no handover action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no handover form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active operations handover controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1750 : viewport.width < 1024 ? 1020 : 890),
+          true,
+          `${viewport.label}: expected compact operations handover workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected operations handover rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected operations handover workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -12319,6 +12638,51 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal fleet/driver readiness/schedule/dispatch data leak`,
+      );
+    };
+
+    const assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "operations handover & shift briefing workbench",
+            "internal/admin-only shift handover and daily briefing preview",
+            "today shift handover / daily operations briefing",
+            "mock cross-workbench operations review",
+            "3 handover rows maximum",
+            "handover reference",
+            "shift / handover window",
+            "priority area",
+            "owner / next shift assignee",
+            "customer impact",
+            "driver/fleet impact",
+            "finance/closeout impact",
+            "handover readiness",
+            "vip airport job confirmed",
+            "manager/customer update review pending",
+            "evidence pending before billing handoff",
+            "no shift handover saved",
+            "no job status changed",
+            "no dispatch record created",
+            "no closeout record created",
+            "no real operations handover workflow",
+            "shift scheduling workflow",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-operations-handover-shift-briefing-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock operations handover shift briefing workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal operations handover/shift briefing/impact data leak`,
       );
     };
 
@@ -12920,6 +13284,7 @@ async function runChromeTest() {
         await assertNoMockReplacementVehicleServiceRecoveryWorkbenchLeak(routeName);
         await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak(routeName);
         await assertNoMockFleetDriverReadinessWorkbenchLeak(routeName);
+        await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -13919,6 +14284,7 @@ async function runChromeTest() {
       await assertNoMockReplacementVehicleServiceRecoveryWorkbenchLeak("/customers desktop");
       await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak("/customers desktop");
       await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers desktop");
+      await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -19582,6 +19948,7 @@ async function runChromeTest() {
       await assertNoMockReplacementVehicleServiceRecoveryWorkbenchLeak("/customers mobile");
       await assertNoMockCustomerServiceRecoveryCommunicationWorkbenchLeak("/customers mobile");
       await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers mobile");
+      await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -25511,6 +25878,8 @@ async function runChromeTest() {
     state.adminMockCustomerServiceRecoveryCommunicationWorkbench =
       await checkAdminMockCustomerServiceRecoveryCommunicationWorkbench();
     state.adminMockFleetDriverReadinessWorkbench = await checkAdminMockFleetDriverReadinessWorkbench();
+    state.adminMockOperationsHandoverShiftBriefingWorkbench =
+      await checkAdminMockOperationsHandoverShiftBriefingWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

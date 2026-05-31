@@ -11747,6 +11747,206 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Operations Handover Shift Briefing Workbench Mock Only"
+          className="rounded-lg border border-sky-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-operations-handover-shift-briefing-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-sky-700">Operations Handover &amp; Shift Briefing Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-operations-handover-shift-briefing-workbench-copy="true"
+                >
+                  Internal/admin-only shift handover and daily briefing preview for active operations priorities.
+                  Static/mock/local display data only; no real scheduling, customer update, notification, persistence,
+                  storage, API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-semibold uppercase text-sky-700">
+                Display-only shift briefing
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-operations-handover-shift-briefing-workbench-filter-summary="true"
+            >
+              {[
+                ["Shift/date scope", "Today shift handover / daily operations briefing"],
+                ["Source", "Mock cross-workbench operations review"],
+                ["Mock results", "3 handover rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-sky-200 bg-sky-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-sky-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-operations-handover-shift-briefing-workbench-rows="true">
+              {[
+                {
+                  currentStatus: "VIP airport job confirmed; monitor flight timing",
+                  customerImpact: "Customer impact low; no customer update sent",
+                  driverFleetImpact: "Driver/fleet ready; no schedule conflict",
+                  financeCloseoutImpact: "No finance/closeout impact",
+                  handoverReadiness: "Ready for next shift briefing",
+                  handoverReference: "PLO-HANDOVER-2026-05-MORNING",
+                  nextInternalAction: "Monitor flight timing before future dispatch review",
+                  ownerNextShiftAssignee: "Morning dispatcher",
+                  priorityArea: "VIP airport priority",
+                  relatedJobAccount: "PLO-ARR-VIP-204 / VIP Customer",
+                  riskExceptionSummary: "Flight timing watch only",
+                  shiftWindow: "Morning handover 06:00-10:00",
+                },
+                {
+                  currentStatus: "Manager/customer update review pending",
+                  customerImpact: "Customer impact review pending; update not sent",
+                  driverFleetImpact: "Replacement vehicle and backup driver status carried for review",
+                  financeCloseoutImpact: "Closeout handoff held until recovery review",
+                  handoverReadiness: "Handover needs manager review",
+                  handoverReference: "PLO-HANDOVER-2026-05-RECOVERY",
+                  nextInternalAction: "Review manager/customer update readiness before future closeout",
+                  ownerNextShiftAssignee: "Afternoon lead dispatcher",
+                  priorityArea: "Service recovery",
+                  relatedJobAccount: "PLO-REC-2026-05-BREAKDOWN / Ritz-Carlton",
+                  riskExceptionSummary: "Replacement/service recovery case needs manager review",
+                  shiftWindow: "Afternoon handover 14:00-18:00",
+                },
+                {
+                  currentStatus: "Evidence pending before billing handoff",
+                  customerImpact: "No customer message prepared",
+                  driverFleetImpact: "No driver/fleet action",
+                  financeCloseoutImpact: "Finance/closeout blocked pending evidence",
+                  handoverReadiness: "Handover held for evidence review",
+                  handoverReference: "PLO-HANDOVER-2026-05-CLOSEOUT",
+                  nextInternalAction: "Collect evidence in future workflow before finance handoff",
+                  ownerNextShiftAssignee: "Finance/admin next shift",
+                  priorityArea: "Finance closeout",
+                  relatedJobAccount: "PLO-FIN-EXC-2026-05-EVIDENCE / UBS Priority",
+                  riskExceptionSummary: "Extra-charge evidence missing; hold billing handoff",
+                  shiftWindow: "Month-end handover 17:00-19:00",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-sky-200 bg-sky-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.2fr_1.15fr_1.15fr_1.15fr_1.15fr_1.25fr]"
+                  data-mock-operations-handover-shift-briefing-workbench-row={row.handoverReference}
+                  key={row.handoverReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-sky-700"
+                      data-mock-operations-handover-shift-briefing-workbench-column="Handover reference shift handover window"
+                    >
+                      Handover / Shift
+                    </span>
+                    <span className="block">{row.handoverReference}</span>
+                    <span>{row.shiftWindow}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-sky-700"
+                      data-mock-operations-handover-shift-briefing-workbench-column="Priority area related job account"
+                    >
+                      Priority / Related
+                    </span>
+                    <span className="block">{row.priorityArea}</span>
+                    <span>{row.relatedJobAccount}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-sky-700"
+                      data-mock-operations-handover-shift-briefing-workbench-column="Current status risk exception summary"
+                    >
+                      Status / Risk
+                    </span>
+                    <span className="block">{row.currentStatus}</span>
+                    <span>{row.riskExceptionSummary}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-sky-700"
+                      data-mock-operations-handover-shift-briefing-workbench-column="Owner next shift assignee customer impact"
+                    >
+                      Owner / Customer
+                    </span>
+                    <span className="block">{row.ownerNextShiftAssignee}</span>
+                    <span>{row.customerImpact}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-sky-700"
+                      data-mock-operations-handover-shift-briefing-workbench-column="Driver fleet impact finance closeout impact"
+                    >
+                      Driver-Fleet / Finance
+                    </span>
+                    <span className="block">{row.driverFleetImpact}</span>
+                    <span>{row.financeCloseoutImpact}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-sky-700"
+                      data-mock-operations-handover-shift-briefing-workbench-column="Handover readiness next internal action"
+                    >
+                      Readiness / Next
+                    </span>
+                    <span className="block">{row.handoverReadiness}</span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-sky-200 bg-sky-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-operations-handover-shift-briefing-workbench-coverage-note="true"
+              >
+                Operations handover - mock only. Handover reference, shift window, priority area, related job/account,
+                status, risk summary, owner/next shift assignee, customer impact, driver/fleet impact, finance/closeout
+                impact, handover readiness, and next internal action stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-sky-200 bg-sky-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-operations-handover-shift-briefing-workbench-distinction="true"
+              >
+                This is separate from Fleet &amp; Driver Readiness, Customer Service Recovery, Replacement Vehicle
+                Recovery, and Driver Job Completion: it summarizes cross-shift priorities and handover readiness only.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-sky-200 bg-sky-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-operations-handover-shift-briefing-workbench-safety="true"
+              >
+                Mock Only. No shift handover saved, no job status changed, no driver assigned, no vehicle assigned, no
+                schedule changed, no customer update sent, no notification sent, no live location activated, no dispatch
+                record created, no closeout record created, no billing, invoice, payment, PDF, payout, accounting, or
+                finance export created. No save/load and no API/storage/Supabase behavior.
+              </p>
+            </div>
+
+            <p
+              className="text-[10px] leading-[1.15] text-slate-500"
+              data-mock-operations-handover-shift-briefing-workbench-boundary="true"
+            >
+              Future workflow boundary: Mock/local only. No real operations handover workflow, shift scheduling
+              workflow, driver assignment, vehicle assignment, backup driver assignment, backup vehicle assignment,
+              schedule update, job status persistence, dispatch workflow, dispatch record, customer update sending,
+              notification sending, live location behavior, closeout workflow, closeout record, billing, invoice,
+              statement, payment, payment link, PDF, payout, accounting posting, finance export, customer account,
+              customer auth, save/load behavior, storage, localStorage, sessionStorage, cookies, IndexedDB, API call,
+              fetch, XHR, sendBeacon, WebSocket, Supabase, parser file changes, package script changes, test:safe
+              membership changes, message-channel delivery, customer notification, notification, or send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

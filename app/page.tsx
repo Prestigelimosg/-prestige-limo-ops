@@ -2513,6 +2513,30 @@ function getDriverDispatchCard(bookingRecord: BookingRecord, driverDraft: Driver
     .join("\n");
 }
 
+function parseMockChargeTimeToMinutes(value: string) {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+function isMockMidnightChargeDetected(value: string) {
+  const minutes = parseMockChargeTimeToMinutes(value);
+  if (minutes === null) {
+    return false;
+  }
+
+  return minutes >= 23 * 60 || minutes <= 6 * 60 + 59;
+}
+
 export default function Home() {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [activeTab, setActiveTab] = useState<AppTab>("dispatch");
@@ -2543,6 +2567,9 @@ export default function Home() {
     useState<ReplacementDriverDraft>(initialReplacementDriverDraft);
   const [replacementDriverFeedback, setReplacementDriverFeedback] =
     useState<ReplacementDriverFeedback | null>(null);
+  const [mockMidnightChargeOverrideMode, setMockMidnightChargeOverrideMode] =
+    useState<"auto" | "force-on" | "force-off">("auto");
+  const [mockMidnightChargeOverrideReason, setMockMidnightChargeOverrideReason] = useState("");
   const [telegramAlertPreviewType, setTelegramAlertPreviewType] =
     useState<TelegramAlertPreviewType>("assignment");
   const [telegramAlertPreviewFeedback, setTelegramAlertPreviewFeedback] =
@@ -6906,6 +6933,16 @@ export default function Home() {
   const customerCopyText = getDispatchCopyText("customerCopy");
   const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
   const showDriverJobLinkCopy = Boolean(clean(loadedBookingId));
+  const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
+  const mockMidnightChargeOverrideDetected =
+    mockMidnightChargeOverrideMode === "force-on"
+      ? true
+      : mockMidnightChargeOverrideMode === "force-off"
+        ? false
+        : mockMidnightChargeOverrideAutoDetected;
+  const mockMidnightChargeOverrideStatus = mockMidnightChargeOverrideDetected
+    ? "Midnight Charge shown under Extra Charges - Mock Only"
+    : "No Midnight Charge shown - Mock Only";
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -9634,6 +9671,165 @@ export default function Home() {
             customer charge record, driver payout record, waiting-time record, extra-charge record, dispatcher approval
             record, storage, localStorage, sessionStorage, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, save,
             load, post, reconcile, approve, pay, bill, export, message-channel delivery, customer notification,
+            notification, or send behavior.
+          </p>
+        </section>
+
+        <section
+          aria-label="Mock midnight charge auto-detection and manual override QA review"
+          className="rounded-lg border border-sky-200 bg-white px-2.5 py-1.5 shadow-sm"
+          data-mock-midnight-charge-auto-detection-override-review="true"
+        >
+          <div className="flex flex-col gap-1.5 lg:flex-row lg:items-start">
+            <div className="shrink-0 lg:w-44">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase text-sky-700">Midnight Charge</span>{" "}
+                <span className="text-slate-600">Auto-detection / Override QA</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 gap-2">
+              <p
+                className="min-w-0 rounded-md border border-sky-200 bg-sky-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-midnight-charge-auto-detection-override-copy="true"
+              >
+                Static/mock midnight charge auto-detection and manual override preview data only for internal review.
+                Nothing is billed, paid, approved, posted, saved, persisted, reconciled, generated, exported, or sent.
+              </p>
+              <div className="grid min-w-0 gap-1.5" data-mock-midnight-charge-auto-detection-override-rows="true">
+                {[
+                  {
+                    boundary: "11:00pm included",
+                    detectionTime: "23:00",
+                    displayTime: "23:00 / 11:00pm",
+                    overrideCue: "Override allowed if corrected later",
+                  },
+                  {
+                    boundary: "6:59am included",
+                    detectionTime: "06:59",
+                    displayTime: "06:59 / 6:59am",
+                    overrideCue: "Override allowed if pickup time corrected",
+                  },
+                  {
+                    boundary: "7:00am not included",
+                    detectionTime: "07:00",
+                    displayTime: "07:00 / 7:00am",
+                    overrideCue: "Override allowed if booking time was wrong",
+                  },
+                  {
+                    boundary: "10:59pm not included",
+                    detectionTime: "22:59",
+                    displayTime: "22:59 / 10:59pm",
+                    overrideCue: "Override allowed if late-night time was missed",
+                  },
+                ].map((row) => {
+                  const detected = isMockMidnightChargeDetected(row.detectionTime);
+                  return (
+                    <div
+                      className="grid min-w-0 grid-cols-2 gap-1 rounded-md border border-sky-200 bg-sky-50/75 p-1 text-[10px] leading-[1.1] text-slate-800 sm:grid-cols-4 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+                      data-mock-midnight-charge-auto-detection-override-row={row.detectionTime}
+                      key={row.detectionTime}
+                    >
+                      {[
+                        ["Booking or pickup time", "Time", row.displayTime],
+                        ["Window boundary", "Boundary", row.boundary],
+                        ["Auto-detection result", "Auto", detected ? "Detected" : "Not detected"],
+                        ["Customer midnight charge", "Cust mid", "$15"],
+                        ["Driver midnight payout", "Driver mid", "$10"],
+                        ["Charge type", "Type", "Midnight Charge"],
+                        ["Display group", "Group", "Extra Charges"],
+                        ["Internal distinction", "Distinct", "Separate from waiting time and extra stops"],
+                        ["Manual override cue", "Override", row.overrideCue],
+                        ["Mock status", "Status", detected ? "Mock detected / not billed" : "Mock not detected / not billed"],
+                      ].map(([label, shortLabel, value]) => (
+                        <p className="min-w-0 break-words" key={label}>
+                          <span
+                            className="block font-semibold uppercase text-sky-700"
+                            data-mock-midnight-charge-auto-detection-override-column={label}
+                          >
+                            {shortLabel}
+                          </span>
+                          <span>{value}</span>
+                        </p>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                className="grid min-w-0 gap-1.5 rounded-md border border-sky-200 bg-sky-50/75 p-2 text-[10px] leading-[1.15] text-slate-700 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)]"
+                data-mock-midnight-charge-override-preview="true"
+              >
+                <label className="grid min-w-0 gap-1">
+                  <span className="font-semibold uppercase text-sky-700">Manual Override Mock Only</span>
+                  <select
+                    className="min-h-9 w-full rounded-md border border-sky-200 bg-white px-2 text-[11px] text-slate-800"
+                    data-mock-midnight-charge-override-mode="true"
+                    value={mockMidnightChargeOverrideMode}
+                    onChange={(event) =>
+                      setMockMidnightChargeOverrideMode(event.target.value as "auto" | "force-on" | "force-off")
+                    }
+                  >
+                    <option value="auto">Use auto-detection - Mock Only</option>
+                    <option value="force-on">Override to apply Midnight Charge - Mock Only</option>
+                    <option value="force-off">Override to remove Midnight Charge - Mock Only</option>
+                  </select>
+                </label>
+                <label className="grid min-w-0 gap-1">
+                  <span className="font-semibold uppercase text-sky-700">Override Reason Mock Only</span>
+                  <input
+                    className="min-h-9 w-full rounded-md border border-sky-200 bg-white px-2 text-[11px] text-slate-800"
+                    data-mock-midnight-charge-override-reason="true"
+                    placeholder="Blank by default"
+                    type="text"
+                    value={mockMidnightChargeOverrideReason}
+                    onChange={(event) => setMockMidnightChargeOverrideReason(event.target.value)}
+                  />
+                </label>
+                <p
+                  className="min-w-0 rounded-md border border-sky-200 bg-white px-2 py-1.5 font-medium"
+                  data-mock-midnight-charge-override-preview-status="true"
+                >
+                  Staff override preview - mock only. Auto sample: 22:59 / 10:59pm is not detected. Current preview:{" "}
+                  {mockMidnightChargeOverrideStatus}. Override Reason blank by default; current reason is{" "}
+                  {mockMidnightChargeOverrideReason ? "entered locally only" : "blank"}.
+                </p>
+              </div>
+              <div className="grid min-w-0 gap-1.5 md:grid-cols-2">
+                <p
+                  className="min-w-0 rounded-md border border-sky-200 bg-sky-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-midnight-charge-auto-detection-override-note="true"
+                >
+                  Midnight charge auto-detection review - mock only. Midnight charge customer charge: $15. Midnight
+                  charge driver payout: $10. Applies when booking time or pickup time is between 11:00pm and 6:59am.
+                  11:00pm and 6:59am are included. 7:00am and 10:59pm are not included. Midnight Charge displays
+                  under Extra Charges and remains internally distinct from waiting time, extra stops, and all other
+                  extra charges. Existing waiting-time rule remains: 1 waiting block = 15 minutes, customer waiting
+                  charge $15 per block, driver waiting payout $10 per block, and waiting time remains internally
+                  distinct from extra stops.
+                </p>
+                <p
+                  className="min-w-0 rounded-md border border-sky-200 bg-sky-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                  data-mock-midnight-charge-auto-detection-override-generation="true"
+                >
+                  No midnight-charge record generated. No customer charge record generated. No driver payout record
+                  generated. No waiting-time record generated. No extra-charge record generated. No override record
+                  generated. No booking record generated. No invoice number generated. No PDF generated. No payment
+                  link generated. No accounting record generated. No invoice/payment/PDF generated.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p
+            className="mt-1 text-[10px] leading-[1.15] text-slate-500"
+            data-mock-midnight-charge-auto-detection-override-boundary="true"
+          >
+            Mock/local only. No billing automation, invoice, monthly invoice, payment, payment link, PDF, accounting
+            integration, customer account, customer auth, waiting-time persistence, extra-charge persistence,
+            midnight-charge persistence, customer-charge persistence, driver-payout persistence, approval persistence,
+            reconciliation persistence, manual override persistence, customer charge record, driver payout record,
+            midnight-charge record, waiting-time record, extra-charge record, override record, booking record, storage,
+            localStorage, sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase,
+            save, load, post, reconcile, approve, pay, bill, export, message-channel delivery, customer notification,
             notification, or send behavior.
           </p>
         </section>

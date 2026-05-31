@@ -680,6 +680,7 @@ async function runChromeTest() {
         "[data-mock-close-cycle-exception-resolution-audit-handoff-review]",
         "[data-mock-waiting-time-extra-charges-planning-review]",
         "[data-mock-extra-charges-variance-approval-reconciliation-review]",
+        "[data-mock-midnight-charge-auto-detection-override-review]",
       ];
 
       for (const viewport of placementViewports) {
@@ -732,7 +733,8 @@ async function runChromeTest() {
             state.text.includes("Audit Evidence") &&
             state.text.includes("Exception / Handoff QA") &&
             state.text.includes("Waiting Time") &&
-            state.text.includes("Variance / Approval QA"),
+            state.text.includes("Variance / Approval QA") &&
+            state.text.includes("Auto-detection / Override QA"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -7720,6 +7722,570 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockMidnightChargeAutoDetectionOverrideReview = async () => {
+      const reviewViewports = [
+        {
+          height: 1180,
+          label: "mobile mock midnight charge auto-detection override review",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 1080,
+          label: "desktop mock midnight charge auto-detection override review",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const varianceSection = document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]");
+              const section = document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]");
+              if (!group || !dashboard || !varianceSection || !section) {
+                return false;
+              }
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const varianceRect = varianceSection.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-midnight-charge-auto-detection-override-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-midnight-charge-auto-detection-override-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-midnight-charge-auto-detection-override-column]")].map(
+                    (column) =>
+                      column.getAttribute("data-mock-midnight-charge-auto-detection-override-column") || "",
+                  ),
+                ),
+              ];
+              const preview = document.querySelector("[data-mock-midnight-charge-override-preview]");
+              const fieldLabels = [...(preview?.querySelectorAll("label > span") || [])].map((label) =>
+                label.textContent.replace(/\\s+/g, " ").trim(),
+              );
+              const mode = document.querySelector("[data-mock-midnight-charge-override-mode]");
+              const reason = document.querySelector("[data-mock-midnight-charge-override-reason]");
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-midnight-charge-auto-detection-override-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-midnight-charge-auto-detection-override-copy]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                fieldLabels,
+                forbiddenActionText: [
+                  "approve now",
+                  "bill now",
+                  "create charge",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "export now",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "notify customer",
+                  "pay now",
+                  "post now",
+                  "reconcile now",
+                  "save charge",
+                  "save payout",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                generation:
+                  document.querySelector("[data-mock-midnight-charge-auto-detection-override-generation]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                modeOptionTexts: [...(mode?.querySelectorAll("option") || [])].map((option) =>
+                  option.textContent.replace(/\\s+/g, " ").trim(),
+                ),
+                modeValue: mode?.value || "",
+                note:
+                  document.querySelector("[data-mock-midnight-charge-auto-detection-override-note]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                previewStatus:
+                  document.querySelector("[data-mock-midnight-charge-override-preview-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                reasonValue: reason?.value || "",
+                rows,
+                sectionTop: Math.round(sectionRect.top),
+                text,
+                varianceBottom: Math.round(varianceRect.bottom),
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock midnight charge auto-detection override review`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected midnight charge review inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before bottom mock workflow group`,
+        );
+        assert.equal(
+          state.sectionTop >= state.varianceBottom,
+          true,
+          `${viewport.label}: expected midnight charge review after extra charges variance approval review`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("midnight charge") &&
+            state.text.toLowerCase().includes("auto-detection / override qa"),
+          true,
+          `${viewport.label}: expected midnight charge auto-detection heading`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Booking or pickup time",
+            "Window boundary",
+            "Auto-detection result",
+            "Customer midnight charge",
+            "Driver midnight payout",
+            "Charge type",
+            "Display group",
+            "Internal distinction",
+            "Manual override cue",
+            "Mock status",
+          ],
+          `${viewport.label}: expected mock midnight charge detection columns`,
+        );
+        assert.equal(state.rows.length, 4, `${viewport.label}: expected four static mock midnight boundary rows`);
+        const rowByTime = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByTime["23:00"].includes("23:00 / 11:00pm") &&
+            rowByTime["23:00"].includes("Detected") &&
+            !rowByTime["23:00"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 23:00 / 11:00pm to auto-detect midnight charge`,
+        );
+        assert.equal(
+          rowByTime["06:59"].includes("06:59 / 6:59am") &&
+            rowByTime["06:59"].includes("Detected") &&
+            !rowByTime["06:59"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 06:59 / 6:59am to auto-detect midnight charge`,
+        );
+        assert.equal(
+          rowByTime["07:00"].includes("07:00 / 7:00am") && rowByTime["07:00"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 07:00 / 7:00am not to auto-detect midnight charge`,
+        );
+        assert.equal(
+          rowByTime["22:59"].includes("22:59 / 10:59pm") && rowByTime["22:59"].includes("Not detected"),
+          true,
+          `${viewport.label}: expected 22:59 / 10:59pm not to auto-detect midnight charge`,
+        );
+        for (const expectedText of [
+          "$15",
+          "$10",
+          "Midnight Charge",
+          "Extra Charges",
+          "Separate from waiting time and extra stops",
+          "Mock detected / not billed",
+          "Mock not detected / not billed",
+        ]) {
+          assert.equal(
+            state.text.includes(expectedText),
+            true,
+            `${viewport.label}: expected static mock midnight charge text ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.copy.includes("Static/mock midnight charge auto-detection and manual override preview data only") &&
+            state.copy.includes("internal review") &&
+            state.copy.includes(
+              "Nothing is billed, paid, approved, posted, saved, persisted, reconciled, generated, exported, or sent",
+            ),
+          true,
+          `${viewport.label}: expected static/mock no-persistence midnight charge copy`,
+        );
+        assert.equal(
+          state.note.includes("Midnight charge auto-detection review - mock only") &&
+            state.note.includes("Midnight charge customer charge: $15") &&
+            state.note.includes("Midnight charge driver payout: $10") &&
+            state.note.includes("booking time or pickup time is between 11:00pm and 6:59am") &&
+            state.note.includes("11:00pm and 6:59am are included") &&
+            state.note.includes("7:00am and 10:59pm are not included") &&
+            state.note.includes("Midnight Charge displays under Extra Charges") &&
+            state.note.includes("remains internally distinct from waiting time, extra stops") &&
+            state.note.includes("1 waiting block = 15 minutes") &&
+            state.note.includes("customer waiting charge $15 per block") &&
+            state.note.includes("driver waiting payout $10 per block"),
+          true,
+          `${viewport.label}: expected midnight charge rule and existing waiting-time separation note`,
+        );
+        assert.equal(
+          state.generation.includes("No midnight-charge record generated") &&
+            state.generation.includes("No customer charge record generated") &&
+            state.generation.includes("No driver payout record generated") &&
+            state.generation.includes("No waiting-time record generated") &&
+            state.generation.includes("No extra-charge record generated") &&
+            state.generation.includes("No override record generated") &&
+            state.generation.includes("No booking record generated") &&
+            state.generation.includes("No invoice number generated") &&
+            state.generation.includes("No PDF generated") &&
+            state.generation.includes("No payment link generated") &&
+            state.generation.includes("No accounting record generated") &&
+            state.generation.includes("No invoice/payment/PDF generated"),
+          true,
+          `${viewport.label}: expected no midnight/customer/driver/invoice/PDF generation`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No billing automation",
+          "invoice",
+          "monthly invoice",
+          "payment",
+          "payment link",
+          "PDF",
+          "accounting integration",
+          "customer account",
+          "customer auth",
+          "waiting-time persistence",
+          "extra-charge persistence",
+          "midnight-charge persistence",
+          "customer-charge persistence",
+          "driver-payout persistence",
+          "manual override persistence",
+          "midnight-charge record",
+          "override record",
+          "booking record",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "save",
+          "load",
+          "post",
+          "reconcile",
+          "approve",
+          "pay",
+          "bill",
+          "export",
+          "message-channel delivery",
+          "customer notification",
+          "notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected midnight charge boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.fieldLabels,
+          ["Manual Override Mock Only", "Override Reason Mock Only"],
+          `${viewport.label}: expected mock-only override field labels`,
+        );
+        assert.equal(
+          state.modeOptionTexts.every((label) => label.includes("Mock Only")),
+          true,
+          `${viewport.label}: expected every override option label to say Mock Only`,
+        );
+        assert.equal(state.modeValue, "auto", `${viewport.label}: expected override mode to default to auto`);
+        assert.equal(state.reasonValue, "", `${viewport.label}: expected Override Reason to be blank by default`);
+        assert.equal(
+          state.previewStatus.includes("Auto sample: 22:59 / 10:59pm is not detected") &&
+            state.previewStatus.includes("No Midnight Charge shown - Mock Only") &&
+            state.previewStatus.includes("current reason is blank"),
+          true,
+          `${viewport.label}: expected default local-only override preview`,
+        );
+        assert.equal(
+          state.actionControlCount,
+          0,
+          `${viewport.label}: expected midnight charge override preview to have no action controls`,
+        );
+        assert.equal(
+          state.controlCount,
+          2,
+          `${viewport.label}: expected only local select/input override controls`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active midnight charge bill/pay/invoice/PDF/post/export controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1900 : viewport.width < 1024 ? 1180 : viewport.width < 1200 ? 980 : 860),
+          true,
+          `${viewport.label}: expected compact midnight charge review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 28 && row.width >= 240),
+          true,
+          `${viewport.label}: expected midnight charge rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected midnight charge review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      await setViewportAndReload({
+        height: 1080,
+        label: "desktop mock midnight charge override local-only behavior",
+        mobile: false,
+        scale: 1,
+        width: 1440,
+      });
+      await clickTab("Dashboard");
+      await waitForSelector(
+        evaluate,
+        "[data-mock-midnight-charge-auto-detection-override-review]",
+        "admin mock midnight charge override local-only behavior",
+      );
+
+      await evaluate(`(() => {
+        window.__mockMidnightChargeIntegrationCalls = [];
+        const originalFetch = window.__mockMidnightChargeOriginalFetch || window.fetch.bind(window);
+        window.__mockMidnightChargeOriginalFetch = originalFetch;
+        window.fetch = (...args) => {
+          const [target, options = {}] = args;
+          const method = options?.method || "GET";
+          window.__mockMidnightChargeIntegrationCalls.push(\`\${method} \${String(target)}\`);
+          return originalFetch(...args);
+        };
+
+        const originalOpen = window.__mockMidnightChargeOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__mockMidnightChargeOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function(method, url, ...args) {
+          window.__mockMidnightChargeIntegrationCalls.push(\`\${method || "GET"} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...args);
+        };
+
+        if (navigator.sendBeacon && !window.__mockMidnightChargeOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__mockMidnightChargeOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            window.__mockMidnightChargeIntegrationCalls.push(\`BEACON \${String(args[0])}\`);
+            return originalSendBeacon(...args);
+          };
+        }
+
+        if (window.WebSocket && !window.__mockMidnightChargeOriginalWebSocket) {
+          const OriginalWebSocket = window.WebSocket;
+          window.__mockMidnightChargeOriginalWebSocket = OriginalWebSocket;
+          window.WebSocket = function MockMidnightChargeWebSocket(url, protocols) {
+            window.__mockMidnightChargeIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            return protocols === undefined
+              ? new OriginalWebSocket(url)
+              : new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+        }
+      })()`);
+
+      const readMockMidnightStorageLeaks = async (sentinels) =>
+        evaluate(`(async () => {
+          const sentinels = ${JSON.stringify(sentinels)};
+          const matchingSentinels = (text) => {
+            const value = String(text || "");
+            return sentinels.filter((sentinel) => value.includes(sentinel));
+          };
+          const readStorageLeaks = (storage) => {
+            const rows = [];
+            try {
+              for (let index = 0; index < storage.length; index += 1) {
+                const key = storage.key(index) || "";
+                rows.push(\`\${key}=\${storage.getItem(key) || ""}\`);
+              }
+            } catch (error) {
+              rows.push(\`storage-read-error:\${error?.message || String(error)}\`);
+            }
+            return matchingSentinels(rows.join("\\n"));
+          };
+          let indexedDbText = "";
+          try {
+            const databases =
+              typeof window.indexedDB?.databases === "function" ? await window.indexedDB.databases() : [];
+            indexedDbText = (databases || []).map((database) => database.name || "").join("\\n");
+          } catch (error) {
+            indexedDbText = \`indexeddb-read-error:\${error?.message || String(error)}\`;
+          }
+
+          return {
+            cookieLeaks: matchingSentinels(document.cookie || ""),
+            indexedDbLeaks: matchingSentinels(indexedDbText),
+            localStorageLeaks: readStorageLeaks(window.localStorage),
+            sessionStorageLeaks: readStorageLeaks(window.sessionStorage),
+          };
+        })()`);
+
+      const setMockMidnightOverride = async (mode, reason) =>
+        evaluate(`(() => {
+          const mode = document.querySelector("[data-mock-midnight-charge-override-mode]");
+          const reason = document.querySelector("[data-mock-midnight-charge-override-reason]");
+          if (!mode || !reason) {
+            return { missing: true };
+          }
+          const modeDescriptor = Object.getOwnPropertyDescriptor(mode.constructor.prototype, "value");
+          modeDescriptor?.set?.call(mode, ${JSON.stringify(mode)});
+          mode.dispatchEvent(new Event("input", { bubbles: true }));
+          mode.dispatchEvent(new Event("change", { bubbles: true }));
+
+          const reasonDescriptor = Object.getOwnPropertyDescriptor(reason.constructor.prototype, "value");
+          reasonDescriptor?.set?.call(reason, ${JSON.stringify(reason)});
+          reason.dispatchEvent(new Event("input", { bubbles: true }));
+          reason.dispatchEvent(new Event("change", { bubbles: true }));
+
+          return { mode: mode.value, reason: reason.value };
+        })()`);
+
+      const overrideSentinels = ["MIDNIGHT_OVERRIDE_REASON_SENTINEL_4238"];
+      const beforeCallCount = await evaluate(`(window.__mockMidnightChargeIntegrationCalls || []).length`);
+      const overrideState = await setMockMidnightOverride("force-on", overrideSentinels[0]);
+      assert.deepEqual(
+        overrideState,
+        { mode: "force-on", reason: overrideSentinels[0] },
+        "Expected midnight charge override fields to update locally",
+      );
+      const forceOnState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const preview = document.querySelector("[data-mock-midnight-charge-override-preview-status]");
+            return preview?.textContent.includes("Midnight Charge shown under Extra Charges - Mock Only") &&
+              preview?.textContent.includes("entered locally only")
+              ? {
+                  callCount: (window.__mockMidnightChargeIntegrationCalls || []).length,
+                  preview: preview.textContent.replace(/\\s+/g, " ").trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "midnight charge local force-on override preview",
+      );
+      assert.equal(
+        forceOnState.callCount,
+        beforeCallCount,
+        "Expected midnight charge manual override not to call fetch, XHR, sendBeacon, or WebSocket",
+      );
+      const storageState = await readMockMidnightStorageLeaks(overrideSentinels);
+      assert.deepEqual(
+        storageState.localStorageLeaks,
+        [],
+        "Expected midnight charge override reason not to be written to localStorage",
+      );
+      assert.deepEqual(
+        storageState.sessionStorageLeaks,
+        [],
+        "Expected midnight charge override reason not to be written to sessionStorage",
+      );
+      assert.deepEqual(
+        storageState.cookieLeaks,
+        [],
+        "Expected midnight charge override reason not to be written to cookies",
+      );
+      assert.deepEqual(
+        storageState.indexedDbLeaks,
+        [],
+        "Expected midnight charge override reason not to be written to IndexedDB",
+      );
+
+      const reloadEvent = client.once("Page.loadEventFired");
+      await client.send("Page.reload", { ignoreCache: true });
+      await reloadEvent;
+      await waitForSelector(
+        evaluate,
+        "[data-mock-midnight-charge-auto-detection-override-review]",
+        "midnight charge override after reload",
+      );
+      const postReloadState = await evaluate(`(() => ({
+        mode: document.querySelector("[data-mock-midnight-charge-override-mode]")?.value || "",
+        reason: document.querySelector("[data-mock-midnight-charge-override-reason]")?.value || "",
+        text: document.querySelector("[data-mock-midnight-charge-override-preview-status]")?.textContent || "",
+      }))()`);
+      assert.equal(postReloadState.mode, "auto", "Expected midnight charge override mode to reset after reload");
+      assert.equal(postReloadState.reason, "", "Expected midnight charge override reason to reset after reload");
+      assert.equal(
+        postReloadState.text.includes(overrideSentinels[0]),
+        false,
+        "Expected midnight charge override sentinel not to persist after reload",
+      );
+
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        customerBookingUrl,
+        "Booking Request",
+        "midnight charge override navigation away",
+      );
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        appUrl,
+        "Midnight Charge",
+        "midnight charge override navigation back",
+      );
+      const postNavigationState = await evaluate(`(() => ({
+        mode: document.querySelector("[data-mock-midnight-charge-override-mode]")?.value || "",
+        reason: document.querySelector("[data-mock-midnight-charge-override-reason]")?.value || "",
+        visible: Boolean(document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]")),
+      }))()`);
+      assert.deepEqual(
+        postNavigationState,
+        { mode: "auto", reason: "", visible: true },
+        "Expected midnight charge override preview to reset after navigation away and back",
+      );
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -7794,6 +8360,44 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal extra-charge/customer-charge/driver-payout variance or approval data leak`,
+      );
+    };
+
+    const assertNoMockMidnightChargeAutoDetectionOverrideLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "midnight charge auto-detection / override qa",
+            "midnight charge auto-detection review",
+            "static/mock midnight charge auto-detection",
+            "midnight charge customer charge: $15",
+            "midnight charge driver payout: $10",
+            "23:00 / 11:00pm",
+            "06:59 / 6:59am",
+            "07:00 / 7:00am",
+            "22:59 / 10:59pm",
+            "manual override mock only",
+            "override reason mock only",
+            "midnight-charge record",
+            "manual override persistence",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(
+            document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]"),
+          ),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock midnight charge auto-detection override review`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal midnight charge/customer-charge/driver-payout/override data leak`,
       );
     };
 
@@ -8384,6 +8988,7 @@ async function runChromeTest() {
         await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak(routeName);
         await assertNoMockWaitingTimeExtraChargesPlanningLeak(routeName);
         await assertNoMockExtraChargesVarianceApprovalReconciliationLeak(routeName);
+        await assertNoMockMidnightChargeAutoDetectionOverrideLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -8453,6 +9058,9 @@ async function runChromeTest() {
             ),
             mockExtraChargesVarianceApprovalReconciliationReviewVisible: Boolean(
               document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]"),
+            ),
+            mockMidnightChargeAutoDetectionOverrideReviewVisible: Boolean(
+              document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]"),
             ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
@@ -8601,6 +9209,15 @@ async function runChromeTest() {
               "no dispatcher approval record generated",
               "no driver payout reconciliation record generated",
               "not approved / not billed / not paid / not saved",
+              "midnight charge auto-detection / override qa",
+              "static/mock midnight charge auto-detection",
+              "midnight charge auto-detection review - mock only",
+              "midnight charge customer charge: $15",
+              "midnight charge driver payout: $10",
+              "manual override mock only",
+              "override reason mock only",
+              "no midnight-charge record generated",
+              "manual override persistence",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -8715,6 +9332,11 @@ async function runChromeTest() {
           routeState.mockExtraChargesVarianceApprovalReconciliationReviewVisible,
           false,
           `${routeName}: expected no internal mock extra charges variance approval reconciliation review`,
+        );
+        assert.equal(
+          routeState.mockMidnightChargeAutoDetectionOverrideReviewVisible,
+          false,
+          `${routeName}: expected no internal mock midnight charge auto-detection override review`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -9269,6 +9891,7 @@ async function runChromeTest() {
       await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak("/customers desktop");
       await assertNoMockWaitingTimeExtraChargesPlanningLeak("/customers desktop");
       await assertNoMockExtraChargesVarianceApprovalReconciliationLeak("/customers desktop");
+      await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -14921,6 +15544,7 @@ async function runChromeTest() {
       await assertNoMockCloseCycleExceptionResolutionAuditHandoffLeak("/customers mobile");
       await assertNoMockWaitingTimeExtraChargesPlanningLeak("/customers mobile");
       await assertNoMockExtraChargesVarianceApprovalReconciliationLeak("/customers mobile");
+      await assertNoMockMidnightChargeAutoDetectionOverrideLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -20810,6 +21434,8 @@ async function runChromeTest() {
       await checkAdminMockWaitingTimeExtraChargesPlanningReview();
     state.adminMockExtraChargesVarianceApprovalReconciliationReview =
       await checkAdminMockExtraChargesVarianceApprovalReconciliationReview();
+    state.adminMockMidnightChargeAutoDetectionOverrideReview =
+      await checkAdminMockMidnightChargeAutoDetectionOverrideReview();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

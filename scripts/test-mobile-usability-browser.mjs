@@ -531,6 +531,9 @@ async function runChromeTest() {
       const mockExtraChargesVarianceApprovalReconciliationReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]"))`,
       );
+      const mockMidnightChargeAutoDetectionOverrideReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -547,6 +550,15 @@ async function runChromeTest() {
             "not approved / not billed / not paid / not saved",
             "no dispatcher approval record generated",
             "no driver payout reconciliation record generated",
+            "midnight charge auto-detection / override qa",
+            "midnight charge auto-detection review",
+            "static/mock midnight charge auto-detection",
+            "midnight charge customer charge: $15",
+            "midnight charge driver payout: $10",
+            "manual override mock only",
+            "override reason mock only",
+            "no midnight-charge record generated",
+            "manual override persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -687,6 +699,11 @@ async function runChromeTest() {
         mockExtraChargesVarianceApprovalReconciliationReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock extra charges variance approval reconciliation review`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock midnight charge auto-detection override review`,
       );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
@@ -4322,6 +4339,249 @@ async function runChromeTest() {
         `${viewport.label}: expected extra charges variance review not to create horizontal overflow`,
       );
 
+      const mockMidnightChargeAutoDetectionOverrideReviewState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const varianceReview = document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]");
+            const review = document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]");
+            if (!group || !dashboard || !varianceReview || !review) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const varianceRect = varianceReview.getBoundingClientRect();
+            const rect = review.getBoundingClientRect();
+            const rows = [...review.querySelectorAll("[data-mock-midnight-charge-auto-detection-override-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-midnight-charge-auto-detection-override-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...review.querySelectorAll("[data-mock-midnight-charge-auto-detection-override-column]")].map(
+                  (column) =>
+                    column.getAttribute("data-mock-midnight-charge-auto-detection-override-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: review.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-midnight-charge-auto-detection-override-boundary]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: review.querySelectorAll("input, select, textarea").length,
+              copy:
+                document.querySelector("[data-mock-midnight-charge-auto-detection-override-copy]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              generation:
+                document.querySelector("[data-mock-midnight-charge-auto-detection-override-generation]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              modeValue: document.querySelector("[data-mock-midnight-charge-override-mode]")?.value || "",
+              note:
+                document.querySelector("[data-mock-midnight-charge-auto-detection-override-note]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              reasonValue: document.querySelector("[data-mock-midnight-charge-override-reason]")?.value || "",
+              rows,
+              sectionTop: Math.round(rect.top),
+              text: review.innerText,
+              varianceBottom: Math.round(varianceRect.bottom),
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock midnight charge auto-detection override review`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.groupTop >=
+          mockMidnightChargeAutoDetectionOverrideReviewState.dashboardBottom,
+        true,
+        `${viewport.label}: expected midnight charge review to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.sectionTop >=
+          mockMidnightChargeAutoDetectionOverrideReviewState.varianceBottom,
+        true,
+        `${viewport.label}: expected midnight charge review after extra charges variance approval review`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.text.toLowerCase().includes("midnight charge") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.text
+            .toLowerCase()
+            .includes("auto-detection / override qa"),
+        true,
+        `${viewport.label}: expected mock midnight charge auto-detection review`,
+      );
+      assert.deepEqual(
+        mockMidnightChargeAutoDetectionOverrideReviewState.columns,
+        [
+          "Booking or pickup time",
+          "Window boundary",
+          "Auto-detection result",
+          "Customer midnight charge",
+          "Driver midnight payout",
+          "Charge type",
+          "Display group",
+          "Internal distinction",
+          "Manual override cue",
+          "Mock status",
+        ],
+        `${viewport.label}: expected midnight charge detection columns`,
+      );
+      const midnightRowsByTime = Object.fromEntries(
+        mockMidnightChargeAutoDetectionOverrideReviewState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        midnightRowsByTime["23:00"].includes("Detected") &&
+          !midnightRowsByTime["23:00"].includes("Not detected") &&
+          midnightRowsByTime["06:59"].includes("Detected") &&
+          !midnightRowsByTime["06:59"].includes("Not detected") &&
+          midnightRowsByTime["07:00"].includes("Not detected") &&
+          midnightRowsByTime["22:59"].includes("Not detected"),
+        true,
+        `${viewport.label}: expected midnight charge boundary auto-detection examples`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.text.includes("$15") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.text.includes("$10") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.text.includes("Midnight Charge") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.text.includes("Extra Charges") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.text.includes(
+            "Separate from waiting time and extra stops",
+          ),
+        true,
+        `${viewport.label}: expected midnight charge amount, display group, and internal distinction`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.copy.includes(
+          "Static/mock midnight charge auto-detection and manual override preview data only",
+        ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.copy.includes("internal review") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.copy.includes("Nothing is billed"),
+        true,
+        `${viewport.label}: expected static no-persistence midnight charge copy`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.note.includes(
+          "Midnight charge customer charge: $15",
+        ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.note.includes(
+            "Midnight charge driver payout: $10",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.note.includes(
+            "booking time or pickup time is between 11:00pm and 6:59am",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.note.includes(
+            "11:00pm and 6:59am are included",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.note.includes(
+            "7:00am and 10:59pm are not included",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.note.includes(
+            "remains internally distinct from waiting time, extra stops",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.note.includes("1 waiting block = 15 minutes"),
+        true,
+        `${viewport.label}: expected midnight charge and waiting-time locked rules`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.generation.includes(
+          "No midnight-charge record generated",
+        ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.generation.includes(
+            "No customer charge record generated",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.generation.includes(
+            "No driver payout record generated",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.generation.includes(
+            "No override record generated",
+          ) &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.generation.includes("No invoice number generated") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.generation.includes("No PDF generated") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.generation.includes("No payment link generated"),
+        true,
+        `${viewport.label}: expected no midnight/customer/driver override generation`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("Mock/local only.") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("midnight-charge persistence") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("manual override persistence") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("localStorage") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("sessionStorage") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("cookies") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("IndexedDB") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("API call") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("fetch") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("XHR") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("sendBeacon") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("WebSocket") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("Supabase") &&
+          mockMidnightChargeAutoDetectionOverrideReviewState.boundary.includes("send behavior"),
+        true,
+        `${viewport.label}: expected midnight charge no persistence/storage/API boundary`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.actionControlCount,
+        0,
+        `${viewport.label}: expected midnight charge preview to have no action controls`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.controlCount,
+        2,
+        `${viewport.label}: expected only mock local select/input controls`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.modeValue,
+        "auto",
+        `${viewport.label}: expected midnight charge override mode to default to auto`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.reasonValue,
+        "",
+        `${viewport.label}: expected Override Reason to be blank by default`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.rows.length,
+        4,
+        `${viewport.label}: expected four midnight charge boundary rows`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.height <=
+          (viewport.width < 640 ? 1900 : viewport.width < 1024 ? 1180 : viewport.width < 1200 ? 980 : 860),
+        true,
+        `${viewport.label}: expected compact midnight charge review, got ${mockMidnightChargeAutoDetectionOverrideReviewState.height}px`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.rows.every(
+          (row) => row.height >= 28 && row.width >= 240,
+        ),
+        true,
+        `${viewport.label}: expected midnight charge rows to stay readable`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewState.docScrollWidth <=
+          mockMidnightChargeAutoDetectionOverrideReviewState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected midnight charge review not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -4422,6 +4682,9 @@ async function runChromeTest() {
       const mockExtraChargesVarianceApprovalReconciliationReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-extra-charges-variance-approval-reconciliation-review]"))`,
       );
+      const mockMidnightChargeAutoDetectionOverrideReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-midnight-charge-auto-detection-override-review]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -4438,6 +4701,15 @@ async function runChromeTest() {
             "not approved / not billed / not paid / not saved",
             "no dispatcher approval record generated",
             "no driver payout reconciliation record generated",
+            "midnight charge auto-detection / override qa",
+            "midnight charge auto-detection review",
+            "static/mock midnight charge auto-detection",
+            "midnight charge customer charge: $15",
+            "midnight charge driver payout: $10",
+            "manual override mock only",
+            "override reason mock only",
+            "no midnight-charge record generated",
+            "manual override persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -4604,6 +4876,11 @@ async function runChromeTest() {
         mockExtraChargesVarianceApprovalReconciliationReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock extra charges variance approval reconciliation review`,
+      );
+      assert.equal(
+        mockMidnightChargeAutoDetectionOverrideReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock midnight charge auto-detection override review`,
       );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,

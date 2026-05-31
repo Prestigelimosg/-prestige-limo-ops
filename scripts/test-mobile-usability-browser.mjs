@@ -695,6 +695,9 @@ async function runChromeTest() {
       const mockOperationsRiskSlaWatchlistWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench]"))`,
       );
+      const mockQuotePricingReviewReadinessWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-quote-pricing-review-readiness-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -1057,6 +1060,31 @@ async function runChromeTest() {
             "no real sla alerting workflow",
             "operations risk workflow",
             "sla alerting",
+            "quote & pricing review readiness workbench",
+            "internal/admin-only quote and pricing review readiness",
+            "mock dispatcher/admin quote desk",
+            "3 quote/pricing rows maximum",
+            "plo-quote-ready-corp-airport",
+            "plo-quote-ready-vip-hourly",
+            "plo-quote-ready-recovery-nocharge",
+            "quote review reference",
+            "rate/price basis",
+            "quoted amount status",
+            "manual extra charge review",
+            "discount/goodwill review",
+            "approval readiness",
+            "margin/risk note",
+            "customer quote handoff readiness",
+            "quoted amount ready - display-only",
+            "manual extra charge note present",
+            "goodwill/no-charge review pending",
+            "customer quote handoff blocked",
+            "no quote sent",
+            "no quoted amount saved",
+            "no pricing calculation created",
+            "no real quote workflow",
+            "pricing automation",
+            "quote automation",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -1293,10 +1321,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${route.label}: expected no internal mock operations risk SLA watchlist workbench`,
       );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock quote pricing review readiness workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, driver assignment dispatch, booking lifecycle audit, or operations risk SLA text leak`,
+        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, driver assignment dispatch, booking lifecycle audit, operations risk SLA, or quote pricing review text leak`,
       );
     };
 
@@ -8883,6 +8916,233 @@ async function runChromeTest() {
         `${viewport.label}: expected operations risk SLA workbench not to create horizontal overflow`,
       );
 
+      const mockQuotePricingReviewReadinessWorkbenchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const previousWorkbench = document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench]");
+            const workbench = document.querySelector("[data-mock-quote-pricing-review-readiness-workbench]");
+            if (!group || !dashboard || !previousWorkbench || !workbench) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const previousRect = previousWorkbench.getBoundingClientRect();
+            const rect = workbench.getBoundingClientRect();
+            const rows = [
+              ...workbench.querySelectorAll("[data-mock-quote-pricing-review-readiness-workbench-row]"),
+            ].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-quote-pricing-review-readiness-workbench-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [
+                  ...workbench.querySelectorAll("[data-mock-quote-pricing-review-readiness-workbench-column]"),
+                ].map(
+                  (column) =>
+                    column.getAttribute("data-mock-quote-pricing-review-readiness-workbench-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: workbench.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-quote-pricing-review-readiness-workbench-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: workbench.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              filterSummary:
+                document.querySelector("[data-mock-quote-pricing-review-readiness-workbench-filter-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              previousBottom: Math.round(previousRect.bottom),
+              rows,
+              rules:
+                document.querySelector("[data-mock-quote-pricing-review-readiness-workbench-rules]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              safety:
+                document.querySelector("[data-mock-quote-pricing-review-readiness-workbench-safety]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              text: workbench.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock quote pricing review readiness workbench`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.groupTop >=
+          mockQuotePricingReviewReadinessWorkbenchState.dashboardBottom,
+        true,
+        `${viewport.label}: expected quote pricing review workbench to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.sectionTop >=
+          mockQuotePricingReviewReadinessWorkbenchState.previousBottom,
+        true,
+        `${viewport.label}: expected quote pricing review workbench after operations risk SLA watchlist workbench`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.text
+          .toLowerCase()
+          .includes("quote & pricing review readiness workbench") &&
+          mockQuotePricingReviewReadinessWorkbenchState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected quote pricing review workbench heading`,
+      );
+      assert.deepEqual(
+        mockQuotePricingReviewReadinessWorkbenchState.columns,
+        [
+          "Quote review reference related job reference",
+          "Customer account service type",
+          "Rate price basis quoted amount status",
+          "Manual extra charge review discount goodwill review",
+          "Approval readiness margin risk note",
+          "Customer quote handoff readiness next internal action",
+        ],
+        `${viewport.label}: expected quote pricing review workflow columns`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.filterSummary.includes(
+          "Mock quote and pricing review readiness",
+        ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.filterSummary.includes(
+            "Mock dispatcher/admin quote desk",
+          ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.filterSummary.includes(
+            "3 quote/pricing rows maximum",
+          ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.filterSummary.includes("display-only / no actions"),
+        true,
+        `${viewport.label}: expected compact display-only quote pricing filter summary`,
+      );
+      const quoteRowsByRef = Object.fromEntries(
+        mockQuotePricingReviewReadinessWorkbenchState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        quoteRowsByRef["PLO-QUOTE-READY-CORP-AIRPORT"].includes(
+          "Corporate account MNG rate basis reviewed",
+        ) &&
+          quoteRowsByRef["PLO-QUOTE-READY-CORP-AIRPORT"].includes(
+            "Quoted amount ready - display-only",
+          ) &&
+          quoteRowsByRef["PLO-QUOTE-READY-VIP-HOURLY"].includes(
+            "Manual extra charge note present - review only",
+          ) &&
+          quoteRowsByRef["PLO-QUOTE-READY-VIP-HOURLY"].includes(
+            "Manager approval pending - no approval saved",
+          ) &&
+          quoteRowsByRef["PLO-QUOTE-READY-RECOVERY-NOCHARGE"].includes(
+            "Goodwill/no-charge review pending",
+          ) &&
+          quoteRowsByRef["PLO-QUOTE-READY-RECOVERY-NOCHARGE"].includes(
+            "Customer quote handoff blocked - no notification",
+          ),
+        true,
+        `${viewport.label}: expected quote pricing rows with corporate, VIP, and recovery cases`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.rules.includes(
+          "quote review stays separate from real billing, invoice, statement, payment, payout, and accounting behavior",
+        ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.rules.includes(
+            "quoted amount status does not calculate or change totals",
+          ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.rules.includes(
+            "manual extra charge review creates no records",
+          ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.rules.includes(
+            "discount/goodwill review creates no credit or no-charge decision",
+          ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.rules.includes(
+            "approval readiness creates no approvals, tasks, audit records, or quote records",
+          ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.rules.includes(
+            "customer quote handoff readiness sends no quote, payment link, PDF, customer notification, or message-channel delivery",
+          ) &&
+          mockQuotePricingReviewReadinessWorkbenchState.rules.includes(
+            "parser/manual review stays separate from parser behavior",
+          ),
+        true,
+        `${viewport.label}: expected protected quote pricing business rules`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.safety.includes("No quote sent") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no quoted amount saved") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no pricing calculation created") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no invoice generated") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no statement generated") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no payment link created") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no PDF generated") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no payout created") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no accounting posting created") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no finance export created") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no customer notification sent") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no message-channel delivery") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no approval record created") &&
+          mockQuotePricingReviewReadinessWorkbenchState.safety.includes("no audit record created") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("No real quote workflow") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("pricing automation") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("quoted amount persistence") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("approval workflow") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("audit trail creation") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("parser behavior changes") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("API call") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("Supabase") &&
+          mockQuotePricingReviewReadinessWorkbenchState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected quote pricing no API/parser/billing boundary`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.actionControlCount,
+        0,
+        `${viewport.label}: expected quote pricing workbench to have no action controls`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.controlCount,
+        0,
+        `${viewport.label}: expected quote pricing workbench to have no form controls`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.rows.length,
+        3,
+        `${viewport.label}: expected three quote pricing rows`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.height <=
+          (viewport.width < 640 ? 2140 : viewport.width < 1024 ? 1260 : viewport.width < 1200 ? 1120 : 1080),
+        true,
+        `${viewport.label}: expected compact quote pricing workbench, got ${mockQuotePricingReviewReadinessWorkbenchState.height}px`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.rows.every((row) => row.height >= 48 && row.width >= 240),
+        true,
+        `${viewport.label}: expected quote pricing rows to stay readable`,
+      );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchState.docScrollWidth <=
+          mockQuotePricingReviewReadinessWorkbenchState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected quote pricing workbench not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -9040,6 +9300,9 @@ async function runChromeTest() {
       );
       const mockOperationsRiskSlaWatchlistWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench]"))`,
+      );
+      const mockQuotePricingReviewReadinessWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-quote-pricing-review-readiness-workbench]"))`,
       );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
@@ -9403,6 +9666,31 @@ async function runChromeTest() {
             "no real sla alerting workflow",
             "operations risk workflow",
             "sla alerting",
+            "quote & pricing review readiness workbench",
+            "internal/admin-only quote and pricing review readiness",
+            "mock dispatcher/admin quote desk",
+            "3 quote/pricing rows maximum",
+            "plo-quote-ready-corp-airport",
+            "plo-quote-ready-vip-hourly",
+            "plo-quote-ready-recovery-nocharge",
+            "quote review reference",
+            "rate/price basis",
+            "quoted amount status",
+            "manual extra charge review",
+            "discount/goodwill review",
+            "approval readiness",
+            "margin/risk note",
+            "customer quote handoff readiness",
+            "quoted amount ready - display-only",
+            "manual extra charge note present",
+            "goodwill/no-charge review pending",
+            "customer quote handoff blocked",
+            "no quote sent",
+            "no quoted amount saved",
+            "no pricing calculation created",
+            "no real quote workflow",
+            "pricing automation",
+            "quote automation",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -9665,10 +9953,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock operations risk SLA watchlist workbench`,
       );
+      assert.equal(
+        mockQuotePricingReviewReadinessWorkbenchVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock quote pricing review readiness workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, driver assignment dispatch, booking lifecycle audit, or operations risk SLA text leak`,
+        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, booking intake, airport readiness, route itinerary, driver assignment dispatch, booking lifecycle audit, operations risk SLA, or quote pricing review text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

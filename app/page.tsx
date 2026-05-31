@@ -13466,6 +13466,228 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section
+          aria-label="Quote Pricing Review Readiness Workbench Mock Only"
+          className="rounded-lg border border-teal-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-quote-pricing-review-readiness-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-teal-700">Quote &amp; Pricing Review Readiness Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-quote-pricing-review-readiness-workbench-copy="true"
+                >
+                  Internal/admin-only quote and pricing review readiness preview for quoted amount readiness, rate
+                  basis, customer/account pricing context, manual extra charge review, approval status, margin/risk
+                  note, customer quote handoff readiness, and next internal action. Static/mock/local display data only;
+                  no real pricing automation, quote sending, billing, storage, API, parser, or Supabase behavior is
+                  active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-[10px] font-semibold uppercase text-teal-700">
+                Display-only quote review
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-quote-pricing-review-readiness-workbench-filter-summary="true"
+            >
+              {[
+                ["Quote/date scope", "Mock quote and pricing review readiness"],
+                ["Source", "Mock dispatcher/admin quote desk"],
+                ["Mock results", "3 quote/pricing rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-teal-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5"
+              data-mock-quote-pricing-review-readiness-workbench-rows="true"
+            >
+              {[
+                {
+                  approvalReadiness: "Dispatcher approval readiness complete - no approval record",
+                  customerAccount: "UBS Priority",
+                  customerQuoteHandoffReadiness: "Customer quote handoff ready - not sent",
+                  discountGoodwillReview: "No discount/goodwill review needed",
+                  manualExtraChargeReview: "Manual extra charge review clear - no total calculated",
+                  marginRiskNote: "Margin note acceptable in mock review",
+                  nextInternalAction: "Review wording before any future quote handoff",
+                  quoteReviewReference: "PLO-QUOTE-READY-CORP-AIRPORT",
+                  quotedAmountStatus: "Quoted amount ready - display-only, no total changed",
+                  ratePriceBasis: "Corporate account MNG rate basis reviewed",
+                  relatedJobReference: "PLO-ARR-2026-05-QUOTE1",
+                  serviceType: "Airport transfer / Arrival",
+                },
+                {
+                  approvalReadiness: "Manager approval pending - no approval saved",
+                  customerAccount: "VIP Private Customer",
+                  customerQuoteHandoffReadiness: "Customer quote handoff held - not sent",
+                  discountGoodwillReview: "Discount/goodwill review not applied",
+                  manualExtraChargeReview: "Manual extra charge note present - review only",
+                  marginRiskNote: "Margin/risk note requires manager review",
+                  nextInternalAction: "Confirm manager note before future quote handoff",
+                  quoteReviewReference: "PLO-QUOTE-READY-VIP-HOURLY",
+                  quotedAmountStatus: "Quoted amount status held - no pricing calculation",
+                  ratePriceBasis: "VIP hourly rate basis under manager review",
+                  relatedJobReference: "PLO-DSP-2026-05-QUOTE2",
+                  serviceType: "Hourly / VIP standby",
+                },
+                {
+                  approvalReadiness: "Manager approval required - no record created",
+                  customerAccount: "Ritz-Carlton Concierge",
+                  customerQuoteHandoffReadiness: "Customer quote handoff blocked - no notification",
+                  discountGoodwillReview: "Goodwill/no-charge review pending - no credit created",
+                  manualExtraChargeReview: "Manual extra charge review waived in mock context",
+                  marginRiskNote: "Margin/risk note: service recovery exception",
+                  nextInternalAction: "Hold until goodwill/no-charge review is complete",
+                  quoteReviewReference: "PLO-QUOTE-READY-RECOVERY-NOCHARGE",
+                  quotedAmountStatus: "Quote/invoice handoff held - no amount saved",
+                  ratePriceBasis: "Service recovery pricing context under review",
+                  relatedJobReference: "PLO-REC-2026-05-QUOTE3",
+                  serviceType: "Service recovery / no-charge review",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-teal-200 bg-teal-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.05fr_1.05fr_1.15fr_1.15fr_1.1fr_1.2fr]"
+                  data-mock-quote-pricing-review-readiness-workbench-row={row.quoteReviewReference}
+                  key={row.quoteReviewReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-quote-pricing-review-readiness-workbench-column="Quote review reference related job reference"
+                    >
+                      Quote / Job
+                    </span>
+                    <span className="block">{row.quoteReviewReference}</span>
+                    <span>{row.relatedJobReference}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-quote-pricing-review-readiness-workbench-column="Customer account service type"
+                    >
+                      Customer / Service
+                    </span>
+                    <span className="block">{row.customerAccount}</span>
+                    <span>{row.serviceType}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-quote-pricing-review-readiness-workbench-column="Rate price basis quoted amount status"
+                    >
+                      Rate Basis / Quote Status
+                    </span>
+                    <span className="block">{row.ratePriceBasis}</span>
+                    <span>{row.quotedAmountStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-quote-pricing-review-readiness-workbench-column="Manual extra charge review discount goodwill review"
+                    >
+                      Manual / Goodwill Review
+                    </span>
+                    <span className="block">{row.manualExtraChargeReview}</span>
+                    <span>{row.discountGoodwillReview}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-quote-pricing-review-readiness-workbench-column="Approval readiness margin risk note"
+                    >
+                      Approval / Margin Risk
+                    </span>
+                    <span className="block">{row.approvalReadiness}</span>
+                    <span>{row.marginRiskNote}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-quote-pricing-review-readiness-workbench-column="Customer quote handoff readiness next internal action"
+                    >
+                      Handoff / Next Action
+                    </span>
+                    <span className="block">{row.customerQuoteHandoffReadiness}</span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-quote-pricing-review-readiness-workbench-coverage-note="true"
+              >
+                Quote pricing review - mock only. Quote review reference, related job reference, customer/account,
+                service type, rate/price basis, quoted amount status, manual extra charge review, discount/goodwill
+                review, approval readiness, margin/risk note, customer quote handoff readiness, and next internal action
+                stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-quote-pricing-review-readiness-workbench-rules="true"
+              >
+                Quote/pricing rules preserved: quote review stays separate from real billing, invoice, statement,
+                payment, payout, and accounting behavior; quoted amount status does not calculate or change totals;
+                manual extra charge review creates no records; discount/goodwill review creates no credit or no-charge
+                decision; approval readiness creates no approvals, tasks, audit records, or quote records; customer
+                quote handoff readiness sends no quote, payment link, PDF, customer notification, or message-channel
+                delivery; parser/manual review stays separate from parser behavior.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-quote-pricing-review-readiness-workbench-safety="true"
+              >
+                Mock Only. No quote sent, no quoted amount saved, no pricing calculation created, no invoice generated,
+                no statement generated, no payment link created, no PDF generated, no payout created, no accounting
+                posting created, no finance export created, no customer notification sent, no message-channel delivery,
+                no approval record created, no audit record created, and no booking saved. No save/load, no
+                API/storage/Supabase behavior, and no parser change.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-[1fr_2fr]">
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-quote-pricing-review-readiness-workbench-distinction="true"
+              >
+                This is separate from Operations Risk &amp; SLA Watchlist, Booking Lifecycle Timeline, Driver
+                Assignment, Route &amp; Itinerary Readiness, Airport Flight Monitoring, Booking Intake, Customer
+                Account Profile, Operations Handover, Fleet Readiness, Customer Service Recovery, Replacement Vehicle
+                Recovery, Driver Job Completion, and Extra Charges: it reviews quote/pricing readiness before any future
+                quote automation only.
+              </p>
+              <p
+                className="text-[10px] leading-[1.15] text-slate-500"
+                data-mock-quote-pricing-review-readiness-workbench-boundary="true"
+              >
+                Future workflow boundary: Mock/local only. No real quote workflow, pricing automation, quoted amount
+                persistence, billing workflow, invoice generation, statement generation, payment links, PDF generation,
+                payout creation, accounting posting, finance export, customer notification or message-channel delivery,
+                approval workflow, audit trail creation, booking save/load behavior, customer account/auth behavior,
+                parser behavior changes, parser file changes, parser test changes, localStorage, sessionStorage,
+                cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, package script changes,
+                test:safe membership changes, or send behavior.
+              </p>
+            </div>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

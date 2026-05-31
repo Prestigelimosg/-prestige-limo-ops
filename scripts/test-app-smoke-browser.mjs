@@ -692,6 +692,7 @@ async function runChromeTest() {
         "[data-mock-booking-intake-account-matching-workbench]",
         "[data-mock-airport-flight-pickup-readiness-workbench]",
         "[data-mock-route-itinerary-readiness-workbench]",
+        "[data-mock-driver-assignment-dispatch-readiness-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -13460,6 +13461,365 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockDriverAssignmentDispatchReadinessWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock driver assignment dispatch readiness workbench",
+          mobile: true,
+          scale: 2,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock driver assignment dispatch readiness workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const previousWorkbench = document.querySelector("[data-mock-route-itinerary-readiness-workbench]");
+              const section = document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench]");
+              if (!group || !dashboard || !previousWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const previousRect = previousWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [
+                ...section.querySelectorAll("[data-mock-driver-assignment-dispatch-readiness-workbench-row]"),
+              ].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-driver-assignment-dispatch-readiness-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [
+                    ...section.querySelectorAll("[data-mock-driver-assignment-dispatch-readiness-workbench-column]"),
+                  ].map(
+                    (column) =>
+                      column.getAttribute("data-mock-driver-assignment-dispatch-readiness-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "assign driver now",
+                  "assign vehicle now",
+                  "send driver acknowledgement now",
+                  "send customer update now",
+                  "change schedule now",
+                  "create dispatch job now",
+                  "save booking now",
+                  "change job status now",
+                  "activate live location now",
+                  "generate invoice now",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                previousBottom: Math.round(previousRect.bottom),
+                coverageNote:
+                  document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench-coverage-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                rules:
+                  document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench-rules]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                safety:
+                  document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock driver assignment dispatch readiness workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected driver assignment dispatch readiness workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before driver assignment dispatch readiness workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.previousBottom,
+          true,
+          `${viewport.label}: expected driver assignment dispatch readiness workbench after route itinerary readiness`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("driver assignment & dispatch readiness workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected driver assignment dispatch readiness heading`,
+        );
+        assert.equal(
+          state.copy.includes("driver assignment and dispatch readiness preview") &&
+            state.copy.includes("proposed driver/vehicle pairing") &&
+            state.copy.includes("job timing") &&
+            state.copy.includes("driver contact readiness") &&
+            state.copy.includes("acknowledgement readiness") &&
+            state.copy.includes("schedule overlap risk") &&
+            state.copy.includes("customer update readiness") &&
+            state.copy.includes("dispatch readiness") &&
+            state.copy.includes("no real driver assignment") &&
+            state.copy.includes("vehicle assignment") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected driver assignment dispatch boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Dispatch readiness reference job reference",
+            "Customer account service type pickup window",
+            "Proposed driver proposed vehicle plate",
+            "Driver contact readiness driver acknowledgement readiness",
+            "Schedule overlap risk customer update readiness",
+            "Dispatch readiness next internal action",
+          ],
+          `${viewport.label}: expected driver assignment dispatch workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three driver assignment rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Mock proposed driver, vehicle, and pickup-window readiness") &&
+            state.filterSummary.includes("Mock dispatcher driver/vehicle pairing review") &&
+            state.filterSummary.includes("3 driver assignment rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only driver assignment filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-DISP-READY-AIRPORT"].includes("Proposed driver: Kumar Tan") &&
+            rowByRef["PLO-DISP-READY-AIRPORT"].includes("Mercedes V-Class / SLP 8822") &&
+            rowByRef["PLO-DISP-READY-AIRPORT"].includes("Driver acknowledgement pending - not sent") &&
+            rowByRef["PLO-DISP-READY-AIRPORT"].includes("Dispatch handoff ready"),
+          true,
+          `${viewport.label}: expected airport transfer driver assignment readiness row`,
+        );
+        assert.equal(
+          rowByRef["PLO-DISP-READY-VIP-HOURLY"].includes("Hourly / VIP standby") &&
+            rowByRef["PLO-DISP-READY-VIP-HOURLY"].includes(
+              "Schedule overlap warning only - dispatcher may intentionally assign same driver",
+            ) &&
+            rowByRef["PLO-DISP-READY-VIP-HOURLY"].includes(
+              "Review overlap warning without blocking or hiding drivers",
+            ),
+          true,
+          `${viewport.label}: expected hourly/VIP schedule overlap warning row`,
+        );
+        assert.equal(
+          rowByRef["PLO-DISP-READY-TRANSFER-HOLD"].includes("Customer update not prepared - no message sent") &&
+            rowByRef["PLO-DISP-READY-TRANSFER-HOLD"].includes("Dispatch hold in mock review") &&
+            rowByRef["PLO-DISP-READY-TRANSFER-HOLD"].includes(
+              "Prepare customer update readiness before future dispatch handoff",
+            ),
+          true,
+          `${viewport.label}: expected transfer customer update hold row`,
+        );
+        assert.equal(
+          state.coverageNote.includes("Dispatch readiness reference") &&
+            state.coverageNote.includes("job reference") &&
+            state.coverageNote.includes("customer/account") &&
+            state.coverageNote.includes("service type") &&
+            state.coverageNote.includes("pickup window") &&
+            state.coverageNote.includes("proposed driver") &&
+            state.coverageNote.includes("proposed vehicle/plate") &&
+            state.coverageNote.includes("driver contact readiness") &&
+            state.coverageNote.includes("driver acknowledgement readiness") &&
+            state.coverageNote.includes("schedule/overlap risk") &&
+            state.coverageNote.includes("customer update readiness") &&
+            state.coverageNote.includes("dispatch readiness") &&
+            state.coverageNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected driver assignment dispatch workflow coverage`,
+        );
+        assert.equal(
+          state.rules.includes("readiness stays separate from real driver assignment") &&
+            state.rules.includes("proposed driver/vehicle display creates no assignment") &&
+            state.rules.includes("acknowledgement readiness sends nothing") &&
+            state.rules.includes("customer update readiness sends nothing") &&
+            state.rules.includes("schedule/overlap review is display-only") &&
+            state.rules.includes("dispatcher may intentionally assign the same driver to multiple bookings") &&
+            state.rules.includes("warn only, not block or hide drivers"),
+          true,
+          `${viewport.label}: expected protected driver assignment business rules`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Route & Itinerary Readiness") &&
+            state.distinction.includes("Airport Flight Monitoring") &&
+            state.distinction.includes("Booking Intake") &&
+            state.distinction.includes("Customer Account Profile") &&
+            state.distinction.includes("Operations Handover") &&
+            state.distinction.includes("Fleet Readiness") &&
+            state.distinction.includes("Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("proposed driver/vehicle pairing"),
+          true,
+          `${viewport.label}: expected driver assignment dispatch workbench not to repeat recent workbenches`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No driver assigned") &&
+            state.safety.includes("no vehicle assigned") &&
+            state.safety.includes("no driver acknowledgement sent") &&
+            state.safety.includes("no customer update sent") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no live location activated") &&
+            state.safety.includes("no schedule changed") &&
+            state.safety.includes("no dispatch job created") &&
+            state.safety.includes("no job status changed") &&
+            state.safety.includes("no booking saved") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting") &&
+            state.safety.includes("finance export created") &&
+            state.safety.includes("No save/load") &&
+            state.safety.includes("API/storage/Supabase behavior") &&
+            state.safety.includes("no parser change"),
+          true,
+          `${viewport.label}: expected no driver assignment/API/dispatch/parser/billing behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real driver assignment",
+          "vehicle assignment",
+          "driver acknowledgement behavior",
+          "customer update sending",
+          "notification sending",
+          "schedule update",
+          "dispatch workflow",
+          "booking save/load behavior",
+          "job status persistence",
+          "live location behavior",
+          "parser behavior changes",
+          "parser file changes",
+          "parser test changes",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account/auth behavior",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected driver assignment dispatch boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionControlCount,
+          0,
+          `${viewport.label}: expected no driver assignment dispatch action controls`,
+        );
+        assert.equal(
+          state.controlCount,
+          0,
+          `${viewport.label}: expected no driver assignment dispatch form controls`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active driver assignment dispatch controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 2050 : viewport.width < 1024 ? 1220 : 1060),
+          true,
+          `${viewport.label}: expected compact driver assignment dispatch workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected driver assignment dispatch rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected driver assignment dispatch workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -14228,6 +14588,55 @@ async function runChromeTest() {
       );
     };
 
+    const assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "driver assignment & dispatch readiness workbench",
+            "internal/admin-only driver assignment and dispatch readiness preview",
+            "mock dispatcher driver/vehicle pairing review",
+            "3 driver assignment rows maximum",
+            "plo-disp-ready-airport",
+            "plo-disp-ready-vip-hourly",
+            "plo-disp-ready-transfer-hold",
+            "dispatch readiness reference",
+            "proposed driver/vehicle pairing",
+            "proposed driver: kumar tan",
+            "proposed driver: lee wei",
+            "proposed driver: siva kumar",
+            "proposed vehicle/plate",
+            "driver contact readiness",
+            "driver acknowledgement readiness",
+            "schedule overlap risk",
+            "customer update readiness",
+            "schedule overlap warning only",
+            "dispatcher may intentionally assign same driver",
+            "warning without blocking or hiding drivers",
+            "customer update not prepared - no message sent",
+            "no driver assigned, no vehicle assigned",
+            "no driver acknowledgement sent",
+            "no schedule changed",
+            "no real driver assignment",
+            "driver acknowledgement behavior",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-driver-assignment-dispatch-readiness-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock driver assignment dispatch readiness workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal driver assignment/proposed vehicle/acknowledgement/schedule/customer update data leak`,
+      );
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -14831,6 +15240,7 @@ async function runChromeTest() {
         await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak(routeName);
         await assertNoMockAirportFlightPickupReadinessWorkbenchLeak(routeName);
         await assertNoMockRouteItineraryReadinessWorkbenchLeak(routeName);
+        await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -15835,6 +16245,7 @@ async function runChromeTest() {
       await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak("/customers desktop");
       await assertNoMockAirportFlightPickupReadinessWorkbenchLeak("/customers desktop");
       await assertNoMockRouteItineraryReadinessWorkbenchLeak("/customers desktop");
+      await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -21503,6 +21914,7 @@ async function runChromeTest() {
       await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak("/customers mobile");
       await assertNoMockAirportFlightPickupReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockRouteItineraryReadinessWorkbenchLeak("/customers mobile");
+      await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -27442,6 +27854,8 @@ async function runChromeTest() {
       await checkAdminMockAirportFlightPickupReadinessWorkbench();
     state.adminMockRouteItineraryReadinessWorkbench =
       await checkAdminMockRouteItineraryReadinessWorkbench();
+    state.adminMockDriverAssignmentDispatchReadinessWorkbench =
+      await checkAdminMockDriverAssignmentDispatchReadinessWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

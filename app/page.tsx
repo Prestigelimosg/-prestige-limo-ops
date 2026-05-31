@@ -12795,6 +12795,231 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section
+          aria-label="Driver Assignment Dispatch Readiness Workbench Mock Only"
+          className="rounded-lg border border-indigo-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-driver-assignment-dispatch-readiness-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-indigo-700">Driver Assignment &amp; Dispatch Readiness Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-driver-assignment-dispatch-readiness-workbench-copy="true"
+                >
+                  Internal/admin-only driver assignment and dispatch readiness preview for proposed driver/vehicle
+                  pairing, job timing, driver contact readiness, acknowledgement readiness, schedule overlap risk,
+                  customer update readiness, and dispatch readiness. Static/mock/local display data only; no real driver
+                  assignment, vehicle assignment, notification, live location, scheduling, dispatch workflow, storage,
+                  API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-semibold uppercase text-indigo-700">
+                Display-only dispatch readiness
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-driver-assignment-dispatch-readiness-workbench-filter-summary="true"
+            >
+              {[
+                ["Dispatch/date scope", "Mock proposed driver, vehicle, and pickup-window readiness"],
+                ["Source", "Mock dispatcher driver/vehicle pairing review"],
+                ["Mock results", "3 driver assignment rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-indigo-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5"
+              data-mock-driver-assignment-dispatch-readiness-workbench-rows="true"
+            >
+              {[
+                {
+                  customerAccount: "UBS Priority",
+                  customerUpdateReadiness: "Customer update draft ready - not sent",
+                  dispatchReadiness: "Dispatch handoff ready in mock review",
+                  dispatchReadinessReference: "PLO-DISP-READY-AIRPORT",
+                  driverAcknowledgementReadiness: "Driver acknowledgement pending - not sent",
+                  driverContactReadiness: "Driver contact ready",
+                  jobReference: "PLO-ARR-2026-05-DISP1",
+                  nextInternalAction: "Review acknowledgement before any future dispatch handoff",
+                  pickupWindow: "27 May 2026 15:30-16:00",
+                  proposedDriver: "Proposed driver: Kumar Tan",
+                  proposedVehiclePlate: "Mercedes V-Class / SLP 8822",
+                  scheduleOverlapRisk: "No overlap risk in mock review",
+                  serviceType: "Airport transfer / Arrival",
+                },
+                {
+                  customerAccount: "VIP Private Customer",
+                  customerUpdateReadiness: "Customer update readiness pending manager note",
+                  dispatchReadiness: "Dispatch readiness needs schedule review",
+                  dispatchReadinessReference: "PLO-DISP-READY-VIP-HOURLY",
+                  driverAcknowledgementReadiness: "Acknowledgement readiness held in mock review",
+                  driverContactReadiness: "Driver contact ready",
+                  jobReference: "PLO-DSP-2026-05-VIP",
+                  nextInternalAction: "Review overlap warning without blocking or hiding drivers",
+                  pickupWindow: "28 May 2026 18:00-22:00",
+                  proposedDriver: "Proposed driver: Lee Wei",
+                  proposedVehiclePlate: "S-Class / SKX 1188",
+                  scheduleOverlapRisk:
+                    "Schedule overlap warning only - dispatcher may intentionally assign same driver",
+                  serviceType: "Hourly / VIP standby",
+                },
+                {
+                  customerAccount: "Ritz-Carlton Concierge",
+                  customerUpdateReadiness: "Customer update not prepared - no message sent",
+                  dispatchReadiness: "Dispatch hold in mock review",
+                  dispatchReadinessReference: "PLO-DISP-READY-TRANSFER-HOLD",
+                  driverAcknowledgementReadiness: "Acknowledgement not requested",
+                  driverContactReadiness: "Driver contact ready",
+                  jobReference: "PLO-TRF-2026-05-HOLD",
+                  nextInternalAction: "Prepare customer update readiness before future dispatch handoff",
+                  pickupWindow: "29 May 2026 09:10-09:40",
+                  proposedDriver: "Proposed driver: Siva Kumar",
+                  proposedVehiclePlate: "E-Class / SLQ 5501",
+                  scheduleOverlapRisk: "No overlap risk; dispatch held for customer update",
+                  serviceType: "Transfer",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-indigo-200 bg-indigo-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.05fr_1.05fr_1.2fr_1.2fr_1.2fr_1.25fr]"
+                  data-mock-driver-assignment-dispatch-readiness-workbench-row={row.dispatchReadinessReference}
+                  key={row.dispatchReadinessReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-driver-assignment-dispatch-readiness-workbench-column="Dispatch readiness reference job reference"
+                    >
+                      Dispatch / Job
+                    </span>
+                    <span className="block">{row.dispatchReadinessReference}</span>
+                    <span>{row.jobReference}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-driver-assignment-dispatch-readiness-workbench-column="Customer account service type pickup window"
+                    >
+                      Customer / Service / Pickup
+                    </span>
+                    <span className="block">{row.customerAccount}</span>
+                    <span className="block">{row.serviceType}</span>
+                    <span>{row.pickupWindow}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-driver-assignment-dispatch-readiness-workbench-column="Proposed driver proposed vehicle plate"
+                    >
+                      Proposed Driver / Vehicle
+                    </span>
+                    <span className="block">{row.proposedDriver}</span>
+                    <span>{row.proposedVehiclePlate}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-driver-assignment-dispatch-readiness-workbench-column="Driver contact readiness driver acknowledgement readiness"
+                    >
+                      Driver Contact / Acknowledgement
+                    </span>
+                    <span className="block">{row.driverContactReadiness}</span>
+                    <span>{row.driverAcknowledgementReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-driver-assignment-dispatch-readiness-workbench-column="Schedule overlap risk customer update readiness"
+                    >
+                      Schedule / Customer Update
+                    </span>
+                    <span className="block">{row.scheduleOverlapRisk}</span>
+                    <span>{row.customerUpdateReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-indigo-700"
+                      data-mock-driver-assignment-dispatch-readiness-workbench-column="Dispatch readiness next internal action"
+                    >
+                      Dispatch Readiness / Next Action
+                    </span>
+                    <span className="block">{row.dispatchReadiness}</span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-driver-assignment-dispatch-readiness-workbench-coverage-note="true"
+              >
+                Dispatch readiness review - mock only. Dispatch readiness reference, job reference, customer/account,
+                service type, pickup window, proposed driver, proposed vehicle/plate, driver contact readiness, driver
+                acknowledgement readiness, schedule/overlap risk, customer update readiness, dispatch readiness, and next
+                internal action stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-driver-assignment-dispatch-readiness-workbench-rules="true"
+              >
+                Driver assignment rules preserved: readiness stays separate from real driver assignment, proposed
+                driver/vehicle display creates no assignment, acknowledgement readiness sends nothing, customer update
+                readiness sends nothing, and schedule/overlap review is display-only. The dispatcher may intentionally
+                assign the same driver to multiple bookings; future conflict logic should warn only, not block or hide
+                drivers.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-driver-assignment-dispatch-readiness-workbench-safety="true"
+              >
+                Mock Only. No driver assigned, no vehicle assigned, no driver acknowledgement sent, no customer update
+                sent, no notification sent, no live location activated, no schedule changed, no dispatch job created, no
+                job status changed, no booking saved, and no billing, invoice, payment, PDF, payout, accounting, or
+                finance export created. No save/load, no API/storage/Supabase behavior, and no parser change.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-[1fr_2fr]">
+              <p
+                className="min-w-0 rounded-md border border-indigo-200 bg-indigo-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-driver-assignment-dispatch-readiness-workbench-distinction="true"
+              >
+                This is separate from Route &amp; Itinerary Readiness, Airport Flight Monitoring, Booking Intake,
+                Customer Account Profile, Operations Handover, Fleet Readiness, Customer Service Recovery, Replacement
+                Vehicle Recovery, and Driver Job Completion: it reviews proposed driver/vehicle pairing and dispatch
+                readiness before any future dispatch automation only.
+              </p>
+              <p
+                className="text-[10px] leading-[1.15] text-slate-500"
+                data-mock-driver-assignment-dispatch-readiness-workbench-boundary="true"
+              >
+                Future workflow boundary: Mock/local only. No real driver assignment, vehicle assignment, driver
+                acknowledgement behavior, customer update sending, notification sending, schedule update, dispatch
+                workflow, booking save/load behavior, job status persistence, live location behavior, parser behavior
+                changes, parser file changes, parser test changes, billing, invoice, statement, payment, payment link,
+                PDF, payout, accounting posting, finance export, customer account/auth behavior, localStorage,
+                sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, package
+                script changes, test:safe membership changes, message-channel delivery, customer notification,
+                notification, or send behavior.
+              </p>
+            </div>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

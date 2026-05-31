@@ -677,6 +677,9 @@ async function runChromeTest() {
       const mockCustomerAccountServiceProfileWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-customer-account-service-profile-workbench]"))`,
       );
+      const mockBookingIntakeAccountMatchingWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-booking-intake-account-matching-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -896,6 +899,32 @@ async function runChromeTest() {
             "crm record creation",
             "billing contact persistence",
             "monthly billing activation",
+            "booking intake quality & account matching workbench",
+            "internal/admin-only booking intake quality and customer/account matching preview",
+            "mock parser/manual review and dispatcher intake qa",
+            "3 booking intake rows maximum",
+            "plo-intake-match-ubs",
+            "plo-intake-manual-personal",
+            "plo-intake-missing-detail",
+            "ubs matched from organization domain ubs.com",
+            "public/personal email domain - no company/account created",
+            "prestige transport ignored as own company",
+            "parser/manual review required - no parser change made",
+            "manual account review separate from parser behavior",
+            "drop-off or flight detail incomplete",
+            "dispatch handoff ready in mock review",
+            "dispatch handoff blocked in mock review",
+            "no parser change",
+            "mock only. no parser change, no booking saved, no account linked",
+            "no account linked",
+            "no customer/contact record created",
+            "no dispatch job created",
+            "no parser behavior changes",
+            "parser test changes",
+            "customer/account matching workflow",
+            "booking save/load behavior",
+            "account linking",
+            "dispatch job creation",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -1102,10 +1131,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${route.label}: expected no internal mock customer account service profile workbench`,
       );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock booking intake account matching workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, or customer account profile text leak`,
+        `${viewport.label} ${route.label}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, or booking intake text leak`,
       );
     };
 
@@ -7424,6 +7458,206 @@ async function runChromeTest() {
         `${viewport.label}: expected customer account service profile workbench not to create horizontal overflow`,
       );
 
+      const mockBookingIntakeAccountMatchingWorkbenchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const previousWorkbench = document.querySelector("[data-mock-customer-account-service-profile-workbench]");
+            const workbench = document.querySelector("[data-mock-booking-intake-account-matching-workbench]");
+            if (!group || !dashboard || !previousWorkbench || !workbench) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const previousRect = previousWorkbench.getBoundingClientRect();
+            const rect = workbench.getBoundingClientRect();
+            const rows = [...workbench.querySelectorAll("[data-mock-booking-intake-account-matching-workbench-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-booking-intake-account-matching-workbench-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...workbench.querySelectorAll("[data-mock-booking-intake-account-matching-workbench-column]")].map(
+                  (column) => column.getAttribute("data-mock-booking-intake-account-matching-workbench-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: workbench.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-booking-intake-account-matching-workbench-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: workbench.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              filterSummary:
+                document.querySelector("[data-mock-booking-intake-account-matching-workbench-filter-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              previousBottom: Math.round(previousRect.bottom),
+              rows,
+              rules:
+                document.querySelector("[data-mock-booking-intake-account-matching-workbench-rules]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              safety:
+                document.querySelector("[data-mock-booking-intake-account-matching-workbench-safety]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              text: workbench.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock booking intake account matching workbench`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.groupTop >=
+          mockBookingIntakeAccountMatchingWorkbenchState.dashboardBottom,
+        true,
+        `${viewport.label}: expected booking intake account matching workbench to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.sectionTop >=
+          mockBookingIntakeAccountMatchingWorkbenchState.previousBottom,
+        true,
+        `${viewport.label}: expected booking intake account matching workbench after customer account profile workbench`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.text
+          .toLowerCase()
+          .includes("booking intake quality & account matching workbench") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected booking intake account matching workbench heading`,
+      );
+      assert.deepEqual(
+        mockBookingIntakeAccountMatchingWorkbenchState.columns,
+        [
+          "Intake reference source channel",
+          "Customer account match booker contact readiness",
+          "Passenger readiness route completeness",
+          "Flight timing readiness vehicle pax readiness",
+          "Parser manual review status missing detail exception summary",
+          "Dispatch handoff readiness next internal action",
+        ],
+        `${viewport.label}: expected booking intake account matching workflow columns`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.filterSummary.includes(
+          "Booking intake quality and account matching",
+        ) &&
+          mockBookingIntakeAccountMatchingWorkbenchState.filterSummary.includes(
+            "Mock parser/manual review and dispatcher intake QA",
+          ) &&
+          mockBookingIntakeAccountMatchingWorkbenchState.filterSummary.includes("3 booking intake rows maximum") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.filterSummary.includes("display-only / no actions"),
+        true,
+        `${viewport.label}: expected compact display-only booking intake filter summary`,
+      );
+      const bookingIntakeRowsByRef = Object.fromEntries(
+        mockBookingIntakeAccountMatchingWorkbenchState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        bookingIntakeRowsByRef["PLO-INTAKE-MATCH-UBS"].includes("UBS matched from organization domain ubs.com") &&
+          bookingIntakeRowsByRef["PLO-INTAKE-MANUAL-PERSONAL"].includes(
+            "Public/personal email domain - no company/account created",
+          ) &&
+          bookingIntakeRowsByRef["PLO-INTAKE-MISSING-DETAIL"].includes(
+            "Prestige Transport ignored as own company",
+          ) &&
+          bookingIntakeRowsByRef["PLO-INTAKE-MISSING-DETAIL"].includes(
+            "Drop-off or flight detail incomplete",
+          ),
+        true,
+        `${viewport.label}: expected account inference, personal email, and missing detail intake rows`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.rules.includes("Prestige Transport is our own company") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.rules.includes("not a customer/account") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.rules.includes("ubs.com to UBS") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.rules.includes("public/personal email domains") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.rules.includes(
+            "manual account review stays separate from automatic parser behavior",
+          ),
+        true,
+        `${viewport.label}: expected protected booking intake account matching rules`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("No parser change") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no booking saved") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no account linked") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no customer profile saved") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes(
+            "no customer/contact record created",
+          ) &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no dispatch job created") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no driver assigned") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no vehicle assigned") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no customer update sent") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.safety.includes("no notification sent") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("No parser behavior changes") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("parser file changes") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("parser test changes") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("customer/account matching workflow") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("booking save/load behavior") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("account linking") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("dispatch job creation") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("API call") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("localStorage") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("sessionStorage") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("IndexedDB") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("Supabase") &&
+          mockBookingIntakeAccountMatchingWorkbenchState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected booking intake no parser/account/dispatch/API boundary`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.actionControlCount,
+        0,
+        `${viewport.label}: expected booking intake account matching workbench to have no action controls`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.controlCount,
+        0,
+        `${viewport.label}: expected booking intake account matching workbench to have no form controls`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.rows.length,
+        3,
+        `${viewport.label}: expected three booking intake account matching rows`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.height <=
+          (viewport.width < 640 ? 1900 : viewport.width < 1024 ? 1120 : viewport.width < 1200 ? 1020 : 960),
+        true,
+        `${viewport.label}: expected compact booking intake account matching workbench, got ${mockBookingIntakeAccountMatchingWorkbenchState.height}px`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.rows.every((row) => row.height >= 48 && row.width >= 240),
+        true,
+        `${viewport.label}: expected booking intake account matching rows to stay readable`,
+      );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchState.docScrollWidth <=
+          mockBookingIntakeAccountMatchingWorkbenchState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected booking intake account matching workbench not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -7563,6 +7797,9 @@ async function runChromeTest() {
       );
       const mockCustomerAccountServiceProfileWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-customer-account-service-profile-workbench]"))`,
+      );
+      const mockBookingIntakeAccountMatchingWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-booking-intake-account-matching-workbench]"))`,
       );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
@@ -7783,6 +8020,32 @@ async function runChromeTest() {
             "crm record creation",
             "billing contact persistence",
             "monthly billing activation",
+            "booking intake quality & account matching workbench",
+            "internal/admin-only booking intake quality and customer/account matching preview",
+            "mock parser/manual review and dispatcher intake qa",
+            "3 booking intake rows maximum",
+            "plo-intake-match-ubs",
+            "plo-intake-manual-personal",
+            "plo-intake-missing-detail",
+            "ubs matched from organization domain ubs.com",
+            "public/personal email domain - no company/account created",
+            "prestige transport ignored as own company",
+            "parser/manual review required - no parser change made",
+            "manual account review separate from parser behavior",
+            "drop-off or flight detail incomplete",
+            "dispatch handoff ready in mock review",
+            "dispatch handoff blocked in mock review",
+            "no parser change",
+            "mock only. no parser change, no booking saved, no account linked",
+            "no account linked",
+            "no customer/contact record created",
+            "no dispatch job created",
+            "no parser behavior changes",
+            "parser test changes",
+            "customer/account matching workflow",
+            "booking save/load behavior",
+            "account linking",
+            "dispatch job creation",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -8015,10 +8278,15 @@ async function runChromeTest() {
         false,
         `${viewport.label} ${context}: expected no admin mock customer account service profile workbench`,
       );
+      assert.equal(
+        mockBookingIntakeAccountMatchingWorkbenchVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock booking intake account matching workbench`,
+      );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
         [],
-        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, or customer account profile text leak`,
+        `${viewport.label} ${context}: expected no internal extra charges, finance, driver completion, replacement recovery, customer recovery communication, fleet readiness, operations handover, customer account profile, or booking intake text leak`,
       );
       if (context === "driver job demo") {
         assert.equal(

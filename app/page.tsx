@@ -12145,6 +12145,219 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Booking Intake Quality Account Matching Workbench Mock Only"
+          className="rounded-lg border border-teal-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-booking-intake-account-matching-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-teal-700">Booking Intake Quality &amp; Account Matching Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-booking-intake-account-matching-workbench-copy="true"
+                >
+                  Internal/admin-only booking intake quality and customer/account matching preview before operational
+                  handoff. Static/mock/local display data only; no real parser change, customer account link, booking
+                  save, dispatch job, storage, API, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-[10px] font-semibold uppercase text-teal-700">
+                Display-only intake review
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-booking-intake-account-matching-workbench-filter-summary="true"
+            >
+              {[
+                ["Intake scope", "Booking intake quality and account matching"],
+                ["Source", "Mock parser/manual review and dispatcher intake QA"],
+                ["Mock results", "3 booking intake rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-teal-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-booking-intake-account-matching-workbench-rows="true">
+              {[
+                {
+                  bookerContactReadiness: "Booker/contact ready for dispatcher review",
+                  customerAccountMatch: "UBS matched from organization domain ubs.com - mock review only",
+                  dispatchHandoffReadiness: "Dispatch handoff ready in mock review",
+                  flightTimingReadiness: "Flight and pickup timing complete",
+                  intakeReference: "PLO-INTAKE-MATCH-UBS",
+                  missingDetailExceptionSummary: "No missing detail exception in mock row",
+                  nextInternalAction: "Dispatcher may continue future operational review",
+                  parserManualReviewStatus: "Parser suggestion checked; manual review complete",
+                  passengerReadiness: "Passenger name and pax ready",
+                  routeCompleteness: "Pickup, drop-off, and route complete",
+                  sourceChannel: "Corporate email booking",
+                  vehiclePaxReadiness: "Vehicle class and pax ready",
+                },
+                {
+                  bookerContactReadiness: "Contact ready; company/account blank",
+                  customerAccountMatch: "Public/personal email domain - no company/account created",
+                  dispatchHandoffReadiness: "Dispatch handoff held for account review",
+                  flightTimingReadiness: "Pickup timing ready",
+                  intakeReference: "PLO-INTAKE-MANUAL-PERSONAL",
+                  missingDetailExceptionSummary: "Manual account review needed before any future link",
+                  nextInternalAction: "Confirm whether this stays private customer or maps to an account",
+                  parserManualReviewStatus: "Manual account review separate from parser behavior",
+                  passengerReadiness: "Passenger ready",
+                  routeCompleteness: "Route complete",
+                  sourceChannel: "Public/personal email booking",
+                  vehiclePaxReadiness: "Vehicle and pax ready",
+                },
+                {
+                  bookerContactReadiness: "Booker contact present",
+                  customerAccountMatch: "Prestige Transport ignored as own company - not a customer/account",
+                  dispatchHandoffReadiness: "Dispatch handoff blocked in mock review",
+                  flightTimingReadiness: "Flight detail missing; pickup timing needs review",
+                  intakeReference: "PLO-INTAKE-MISSING-DETAIL",
+                  missingDetailExceptionSummary: "Drop-off or flight detail incomplete; dispatcher review required",
+                  nextInternalAction: "Collect missing route/flight detail before future dispatch handoff",
+                  parserManualReviewStatus: "Parser/manual review required - no parser change made",
+                  passengerReadiness: "Passenger name ready",
+                  routeCompleteness: "Route incomplete until missing detail is confirmed",
+                  sourceChannel: "Forwarded operations message",
+                  vehiclePaxReadiness: "Vehicle/pax readiness pending missing detail review",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-teal-200 bg-teal-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.1fr_1.25fr_1.05fr_1.05fr_1.25fr_1.2fr]"
+                  data-mock-booking-intake-account-matching-workbench-row={row.intakeReference}
+                  key={row.intakeReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-booking-intake-account-matching-workbench-column="Intake reference source channel"
+                    >
+                      Intake / Source
+                    </span>
+                    <span className="block">{row.intakeReference}</span>
+                    <span>{row.sourceChannel}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-booking-intake-account-matching-workbench-column="Customer account match booker contact readiness"
+                    >
+                      Account / Contact
+                    </span>
+                    <span className="block">{row.customerAccountMatch}</span>
+                    <span>{row.bookerContactReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-booking-intake-account-matching-workbench-column="Passenger readiness route completeness"
+                    >
+                      Passenger / Route
+                    </span>
+                    <span className="block">{row.passengerReadiness}</span>
+                    <span>{row.routeCompleteness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-booking-intake-account-matching-workbench-column="Flight timing readiness vehicle pax readiness"
+                    >
+                      Timing / Vehicle
+                    </span>
+                    <span className="block">{row.flightTimingReadiness}</span>
+                    <span>{row.vehiclePaxReadiness}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-booking-intake-account-matching-workbench-column="Parser manual review status missing detail exception summary"
+                    >
+                      Review / Exception
+                    </span>
+                    <span className="block">{row.parserManualReviewStatus}</span>
+                    <span>{row.missingDetailExceptionSummary}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-booking-intake-account-matching-workbench-column="Dispatch handoff readiness next internal action"
+                    >
+                      Handoff / Next
+                    </span>
+                    <span className="block">{row.dispatchHandoffReadiness}</span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-intake-account-matching-workbench-coverage-note="true"
+              >
+                Intake quality review - mock only. Intake reference, source/channel, customer/account match,
+                booker/contact readiness, passenger readiness, route completeness, flight/timing readiness, vehicle/pax
+                readiness, parser/manual review status, missing detail/exception summary, dispatch handoff readiness,
+                and next internal action stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-intake-account-matching-workbench-rules="true"
+              >
+                Matching rules preserved: Prestige Transport is our own company and is not a customer/account;
+                organization email domains may support inference such as ubs.com to UBS; public/personal email domains
+                must not create a company/account; manual account review stays separate from automatic parser behavior.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-intake-account-matching-workbench-safety="true"
+              >
+                Mock Only. No parser change, no booking saved, no account linked, no customer profile saved, no
+                customer/contact record created, no dispatch job created, no driver assigned, no vehicle assigned, no
+                customer update sent, no notification sent, and no billing, invoice, payment, PDF, payout, accounting,
+                or finance export created.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-[1fr_2fr]">
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-booking-intake-account-matching-workbench-distinction="true"
+              >
+                This is separate from Customer Account &amp; Service Profile, Operations Handover, Fleet &amp; Driver
+                Readiness, Customer Service Recovery, Replacement Vehicle Recovery, and Driver Job Completion: it reviews
+                booking intake quality and account matching before operational handoff only.
+              </p>
+              <p
+                className="text-[10px] leading-[1.15] text-slate-500"
+                data-mock-booking-intake-account-matching-workbench-boundary="true"
+              >
+                Future workflow boundary: Mock/local only. No parser behavior changes, parser file changes, parser test
+                changes, real booking intake workflow, customer/account matching workflow, CRM creation, customer profile
+                creation, customer/contact persistence, booking save/load behavior, account linking, dispatch job
+                creation, driver assignment, vehicle assignment, schedule update, customer update sending, notification
+                sending, live location behavior, billing, invoice, statement, payment, payment link, PDF, payout,
+                accounting posting, finance export, customer account/auth behavior, localStorage, sessionStorage,
+                cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, package script changes,
+                test:safe membership changes, message-channel delivery, customer notification, notification, or send
+                behavior.
+              </p>
+            </div>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

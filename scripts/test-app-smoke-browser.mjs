@@ -684,6 +684,12 @@ async function runChromeTest() {
         "[data-mock-month-end-closeout-workbench]",
         "[data-mock-finance-exception-resolution-workbench]",
         "[data-mock-driver-job-completion-exception-intake-workbench]",
+        "[data-mock-replacement-vehicle-service-recovery-workbench]",
+        "[data-mock-customer-service-recovery-communication-workbench]",
+        "[data-mock-fleet-driver-readiness-workbench]",
+        "[data-mock-operations-handover-shift-briefing-workbench]",
+        "[data-mock-customer-account-service-profile-workbench]",
+        "[data-mock-booking-intake-account-matching-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -739,7 +745,9 @@ async function runChromeTest() {
             state.text.includes("Completed Job Closeout Center") &&
             state.text.includes("Month-End Closeout Workbench") &&
             state.text.includes("Finance Exception Resolution Workbench") &&
-            state.text.includes("Driver Job Completion & Exception Intake Workbench"),
+            state.text.includes("Driver Job Completion & Exception Intake Workbench") &&
+            state.text.includes("Customer Account & Service Profile Workbench") &&
+            state.text.includes("Booking Intake Quality & Account Matching Workbench"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -12424,6 +12432,341 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockBookingIntakeAccountMatchingWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock booking intake account matching workbench",
+          mobile: true,
+          scale: 2,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock booking intake account matching workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const previousWorkbench = document.querySelector("[data-mock-customer-account-service-profile-workbench]");
+              const section = document.querySelector("[data-mock-booking-intake-account-matching-workbench]");
+              if (!group || !dashboard || !previousWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const previousRect = previousWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-booking-intake-account-matching-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-booking-intake-account-matching-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-booking-intake-account-matching-workbench-column]")].map(
+                    (column) => column.getAttribute("data-mock-booking-intake-account-matching-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-booking-intake-account-matching-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-booking-intake-account-matching-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-booking-intake-account-matching-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-booking-intake-account-matching-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "run parser now",
+                  "save booking now",
+                  "link account now",
+                  "create dispatch job now",
+                  "assign driver now",
+                  "assign vehicle now",
+                  "send customer update now",
+                  "send notification now",
+                  "generate invoice now",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                previousBottom: Math.round(previousRect.bottom),
+                coverageNote:
+                  document.querySelector("[data-mock-booking-intake-account-matching-workbench-coverage-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                rules:
+                  document.querySelector("[data-mock-booking-intake-account-matching-workbench-rules]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                safety:
+                  document.querySelector("[data-mock-booking-intake-account-matching-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock booking intake account matching workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected booking intake account matching workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before booking intake account matching workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.previousBottom,
+          true,
+          `${viewport.label}: expected booking intake account matching workbench after customer account profile workbench`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("booking intake quality & account matching workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected booking intake account matching heading`,
+        );
+        assert.equal(
+          state.copy.includes("booking intake quality and customer/account matching preview") &&
+            state.copy.includes("Static/mock/local display data only") &&
+            state.copy.includes("no real parser change") &&
+            state.copy.includes("customer account link") &&
+            state.copy.includes("booking save") &&
+            state.copy.includes("dispatch job") &&
+            state.copy.includes("storage, API") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected booking intake account matching boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Intake reference source channel",
+            "Customer account match booker contact readiness",
+            "Passenger readiness route completeness",
+            "Flight timing readiness vehicle pax readiness",
+            "Parser manual review status missing detail exception summary",
+            "Dispatch handoff readiness next internal action",
+          ],
+          `${viewport.label}: expected booking intake workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three booking intake rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Booking intake quality and account matching") &&
+            state.filterSummary.includes("Mock parser/manual review and dispatcher intake QA") &&
+            state.filterSummary.includes("3 booking intake rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only booking intake filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-INTAKE-MATCH-UBS"].includes("Corporate email booking") &&
+            rowByRef["PLO-INTAKE-MATCH-UBS"].includes("UBS matched from organization domain ubs.com") &&
+            rowByRef["PLO-INTAKE-MATCH-UBS"].includes("route complete") &&
+            rowByRef["PLO-INTAKE-MATCH-UBS"].includes("Dispatch handoff ready"),
+          true,
+          `${viewport.label}: expected corporate email account match row`,
+        );
+        assert.equal(
+          rowByRef["PLO-INTAKE-MANUAL-PERSONAL"].includes("Public/personal email booking") &&
+            rowByRef["PLO-INTAKE-MANUAL-PERSONAL"].includes("no company/account created") &&
+            rowByRef["PLO-INTAKE-MANUAL-PERSONAL"].includes("Manual account review separate from parser behavior") &&
+            rowByRef["PLO-INTAKE-MANUAL-PERSONAL"].includes("Dispatch handoff held"),
+          true,
+          `${viewport.label}: expected personal email manual account review row`,
+        );
+        assert.equal(
+          rowByRef["PLO-INTAKE-MISSING-DETAIL"].includes("Prestige Transport ignored as own company") &&
+            rowByRef["PLO-INTAKE-MISSING-DETAIL"].includes("Drop-off or flight detail incomplete") &&
+            rowByRef["PLO-INTAKE-MISSING-DETAIL"].includes("Parser/manual review required - no parser change made") &&
+            rowByRef["PLO-INTAKE-MISSING-DETAIL"].includes("Dispatch handoff blocked"),
+          true,
+          `${viewport.label}: expected missing detail parser/manual review row`,
+        );
+        assert.equal(
+          state.coverageNote.includes("Intake reference") &&
+            state.coverageNote.includes("source/channel") &&
+            state.coverageNote.includes("customer/account match") &&
+            state.coverageNote.includes("booker/contact readiness") &&
+            state.coverageNote.includes("passenger readiness") &&
+            state.coverageNote.includes("route completeness") &&
+            state.coverageNote.includes("flight/timing readiness") &&
+            state.coverageNote.includes("vehicle/pax readiness") &&
+            state.coverageNote.includes("parser/manual review status") &&
+            state.coverageNote.includes("missing detail/exception summary") &&
+            state.coverageNote.includes("dispatch handoff readiness") &&
+            state.coverageNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected booking intake workflow coverage`,
+        );
+        assert.equal(
+          state.rules.includes("Prestige Transport is our own company") &&
+            state.rules.includes("not a customer/account") &&
+            state.rules.includes("organization email domains may support inference") &&
+            state.rules.includes("ubs.com to UBS") &&
+            state.rules.includes("public/personal email domains") &&
+            state.rules.includes("must not create a company/account") &&
+            state.rules.includes("manual account review stays separate from automatic parser behavior"),
+          true,
+          `${viewport.label}: expected booking intake account matching rules`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Customer Account & Service Profile") &&
+            state.distinction.includes("Operations Handover") &&
+            state.distinction.includes("Fleet & Driver Readiness") &&
+            state.distinction.includes("Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("booking intake quality and account matching"),
+          true,
+          `${viewport.label}: expected booking intake workbench not to repeat recent workbenches`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No parser change") &&
+            state.safety.includes("no booking saved") &&
+            state.safety.includes("no account linked") &&
+            state.safety.includes("no customer profile saved") &&
+            state.safety.includes("no customer/contact record created") &&
+            state.safety.includes("no dispatch job created") &&
+            state.safety.includes("no driver assigned") &&
+            state.safety.includes("no vehicle assigned") &&
+            state.safety.includes("no customer update sent") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting") &&
+            state.safety.includes("finance export created"),
+          true,
+          `${viewport.label}: expected no parser/account/booking/dispatch/billing behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No parser behavior changes",
+          "parser file changes",
+          "parser test changes",
+          "real booking intake workflow",
+          "customer/account matching workflow",
+          "CRM creation",
+          "customer profile creation",
+          "customer/contact persistence",
+          "booking save/load behavior",
+          "account linking",
+          "dispatch job creation",
+          "driver assignment",
+          "vehicle assignment",
+          "schedule update",
+          "customer update sending",
+          "notification sending",
+          "live location behavior",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account/auth behavior",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected booking intake boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no booking intake action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no booking intake form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active booking intake controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1900 : viewport.width < 1024 ? 1120 : 960),
+          true,
+          `${viewport.label}: expected compact booking intake account matching workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected booking intake rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected booking intake workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -13043,6 +13386,55 @@ async function runChromeTest() {
       );
     };
 
+    const assertNoMockBookingIntakeAccountMatchingWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "booking intake quality & account matching workbench",
+            "internal/admin-only booking intake quality and customer/account matching preview",
+            "mock parser/manual review and dispatcher intake qa",
+            "3 booking intake rows maximum",
+            "plo-intake-match-ubs",
+            "plo-intake-manual-personal",
+            "plo-intake-missing-detail",
+            "ubs matched from organization domain ubs.com",
+            "public/personal email domain - no company/account created",
+            "prestige transport ignored as own company",
+            "parser/manual review required - no parser change made",
+            "manual account review separate from parser behavior",
+            "drop-off or flight detail incomplete",
+            "dispatch handoff ready in mock review",
+            "dispatch handoff blocked in mock review",
+            "no parser change",
+            "mock only. no parser change, no booking saved, no account linked",
+            "no account linked",
+            "no customer/contact record created",
+            "no dispatch job created",
+            "no parser behavior changes",
+            "parser test changes",
+            "customer/account matching workflow",
+            "booking save/load behavior",
+            "account linking",
+            "dispatch job creation",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-booking-intake-account-matching-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock booking intake account matching workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal booking intake/account matching/parser review/dispatch handoff data leak`,
+      );
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -13643,6 +14035,7 @@ async function runChromeTest() {
         await assertNoMockFleetDriverReadinessWorkbenchLeak(routeName);
         await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak(routeName);
         await assertNoMockCustomerAccountServiceProfileWorkbenchLeak(routeName);
+        await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -14644,6 +15037,7 @@ async function runChromeTest() {
       await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers desktop");
       await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers desktop");
       await assertNoMockCustomerAccountServiceProfileWorkbenchLeak("/customers desktop");
+      await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -20309,6 +20703,7 @@ async function runChromeTest() {
       await assertNoMockFleetDriverReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockOperationsHandoverShiftBriefingWorkbenchLeak("/customers mobile");
       await assertNoMockCustomerAccountServiceProfileWorkbenchLeak("/customers mobile");
+      await assertNoMockBookingIntakeAccountMatchingWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -26242,6 +26637,8 @@ async function runChromeTest() {
       await checkAdminMockOperationsHandoverShiftBriefingWorkbench();
     state.adminMockCustomerAccountServiceProfileWorkbench =
       await checkAdminMockCustomerAccountServiceProfileWorkbench();
+    state.adminMockBookingIntakeAccountMatchingWorkbench =
+      await checkAdminMockBookingIntakeAccountMatchingWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

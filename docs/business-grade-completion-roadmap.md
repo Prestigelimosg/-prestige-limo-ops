@@ -65,7 +65,17 @@ The following sectors are high-risk and should remain inactive until they receiv
 
 No future stage should activate any of these indirectly through a UI cleanup, mock consolidation, docs task, or test-only task.
 
-## 5. Recommended Business-Grade Completion Path
+## 5. Locked Customer Short-Notice Booking Rule
+
+Customer-submitted bookings with a pickup time less than 24 hours away must not be directly confirmed by the customer app. These bookings must move to `Admin Review Required` so admin/dispatcher staff can review availability and confirm manually.
+
+Customer-facing wording:
+
+> “This booking is within 24 hours, so our team will review and confirm availability.”
+
+Stage 4A-286 documents this rule only. It does not implement app behavior, booking save/load, customer confirmation blocking, notification, parser logic, API, storage, Supabase, or dispatch behavior. Future implementation must be separately approved, scoped, and protected by booking UI, customer route, browser/mobile, parser-boundary, and `test:safe` coverage.
+
+## 6. Recommended Business-Grade Completion Path
 
 Use staged batches. Each stage should be small, test-protected, reversible, and followed by one read-only checkpoint review.
 
@@ -143,7 +153,7 @@ Before production launch, complete a final readiness checklist covering:
 - Staff training and manual fallback.
 - Explicit owner approval for each live switch.
 
-## 6. Dashboard Cleanup Direction
+## 7. Dashboard Cleanup Direction
 
 The current internal/admin dashboard is now too mock-section-heavy for production. It has served its purpose as a safe exploration and protection surface, but it should not keep growing.
 
@@ -156,7 +166,7 @@ Future dashboard work should prefer one of these paths:
 
 The production dashboard should be compact, role-aware, and operational. It should focus on the next action for dispatch/admin staff instead of displaying every mock workflow at once.
 
-## 7. Parser Safety Plateau
+## 8. Parser Safety Plateau
 
 Parser behavior should stay frozen unless there is a specific parser defect or an explicitly approved parser-improvement stage.
 
@@ -170,7 +180,7 @@ Any parser change must:
 
 Parser learning, AI parser changes, automatic account linking, and production parser automation should not be bundled into unrelated app, dashboard, billing, dispatch, or Supabase work.
 
-## 8. Required Checks For Future Commits
+## 9. Required Checks For Future Commits
 
 Keep the current checkpoint pattern for future implementation commits:
 
@@ -190,10 +200,10 @@ Keep the current checkpoint pattern for future implementation commits:
 
 Do not change package scripts or `test:safe` membership without a separate explicit approval stage.
 
-## 9. Recommended Next Safe Stage
+## 10. Recommended Next Safe Stage
 
-Recommended next stage: read-only production readiness inventory.
+Recommended next stage: Stage 4A-287 - Read-only dashboard mock-section inventory.
 
-Reason: before changing the dashboard or activating any real behavior, the project should inventory what currently exists, what is mock-only, what docs already cover, and which production gaps are truly blocking launch. This keeps the direction practical and avoids starting another mock workbench cycle.
+Reason: before changing the dashboard or activating any real behavior, the project should inventory the current dashboard sections, mock labels, route boundaries, and browser/mobile protections. This keeps the direction practical and avoids starting another mock workbench cycle.
 
-An acceptable alternative is a docs-only dashboard consolidation/hide plan, if the immediate priority is to reduce internal dashboard noise before production architecture planning.
+An acceptable alternative is a docs-only dashboard information architecture plan, if the dashboard inventory has already been completed and the immediate priority is to design the consolidated internal dashboard shape.

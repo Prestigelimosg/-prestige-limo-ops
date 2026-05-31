@@ -2769,6 +2769,10 @@ export default function Home() {
     () => getReviewAcceptanceKey(booking, needsReviewWarnings),
     [booking, needsReviewWarnings],
   );
+  const manualExtraChargesAmountPreview = clean(booking.manualExtraCharges)
+    ? `$${formatMoney(booking.manualExtraCharges)}`
+    : "$0.00";
+  const manualExtraChargesNotePreview = clean(booking.manualExtraChargesNote) || "Blank";
   const hasNeedsReviewWarnings = needsReviewWarnings.length > 0;
   const reviewWarningsAccepted = hasNeedsReviewWarnings && acceptedReviewWarningKey === needsReviewAcceptanceKey;
   const customerMatchSuggestion = useMemo(
@@ -11944,6 +11948,32 @@ export default function Home() {
                     </div>
                   ) : null}
                 </div>
+              </div>
+              <div
+                className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                data-manual-extra-charges-review-preview="true"
+              >
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-amber-800">Manual Extra Charges</p>
+                    <p className="mt-0.5 font-semibold" data-manual-extra-charges-review-amount="true">
+                      {manualExtraChargesAmountPreview}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-amber-800">Manual Extra Charges note</p>
+                    <p className="mt-0.5 break-words" data-manual-extra-charges-review-note="true">
+                      {manualExtraChargesNotePreview}
+                    </p>
+                  </div>
+                </div>
+                <p
+                  className="mt-2 border-t border-amber-200 pt-2 text-xs leading-5 text-amber-900"
+                  data-manual-extra-charges-review-boundary="true"
+                >
+                  Manual staff entry only - not billed or saved. No invoice, statement, payment,
+                  PDF, payout, accounting, finance export, storage, API, Supabase, or notification behavior.
+                </p>
               </div>
               {jobCardCopyEditState.isEditing ? (
                 <textarea

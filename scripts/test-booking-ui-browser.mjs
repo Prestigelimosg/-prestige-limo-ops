@@ -1515,6 +1515,22 @@ function assertBookingUiState(state) {
   assert.match(state.visibleText, /Extra Charges/);
   assert.match(state.visibleText, /Extra Charges note \/ reason/);
   assert.match(state.visibleText, /Manual staff entry only/);
+  assert.equal(state.manualExtraChargesReviewPreview.visible, true);
+  assert.match(state.manualExtraChargesReviewPreview.text, /Manual Extra Charges/i);
+  assert.match(state.manualExtraChargesReviewPreview.text, /Manual Extra Charges note/i);
+  assert.equal(state.manualExtraChargesReviewPreview.amount, "$0.00");
+  assert.equal(state.manualExtraChargesReviewPreview.note, "Blank");
+  assert.deepEqual(state.manualExtraChargesReviewPreview.buttons, []);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /Manual staff entry only - not billed or saved/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /No invoice/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /payment/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /PDF/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /payout/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /accounting/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /storage/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /API/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /Supabase/);
+  assert.match(state.manualExtraChargesReviewPreview.boundary, /notification/);
   assert.match(state.visibleText, /Child seat count/);
   assert.equal(state.fields.childSeatCount, "2");
   assert.match(state.fields.childSeatType, /booster seat/);
@@ -2358,6 +2374,28 @@ async function runChromeTest() {
 
         return heading?.parentElement?.innerText || "";
       };
+      const manualExtraChargesReviewPreview = () => {
+        const preview = document.querySelector("[data-manual-extra-charges-review-preview='true']");
+        const rect = preview?.getBoundingClientRect();
+
+        return {
+          amount:
+            preview?.querySelector("[data-manual-extra-charges-review-amount='true']")?.textContent.trim() ||
+            "",
+          boundary:
+            preview?.querySelector("[data-manual-extra-charges-review-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          buttons: [...(preview?.querySelectorAll("button, a[href]") || [])].map((control) =>
+            control.textContent.trim(),
+          ),
+          note:
+            preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
+            "",
+          text: preview?.innerText || "",
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -2368,6 +2406,7 @@ async function runChromeTest() {
         fields,
         fieldText: [...Object.values(fields), ...overrideReasons].join("\\n"),
         jobCardPreview: preTextByHeading("Job Card Preview"),
+        manualExtraChargesReviewPreview: manualExtraChargesReviewPreview(),
         pricingPanel: sectionTextByHeading("Pricing"),
         visibleText: document.body.innerText,
       };
@@ -2446,6 +2485,51 @@ async function runChromeTest() {
     assert.match(manualExtraChargeDefaultState.boundaryText, /API/);
     assert.match(manualExtraChargeDefaultState.boundaryText, /Supabase/);
     assert.match(manualExtraChargeDefaultState.boundaryText, /notification/);
+
+    const manualExtraChargePreviewDefaultState = await evaluate(`(() => {
+      const preview = document.querySelector("[data-manual-extra-charges-review-preview='true']");
+      const rect = preview?.getBoundingClientRect();
+
+      return {
+        amount:
+          preview?.querySelector("[data-manual-extra-charges-review-amount='true']")?.textContent.trim() ||
+          "",
+        boundary:
+          preview?.querySelector("[data-manual-extra-charges-review-boundary='true']")?.textContent
+            .replace(/\\s+/g, " ")
+            .trim() || "",
+        buttons: [...(preview?.querySelectorAll("button, a[href]") || [])].map((control) =>
+          control.textContent.trim(),
+        ),
+        note:
+          preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
+          "",
+        text: preview?.innerText || "",
+        visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+      };
+    })()`);
+    assert.equal(manualExtraChargePreviewDefaultState.visible, true);
+    assert.match(manualExtraChargePreviewDefaultState.text, /Manual Extra Charges/i);
+    assert.match(manualExtraChargePreviewDefaultState.text, /Manual Extra Charges note/i);
+    assert.equal(manualExtraChargePreviewDefaultState.amount, "$0.00");
+    assert.equal(manualExtraChargePreviewDefaultState.note, "Blank");
+    assert.deepEqual(
+      manualExtraChargePreviewDefaultState.buttons,
+      [],
+      "Expected manual Extra Charges review preview to add no action controls",
+    );
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /Manual staff entry only - not billed or saved/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /No invoice/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /statement/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /payment/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /PDF/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /payout/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /accounting/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /finance export/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /storage/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /API/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /Supabase/);
+    assert.match(manualExtraChargePreviewDefaultState.boundary, /notification/);
 
     await evaluate(`(() => {
       window.__manualExtraChargesCalls = {
@@ -2531,6 +2615,7 @@ async function runChromeTest() {
       const pricing = [...document.querySelectorAll("section, div")].find((candidate) =>
         candidate.querySelector("h3")?.textContent.trim() === "Pricing",
       );
+      const preview = document.querySelector("[data-manual-extra-charges-review-preview='true']");
       const pres = [...document.querySelectorAll("pre")].map((pre) => pre.innerText);
       const indexedDbNames = globalThis.indexedDB?.databases
         ? (await indexedDB.databases()).map((database) => database.name || "")
@@ -2543,13 +2628,48 @@ async function runChromeTest() {
         indexedDbLeaks: indexedDbNames.filter((name) => matchesSentinel(name)),
         localStorageLeaks: readStorage(localStorage).filter((value) => matchesSentinel(value)),
         noteValue: note?.value || "",
+        previewAmount:
+          preview?.querySelector("[data-manual-extra-charges-review-amount='true']")?.textContent.trim() ||
+          "",
+        previewBoundary:
+          preview?.querySelector("[data-manual-extra-charges-review-boundary='true']")?.textContent
+            .replace(/\\s+/g, " ")
+            .trim() || "",
+        previewButtons: [...(preview?.querySelectorAll("button, a[href]") || [])].map((control) =>
+          control.textContent.trim(),
+        ),
         previewLeaks: pres.filter((text) => matchesSentinel(text)),
+        previewNote:
+          preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
+          "",
+        previewText: preview?.innerText || "",
         pricingText: pricing?.innerText || "",
         sessionStorageLeaks: readStorage(sessionStorage).filter((value) => matchesSentinel(value)),
       };
     })()`);
     assert.equal(manualExtraChargeEditedState.amountValue, manualExtraChargeAmount);
     assert.equal(manualExtraChargeEditedState.noteValue, manualExtraChargeReason);
+    assert.equal(manualExtraChargeEditedState.previewAmount, "$47.25");
+    assert.equal(manualExtraChargeEditedState.previewNote, manualExtraChargeReason);
+    assert.match(manualExtraChargeEditedState.previewText, /Manual Extra Charges/i);
+    assert.match(manualExtraChargeEditedState.previewText, /Manual Extra Charges note/i);
+    assert.deepEqual(
+      manualExtraChargeEditedState.previewButtons,
+      [],
+      "Expected manual Extra Charges review preview to remain display-only",
+    );
+    assert.match(manualExtraChargeEditedState.previewBoundary, /Manual staff entry only - not billed or saved/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /No invoice/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /statement/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /payment/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /PDF/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /payout/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /accounting/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /finance export/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /storage/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /API/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /Supabase/);
+    assert.match(manualExtraChargeEditedState.previewBoundary, /notification/);
     assert.deepEqual(
       manualExtraChargeEditedState.calls.fetch,
       [],
@@ -2594,14 +2714,23 @@ async function runChromeTest() {
     await setFieldValueByLabel("Extra Charges note / reason", "", "manual Extra Charges note reset");
     const manualExtraChargeResetState = await evaluate(`(() => {
       const section = document.querySelector("[data-route-extras-child-seat-section='true']");
+      const preview = document.querySelector("[data-manual-extra-charges-review-preview='true']");
       return {
         amountValue: section?.querySelector("[data-manual-extra-charges-amount='true']")?.value || "",
         calls: window.__manualExtraChargesCalls,
         noteValue: section?.querySelector("[data-manual-extra-charges-note='true']")?.value || "",
+        previewAmount:
+          preview?.querySelector("[data-manual-extra-charges-review-amount='true']")?.textContent.trim() ||
+          "",
+        previewNote:
+          preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
+          "",
       };
     })()`);
     assert.equal(manualExtraChargeResetState.amountValue, "");
     assert.equal(manualExtraChargeResetState.noteValue, "");
+    assert.equal(manualExtraChargeResetState.previewAmount, "$0.00");
+    assert.equal(manualExtraChargeResetState.previewNote, "Blank");
     assert.deepEqual(
       manualExtraChargeResetState.calls.fetch,
       [],

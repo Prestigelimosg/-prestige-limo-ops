@@ -454,8 +454,10 @@ async function runChromeTest() {
         const amount = section?.querySelector("[data-manual-extra-charges-amount='true']");
         const note = section?.querySelector("[data-manual-extra-charges-note='true']");
         const boundary = section?.querySelector("[data-manual-extra-charges-boundary='true']");
+        const preview = document.querySelector("[data-manual-extra-charges-review-preview='true']");
         const amountRect = amount?.getBoundingClientRect();
         const noteRect = note?.getBoundingClientRect();
+        const previewRect = preview?.getBoundingClientRect();
         const sectionRect = section?.getBoundingClientRect();
 
         return {
@@ -466,6 +468,19 @@ async function runChromeTest() {
           noteLabel: note?.closest("label")?.innerText.replace(/\\s+/g, " ").trim() || "",
           noteValue: note?.value ?? null,
           noteVisible: Boolean(noteRect && noteRect.width > 0 && noteRect.height >= 40),
+          previewAmount:
+            preview?.querySelector("[data-manual-extra-charges-review-amount='true']")?.textContent.trim() ||
+            "",
+          previewBoundary:
+            preview?.querySelector("[data-manual-extra-charges-review-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          previewNote:
+            preview?.querySelector("[data-manual-extra-charges-review-note='true']")?.textContent.trim() ||
+            "",
+          previewRight: Math.round(previewRect?.right || 0),
+          previewText: preview?.innerText || "",
+          previewVisible: Boolean(previewRect && previewRect.width > 0 && previewRect.height > 0),
           sectionText: section?.innerText || "",
           sectionVisible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
           sectionRight: Math.round(sectionRect?.right || 0),
@@ -490,6 +505,30 @@ async function runChromeTest() {
       assert.equal(state.amountVisible, true, `${viewport.label}: expected manual Extra Charges field to be touch-friendly`);
       assert.equal(state.noteVisible, true, `${viewport.label}: expected manual Extra Charges note to be touch-friendly`);
       assert.equal(
+        state.previewVisible,
+        true,
+        `${viewport.label}: expected manual Extra Charges review preview to stay visible`,
+      );
+      assert.equal(state.previewAmount, "$0.00", `${viewport.label}: expected preview amount to default safely`);
+      assert.equal(state.previewNote, "Blank", `${viewport.label}: expected preview note to default blank`);
+      const normalizedPreviewText = state.previewText.toLowerCase();
+      assert.equal(
+        normalizedPreviewText.includes("manual extra charges") &&
+          normalizedPreviewText.includes("manual extra charges note") &&
+          state.previewBoundary.includes("Manual staff entry only - not billed or saved") &&
+          state.previewBoundary.includes("No invoice") &&
+          state.previewBoundary.includes("payment") &&
+          state.previewBoundary.includes("PDF") &&
+          state.previewBoundary.includes("payout") &&
+          state.previewBoundary.includes("accounting") &&
+          state.previewBoundary.includes("storage") &&
+          state.previewBoundary.includes("API") &&
+          state.previewBoundary.includes("Supabase") &&
+          state.previewBoundary.includes("notification"),
+        true,
+        `${viewport.label}: expected manual Extra Charges review preview local-only boundary`,
+      );
+      assert.equal(
         state.boundaryText.includes("Manual staff entry only") &&
           state.boundaryText.includes("local UI field") &&
           state.boundaryText.includes("not included in totals") &&
@@ -507,6 +546,11 @@ async function runChromeTest() {
         state.sectionRight <= state.viewportWidth + 2,
         true,
         `${viewport.label}: expected manual Extra Charges section not to overflow`,
+      );
+      assert.equal(
+        state.previewRight <= state.viewportWidth + 2,
+        true,
+        `${viewport.label}: expected manual Extra Charges review preview not to overflow`,
       );
     };
 

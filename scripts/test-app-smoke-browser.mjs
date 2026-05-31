@@ -250,6 +250,7 @@ const requiredVisibleText = [
   "Pricing",
   "Route Extras & Child Seat",
   "Job Card Preview",
+  "Manual staff entry only - not billed or saved",
   "Driver Dispatch",
   "Replacement Car / Driver — Mock Only",
   "Load Bookings",

@@ -694,6 +694,7 @@ async function runChromeTest() {
         "[data-mock-route-itinerary-readiness-workbench]",
         "[data-mock-driver-assignment-dispatch-readiness-workbench]",
         "[data-mock-booking-lifecycle-audit-readiness-workbench]",
+        "[data-mock-operations-risk-sla-watchlist-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -754,7 +755,8 @@ async function runChromeTest() {
             state.text.includes("Booking Intake Quality & Account Matching Workbench") &&
             state.text.includes("Airport Flight Monitoring & Pickup Readiness Workbench") &&
             state.text.includes("Route & Itinerary Readiness Workbench") &&
-            state.text.includes("Booking Lifecycle Timeline & Internal Audit Readiness Workbench"),
+            state.text.includes("Booking Lifecycle Timeline & Internal Audit Readiness Workbench") &&
+            state.text.includes("Operations Risk & SLA Watchlist Workbench"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -14189,6 +14191,371 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockOperationsRiskSlaWatchlistWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 900,
+          label: "mobile mock operations risk SLA watchlist workbench",
+          mobile: true,
+          scale: 3,
+          width: 390,
+        },
+        {
+          height: 900,
+          label: "desktop mock operations risk SLA watchlist workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const previousWorkbench = document.querySelector("[data-mock-booking-lifecycle-audit-readiness-workbench]");
+              const section = document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench]");
+              if (!group || !dashboard || !previousWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const previousRect = previousWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [
+                ...section.querySelectorAll("[data-mock-operations-risk-sla-watchlist-workbench-row]"),
+              ].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-operations-risk-sla-watchlist-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [
+                    ...section.querySelectorAll("[data-mock-operations-risk-sla-watchlist-workbench-column]"),
+                  ].map(
+                    (column) =>
+                      column.getAttribute("data-mock-operations-risk-sla-watchlist-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                distinction:
+                  document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench-distinction]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "create sla alert now",
+                  "save risk task now",
+                  "assign staff now",
+                  "assign driver now",
+                  "assign vehicle now",
+                  "send customer update now",
+                  "create dispatch job now",
+                  "create closeout now",
+                  "generate invoice now",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                previousBottom: Math.round(previousRect.bottom),
+                coverageNote:
+                  document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench-coverage-note]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                rowCount: rows.length,
+                rows,
+                rules:
+                  document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench-rules]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                safety:
+                  document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench-safety]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock operations risk SLA watchlist workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected operations risk SLA watchlist workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before operations risk SLA watchlist workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.previousBottom,
+          true,
+          `${viewport.label}: expected operations risk SLA watchlist workbench after booking lifecycle audit readiness`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("operations risk & sla watchlist workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected operations risk SLA watchlist heading`,
+        );
+        assert.equal(
+          state.copy.includes("operations risk and SLA watchlist preview") &&
+            state.copy.includes("VIP timing risk") &&
+            state.copy.includes("airport timing") &&
+            state.copy.includes("route/driver readiness risk") &&
+            state.copy.includes("customer update risk") &&
+            state.copy.includes("service recovery risk") &&
+            state.copy.includes("closeout risk") &&
+            state.copy.includes("next internal action") &&
+            state.copy.includes("no real SLA automation") &&
+            state.copy.includes("Supabase behavior is active"),
+          true,
+          `${viewport.label}: expected operations risk SLA boundary copy`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Risk reference related job reference",
+            "Customer account risk area",
+            "SLA timing window current status",
+            "Risk severity owner responsible desk",
+            "Customer impact driver fleet impact",
+            "Closeout finance impact next internal action",
+          ],
+          `${viewport.label}: expected operations risk SLA workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three operations risk rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Mock operations risk and SLA watchlist review") &&
+            state.filterSummary.includes("Mock dispatcher/admin risk desk") &&
+            state.filterSummary.includes("3 risk watchlist rows maximum") &&
+            state.filterSummary.includes("display-only / no actions"),
+          true,
+          `${viewport.label}: expected display-only operations risk filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-RISK-SLA-VIP-AIRPORT"].includes("VIP airport pickup timing watch") &&
+            rowByRef["PLO-RISK-SLA-VIP-AIRPORT"].includes("Driver/vehicle ready; watch timing") &&
+            rowByRef["PLO-RISK-SLA-VIP-AIRPORT"].includes("Medium - display-only") &&
+            rowByRef["PLO-RISK-SLA-VIP-AIRPORT"].includes("no assignment created"),
+          true,
+          `${viewport.label}: expected VIP airport timing risk row`,
+        );
+        assert.equal(
+          rowByRef["PLO-RISK-SLA-RECOVERY-UPDATE"].includes("Customer update risk after service recovery") &&
+            rowByRef["PLO-RISK-SLA-RECOVERY-UPDATE"].includes("Customer update readiness pending - not sent") &&
+            rowByRef["PLO-RISK-SLA-RECOVERY-UPDATE"].includes("Manager desk - not assigned") &&
+            rowByRef["PLO-RISK-SLA-RECOVERY-UPDATE"].includes("no record created"),
+          true,
+          `${viewport.label}: expected customer update risk row`,
+        );
+        assert.equal(
+          rowByRef["PLO-RISK-SLA-FINANCE-CLOSEOUT"].includes("Finance/closeout evidence risk") &&
+            rowByRef["PLO-RISK-SLA-FINANCE-CLOSEOUT"].includes("Exception evidence pending") &&
+            rowByRef["PLO-RISK-SLA-FINANCE-CLOSEOUT"].includes("no invoice/payout created") &&
+            rowByRef["PLO-RISK-SLA-FINANCE-CLOSEOUT"].includes("future finance handoff"),
+          true,
+          `${viewport.label}: expected finance closeout risk row`,
+        );
+        assert.equal(
+          state.coverageNote.includes("Risk reference") &&
+            state.coverageNote.includes("related job reference") &&
+            state.coverageNote.includes("customer/account") &&
+            state.coverageNote.includes("risk area") &&
+            state.coverageNote.includes("SLA/timing window") &&
+            state.coverageNote.includes("current status") &&
+            state.coverageNote.includes("risk severity") &&
+            state.coverageNote.includes("owner/responsible desk") &&
+            state.coverageNote.includes("customer impact") &&
+            state.coverageNote.includes("driver/fleet impact") &&
+            state.coverageNote.includes("closeout/finance impact") &&
+            state.coverageNote.includes("static review labels"),
+          true,
+          `${viewport.label}: expected operations risk SLA workflow coverage`,
+        );
+        assert.equal(
+          state.rules.includes(
+            "SLA/risk watchlist readiness stays separate from real scheduling, alerts, notifications, dispatch, billing, and audit behavior",
+          ) &&
+            state.rules.includes("risk severity creates no alerts or tasks") &&
+            state.rules.includes("owner/responsible desk display assigns no staff, drivers, or vehicles") &&
+            state.rules.includes("customer impact sends no customer update") &&
+            state.rules.includes("driver/fleet impact assigns no drivers or vehicles") &&
+            state.rules.includes("closeout/finance impact creates no closeout, billing, invoice, payout, or finance records") &&
+            state.rules.includes("parser/manual review stays separate from parser behavior"),
+          true,
+          `${viewport.label}: expected protected operations risk SLA business rules`,
+        );
+        assert.equal(
+          state.distinction.includes("separate from Booking Lifecycle Timeline") &&
+            state.distinction.includes("Driver Assignment") &&
+            state.distinction.includes("Route & Itinerary Readiness") &&
+            state.distinction.includes("Airport Flight Monitoring") &&
+            state.distinction.includes("Booking Intake") &&
+            state.distinction.includes("Customer Account Profile") &&
+            state.distinction.includes("Operations Handover") &&
+            state.distinction.includes("Fleet Readiness") &&
+            state.distinction.includes("Customer Service Recovery") &&
+            state.distinction.includes("Replacement Vehicle Recovery") &&
+            state.distinction.includes("Driver Job Completion") &&
+            state.distinction.includes("operations risk and SLA watchlist readiness"),
+          true,
+          `${viewport.label}: expected operations risk SLA workbench not to repeat recent workbenches`,
+        );
+        assert.equal(
+          state.safety.includes("Mock Only") &&
+            state.safety.includes("No SLA alert created") &&
+            state.safety.includes("no risk task saved") &&
+            state.safety.includes("no booking status changed") &&
+            state.safety.includes("no staff assigned") &&
+            state.safety.includes("no driver assigned") &&
+            state.safety.includes("no vehicle assigned") &&
+            state.safety.includes("no customer update sent") &&
+            state.safety.includes("no notification sent") &&
+            state.safety.includes("no live location activated") &&
+            state.safety.includes("no dispatch job created") &&
+            state.safety.includes("no closeout record created") &&
+            state.safety.includes("no billing, invoice, payment, PDF, payout, accounting") &&
+            state.safety.includes("finance export created") &&
+            state.safety.includes("No save/load") &&
+            state.safety.includes("API/storage/Supabase behavior") &&
+            state.safety.includes("no parser change"),
+          true,
+          `${viewport.label}: expected no operations risk/SLA/API/dispatch/parser/billing behavior`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real SLA alerting workflow",
+          "operations risk workflow",
+          "task creation",
+          "booking status persistence",
+          "staff assignment",
+          "driver assignment",
+          "vehicle assignment",
+          "customer update sending",
+          "notification sending",
+          "live location behavior",
+          "dispatch workflow",
+          "closeout workflow",
+          "parser behavior changes",
+          "parser file changes",
+          "parser test changes",
+          "maps",
+          "scheduling",
+          "traffic",
+          "route optimization",
+          "audit logging",
+          "SLA alerting",
+          "billing",
+          "invoice",
+          "statement",
+          "payment",
+          "payment link",
+          "PDF",
+          "payout",
+          "accounting posting",
+          "finance export",
+          "customer account/auth behavior",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected operations risk SLA boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(
+          state.actionControlCount,
+          0,
+          `${viewport.label}: expected no operations risk SLA action controls`,
+        );
+        assert.equal(
+          state.controlCount,
+          0,
+          `${viewport.label}: expected no operations risk SLA form controls`,
+        );
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active operations risk SLA controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 2140 : viewport.width < 1024 ? 1260 : 1080),
+          true,
+          `${viewport.label}: expected compact operations risk SLA workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected operations risk SLA rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected operations risk SLA workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -15054,6 +15421,53 @@ async function runChromeTest() {
       );
     };
 
+    const assertNoMockOperationsRiskSlaWatchlistWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "operations risk & sla watchlist workbench",
+            "internal/admin-only operations risk and sla watchlist",
+            "mock dispatcher/admin risk desk",
+            "3 risk watchlist rows maximum",
+            "plo-risk-sla-vip-airport",
+            "plo-risk-sla-recovery-update",
+            "plo-risk-sla-finance-closeout",
+            "risk reference",
+            "sla/timing window",
+            "sla / status",
+            "risk severity",
+            "owner/responsible desk",
+            "customer / fleet impact",
+            "closeout/finance impact",
+            "vip airport pickup timing watch",
+            "customer update risk after service recovery",
+            "finance/closeout evidence risk",
+            "customer update readiness pending",
+            "exception evidence pending",
+            "no sla alert created",
+            "no risk task saved",
+            "no real sla alerting workflow",
+            "operations risk workflow",
+            "sla alerting",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-operations-risk-sla-watchlist-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock operations risk SLA watchlist workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal operations risk/SLA/customer-impact/closeout-finance data leak`,
+      );
+    };
+
     const checkAdminReplacementPlaceholder = async () => {
       await setViewportAndReload({
         height: 900,
@@ -15659,6 +16073,7 @@ async function runChromeTest() {
         await assertNoMockRouteItineraryReadinessWorkbenchLeak(routeName);
         await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak(routeName);
         await assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak(routeName);
+        await assertNoMockOperationsRiskSlaWatchlistWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -16665,6 +17080,7 @@ async function runChromeTest() {
       await assertNoMockRouteItineraryReadinessWorkbenchLeak("/customers desktop");
       await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak("/customers desktop");
       await assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak("/customers desktop");
+      await assertNoMockOperationsRiskSlaWatchlistWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -22335,6 +22751,7 @@ async function runChromeTest() {
       await assertNoMockRouteItineraryReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockDriverAssignmentDispatchReadinessWorkbenchLeak("/customers mobile");
       await assertNoMockBookingLifecycleAuditReadinessWorkbenchLeak("/customers mobile");
+      await assertNoMockOperationsRiskSlaWatchlistWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -28278,6 +28695,8 @@ async function runChromeTest() {
       await checkAdminMockDriverAssignmentDispatchReadinessWorkbench();
     state.adminMockBookingLifecycleAuditReadinessWorkbench =
       await checkAdminMockBookingLifecycleAuditReadinessWorkbench();
+    state.adminMockOperationsRiskSlaWatchlistWorkbench =
+      await checkAdminMockOperationsRiskSlaWatchlistWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

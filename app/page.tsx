@@ -13244,6 +13244,228 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        <section
+          aria-label="Operations Risk SLA Watchlist Workbench Mock Only"
+          className="rounded-lg border border-rose-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-operations-risk-sla-watchlist-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-rose-700">Operations Risk &amp; SLA Watchlist Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-operations-risk-sla-watchlist-workbench-copy="true"
+                >
+                  Internal/admin-only operations risk and SLA watchlist preview for VIP timing risk, airport timing
+                  risk, route/driver readiness risk, customer update risk, service recovery risk, closeout risk, and
+                  next internal action. Static/mock/local display data only; no real SLA automation, alerting,
+                  scheduling, dispatch, billing, audit, storage, API, parser, or Supabase behavior is active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-semibold uppercase text-rose-700">
+                Display-only risk watchlist
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-operations-risk-sla-watchlist-workbench-filter-summary="true"
+            >
+              {[
+                ["Risk/date scope", "Mock operations risk and SLA watchlist review"],
+                ["Source", "Mock dispatcher/admin risk desk"],
+                ["Mock results", "3 risk watchlist rows maximum"],
+                ["Mode", "Mock Only / display-only / no actions"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-rose-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div
+              className="grid min-w-0 gap-1.5"
+              data-mock-operations-risk-sla-watchlist-workbench-rows="true"
+            >
+              {[
+                {
+                  closeoutFinanceImpact: "No closeout or finance record created",
+                  currentStatus: "Driver/vehicle ready; watch timing",
+                  customerAccount: "UBS Priority",
+                  customerImpact: "VIP arrival timing sensitivity; no customer update sent",
+                  driverFleetImpact: "Driver and vehicle ready; no assignment created",
+                  nextInternalAction: "Monitor flight/traffic timing before future handoff",
+                  ownerResponsibleDesk: "Dispatch desk - not assigned",
+                  relatedJobReference: "PLO-ARR-2026-05-SLA1",
+                  riskArea: "VIP airport pickup timing watch",
+                  riskReference: "PLO-RISK-SLA-VIP-AIRPORT",
+                  riskSeverity: "Medium - display-only",
+                  slaTimingWindow: "Pickup window 15:30-16:00; monitor flight/traffic timing",
+                },
+                {
+                  closeoutFinanceImpact: "Closeout held in mock review; no record created",
+                  currentStatus: "Customer update draft needs manager approval",
+                  customerAccount: "Ritz-Carlton Concierge",
+                  customerImpact: "Customer update readiness pending - not sent",
+                  driverFleetImpact: "No driver/fleet change; no vehicle assignment",
+                  nextInternalAction: "Review manager-approved wording before future closeout",
+                  ownerResponsibleDesk: "Manager desk - not assigned",
+                  relatedJobReference: "PLO-REC-2026-05-SLA2",
+                  riskArea: "Customer update risk after service recovery",
+                  riskReference: "PLO-RISK-SLA-RECOVERY-UPDATE",
+                  riskSeverity: "High - display-only",
+                  slaTimingWindow: "Manager review before closeout",
+                },
+                {
+                  closeoutFinanceImpact: "Evidence pending before month-end billing handoff; no invoice/payout created",
+                  currentStatus: "Exception evidence pending",
+                  customerAccount: "VIP Private Customer",
+                  customerImpact: "No customer billing update sent",
+                  driverFleetImpact: "No driver/fleet impact; no assignment created",
+                  nextInternalAction: "Collect mock evidence note before future finance handoff",
+                  ownerResponsibleDesk: "Finance desk - not assigned",
+                  relatedJobReference: "PLO-FIN-2026-05-SLA3",
+                  riskArea: "Finance/closeout evidence risk",
+                  riskReference: "PLO-RISK-SLA-FINANCE-CLOSEOUT",
+                  riskSeverity: "Medium - display-only",
+                  slaTimingWindow: "Month-end evidence review before billing handoff",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-rose-200 bg-rose-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1.05fr_1.05fr_1.15fr_1.1fr_1.15fr_1.2fr]"
+                  data-mock-operations-risk-sla-watchlist-workbench-row={row.riskReference}
+                  key={row.riskReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-operations-risk-sla-watchlist-workbench-column="Risk reference related job reference"
+                    >
+                      Risk / Job
+                    </span>
+                    <span className="block">{row.riskReference}</span>
+                    <span>{row.relatedJobReference}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-operations-risk-sla-watchlist-workbench-column="Customer account risk area"
+                    >
+                      Customer / Risk Area
+                    </span>
+                    <span className="block">{row.customerAccount}</span>
+                    <span>{row.riskArea}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-operations-risk-sla-watchlist-workbench-column="SLA timing window current status"
+                    >
+                      SLA / Status
+                    </span>
+                    <span className="block">{row.slaTimingWindow}</span>
+                    <span>{row.currentStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-operations-risk-sla-watchlist-workbench-column="Risk severity owner responsible desk"
+                    >
+                      Severity / Owner
+                    </span>
+                    <span className="block">{row.riskSeverity}</span>
+                    <span>{row.ownerResponsibleDesk}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-operations-risk-sla-watchlist-workbench-column="Customer impact driver fleet impact"
+                    >
+                      Customer / Fleet Impact
+                    </span>
+                    <span className="block">{row.customerImpact}</span>
+                    <span>{row.driverFleetImpact}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-rose-700"
+                      data-mock-operations-risk-sla-watchlist-workbench-column="Closeout finance impact next internal action"
+                    >
+                      Closeout / Next Action
+                    </span>
+                    <span className="block">{row.closeoutFinanceImpact}</span>
+                    <span>{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-operations-risk-sla-watchlist-workbench-coverage-note="true"
+              >
+                Operations risk watchlist review - mock only. Risk reference, related job reference, customer/account,
+                risk area, SLA/timing window, current status, risk severity, owner/responsible desk, customer impact,
+                driver/fleet impact, closeout/finance impact, and next internal action stay as static review labels.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-operations-risk-sla-watchlist-workbench-rules="true"
+              >
+                Risk/SLA rules preserved: SLA/risk watchlist readiness stays separate from real scheduling, alerts,
+                notifications, dispatch, billing, and audit behavior; risk severity creates no alerts or tasks;
+                owner/responsible desk display assigns no staff, drivers, or vehicles; customer impact sends no
+                customer update; driver/fleet impact assigns no drivers or vehicles; closeout/finance impact creates no
+                closeout, billing, invoice, payout, or finance records; parser/manual review stays separate from parser
+                behavior.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-operations-risk-sla-watchlist-workbench-safety="true"
+              >
+                Mock Only. No SLA alert created, no risk task saved, no booking status changed, no staff assigned, no
+                driver assigned, no vehicle assigned, no customer update sent, no notification sent, no live location
+                activated, no dispatch job created, no closeout record created, and no billing, invoice, payment, PDF,
+                payout, accounting, or finance export created. No save/load, no API/storage/Supabase behavior, and no
+                parser change.
+              </p>
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-[1fr_2fr]">
+              <p
+                className="min-w-0 rounded-md border border-rose-200 bg-rose-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-operations-risk-sla-watchlist-workbench-distinction="true"
+              >
+                This is separate from Booking Lifecycle Timeline &amp; Internal Audit Readiness, Driver Assignment,
+                Route &amp; Itinerary Readiness, Airport Flight Monitoring, Booking Intake, Customer Account Profile,
+                Operations Handover, Fleet Readiness, Customer Service Recovery, Replacement Vehicle Recovery, and
+                Driver Job Completion: it reviews cross-booking operations risk and SLA watchlist readiness before any
+                future SLA automation or alerting only.
+              </p>
+              <p
+                className="text-[10px] leading-[1.15] text-slate-500"
+                data-mock-operations-risk-sla-watchlist-workbench-boundary="true"
+              >
+                Future workflow boundary: Mock/local only. No real SLA alerting workflow, operations risk workflow,
+                task creation, booking status persistence, staff assignment, driver assignment, vehicle assignment,
+                customer update sending, notification sending, live location behavior, dispatch workflow, closeout
+                workflow, parser behavior changes, parser file changes, parser test changes, maps, scheduling, traffic,
+                route optimization, audit logging, SLA alerting, billing, invoice, statement, payment, payment link,
+                PDF, payout, accounting posting, finance export, customer account/auth behavior, localStorage,
+                sessionStorage, cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, package
+                script changes, test:safe membership changes, message-channel delivery, customer notification,
+                notification, or send behavior.
+              </p>
+            </div>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

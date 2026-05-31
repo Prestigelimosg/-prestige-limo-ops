@@ -10486,6 +10486,216 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        <section
+          aria-label="Finance Exception Resolution Workbench Mock Only"
+          className="rounded-lg border border-teal-200 bg-white px-3 py-2 shadow-sm"
+          data-mock-finance-exception-resolution-workbench="true"
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-950">
+                  <span className="uppercase text-teal-700">Finance Exception Resolution Workbench</span>{" "}
+                  <span className="text-slate-600">&mdash; Mock Only</span>
+                </h2>
+                <p
+                  className="mt-1 max-w-4xl text-[10px] font-medium leading-[1.2] text-slate-600"
+                  data-mock-finance-exception-resolution-workbench-copy="true"
+                >
+                  Internal/admin-only finance exception preview for month-end account rows from the Month-End Closeout
+                  Workbench. Static/mock/local display data only; no real exception resolution, statement, invoice,
+                  payment, payout, PDF, accounting posting, finance export, storage, API, or Supabase behavior is
+                  active.
+                </p>
+              </div>
+              <p className="shrink-0 rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-[10px] font-semibold uppercase text-teal-700">
+                Display-only exception workbench
+              </p>
+            </div>
+
+            <div
+              className="grid min-w-0 grid-cols-2 gap-1.5 text-[10px] leading-[1.1] text-slate-700 sm:grid-cols-4"
+              data-mock-finance-exception-resolution-workbench-filter-summary="true"
+            >
+              {[
+                ["Exception month", "May 2026"],
+                ["Source", "Month-End Closeout Workbench exception rows"],
+                ["Scope", "Open billing, payout, statement, and finance review exceptions"],
+                ["Mock results", "3 exception rows maximum / display-only"],
+              ].map(([label, value]) => (
+                <p className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1" key={label}>
+                  <span className="block font-semibold uppercase text-teal-700">{label}</span>
+                  <span className="break-words">{value}</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5" data-mock-finance-exception-resolution-workbench-rows="true">
+              {[
+                {
+                  account: "Ritz-Carlton",
+                  billingImpact: "Hold customer billing until Extra Charges evidence is reviewed",
+                  closeoutMonth: "May 2026",
+                  dispatcherFollowUpStatus: "Dispatcher follow-up needed for waiting-time proof",
+                  driverPayoutImpact: "Driver payout still under review for Waiting Time and Extra Stops",
+                  exceptionReference: "PLO-FIN-EX-2026-05-RITZ-EV",
+                  exceptionType: "Extra-charge evidence missing",
+                  extraCharges:
+                    "Extra Charges: Waiting Time 2 blocks; Extra Stops 1; Midnight Charge not detected; sources separate",
+                  financeReviewStatus: "Finance review blocked in mock",
+                  nextInternalAction: "Collect evidence before future statement or payout review",
+                  relatedGroup: "PLO-ME-2026-05-RITZ / PLO-CLOSE-118",
+                  resolutionReadiness: "Not ready - mock exception open",
+                },
+                {
+                  account: "VIP Customer",
+                  billingImpact: "Customer charge waived in mock month-end review",
+                  closeoutMonth: "May 2026",
+                  dispatcherFollowUpStatus: "Dispatcher waiver note reviewed",
+                  driverPayoutImpact: "Driver payout review remains separate from customer waiver",
+                  exceptionReference: "PLO-FIN-EX-2026-05-VIP-WAIVER",
+                  exceptionType: "Customer charge waived / payout still reviewed",
+                  extraCharges:
+                    "Extra Charges: Waiting Time none; Extra Stops none; Midnight Charge detected; midnight source separate",
+                  financeReviewStatus: "Finance waiver note held for mock review",
+                  nextInternalAction: "Review driver payout even though customer charge is waived",
+                  relatedGroup: "PLO-ME-2026-05-VIP / PLO-CLOSE-207",
+                  resolutionReadiness: "Payout review pending - display only",
+                },
+                {
+                  account: "Ritz-Carlton",
+                  billingImpact: "Statement/invoice readiness blocked by finance review note",
+                  closeoutMonth: "May 2026",
+                  dispatcherFollowUpStatus: "Dispatcher confirms route exception before future handoff",
+                  driverPayoutImpact: "No payout created; review remains pending",
+                  exceptionReference: "PLO-FIN-EX-2026-05-RITZ-STMT",
+                  exceptionType: "Statement/invoice readiness blocked",
+                  extraCharges:
+                    "Extra Charges: Waiting Time reviewed separately; Extra Stops needs confirmation; Midnight Charge excluded",
+                  financeReviewStatus: "Finance note unresolved in mock",
+                  nextInternalAction: "Clear finance note before future month-end handoff",
+                  relatedGroup: "PLO-ME-2026-05-RITZ",
+                  resolutionReadiness: "Blocked - no statement or invoice generated",
+                },
+              ].map((row) => (
+                <div
+                  className="grid min-w-0 gap-1 rounded-md border border-teal-200 bg-teal-50/70 p-1.5 text-[10px] leading-[1.12] text-slate-800 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.15fr_1.15fr_1.25fr_1.25fr]"
+                  data-mock-finance-exception-resolution-workbench-row={row.exceptionReference}
+                  key={row.exceptionReference}
+                >
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-finance-exception-resolution-workbench-column="Exception reference closeout month customer account related job month-end group"
+                    >
+                      Exception / Group
+                    </span>
+                    <span className="block">{row.exceptionReference}</span>
+                    <span className="block">{row.closeoutMonth}</span>
+                    <span className="block">{row.account}</span>
+                    <span className="block">{row.relatedGroup}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-finance-exception-resolution-workbench-column="Exception type"
+                    >
+                      Exception Type
+                    </span>
+                    <span className="block">{row.exceptionType}</span>
+                    <span className="block" data-mock-finance-exception-resolution-workbench-extra-charges="true">
+                      {row.extraCharges}
+                    </span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-finance-exception-resolution-workbench-column="Customer billing impact"
+                    >
+                      Billing Impact
+                    </span>
+                    <span>{row.billingImpact}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-finance-exception-resolution-workbench-column="Driver payout impact"
+                    >
+                      Payout Impact
+                    </span>
+                    <span>{row.driverPayoutImpact}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-finance-exception-resolution-workbench-column="Finance review status dispatcher follow-up status"
+                    >
+                      Review / Follow-up
+                    </span>
+                    <span className="block">{row.financeReviewStatus}</span>
+                    <span className="block">{row.dispatcherFollowUpStatus}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span
+                      className="block font-semibold uppercase text-teal-700"
+                      data-mock-finance-exception-resolution-workbench-column="Resolution readiness next internal action"
+                    >
+                      Resolution / Next
+                    </span>
+                    <span className="block">{row.resolutionReadiness}</span>
+                    <span className="block">{row.nextInternalAction}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 md:grid-cols-3">
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-finance-exception-resolution-workbench-rule="true"
+              >
+                Locked rules - mock only. Waiting Time: 1 waiting block = 15 minutes, customer charge $15 per waiting
+                block, driver payout $10 per waiting block. Midnight Charge: customer charge $15, driver payout $10,
+                applies from 11:00pm / 23:00 through 6:59am / 06:59 inclusive; 7:00am / 07:00 and 10:59pm / 22:59 are
+                excluded.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-finance-exception-resolution-workbench-separation="true"
+              >
+                Finance exception review - mock only. Waiting Time, Extra Stops, and Midnight Charge may display under
+                Extra Charges where relevant, but each charge type remains internally distinct for billing, payout,
+                audit, and dispute review.
+              </p>
+              <p
+                className="min-w-0 rounded-md border border-teal-200 bg-teal-50/75 px-2 py-1.5 text-[10px] font-medium leading-[1.15] text-slate-700"
+                data-mock-finance-exception-resolution-workbench-decision="true"
+              >
+                Customer billing approval and driver payout approval are separate decisions. Waived customer charge does
+                not automatically cancel driver payout review. No exception saved, no statement generated, no invoice
+                generated, no payment link created, no PDF generated, no payout created, no accounting posting, no
+                finance export, and not saved.
+              </p>
+            </div>
+
+            <p
+              className="text-[10px] leading-[1.15] text-slate-500"
+              data-mock-finance-exception-resolution-workbench-boundary="true"
+            >
+              Future workflow boundary: Mock/local only. No real finance exception workflow, real month-end closeout
+              workflow, completed-job persistence, monthly billing persistence, statement generation, invoice
+              generation, real combined charge calculation, billing automation, monthly invoice, payment link, PDF
+              generation, accounting integration, accounting posting, finance export, customer account, customer auth,
+              driver payout creation, waiting-time persistence, extra-stop persistence, midnight-charge persistence,
+              approval-decision persistence, exception persistence, extra-charge persistence, customer-charge
+              persistence, driver-payout persistence, save/load behavior, storage, localStorage, sessionStorage,
+              cookies, IndexedDB, API call, fetch, XHR, sendBeacon, WebSocket, Supabase, parser file changes, package
+              script changes, test:safe membership changes, message-channel delivery, customer notification,
+              notification, or send behavior.
+            </p>
+          </div>
+        </section>
         </div>
 
         {activeTab === "dispatch" ? (

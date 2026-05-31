@@ -546,6 +546,9 @@ async function runChromeTest() {
       const mockMonthEndCloseoutWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-month-end-closeout-workbench]"))`,
       );
+      const mockFinanceExceptionResolutionWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-finance-exception-resolution-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -616,6 +619,15 @@ async function runChromeTest() {
             "no real month-end closeout workflow",
             "monthly billing persistence",
             "finance export",
+            "finance exception resolution workbench",
+            "internal/admin-only finance exception preview",
+            "month-end closeout workbench exception rows",
+            "extra-charge evidence missing",
+            "customer charge waived / payout still reviewed",
+            "statement/invoice readiness blocked",
+            "no exception saved",
+            "no real finance exception workflow",
+            "exception persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -781,6 +793,11 @@ async function runChromeTest() {
         mockMonthEndCloseoutWorkbenchVisible,
         false,
         `${viewport.label} ${route.label}: expected no internal mock month-end closeout workbench`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal mock finance exception resolution workbench`,
       );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,
@@ -5508,6 +5525,226 @@ async function runChromeTest() {
         `${viewport.label}: expected month-end closeout workbench not to create horizontal overflow`,
       );
 
+      const mockFinanceExceptionResolutionWorkbenchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const group = document.querySelector("[data-mock-workflow-review-group]");
+            const dashboard = document.querySelector("[data-operations-dashboard]");
+            const monthEndWorkbench = document.querySelector("[data-mock-month-end-closeout-workbench]");
+            const workbench = document.querySelector("[data-mock-finance-exception-resolution-workbench]");
+            if (!group || !dashboard || !monthEndWorkbench || !workbench) {
+              return false;
+            }
+
+            const groupRect = group.getBoundingClientRect();
+            const dashboardRect = dashboard.getBoundingClientRect();
+            const monthEndRect = monthEndWorkbench.getBoundingClientRect();
+            const rect = workbench.getBoundingClientRect();
+            const rows = [...workbench.querySelectorAll("[data-mock-finance-exception-resolution-workbench-row]")].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+              return {
+                height: Math.round(rowRect.height),
+                key: row.getAttribute("data-mock-finance-exception-resolution-workbench-row") || "",
+                text: row.textContent.replace(/\\s+/g, " ").trim(),
+                width: Math.round(rowRect.width),
+              };
+            });
+            const columns = [
+              ...new Set(
+                [...workbench.querySelectorAll("[data-mock-finance-exception-resolution-workbench-column]")].map(
+                  (column) => column.getAttribute("data-mock-finance-exception-resolution-workbench-column") || "",
+                ),
+              ),
+            ];
+
+            return {
+              actionControlCount: workbench.querySelectorAll("button, a, form").length,
+              boundary:
+                document.querySelector("[data-mock-finance-exception-resolution-workbench-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              columns,
+              controlCount: workbench.querySelectorAll("input, select, textarea").length,
+              dashboardBottom: Math.round(dashboardRect.bottom),
+              decision:
+                document.querySelector("[data-mock-finance-exception-resolution-workbench-decision]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              filterSummary:
+                document.querySelector("[data-mock-finance-exception-resolution-workbench-filter-summary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              groupTop: Math.round(groupRect.top),
+              height: Math.round(rect.height),
+              monthEndBottom: Math.round(monthEndRect.bottom),
+              rows,
+              rule:
+                document.querySelector("[data-mock-finance-exception-resolution-workbench-rule]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              sectionTop: Math.round(rect.top),
+              separation:
+                document.querySelector("[data-mock-finance-exception-resolution-workbench-separation]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              text: workbench.innerText,
+            };
+          })()`),
+        10000,
+        `${viewport.label} mock finance exception resolution workbench`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.groupTop >=
+          mockFinanceExceptionResolutionWorkbenchState.dashboardBottom,
+        true,
+        `${viewport.label}: expected finance exception workbench to remain in bottom mock workflow group`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.sectionTop >=
+          mockFinanceExceptionResolutionWorkbenchState.monthEndBottom,
+        true,
+        `${viewport.label}: expected finance exception workbench after month-end closeout workbench`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.text.toLowerCase().includes(
+          "finance exception resolution workbench",
+        ) && mockFinanceExceptionResolutionWorkbenchState.text.toLowerCase().includes("mock only"),
+        true,
+        `${viewport.label}: expected finance exception workbench heading`,
+      );
+      assert.deepEqual(
+        mockFinanceExceptionResolutionWorkbenchState.columns,
+        [
+          "Exception reference closeout month customer account related job month-end group",
+          "Exception type",
+          "Customer billing impact",
+          "Driver payout impact",
+          "Finance review status dispatcher follow-up status",
+          "Resolution readiness next internal action",
+        ],
+        `${viewport.label}: expected finance exception workflow columns`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.filterSummary.includes("May 2026") &&
+          mockFinanceExceptionResolutionWorkbenchState.filterSummary.includes(
+            "Month-End Closeout Workbench exception rows",
+          ) &&
+          mockFinanceExceptionResolutionWorkbenchState.filterSummary.includes(
+            "Open billing, payout, statement, and finance review exceptions",
+          ) &&
+          mockFinanceExceptionResolutionWorkbenchState.filterSummary.includes("3 exception rows maximum") &&
+          mockFinanceExceptionResolutionWorkbenchState.filterSummary.includes("display-only"),
+        true,
+        `${viewport.label}: expected compact display-only finance exception filter summary`,
+      );
+      const financeExceptionRowsByRef = Object.fromEntries(
+        mockFinanceExceptionResolutionWorkbenchState.rows.map((row) => [row.key, row.text]),
+      );
+      assert.equal(
+        financeExceptionRowsByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Extra-charge evidence missing") &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Hold customer billing") &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Driver payout still under review") &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Waiting Time 2 blocks") &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Extra Stops 1") &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes("Customer charge waived") &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes(
+            "Driver payout review remains separate",
+          ) &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes("Midnight Charge detected") &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-RITZ-STMT"].includes(
+            "Statement/invoice readiness blocked",
+          ) &&
+          financeExceptionRowsByRef["PLO-FIN-EX-2026-05-RITZ-STMT"].includes("finance review note"),
+        true,
+        `${viewport.label}: expected finance exception rows for evidence, waiver, and statement readiness`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.separation.includes(
+          "Waiting Time, Extra Stops, and Midnight Charge may display",
+        ) &&
+          mockFinanceExceptionResolutionWorkbenchState.separation.includes("under Extra Charges") &&
+          mockFinanceExceptionResolutionWorkbenchState.separation.includes("each charge type remains internally distinct") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes(
+            "Customer billing approval and driver payout approval are separate decisions",
+          ) &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes(
+            "Waived customer charge does not automatically cancel driver payout review",
+          ),
+        true,
+        `${viewport.label}: expected finance charge separation and billing/payout decision rules`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.rule.includes("1 waiting block = 15 minutes") &&
+          mockFinanceExceptionResolutionWorkbenchState.rule.includes("customer charge $15 per waiting block") &&
+          mockFinanceExceptionResolutionWorkbenchState.rule.includes("driver payout $10 per waiting block") &&
+          mockFinanceExceptionResolutionWorkbenchState.rule.includes("Midnight Charge: customer charge $15") &&
+          mockFinanceExceptionResolutionWorkbenchState.rule.includes(
+            "11:00pm / 23:00 through 6:59am / 06:59 inclusive",
+          ) &&
+          mockFinanceExceptionResolutionWorkbenchState.rule.includes(
+            "7:00am / 07:00 and 10:59pm / 22:59 are excluded",
+          ),
+        true,
+        `${viewport.label}: expected finance waiting-time and midnight locked rules`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.decision.includes("No exception saved") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("no statement generated") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("no invoice generated") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("no payment link created") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("no PDF generated") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("no payout created") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("no accounting posting") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("no finance export") &&
+          mockFinanceExceptionResolutionWorkbenchState.decision.includes("not saved") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("No real finance exception workflow") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("real month-end closeout workflow") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("monthly billing persistence") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("statement generation") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("finance export") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("API call") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("storage") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("Supabase") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("parser file changes") &&
+          mockFinanceExceptionResolutionWorkbenchState.boundary.includes("package script changes"),
+        true,
+        `${viewport.label}: expected finance no exception/statement/invoice/payment/PDF/payout/accounting/storage/API boundary`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.actionControlCount,
+        0,
+        `${viewport.label}: expected finance exception workbench to have no action controls`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.controlCount,
+        0,
+        `${viewport.label}: expected finance exception workbench to have no form controls`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.rows.length,
+        3,
+        `${viewport.label}: expected three finance exception rows`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.height <=
+          (viewport.width < 640 ? 1700 : viewport.width < 1024 ? 980 : viewport.width < 1200 ? 900 : 820),
+        true,
+        `${viewport.label}: expected compact finance exception workbench, got ${mockFinanceExceptionResolutionWorkbenchState.height}px`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.rows.every((row) => row.height >= 48 && row.width >= 240),
+        true,
+        `${viewport.label}: expected finance exception rows to stay readable`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchState.docScrollWidth <=
+          mockFinanceExceptionResolutionWorkbenchState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected finance exception workbench not to create horizontal overflow`,
+      );
+
       for (const tabLabel of appTabs) {
         await clickTab(tabLabel);
         const state = await layoutState();
@@ -5623,6 +5860,9 @@ async function runChromeTest() {
       const mockMonthEndCloseoutWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-month-end-closeout-workbench]"))`,
       );
+      const mockFinanceExceptionResolutionWorkbenchVisible = await evaluate(
+        `Boolean(document.querySelector("[data-mock-finance-exception-resolution-workbench]"))`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -5693,6 +5933,15 @@ async function runChromeTest() {
             "no real month-end closeout workflow",
             "monthly billing persistence",
             "finance export",
+            "finance exception resolution workbench",
+            "internal/admin-only finance exception preview",
+            "month-end closeout workbench exception rows",
+            "extra-charge evidence missing",
+            "customer charge waived / payout still reviewed",
+            "statement/invoice readiness blocked",
+            "no exception saved",
+            "no real finance exception workflow",
+            "exception persistence",
           ].filter((value) => text.includes(value));
         })()`,
       );
@@ -5884,6 +6133,11 @@ async function runChromeTest() {
         mockMonthEndCloseoutWorkbenchVisible,
         false,
         `${viewport.label} ${context}: expected no admin mock month-end closeout workbench`,
+      );
+      assert.equal(
+        mockFinanceExceptionResolutionWorkbenchVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin mock finance exception resolution workbench`,
       );
       assert.deepEqual(
         mockExtraChargesVarianceApprovalReconciliationTextLeaks,

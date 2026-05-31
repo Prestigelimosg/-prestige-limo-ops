@@ -685,6 +685,7 @@ async function runChromeTest() {
         "[data-mock-extra-charges-approval-decision-separation-review]",
         "[data-mock-completed-job-closeout-center]",
         "[data-mock-month-end-closeout-workbench]",
+        "[data-mock-finance-exception-resolution-workbench]",
       ];
 
       for (const viewport of placementViewports) {
@@ -741,7 +742,8 @@ async function runChromeTest() {
             state.text.includes("Auto-detection / Override QA") &&
             state.text.includes("Summary / Charge Type Separation QA") &&
             state.text.includes("Completed Job Closeout Center") &&
-            state.text.includes("Month-End Closeout Workbench"),
+            state.text.includes("Month-End Closeout Workbench") &&
+            state.text.includes("Finance Exception Resolution Workbench"),
           true,
           `${viewport.label}: expected grouped mock workflow reviews to preserve first and final review sections`,
         );
@@ -9574,6 +9576,338 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMockFinanceExceptionResolutionWorkbench = async () => {
+      const workbenchViewports = [
+        {
+          height: 980,
+          label: "mobile mock finance exception resolution workbench",
+          mobile: true,
+          scale: 3,
+          width: 375,
+        },
+        {
+          height: 900,
+          label: "desktop mock finance exception resolution workbench",
+          mobile: false,
+          scale: 1,
+          width: 1440,
+        },
+      ];
+      const states = [];
+
+      for (const viewport of workbenchViewports) {
+        await setViewportAndReload(viewport);
+        await clickTab("Dashboard");
+
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const group = document.querySelector("[data-mock-workflow-review-group]");
+              const dashboard = document.querySelector("[data-operations-dashboard]");
+              const monthEndWorkbench = document.querySelector("[data-mock-month-end-closeout-workbench]");
+              const section = document.querySelector("[data-mock-finance-exception-resolution-workbench]");
+              if (!group || !dashboard || !monthEndWorkbench || !section) {
+                return false;
+              }
+
+              const groupRect = group.getBoundingClientRect();
+              const dashboardRect = dashboard.getBoundingClientRect();
+              const monthEndRect = monthEndWorkbench.getBoundingClientRect();
+              const sectionRect = section.getBoundingClientRect();
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+              const rows = [...section.querySelectorAll("[data-mock-finance-exception-resolution-workbench-row]")].map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                return {
+                  height: Math.round(rowRect.height),
+                  key: row.getAttribute("data-mock-finance-exception-resolution-workbench-row") || "",
+                  text: row.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(rowRect.width),
+                };
+              });
+              const columns = [
+                ...new Set(
+                  [...section.querySelectorAll("[data-mock-finance-exception-resolution-workbench-column]")].map(
+                    (column) => column.getAttribute("data-mock-finance-exception-resolution-workbench-column") || "",
+                  ),
+                ),
+              ];
+
+              return {
+                actionControlCount: section.querySelectorAll("button, a, form").length,
+                boundary:
+                  document.querySelector("[data-mock-finance-exception-resolution-workbench-boundary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                columns,
+                controlCount: section.querySelectorAll("input, select, textarea").length,
+                copy:
+                  document.querySelector("[data-mock-finance-exception-resolution-workbench-copy]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                dashboardBottom: Math.round(dashboardRect.bottom),
+                decision:
+                  document.querySelector("[data-mock-finance-exception-resolution-workbench-decision]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                filterSummary:
+                  document.querySelector("[data-mock-finance-exception-resolution-workbench-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                forbiddenActionText: [
+                  "approve exception",
+                  "bill now",
+                  "close exception",
+                  "create driver payout",
+                  "create invoice",
+                  "create payment",
+                  "create statement",
+                  "export finance",
+                  "export pdf",
+                  "generate invoice",
+                  "generate payment link",
+                  "generate pdf",
+                  "generate statement",
+                  "pay now",
+                  "post now",
+                  "release statement",
+                  "save exception",
+                  "send invoice",
+                  "send statement",
+                ].filter((value) => lowerText.includes(value)),
+                groupTop: Math.round(groupRect.top),
+                height: Math.round(sectionRect.height),
+                inBottomGroup: group.contains(section),
+                monthEndBottom: Math.round(monthEndRect.bottom),
+                rowCount: rows.length,
+                rows,
+                rule:
+                  document.querySelector("[data-mock-finance-exception-resolution-workbench-rule]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                sectionTop: Math.round(sectionRect.top),
+                separation:
+                  document.querySelector("[data-mock-finance-exception-resolution-workbench-separation]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin mock finance exception resolution workbench`,
+        );
+
+        assert.equal(
+          state.inBottomGroup,
+          true,
+          `${viewport.label}: expected finance exception workbench inside bottom mock workflow group`,
+        );
+        assert.equal(
+          state.groupTop >= state.dashboardBottom,
+          true,
+          `${viewport.label}: expected operations dashboard before finance exception workbench`,
+        );
+        assert.equal(
+          state.sectionTop >= state.monthEndBottom,
+          true,
+          `${viewport.label}: expected finance exception workbench after month-end closeout workbench`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("finance exception resolution workbench") &&
+            state.text.toLowerCase().includes("mock only"),
+          true,
+          `${viewport.label}: expected finance exception workbench heading`,
+        );
+        assert.equal(
+          state.copy.includes("month-end account rows from the Month-End Closeout Workbench") &&
+            state.copy.includes("Static/mock/local display data only") &&
+            state.copy.includes("no real exception resolution"),
+          true,
+          `${viewport.label}: expected finance workbench to connect to month-end closeout workbench`,
+        );
+        assert.deepEqual(
+          state.columns,
+          [
+            "Exception reference closeout month customer account related job month-end group",
+            "Exception type",
+            "Customer billing impact",
+            "Driver payout impact",
+            "Finance review status dispatcher follow-up status",
+            "Resolution readiness next internal action",
+          ],
+          `${viewport.label}: expected finance exception workflow columns`,
+        );
+        assert.equal(state.rowCount, 3, `${viewport.label}: expected three finance exception rows maximum`);
+        assert.equal(
+          state.filterSummary.includes("Exception month") &&
+            state.filterSummary.includes("May 2026") &&
+            state.filterSummary.includes("Month-End Closeout Workbench exception rows") &&
+            state.filterSummary.includes("Open billing, payout, statement, and finance review exceptions") &&
+            state.filterSummary.includes("3 exception rows maximum") &&
+            state.filterSummary.includes("display-only"),
+          true,
+          `${viewport.label}: expected display-only finance exception filter summary`,
+        );
+        const rowByRef = Object.fromEntries(state.rows.map((row) => [row.key, row.text]));
+        assert.equal(
+          rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Ritz-Carlton") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("PLO-ME-2026-05-RITZ / PLO-CLOSE-118") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Extra-charge evidence missing") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Hold customer billing") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Driver payout still under review") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Waiting Time 2 blocks") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Extra Stops 1") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-EV"].includes("Midnight Charge not detected"),
+          true,
+          `${viewport.label}: expected extra-charge evidence exception row`,
+        );
+        assert.equal(
+          rowByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes("VIP Customer") &&
+            rowByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes("Customer charge waived") &&
+            rowByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes("Driver payout review remains separate") &&
+            rowByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes("Midnight Charge detected") &&
+            rowByRef["PLO-FIN-EX-2026-05-VIP-WAIVER"].includes("Review driver payout even though customer charge is waived"),
+          true,
+          `${viewport.label}: expected waived customer charge finance exception row`,
+        );
+        assert.equal(
+          rowByRef["PLO-FIN-EX-2026-05-RITZ-STMT"].includes("Statement/invoice readiness blocked") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-STMT"].includes("finance review note") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-STMT"].includes("No payout created") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-STMT"].includes("Extra Stops needs confirmation") &&
+            rowByRef["PLO-FIN-EX-2026-05-RITZ-STMT"].includes("Blocked - no statement or invoice generated"),
+          true,
+          `${viewport.label}: expected statement/invoice readiness exception row`,
+        );
+        assert.equal(
+          state.text.toLowerCase().includes("exception / group") &&
+            state.text.toLowerCase().includes("exception type") &&
+            state.text.toLowerCase().includes("billing impact") &&
+            state.text.toLowerCase().includes("payout impact") &&
+            state.text.toLowerCase().includes("review / follow-up") &&
+            state.text.toLowerCase().includes("resolution / next"),
+          true,
+          `${viewport.label}: expected complete finance exception workflow pieces`,
+        );
+        assert.equal(
+          state.separation.includes("Waiting Time, Extra Stops, and Midnight Charge may display") &&
+            state.separation.includes("under Extra Charges") &&
+            state.separation.includes("each charge type remains internally distinct"),
+          true,
+          `${viewport.label}: expected Extra Charges grouping with internal charge-type separation`,
+        );
+        assert.equal(
+          state.decision.includes("Customer billing approval and driver payout approval are separate decisions") &&
+            state.decision.includes("Waived customer charge does not automatically cancel driver payout review") &&
+            state.decision.includes("No exception saved") &&
+            state.decision.includes("no statement generated") &&
+            state.decision.includes("no invoice generated") &&
+            state.decision.includes("no payment link created") &&
+            state.decision.includes("no PDF generated") &&
+            state.decision.includes("no payout created") &&
+            state.decision.includes("no accounting posting") &&
+            state.decision.includes("no finance export") &&
+            state.decision.includes("not saved"),
+          true,
+          `${viewport.label}: expected separate billing/payout decisions and no generated finance artifacts`,
+        );
+        assert.equal(
+          state.rule.includes("1 waiting block = 15 minutes") &&
+            state.rule.includes("customer charge $15 per waiting block") &&
+            state.rule.includes("driver payout $10 per waiting block") &&
+            state.rule.includes("Midnight Charge: customer charge $15") &&
+            state.rule.includes("driver payout $10") &&
+            state.rule.includes("11:00pm / 23:00 through 6:59am / 06:59 inclusive") &&
+            state.rule.includes("7:00am / 07:00 and 10:59pm / 22:59 are excluded"),
+          true,
+          `${viewport.label}: expected waiting-time and midnight locked rules in finance exception workbench`,
+        );
+        for (const expectedBoundaryText of [
+          "Mock/local only.",
+          "No real finance exception workflow",
+          "real month-end closeout workflow",
+          "completed-job persistence",
+          "monthly billing persistence",
+          "statement generation",
+          "invoice generation",
+          "real combined charge calculation",
+          "billing automation",
+          "monthly invoice",
+          "payment link",
+          "PDF generation",
+          "accounting integration",
+          "accounting posting",
+          "finance export",
+          "customer account",
+          "customer auth",
+          "driver payout creation",
+          "waiting-time persistence",
+          "extra-stop persistence",
+          "midnight-charge persistence",
+          "approval-decision persistence",
+          "exception persistence",
+          "customer-charge persistence",
+          "driver-payout persistence",
+          "save/load behavior",
+          "storage",
+          "localStorage",
+          "sessionStorage",
+          "cookies",
+          "IndexedDB",
+          "API call",
+          "fetch",
+          "XHR",
+          "sendBeacon",
+          "WebSocket",
+          "Supabase",
+          "parser file changes",
+          "package script changes",
+          "test:safe membership changes",
+          "message-channel delivery",
+          "customer notification",
+          "send behavior",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected finance exception boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.equal(state.actionControlCount, 0, `${viewport.label}: expected no finance exception action controls`);
+        assert.equal(state.controlCount, 0, `${viewport.label}: expected no finance exception form controls`);
+        assert.deepEqual(
+          state.forbiddenActionText,
+          [],
+          `${viewport.label}: expected no active finance exception/bill/pay/invoice/statement/PDF/post controls wording`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1700 : viewport.width < 1024 ? 980 : 820),
+          true,
+          `${viewport.label}: expected compact finance exception workbench, got ${state.height}px`,
+        );
+        assert.equal(
+          state.rows.every((row) => row.height >= 48 && row.width >= 240),
+          true,
+          `${viewport.label}: expected finance exception rows to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected finance exception workbench not to create horizontal overflow`,
+        );
+
+        states.push({
+          height: state.height,
+          rows: state.rows.map((row) => row.key),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const assertNoMockWaitingTimeExtraChargesPlanningLeak = async (context) => {
       const state = await evaluate(`(() => {
         const text = (document.body.innerText || "").toLowerCase();
@@ -9835,6 +10169,43 @@ async function runChromeTest() {
         state.textLeaks,
         [],
         `${context}: expected no internal month-end closeout/billing/payout/statement/finance handoff data leak`,
+      );
+    };
+
+    const assertNoMockFinanceExceptionResolutionWorkbenchLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = (document.body.innerText || "").toLowerCase();
+
+        return {
+          textLeaks: [
+            "finance exception resolution workbench",
+            "internal/admin-only finance exception preview",
+            "month-end closeout workbench exception rows",
+            "open billing, payout, statement, and finance review exceptions",
+            "3 exception rows maximum",
+            "extra-charge evidence missing",
+            "customer charge waived / payout still reviewed",
+            "statement/invoice readiness blocked",
+            "finance review blocked in mock",
+            "dispatcher follow-up needed",
+            "no exception saved",
+            "no real finance exception workflow",
+            "exception persistence",
+            "finance exception boundary",
+          ].filter((value) => text.includes(value)),
+          visible: Boolean(document.querySelector("[data-mock-finance-exception-resolution-workbench]")),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        false,
+        `${context}: expected no internal mock finance exception resolution workbench`,
+      );
+      assert.deepEqual(
+        state.textLeaks,
+        [],
+        `${context}: expected no internal finance exception/billing/payout/statement/finance export data leak`,
       );
     };
 
@@ -10430,6 +10801,7 @@ async function runChromeTest() {
         await assertNoMockExtraChargesApprovalDecisionSeparationLeak(routeName);
         await assertNoMockCompletedJobCloseoutCenterLeak(routeName);
         await assertNoMockMonthEndCloseoutWorkbenchLeak(routeName);
+        await assertNoMockFinanceExceptionResolutionWorkbenchLeak(routeName);
         const routeState = await evaluate(`(() => {
           const sentinels = ${JSON.stringify(replacementAllSentinelValues)};
           const replacementControls = ${JSON.stringify(replacementControlLabels)};
@@ -10514,6 +10886,9 @@ async function runChromeTest() {
             ),
             mockMonthEndCloseoutWorkbenchVisible: Boolean(
               document.querySelector("[data-mock-month-end-closeout-workbench]"),
+            ),
+            mockFinanceExceptionResolutionWorkbenchVisible: Boolean(
+              document.querySelector("[data-mock-finance-exception-resolution-workbench]"),
             ),
             mockReceivablesTextLeaks: [
               "receivables handoff",
@@ -10704,6 +11079,15 @@ async function runChromeTest() {
               "no real month-end closeout workflow",
               "monthly billing persistence",
               "finance export",
+              "finance exception resolution workbench",
+              "internal/admin-only finance exception preview",
+              "month-end closeout workbench exception rows",
+              "extra-charge evidence missing",
+              "customer charge waived / payout still reviewed",
+              "statement/invoice readiness blocked",
+              "no exception saved",
+              "no real finance exception workflow",
+              "exception persistence",
             ].filter((value) => text.toLowerCase().includes(value)),
             replacementControlText: replacementControls.filter((label) => text.includes(label)),
             replacementPlaceholderVisible: Boolean(document.querySelector("[data-admin-replacement-placeholder]")),
@@ -10843,6 +11227,11 @@ async function runChromeTest() {
           routeState.mockMonthEndCloseoutWorkbenchVisible,
           false,
           `${routeName}: expected no internal mock month-end closeout workbench`,
+        );
+        assert.equal(
+          routeState.mockFinanceExceptionResolutionWorkbenchVisible,
+          false,
+          `${routeName}: expected no internal mock finance exception resolution workbench`,
         );
         assert.deepEqual(
           routeState.mockReceivablesTextLeaks,
@@ -11402,6 +11791,7 @@ async function runChromeTest() {
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers desktop");
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers desktop");
       await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers desktop");
+      await assertNoMockFinanceExceptionResolutionWorkbenchLeak("/customers desktop");
 
       const dashboardState = await evaluate(`(() => {
         const text = document.body.innerText;
@@ -17059,6 +17449,7 @@ async function runChromeTest() {
       await assertNoMockExtraChargesApprovalDecisionSeparationLeak("/customers mobile");
       await assertNoMockCompletedJobCloseoutCenterLeak("/customers mobile");
       await assertNoMockMonthEndCloseoutWorkbenchLeak("/customers mobile");
+      await assertNoMockFinanceExceptionResolutionWorkbenchLeak("/customers mobile");
       assert.equal(mobileDashboardState.rowCount, 0, "Expected no customer rows on mobile before search");
       assert.equal(mobileDashboardState.helperVisible, true, "Expected mobile customer search helper before results");
       assert.equal(
@@ -22956,6 +23347,8 @@ async function runChromeTest() {
       await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
     state.adminMockCompletedJobCloseoutCenter = await checkAdminMockCompletedJobCloseoutCenter();
     state.adminMockMonthEndCloseoutWorkbench = await checkAdminMockMonthEndCloseoutWorkbench();
+    state.adminMockFinanceExceptionResolutionWorkbench =
+      await checkAdminMockFinanceExceptionResolutionWorkbench();
     state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];

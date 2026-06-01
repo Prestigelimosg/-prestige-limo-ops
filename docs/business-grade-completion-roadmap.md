@@ -107,6 +107,8 @@ Stage 4A-310 adds a docs-only exact migration/RLS checklist for the admin-only b
 
 Stage 4A-317 adds a docs-only admin booking persistence API/UI acceptance checklist in `docs/admin-booking-persistence-api-ui-acceptance-checklist.md`. It does not edit app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, or persistence behavior. Real admin save/load API/UI implementation remains blocked until later approved stages, and the next safe stage should be Stage 4A-318 read-only checkpoint review.
 
+Stage 4A-321 adds a docs-only exact admin booking persistence API/UI implementation prompt in `docs/admin-booking-persistence-api-ui-implementation-prompt.md`. It does not edit app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, or persistence behavior. Real admin save/load API/UI implementation remains blocked until later approved stages, and the next safe stage should be Stage 4A-322 read-only checkpoint review.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -359,6 +361,8 @@ Stage 4A-310 adds a docs-only exact migration/RLS checklist for the selected adm
 
 Stage 4A-317 adds a docs-only admin booking persistence API/UI acceptance checklist after the migration apply was verified. It keeps app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior unchanged while future admin save/load API/UI implementation remains blocked until later approved stages.
 
+Stage 4A-321 adds a docs-only exact admin booking persistence API/UI implementation prompt after the no-leak guards were implemented and reviewed. It keeps app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior unchanged while future admin save/load API/UI implementation remains blocked until later approved stages.
+
 ## 9. Parser Safety Plateau
 
 Parser behavior should stay frozen unless there is a specific parser defect or an explicitly approved parser-improvement stage.
@@ -395,6 +399,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 11. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-318 - Read-only checkpoint review after admin booking persistence API/UI acceptance checklist.
+Recommended next stage: Stage 4A-322 - Read-only checkpoint review after exact admin booking persistence API/UI implementation prompt.
 
-Reason: Stage 4A-317 is a docs-only checklist. A read-only checkpoint should confirm the future admin-only API/UI acceptance criteria, approved and forbidden data boundaries, route protections, short-notice requirements, RLS/database safety criteria, future test requirements, and no-runtime-change guardrails before any API route, app save/load behavior, auth, billing, payment, notification, driver workflow, or parser behavior is activated.
+Reason: Stage 4A-321 is a docs-only exact implementation prompt. A read-only checkpoint should confirm the future admin-only API/UI file boundaries, approved and forbidden data scope, route protections, short-notice requirements, RLS/database safety criteria, future test requirements, command sequence, and no-runtime-change guardrails before any API route, app save/load behavior, auth, billing, payment, notification, driver workflow, or parser behavior is activated.

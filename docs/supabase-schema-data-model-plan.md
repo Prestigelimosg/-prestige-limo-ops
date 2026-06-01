@@ -304,6 +304,8 @@ Recommended future stages:
 
 Stage 4A-298 plans future migration, RLS, and API boundaries for this schema. It does not create migrations, run Supabase commands, add API routes, or activate persistence.
 
+Stage 4A-300 plans future test guards for accidental Supabase/API/runtime calls before schema implementation. It does not change tests, package scripts, migrations, API routes, database connections, or persistence.
+
 First real workflow candidates, ranked by safety:
 
 1. Admin-only booking persistence prototype with strict tests.

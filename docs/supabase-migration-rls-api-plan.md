@@ -175,6 +175,8 @@ Future implementation stages should add or preserve guards for:
 - `test:safe` passing before and after any approved implementation.
 - Final `git status --short` remaining clean.
 
+Stage 4A-300 plans these future test guards before any migration, RLS, API, auth, save/load, or persistence implementation. It does not change tests, package scripts, Supabase commands, migrations, API routes, database connections, or runtime persistence.
+
 ## I. Data Not Allowed In First Real Persistence Stage
 
 The first persistence implementation must still block:
@@ -197,8 +199,9 @@ Recommended future stages after this plan:
 
 1. Stage 4A-299 - Read-only checkpoint review after Migration / RLS / API plan.
 2. Stage 4A-300 - Docs-only test safety guard plan for accidental Supabase/API/runtime calls.
-3. Stage 4A-301 - Docs-only first real persistence acceptance criteria.
-4. Only after explicit approval, implement the smallest real persistence workflow.
+3. Stage 4A-301 - Read-only checkpoint review after test safety guard plan.
+4. Stage 4A-302 - Docs-only first real persistence acceptance criteria.
+5. Only after explicit approval, implement the smallest real persistence workflow.
 
 First real workflow candidates, ranked by safety:
 

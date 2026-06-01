@@ -488,6 +488,8 @@ Stage 4A-296 keeps the mock QA/dev archive separate from future persisted produc
 
 Stage 4A-298 keeps QA/dev archive content out of future persisted production data, RLS policies, and API boundaries.
 
+Stage 4A-300 keeps QA/dev archive and mock data protected through future test guard planning. It does not activate schema, migration, API, runtime, or persistence behavior.
+
 ### Stage E: Implement Collapsed Mock QA Area
 
 Implement the approved collapse/hide behavior only. Keep all sections mock/local/static/display-only, keep Mock Only labels visible, and preserve browser/mobile route leakage protections.

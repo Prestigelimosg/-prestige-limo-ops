@@ -93,6 +93,8 @@ Stage 4A-294 adds the production data/auth boundary plan after the collapsed arc
 
 Stage 4A-296 adds a docs-only Supabase schema/data model plan in `docs/supabase-schema-data-model-plan.md`. It does not run Supabase commands, create migrations, add API routes, or activate real persistence. Real implementation remains blocked until later explicitly approved stages, and the next safe stage should be Stage 4A-297 read-only checkpoint review.
 
+Stage 4A-298 adds docs-only Migration / RLS / API planning in `docs/supabase-migration-rls-api-plan.md`. It does not run Supabase commands, create migrations, add API routes, or activate persistence. Real implementation remains blocked until later approved stages, and the next safe stage should be Stage 4A-299 read-only checkpoint review.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -333,6 +335,8 @@ The next stage should still be a read-only review, not immediate real Supabase i
 
 Stage 4A-296 adds the docs-only Supabase schema/data model plan. It keeps all Supabase commands, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior blocked until later approved stages.
 
+Stage 4A-298 adds docs-only Migration / RLS / API planning and keeps real migrations, RLS policies, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior blocked until later approved stages.
+
 ## 9. Parser Safety Plateau
 
 Parser behavior should stay frozen unless there is a specific parser defect or an explicitly approved parser-improvement stage.
@@ -369,6 +373,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 11. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-297 - Read-only checkpoint review after Supabase schema/data model plan.
+Recommended next stage: Stage 4A-299 - Read-only checkpoint review after Migration / RLS / API plan.
 
-Reason: Stage 4A-296 is a docs-only schema/data model plan. A read-only checkpoint should confirm the proposed tables, phase boundaries, privacy rules, and no-runtime-change guardrails before any migration/RLS/API planning or real workflow implementation is selected.
+Reason: Stage 4A-298 is a docs-only migration, RLS, and API boundary plan. A read-only checkpoint should confirm the migration order, table access boundaries, future API route categories, blocked data areas, and no-runtime-change guardrails before any test guard planning or real persistence implementation is selected.

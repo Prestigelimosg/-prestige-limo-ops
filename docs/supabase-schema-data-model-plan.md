@@ -302,6 +302,8 @@ Recommended future stages:
 3. Stage 4A-299 - Optional test-only safety guard planning for no accidental Supabase runtime calls.
 4. Only after explicit approval, implement one smallest real persistence workflow.
 
+Stage 4A-298 plans future migration, RLS, and API boundaries for this schema. It does not create migrations, run Supabase commands, add API routes, or activate persistence.
+
 First real workflow candidates, ranked by safety:
 
 1. Admin-only booking persistence prototype with strict tests.

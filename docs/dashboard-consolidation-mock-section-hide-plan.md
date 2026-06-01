@@ -482,6 +482,8 @@ Recommended sequence after Stage 4A-291:
 
 Stage 4A-292, if approved later, should be a bounded runtime UI-only implementation with browser test updates in the same stage. It must not activate real data, API, auth, billing, notification, dispatch, parser, Supabase, or package-script behavior.
 
+Stage 4A-294 plans production data/auth boundaries after the collapsed archive implementation and read-only verification. The mock archive remains internal/admin-only, and real data/auth/Supabase work remains blocked until future approved stages.
+
 ### Stage E: Implement Collapsed Mock QA Area
 
 Implement the approved collapse/hide behavior only. Keep all sections mock/local/static/display-only, keep Mock Only labels visible, and preserve browser/mobile route leakage protections.
@@ -574,6 +576,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 10. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-292 - Implementation of collapsed internal QA/dev archive shell and grouping only.
+Recommended next stage: Stage 4A-295 - Read-only checkpoint review after production data/auth boundary plan.
 
-Reason: Stage 4A-291 defines the exact pass/fail criteria for the internal QA/dev archive and default production dashboard surface. The next safe runtime stage can be a bounded UI-only implementation that groups existing frozen mock/local/static sections, keeps production work visible first, preserves route leakage protections, and updates browser/mobile tests in the same approved stage.
+Reason: the collapsed internal QA/dev archive has been implemented and verified. Stage 4A-294 documents data/auth boundaries, so the safest next step is a read-only review before any Supabase schema, auth, persistence, billing, notification, or real workflow planning advances.

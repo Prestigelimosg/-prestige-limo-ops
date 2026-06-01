@@ -89,6 +89,8 @@ Stage 4A-290 adds the mock-section collapse/hide UI plan. The next production di
 
 Stage 4A-291 defines QA/dev archive acceptance criteria. Future runtime implementation should be UI-only, bounded, and test-protected; mock workbenches remain frozen and real data/API/auth/billing/payment work remains blocked until later approved stages.
 
+Stage 4A-294 adds the production data/auth boundary plan after the collapsed archive implementation and read-only checkpoint review. The next production direction is boundary planning before any real Supabase, API, auth, booking save/load, customer account, billing, payment, notification, or driver workflow implementation.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -169,6 +171,8 @@ Stage 4A-290 defines the collapse/hide UI plan for those frozen sections. Runtim
 
 Stage 4A-291 defines the acceptance criteria for that future UI-only archive implementation. It keeps the next implementation bounded to reorganizing existing mock/local/static sections, with no new mock workbench and no real Supabase, API, auth, billing, payment, notification, dispatch, or parser behavior.
 
+Stage 4A-292 implemented the collapsed internal QA/dev archive shell and Stage 4A-293 verified it with a read-only checkpoint review. Stage 4A-294 now plans production data/auth boundaries before any real persistence, account, billing, payment, notification, or driver workflow work.
+
 Future dashboard work should prefer one of these paths:
 
 - Consolidate related mock workbenches into fewer operational panels.
@@ -178,7 +182,154 @@ Future dashboard work should prefer one of these paths:
 
 The production dashboard should be compact, role-aware, and operational. It should focus on the next action for dispatch/admin staff instead of displaying every mock workflow at once.
 
-## 8. Parser Safety Plateau
+## 8. Stage 4A-294 - Production Data/Auth Boundary Plan
+
+Stage 4A-294 is documentation-only. It plans future production data and auth boundaries after the collapsed QA/dev archive was implemented and verified. It does not change runtime behavior and does not activate real Supabase, auth, API routes, data persistence, billing, invoice, PDF, payment, payout, notification, live location, maps, flight, route, parser learning, customer account, booking save/load, or driver workflow behavior.
+
+### A. Why This Plan Is Needed
+
+Before real production data features are built, Prestige Limo Ops needs clear boundaries for:
+
+- Admin/staff operational data.
+- Customer-visible booking data.
+- Driver-visible job data.
+- Finance-sensitive billing, payment, invoice, accounting, and payout data.
+- Public booking request data.
+- Mock/local-only QA archive data.
+- Future Supabase-saved production data.
+
+This stage is planning only. Real storage, auth, API, billing, payment, PDF, notification, dispatch persistence, customer account, and Supabase work remains blocked until a future explicit implementation stage.
+
+### B. Future Role Model
+
+1. Admin / Owner
+   - Full internal operational view.
+   - Customer accounts, drivers, vehicles, rates, finance, billing, payout, audit, and review powers.
+   - Access to the internal QA/mock archive for QA and planning only.
+
+2. Dispatcher / Operations Staff
+   - Booking intake, parser/manual review, driver assignment review, customer update readiness, and operational job status.
+   - Limited finance visibility only if needed for dispatch decisions.
+   - No automatic billing, payment, payout, notification, or persistence powers unless separately approved.
+
+3. Customer
+   - Own booking requests, own confirmed bookings, simple status, and customer-safe wording only.
+   - No driver payout, internal driver notes, admin workbench, parser debug, finance internals, or QA/mock archive content.
+
+4. Driver
+   - Assigned job details needed to perform the trip: timing, pickup/dropoff, route basics, approved contact/job details, and simple status.
+   - No customer billing, company pricing, payout comparison, admin notes, customer account details, finance internals, or mock archive content.
+
+5. Finance / Admin Billing
+   - Future invoice, statement, payment follow-up, payout review, month-end closeout, and accounting review.
+   - Sensitive and role-protected later; no real finance workflow is activated in this stage.
+
+Actual auth and role implementation is not part of Stage 4A-294.
+
+### C. Route Ownership Plan
+
+| Route | Current/future owner | Boundary |
+| --- | --- | --- |
+| `/` | Admin/internal dashboard | Contains operational admin content and the collapsed QA/dev archive. Should require admin/staff auth later. |
+| `/book` | Public/customer booking request | No admin internals. Future short-notice rule must show simple customer wording only. |
+| `/my-bookings` | Customer portal | Should later require customer identity/auth or a secure access flow. Must show only customer-owned booking information. |
+| `/customers` | Internal staff customer/payments dashboard | Requires admin/staff auth later despite the customer-facing route name. Must not be treated as a public customer portal. |
+| `/driver-job-demo` | Demo/public driver surface | Remains demo/mock/local and must not expose admin, billing, payout, or archive content. |
+| `/driver-job/[token]` | Public driver token route | Should expose only job-card-safe driver information for one scoped job. Must never expose admin, finance, billing, payout, customer account, or mock archive content. |
+
+### D. Data Visibility Matrix
+
+| Data category | Admin/owner | Dispatcher | Customer | Driver | Finance | Notes / future rule |
+| --- | --- | --- | --- | --- | --- | --- |
+| Booking ID/reference | Visible | Visible | Own booking only | Assigned job only | Visible | Future auth required for customer/driver scoping. |
+| Customer name/contact | Visible | Visible for operations | Own profile/booking only | Only approved job contact info | Visible if billing-related | Customer PII must be scoped by role. |
+| Pickup date/time | Visible | Visible | Own booking only | Assigned job only | Visible if billing-related | Customer and driver views can show safe operational timing. |
+| Pickup/dropoff/route | Visible | Visible | Own booking only | Assigned job only | Visible if billing-related | Route details must not include internal notes. |
+| Flight details | Visible | Visible | Own booking only | Assigned job only | Usually hidden unless invoice support needs it | No flight API activation yet. |
+| Pax/luggage/vehicle type | Visible | Visible | Own booking only | Assigned job only | Limited if billing-related | Safe to expose when scoped to own booking/job. |
+| Child seat / extra stop / waiting time / midnight charge | Visible | Visible | Customer-safe summary only | Job-relevant details only | Visible when finance-approved | Charges remain local/mock until billing approval. |
+| Quoted customer price | Visible | Limited if operationally needed | Own quote only after approval | Hidden | Visible | Must not leak to unrelated customers or drivers. |
+| Driver payout | Visible | Limited if approved for dispatcher role | Hidden | Own payout only if a future payout stage approves it | Visible | Never leak payout to customers. |
+| Driver PayNow number | Visible | Limited if needed | Hidden | Own profile only after auth approval | Visible if payout-approved | Highly sensitive; role-protect before persistence. |
+| Internal notes | Visible | Visible if operational | Hidden | Hidden | Limited if finance-relevant | Must never leak to customer or driver routes. |
+| Parser raw text/debug output | Visible for staff QA | Limited/manual review only | Hidden | Hidden | Hidden | Parser behavior remains frozen unless a parser stage approves changes. |
+| Customer copy | Visible | Visible | Own booking-safe copy | Hidden unless driver-safe subset is approved | Hidden unless billing support needs it | Keep customer wording simple and non-internal. |
+| Driver dispatch copy | Visible | Visible | Hidden | Assigned job only | Hidden | Must exclude customer billing and admin notes. |
+| Job card copy | Visible | Visible | Customer-safe subset only | Assigned job-safe subset only | Limited | Split by route and role, not one universal copy. |
+| Invoice/payment/PDF fields | Visible after approval | Usually hidden or limited | Own invoices/payments only after auth/billing approval | Hidden | Visible | No billing/payment/PDF behavior yet. |
+| Supabase IDs / audit metadata | Visible for admin/debug only | Hidden unless operationally needed | Hidden | Hidden | Visible if audit-approved | Future-auth-required and not customer/driver-facing. |
+| Mock QA/dev archive content | Visible only in admin/internal archive | Hidden by default unless staff QA access approved | Hidden | Hidden | Hidden | Mock/local-only for now; never public/customer/driver-visible. |
+
+### E. Data Persistence Boundary
+
+Future Supabase persistence may be considered only after explicit approval for:
+
+- Bookings.
+- Customers.
+- Drivers.
+- Vehicles.
+- Assignments.
+- Job statuses.
+- Customer account links.
+- Billing records.
+- Invoices/statements.
+- Payments or manual payment records.
+- Payout records.
+- Audit logs.
+
+The following must not be persisted yet:
+
+- QA/dev mock archive state or content.
+- Mock workbench data.
+- Parser learning or parser rule changes.
+- Notification send logs unless a notification stage is approved.
+- Billing, payment, invoice, PDF, or statement outputs unless a billing stage is approved.
+- Live location, route traces, proof photos, or file uploads unless a driver workflow/storage stage is approved.
+
+No Supabase commands, schema changes, API routes, or migrations happen in Stage 4A-294.
+
+### F. Future Auth Boundary Requirements
+
+Before any real customer, driver, admin, or finance data goes live:
+
+- Admin dashboard `/` must be auth-protected.
+- `/customers` must be staff-only.
+- Customer portal must show only the authenticated customer's bookings.
+- Driver token route must be scoped to a single job and should later expire or be revocable.
+- Finance data must be role-restricted.
+- Driver payout data must never leak to customers.
+- Customer billing data must never leak to drivers.
+- Internal admin notes must never leak to customers or drivers.
+- Mock QA/dev archive must remain admin-only, collapsed by default, and hidden from public/customer/driver routes.
+
+### G. Short-Notice Booking Rule Data Boundary
+
+The locked 24-hour customer booking rule should later be handled as a customer-submitted booking boundary:
+
+- The rule applies to customer-submitted bookings.
+- Less than 24 hours before pickup should become `Admin Review Required`.
+- Customer-facing wording should stay simple:
+
+> “This booking is within 24 hours, so our team will review and confirm availability.”
+
+- Admin/dispatcher can later see the operational reason and review queue.
+- Customer routes should not expose internal dispatcher/admin logic.
+- Do not implement this rule in Stage 4A-294.
+
+### H. Recommended Real Workflow Sequence After This Plan
+
+Recommended sequence after Stage 4A-294:
+
+1. Stage 4A-295 - Read-only checkpoint review after production data/auth boundary plan.
+2. Stage 4A-296 - Docs-only Supabase schema/data model plan.
+3. Only after explicit approval, implement one smallest safe real workflow, such as:
+   - Real customer booking request save with `Admin Review Required` support.
+   - Admin-only booking persistence.
+   - Customer account linking plan before implementation.
+
+The next stage should still be a read-only review, not immediate real Supabase implementation.
+
+## 9. Parser Safety Plateau
 
 Parser behavior should stay frozen unless there is a specific parser defect or an explicitly approved parser-improvement stage.
 
@@ -192,7 +343,7 @@ Any parser change must:
 
 Parser learning, AI parser changes, automatic account linking, and production parser automation should not be bundled into unrelated app, dashboard, billing, dispatch, or Supabase work.
 
-## 9. Required Checks For Future Commits
+## 10. Required Checks For Future Commits
 
 Keep the current checkpoint pattern for future implementation commits:
 
@@ -212,8 +363,8 @@ Keep the current checkpoint pattern for future implementation commits:
 
 Do not change package scripts or `test:safe` membership without a separate explicit approval stage.
 
-## 10. Recommended Next Safe Stage
+## 11. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-292 - Implementation of collapsed internal QA/dev archive shell and grouping only.
+Recommended next stage: Stage 4A-295 - Read-only checkpoint review after production data/auth boundary plan.
 
-Reason: the dashboard inventory, information architecture plan, route leakage map, collapse/hide UI plan, and QA/dev archive acceptance criteria are now documented. The next safe implementation can be a bounded runtime UI-only stage that groups existing frozen mock workbenches, keeps production work visible first, preserves public/customer/driver protections, and updates browser/mobile tests in the same approved stage.
+Reason: Stage 4A-294 is a docs-only boundary plan. A read-only checkpoint should confirm the role, route, visibility, persistence, auth, and short-notice boundaries before any Supabase schema/data model plan or real workflow implementation is selected.

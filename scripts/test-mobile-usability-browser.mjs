@@ -112,6 +112,61 @@ const mobileLoadedBookingFixture = {
     traveler_name: "MOBILE USABILITY TRAVELER",
   },
 };
+const mobileCustomerFacingPriceVisibilityPatterns = [
+  { label: "price/pricing/fare wording", pattern: /\b(?:price|prices|pricing|fare)\b/i },
+  { label: "quoted price wording", pattern: /\bquoted\s+price\b/i },
+  { label: "customer price wording", pattern: /\bcustomer\s+price\b/i },
+  { label: "currency pricing amount", pattern: /(?:s\$\s*|\$\s*|sgd\s*)\d+(?:[,.]\d{2})?|\b\d+(?:[,.]\d{2})?\s*sgd\b/i },
+  { label: "amount due wording", pattern: /\bamount\s+due\b/i },
+  { label: "payment wording", pattern: /\bpayment\b/i },
+  { label: "payment link wording", pattern: /\bpayment\s+link\b/i },
+  { label: "invoice wording", pattern: /\binvoice\b/i },
+  { label: "PDF wording", pattern: /\bpdf\b/i },
+  { label: "billing wording", pattern: /\bbilling\b/i },
+  { label: "statement wording", pattern: /\bstatement\b/i },
+  { label: "finance wording", pattern: /\bfinance\b/i },
+  { label: "driver payout wording", pattern: /\bdriver\s+payout\b/i },
+  { label: "PayNow payout wording", pattern: /\bpay\s*now\s+payout\b/i },
+  { label: "admin finance wording", pattern: /\badmin\s+finance\b/i },
+  { label: "parser/debug wording", pattern: /\b(?:parser(?:\/debug|\s+debug)|debug\s+output|manual\s+review\s+internals)\b/i },
+  { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+];
+const mobileDriverPriceFinanceLeakPatterns = [
+  { label: "customer price wording", pattern: /\bcustomer\s+price\b/i },
+  { label: "quoted customer price wording", pattern: /\bquoted\s+(?:customer\s+)?price\b/i },
+  { label: "customer billing wording", pattern: /\bcustomer\s+billing\b/i },
+  { label: "invoice/payment details wording", pattern: /\binvoice\s*\/\s*payment\s+details\b/i },
+  { label: "payment link wording", pattern: /\bpayment\s+link\b/i },
+  { label: "driver payout wording", pattern: /\bdriver\s+payout\b/i },
+  { label: "payout comparison wording", pattern: /\bpayout\s+comparison\b/i },
+  { label: "PayNow payout wording", pattern: /\bpay\s*now\s+payout\b/i },
+  { label: "internal finance wording", pattern: /\binternal\s+finance\b/i },
+  { label: "internal admin notes wording", pattern: /\binternal\s+admin\s+notes?\b/i },
+  { label: "admin notes wording", pattern: /\badmin\s+notes?\b/i },
+  { label: "customer account internals wording", pattern: /\bcustomer\s+account\s+internals?\b/i },
+  { label: "mock QA/dev archive wording", pattern: /\bmock\s+qa\s*\/\s*dev\s+archive\b/i },
+  { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+];
+
+function findVisibleTextLeaks(text, patterns) {
+  return patterns.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
+}
+
+function assertNoMobileCustomerFacingPriceLeaks(text, context) {
+  assert.deepEqual(
+    findVisibleTextLeaks(text, mobileCustomerFacingPriceVisibilityPatterns),
+    [],
+    `${context}: expected no mobile customer-facing pricing, payment, billing, finance, payout, parser/debug, or archive leakage`,
+  );
+}
+
+function assertNoMobileDriverPriceFinanceLeaks(text, context) {
+  assert.deepEqual(
+    findVisibleTextLeaks(text, mobileDriverPriceFinanceLeakPatterns),
+    [],
+    `${context}: expected no mobile driver customer price, billing, payout, PayNow payout, finance, admin-note, customer-account, or archive leakage`,
+  );
+}
 
 function assertNoHorizontalOverflow(state, context) {
   const overflowingWidth = Math.max(state.docScrollWidth, state.bodyScrollWidth);
@@ -1119,6 +1174,12 @@ async function runChromeTest() {
         true,
         `${viewport.label} ${route.label}: expected important section text to remain visible`,
       );
+      if (route.path === "/book" || route.path === "/my-bookings") {
+        assertNoMobileCustomerFacingPriceLeaks(
+          state.visibleText,
+          `${viewport.label} ${route.label}`,
+        );
+      }
       assert.equal(adminHubVisible, false, `${viewport.label} ${route.label}: expected no admin access hub`);
       assert.equal(
         internalQaMockArchiveVisible,
@@ -9882,6 +9943,7 @@ async function runChromeTest() {
       })()`);
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
+      assertNoMobileDriverPriceFinanceLeaks(state.visibleText, `${viewport.label} ${context}`);
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
       assert.equal(adminHubVisible, false, `${viewport.label} ${context}: expected no admin access hub`);
       assert.equal(

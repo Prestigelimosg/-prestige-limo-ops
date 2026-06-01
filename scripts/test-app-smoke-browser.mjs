@@ -278,6 +278,84 @@ const forbiddenRuntimeText = [
   "TypeError",
   "Unhandled Runtime Error",
 ];
+const customerFacingPriceVisibilityPatterns = [
+  { label: "price/pricing/fare wording", pattern: /\b(?:price|prices|pricing|fare)\b/i },
+  { label: "quoted price wording", pattern: /\bquoted\s+price\b/i },
+  { label: "customer price wording", pattern: /\bcustomer\s+price\b/i },
+  { label: "currency pricing amount", pattern: /(?:s\$\s*|\$\s*|sgd\s*)\d+(?:[,.]\d{2})?|\b\d+(?:[,.]\d{2})?\s*sgd\b/i },
+  { label: "amount due wording", pattern: /\bamount\s+due\b/i },
+  { label: "payment wording", pattern: /\bpayment\b/i },
+  { label: "payment link wording", pattern: /\bpayment\s+link\b/i },
+  { label: "invoice wording", pattern: /\binvoice\b/i },
+  { label: "PDF wording", pattern: /\bpdf\b/i },
+  { label: "billing wording", pattern: /\bbilling\b/i },
+  { label: "statement wording", pattern: /\bstatement\b/i },
+  { label: "finance wording", pattern: /\bfinance\b/i },
+  { label: "driver payout wording", pattern: /\bdriver\s+payout\b/i },
+  { label: "PayNow payout wording", pattern: /\bpay\s*now\s+payout\b/i },
+  { label: "admin finance wording", pattern: /\badmin\s+finance\b/i },
+  { label: "parser/debug wording", pattern: /\b(?:parser(?:\/debug|\s+debug)|debug\s+output|manual\s+review\s+internals)\b/i },
+  { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+];
+const driverPriceFinanceLeakPatterns = [
+  { label: "customer price wording", pattern: /\bcustomer\s+price\b/i },
+  { label: "quoted customer price wording", pattern: /\bquoted\s+(?:customer\s+)?price\b/i },
+  { label: "customer billing wording", pattern: /\bcustomer\s+billing\b/i },
+  { label: "invoice/payment details wording", pattern: /\binvoice\s*\/\s*payment\s+details\b/i },
+  { label: "payment link wording", pattern: /\bpayment\s+link\b/i },
+  { label: "driver payout wording", pattern: /\bdriver\s+payout\b/i },
+  { label: "payout comparison wording", pattern: /\bpayout\s+comparison\b/i },
+  { label: "PayNow payout wording", pattern: /\bpay\s*now\s+payout\b/i },
+  { label: "internal finance wording", pattern: /\binternal\s+finance\b/i },
+  { label: "internal admin notes wording", pattern: /\binternal\s+admin\s+notes?\b/i },
+  { label: "admin notes wording", pattern: /\badmin\s+notes?\b/i },
+  { label: "customer account internals wording", pattern: /\bcustomer\s+account\s+internals?\b/i },
+  { label: "mock QA/dev archive wording", pattern: /\bmock\s+qa\s*\/\s*dev\s+archive\b/i },
+  { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+];
+const publicRouteRuntimeResourcePattern =
+  /supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
+
+function findVisibleTextLeaks(text, patterns) {
+  return patterns.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
+}
+
+function assertNoCustomerFacingPriceVisibilityLeaks(text, context) {
+  assert.deepEqual(
+    findVisibleTextLeaks(text, customerFacingPriceVisibilityPatterns),
+    [],
+    `${context}: expected no customer-facing pricing, payment, billing, finance, payout, parser/debug, or archive leakage`,
+  );
+}
+
+function assertNoDriverPriceFinanceLeaks(text, context) {
+  assert.deepEqual(
+    findVisibleTextLeaks(text, driverPriceFinanceLeakPatterns),
+    [],
+    `${context}: expected no customer price, billing, payout, PayNow payout, finance, admin-note, customer-account, or archive leakage`,
+  );
+}
+
+function assertNoPublicRouteRuntimeCalls(integrationCalls, resourceCalls, context) {
+  assert.deepEqual(
+    integrationCalls,
+    [],
+    `${context}: expected no public/customer fetch, XHR, sendBeacon, or WebSocket calls`,
+  );
+  assert.deepEqual(
+    resourceCalls.filter((url) => publicRouteRuntimeResourcePattern.test(url)),
+    [],
+    `${context}: expected no Supabase, API, storage, payment, notification, or WebSocket resources`,
+  );
+}
+
+function assertNoBrowserPersistenceLeaks(state, context) {
+  assert.deepEqual(state.localStorageValues, [], `${context}: expected no localStorage persistence`);
+  assert.deepEqual(state.sessionStorageValues, [], `${context}: expected no sessionStorage persistence`);
+  assert.deepEqual(state.cookieValues, [], `${context}: expected no cookie persistence`);
+  assert.deepEqual(state.indexedDbNames, [], `${context}: expected no IndexedDB persistence`);
+  assert.deepEqual(state.cacheKeys, [], `${context}: expected no Cache Storage persistence`);
+}
 
 function assertAppSmokeState(state) {
   const combinedErrors = [...state.errors, ...state.consoleErrors].join("\n");
@@ -373,6 +451,56 @@ async function runChromeTest() {
 
       return result.result?.value;
     };
+
+    const readBrowserPersistenceState = (context) =>
+      evaluate(`(async () => {
+        const readStorage = (storage) => {
+          const values = [];
+          try {
+            for (let index = 0; index < storage.length; index += 1) {
+              const key = storage.key(index) || "";
+              values.push(key + "=" + (storage.getItem(key) || ""));
+            }
+          } catch (error) {
+            values.push("storage-read-error:" + (error?.message || String(error)));
+          }
+          return values;
+        };
+        const readIndexedDbNames = async () => {
+          try {
+            if (!globalThis.indexedDB?.databases) {
+              return [];
+            }
+
+            const databases = await globalThis.indexedDB.databases();
+            return databases.map((database) => database?.name || "").filter(Boolean);
+          } catch (error) {
+            return ["indexeddb-read-error:" + (error?.message || String(error))];
+          }
+        };
+        const readCacheKeys = async () => {
+          try {
+            if (!globalThis.caches?.keys) {
+              return [];
+            }
+
+            return await globalThis.caches.keys();
+          } catch (error) {
+            return ["cache-read-error:" + (error?.message || String(error))];
+          }
+        };
+
+        return {
+          cacheKeys: await readCacheKeys(),
+          context: ${JSON.stringify(context)},
+          cookieValues: document.cookie
+            ? document.cookie.split(";").map((value) => value.trim()).filter(Boolean)
+            : [],
+          indexedDbNames: await readIndexedDbNames(),
+          localStorageValues: readStorage(localStorage),
+          sessionStorageValues: readStorage(sessionStorage),
+        };
+      })()`);
 
     let openInternalQaMockArchiveAfterReload = false;
 
@@ -23507,6 +23635,19 @@ async function runChromeTest() {
             return originalSendBeacon(...args);
           };
         }
+
+        if (window.WebSocket && !window.__customerBookingOriginalWebSocket) {
+          const OriginalWebSocket = window.WebSocket;
+          window.__customerBookingOriginalWebSocket = OriginalWebSocket;
+          window.WebSocket = function CustomerBookingWebSocket(url, protocols) {
+            window.__customerBookingIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            return protocols === undefined
+              ? new OriginalWebSocket(url)
+              : new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+        }
       })()`);
     };
 
@@ -24176,6 +24317,16 @@ async function runChromeTest() {
         [],
         "Expected /book not to show internal/admin/mock/finance wording",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(initialState.text, "/book desktop");
+      assertNoPublicRouteRuntimeCalls(
+        initialState.integrationCalls,
+        initialState.resourceCalls,
+        "/book desktop load",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/book desktop load"),
+        "/book desktop load",
+      );
       assert.equal(initialState.fieldState.contactNo.required, true, "Expected contact no. to be required");
       assert.equal(initialState.fieldState.passengerName.required, true, "Expected passenger name to be required");
       assert.equal(initialState.fieldState.pickupDate.required, true, "Expected pickup date to be required");
@@ -24312,6 +24463,16 @@ async function runChromeTest() {
         [],
         "Expected invalid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(invalidState.text, "/book invalid submit");
+      assertNoPublicRouteRuntimeCalls(
+        invalidState.integrationCalls,
+        invalidState.resourceCalls,
+        "/book invalid submit",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/book invalid submit"),
+        "/book invalid submit",
+      );
       assert.equal(
         /[A-Z]{2,}-\d{3,}/.test(invalidState.text),
         false,
@@ -24356,6 +24517,16 @@ async function runChromeTest() {
         [],
         "Expected valid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(validState.text, "/book valid submit");
+      assertNoPublicRouteRuntimeCalls(
+        validState.integrationCalls,
+        validState.resourceCalls,
+        "/book valid submit",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/book valid submit"),
+        "/book valid submit",
+      );
       assert.deepEqual(
         validState.sameTimeBlockingText,
         [],
@@ -24378,6 +24549,12 @@ async function runChromeTest() {
         sameTimeRepeatState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
         "Expected repeated same-date/same-time /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(sameTimeRepeatState.text, "/book repeated submit");
+      assertNoPublicRouteRuntimeCalls(
+        sameTimeRepeatState.integrationCalls,
+        sameTimeRepeatState.resourceCalls,
+        "/book repeated submit",
       );
 
       await setCustomerBookingViewportAndLoad(mobileViewport);
@@ -24530,6 +24707,16 @@ async function runChromeTest() {
         [],
         "Expected /book mobile view not to show internal/admin/mock/finance wording",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(mobileState.text, "/book mobile");
+      assertNoPublicRouteRuntimeCalls(
+        mobileState.integrationCalls,
+        mobileState.resourceCalls,
+        "/book mobile",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/book mobile"),
+        "/book mobile",
+      );
       assertNoPaymentIntegrationResources(mobileState.resourceCalls, "mobile customer booking page");
       await checkTelegramBoundary("/book mobile");
 
@@ -24591,6 +24778,19 @@ async function runChromeTest() {
             window.__customerPortalIntegrationCalls.push(\`BEACON \${String(args[0])}\`);
             return originalSendBeacon(...args);
           };
+        }
+
+        if (window.WebSocket && !window.__customerPortalOriginalWebSocket) {
+          const OriginalWebSocket = window.WebSocket;
+          window.__customerPortalOriginalWebSocket = OriginalWebSocket;
+          window.WebSocket = function CustomerPortalWebSocket(url, protocols) {
+            window.__customerPortalIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            return protocols === undefined
+              ? new OriginalWebSocket(url)
+              : new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
         }
       })()`);
     };
@@ -25414,6 +25614,16 @@ async function runChromeTest() {
         [],
         "Expected /my-bookings not to show internal/admin/mock/Supabase/payment/billing wording",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(initialState.text, "/my-bookings desktop");
+      assertNoPublicRouteRuntimeCalls(
+        initialState.integrationCalls,
+        initialState.resourceCalls,
+        "/my-bookings desktop load",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings desktop load"),
+        "/my-bookings desktop load",
+      );
       assert.equal(/[A-Z]{2,}-\d{3,}/.test(initialState.text), false, "Expected /my-bookings not to create invoice-style numbers");
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
       await checkTelegramBoundary("/my-bookings desktop");
@@ -25571,6 +25781,16 @@ async function runChromeTest() {
         [],
         "Expected invalid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(invalidRequestState.text, "/my-bookings invalid request");
+      assertNoPublicRouteRuntimeCalls(
+        invalidRequestState.integrationCalls,
+        invalidRequestState.resourceCalls,
+        "/my-bookings invalid request",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings invalid request"),
+        "/my-bookings invalid request",
+      );
 
       await setCustomerPortalRequestField("contactNo", "+65 9000 0123");
       await setCustomerPortalRequestField("passengerName", "Portal Test Passenger");
@@ -25595,6 +25815,16 @@ async function runChromeTest() {
         [],
         "Expected valid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(validRequestState.text, "/my-bookings valid request");
+      assertNoPublicRouteRuntimeCalls(
+        validRequestState.integrationCalls,
+        validRequestState.resourceCalls,
+        "/my-bookings valid request",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings valid request"),
+        "/my-bookings valid request",
+      );
       assert.equal(/[A-Z]{2,}-\d{3,}/.test(validRequestState.text), false, "Expected /my-bookings request not to create invoice-style numbers");
 
       await submitCustomerPortalBookingRequest();
@@ -25610,6 +25840,12 @@ async function runChromeTest() {
         repeatedRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
         "Expected repeated same-date/same-time /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(repeatedRequestState.text, "/my-bookings repeated request");
+      assertNoPublicRouteRuntimeCalls(
+        repeatedRequestState.integrationCalls,
+        repeatedRequestState.resourceCalls,
+        "/my-bookings repeated request",
       );
 
       await clickCustomerPortalFilter("Upcoming");
@@ -25669,6 +25905,12 @@ async function runChromeTest() {
         changeState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
         "Expected request change not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(changeState.text, "/my-bookings change request");
+      assertNoPublicRouteRuntimeCalls(
+        changeState.integrationCalls,
+        changeState.resourceCalls,
+        "/my-bookings change request",
       );
 
       await setCustomerPortalSearch("Sentosa");
@@ -26187,6 +26429,16 @@ async function runChromeTest() {
         [],
         "Expected /my-bookings mobile view not to show internal/admin/mock/Supabase/payment/billing wording",
       );
+      assertNoCustomerFacingPriceVisibilityLeaks(mobileState.text, "/my-bookings mobile");
+      assertNoPublicRouteRuntimeCalls(
+        mobileState.integrationCalls,
+        mobileState.resourceCalls,
+        "/my-bookings mobile",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings mobile"),
+        "/my-bookings mobile",
+      );
       assertNoPaymentIntegrationResources(mobileState.resourceCalls, "mobile customer portal page");
       await checkTelegramBoundary("/my-bookings mobile");
 
@@ -26270,6 +26522,20 @@ async function runChromeTest() {
             window.__driverJobNetworkCalls.push(\`BEACON \${target}\`);
             return blockedDriverJobUrlPattern.test(target) ? false : originalSendBeacon(...args);
           };
+        }
+
+        if (window.WebSocket && !window.__driverJobOriginalWebSocket) {
+          const OriginalWebSocket = window.WebSocket;
+          window.__driverJobOriginalWebSocket = OriginalWebSocket;
+          window.WebSocket = function DriverJobWebSocket(url, protocols) {
+            const target = String(url);
+            window.__driverJobNetworkCalls.push(\`WEBSOCKET \${target}\`);
+            return protocols === undefined
+              ? new OriginalWebSocket(url)
+              : new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
         }
       })()`);
     };
@@ -26771,6 +27037,11 @@ async function runChromeTest() {
         [],
         `${viewport.label}: expected no pricing, payout, CRM, invoice, payment, bank, or admin text on driver job link`,
       );
+      assertNoDriverPriceFinanceLeaks(initialState.text, `${viewport.label} driver job link`);
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState(`${viewport.label} driver job link load`),
+        `${viewport.label} driver job link load`,
+      );
       assert.deepEqual(initialState.fileInputs, [], `${viewport.label}: expected no real file/photo upload inputs`);
       assert.deepEqual(
         initialState.dispatcherExceptionText,
@@ -27102,6 +27373,15 @@ async function runChromeTest() {
         4,
         `${viewport.label}: expected exactly four protected mock status API calls for OTW, OTS, POB, and Job Completed`,
       );
+      const finalDriverJobState = await readDriverJobState();
+      assertNoDriverPriceFinanceLeaks(
+        finalDriverJobState.text,
+        `${viewport.label} completed driver job link workflow`,
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState(`${viewport.label} completed driver job link workflow`),
+        `${viewport.label} completed driver job link workflow`,
+      );
 
       return {
         buttons: initialState.buttonLabels,
@@ -27136,6 +27416,7 @@ async function runChromeTest() {
       );
       await evaluate(`(() => {
         window.__driverDemoFetchCalls = [];
+        window.__driverDemoNetworkCalls = [];
         const blockedDriverDemoUrlPattern = /supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/upload|api\\/storage|api\\/file|api\\/driver-upload|api\\/driver-file|api\\/driver-exception|api\\/driver-replacement|api\\/driver-reassign|api\\/driver-assignment|api\\/driver-cancel|api\\/cancel-driver|api\\/reassign-driver|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
         const originalFetch = window.__driverDemoOriginalFetch || window.fetch.bind(window);
         window.__driverDemoOriginalFetch = originalFetch;
@@ -27143,8 +27424,10 @@ async function runChromeTest() {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
+          const call = \`\${method} \${url}\`;
 
-          window.__driverDemoFetchCalls.push(\`\${method} \${url}\`);
+          window.__driverDemoFetchCalls.push(call);
+          window.__driverDemoNetworkCalls.push(call);
 
           if (blockedDriverDemoUrlPattern.test(url)) {
             return Promise.resolve(
@@ -27157,6 +27440,37 @@ async function runChromeTest() {
 
           return originalFetch(...args);
         };
+
+        const originalOpen = window.__driverDemoOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        window.__driverDemoOriginalXHROpen = originalOpen;
+        window.XMLHttpRequest.prototype.open = function patchedDriverDemoOpen(method, url, ...rest) {
+          window.__driverDemoNetworkCalls.push(\`\${method} \${String(url)}\`);
+          return originalOpen.call(this, method, url, ...rest);
+        };
+
+        if (navigator.sendBeacon && !window.__driverDemoOriginalSendBeacon) {
+          const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+          window.__driverDemoOriginalSendBeacon = originalSendBeacon;
+          navigator.sendBeacon = (...args) => {
+            const target = String(args[0]);
+            window.__driverDemoNetworkCalls.push(\`BEACON \${target}\`);
+            return blockedDriverDemoUrlPattern.test(target) ? false : originalSendBeacon(...args);
+          };
+        }
+
+        if (window.WebSocket && !window.__driverDemoOriginalWebSocket) {
+          const OriginalWebSocket = window.WebSocket;
+          window.__driverDemoOriginalWebSocket = OriginalWebSocket;
+          window.WebSocket = function DriverDemoWebSocket(url, protocols) {
+            const target = String(url);
+            window.__driverDemoNetworkCalls.push(\`WEBSOCKET \${target}\`);
+            return protocols === undefined
+              ? new OriginalWebSocket(url)
+              : new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+        }
       })()`);
     };
 
@@ -27697,6 +28011,11 @@ async function runChromeTest() {
         initialState.forbiddenText,
         [],
         `${viewport.label}: expected no pricing, payout, CRM, or admin text on driver demo`,
+      );
+      assertNoDriverPriceFinanceLeaks(initialState.text, `${viewport.label} driver demo`);
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState(`${viewport.label} driver demo load`),
+        `${viewport.label} driver demo load`,
       );
       assert.deepEqual(initialState.fileInputs, [], `${viewport.label}: expected no real file/photo upload inputs on driver demo`);
       assert.deepEqual(
@@ -29090,6 +29409,7 @@ async function runChromeTest() {
 
         return {
           fetchCalls: window.__driverDemoFetchCalls || [],
+          networkCalls: window.__driverDemoNetworkCalls || [],
           resourceCalls,
         };
       })()`);
@@ -29103,6 +29423,15 @@ async function runChromeTest() {
         networkState.resourceCalls,
         [],
         `${viewport.label}: expected no Supabase/API resources on driver demo route`,
+      );
+      assertNoForbiddenDriverJobNetwork(networkState, `${viewport.label} driver demo workflow`);
+      assertNoDriverPriceFinanceLeaks(
+        await evaluate("document.body?.innerText || ''"),
+        `${viewport.label} completed driver demo workflow`,
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState(`${viewport.label} completed driver demo workflow`),
+        `${viewport.label} completed driver demo workflow`,
       );
       await checkTelegramBoundary(`${viewport.label} driver demo page`);
 

@@ -99,6 +99,8 @@ Stage 4A-300 adds a docs-only test safety guard plan in `docs/supabase-api-runti
 
 Stage 4A-302 adds docs-only first real persistence acceptance criteria in `docs/first-real-persistence-acceptance-criteria.md`. It does not edit app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, or persistence. Real implementation remains blocked until later approved stages, and the next safe stage should be Stage 4A-303 read-only checkpoint review.
 
+Stage 4A-304 patches customer/driver price visibility boundaries. Customer-facing pricing stays hidden unless a future quote/payment display stage is approved, and driver routes must stay free of customer price, billing, payout, PayNow payout, and finance details. It does not edit app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, or persistence, and the next safe stage should be Stage 4A-305 read-only checkpoint review.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only

@@ -66,12 +66,13 @@ Allowed future first-persistence data candidates, only after approval:
 
 Data excluded from first persistence:
 
+- customer price, quoted price, or customer-facing pricing amounts unless a future approved quote/payment stage explicitly includes them.
 - billing records.
 - invoices/statements.
 - payment links.
 - PDF outputs.
 - driver payout records.
-- PayNow/private driver finance details.
+- PayNow payout details and private driver finance details.
 - notification send logs.
 - proof/photo uploads.
 - live location.
@@ -95,7 +96,23 @@ Future implementation of the locked 24-hour rule must satisfy:
 
 This stage does not implement the rule.
 
-## E. Route And Data Leakage Acceptance Criteria
+## E. Customer / Driver Price Visibility Acceptance Criteria
+
+Future first-persistence implementation must keep pricing and finance private by default:
+
+- Customer-facing routes must not show price or pricing amounts unless a future approved customer-facing quote/payment stage explicitly allows it.
+- Customer portal routes must not show prices by default.
+- Public booking request routes must not show prices by default.
+- Drivers must not see customer price.
+- Drivers must not see customer billing, invoice/payment details, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive content.
+- Customers must not see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive content.
+- Pricing and finance must remain admin/internal or finance-role only by default.
+- Quoted customer price is excluded from first real persistence unless a future approved quote/payment stage explicitly includes it.
+- Driver payout and PayNow payout details are excluded from first real persistence.
+- The public driver token route must remain job-card-safe only and must not expose pricing, payout, billing, finance, PayNow payout, or internal admin details.
+- Any existing PayNow display on public driver, demo, or token routes is a future watch item to review in a separately approved test/code stage. This docs-only stage does not change that behavior.
+
+## F. Route And Data Leakage Acceptance Criteria
 
 Future first-persistence implementation must preserve these route boundaries:
 
@@ -112,8 +129,10 @@ Future first persistence must not leak:
 - admin dashboard panels.
 - QA/dev archive labels/content.
 - mock workbench labels/content.
+- customer-facing pricing amounts unless a future approved quote/payment stage explicitly allows them.
+- customer price on driver routes.
 - billing, payment, PDF, invoice, and accounting details.
-- driver payout or PayNow.
+- driver payout or PayNow payout.
 - internal driver notes.
 - internal admin notes.
 - parser/manual review internals.
@@ -122,7 +141,7 @@ Future first persistence must not leak:
 - private customer/account data.
 - finance, month-end, receivables, or closeout data.
 
-## F. Supabase/API/Network Acceptance Criteria
+## G. Supabase/API/Network Acceptance Criteria
 
 Future implementation must satisfy:
 
@@ -136,7 +155,7 @@ Future implementation must satisfy:
 - Any public/customer API must never expose admin internals, payout, billing, parser debug details, or mock archive content.
 - Any driver token API must stay single-job scoped and driver-safe.
 
-## G. Browser Storage Acceptance Criteria
+## H. Browser Storage Acceptance Criteria
 
 Future implementation must not use browser persistence unless explicitly approved:
 
@@ -152,7 +171,7 @@ Future implementation must not use browser persistence unless explicitly approve
 
 If future UI state is needed, it should remain local React state unless explicitly approved.
 
-## H. Parser Acceptance Criteria
+## I. Parser Acceptance Criteria
 
 Parser boundaries for first persistence:
 
@@ -168,7 +187,7 @@ Parser boundaries for first persistence:
 - Passenger, booker, and company separation must remain intact.
 - Vehicle parsing protections must remain intact.
 
-## I. Audit Acceptance Criteria
+## J. Audit Acceptance Criteria
 
 Future first persistence should include an audit approach only inside the approved scope:
 
@@ -182,7 +201,7 @@ Future first persistence should include an audit approach only inside the approv
 
 If auth does not exist yet, a future prototype may need a temporary internal/system actor label, but only if that stage explicitly approves it.
 
-## J. Test Acceptance Criteria Before Implementation
+## K. Test Acceptance Criteria Before Implementation
 
 These checks must continue to pass before any approved first-persistence implementation:
 
@@ -198,7 +217,14 @@ Future implementation-specific tests should cover:
 
 - admin-only persistence controls are not visible on public/customer/driver routes.
 - no public route admin/internal leakage.
-- no driver token billing, payout, PayNow, customer account, or internal-note leakage.
+- no customer-facing pricing amount leakage on `/book`.
+- no customer-facing pricing amount leakage on `/my-bookings` unless future quote/payment display is approved.
+- no driver route customer-price leakage.
+- no driver route billing, invoice, payment, payout, or PayNow payout leakage.
+- no customer route driver payout, PayNow payout, or admin finance leakage.
+- no public driver token route PayNow payout detail leakage.
+- pricing and finance remain admin/internal or finance-role only.
+- no driver token billing, payout, PayNow payout, customer account, or internal-note leakage.
 - no unapproved Supabase/API/network calls outside scope.
 - no browser storage persistence outside scope.
 - short-notice booking behavior if implemented.
@@ -208,31 +234,37 @@ Future implementation-specific tests should cover:
 - parser suite still passes.
 - `test:safe` membership is not weakened.
 
-## K. Failure Criteria For Future Implementation
+## L. Failure Criteria For Future Implementation
 
 Future first real persistence implementation should fail if:
 
 - Any public/customer/driver route exposes admin, mock, finance, payout, or internal data.
+- Any customer-facing route shows pricing amounts without an approved quote/payment stage.
+- Any driver route shows customer price.
+- Any driver route shows billing, invoice, payment, payout, or PayNow payout details.
+- Any customer route shows driver payout, PayNow payout, admin finance, or internal notes.
 - Any new mock workbench is added.
 - Any parser behavior changes outside an approved parser stage.
 - Any Supabase command, migration, or API route appears without explicit approval.
 - Any browser storage persistence appears before approval.
 - Any billing, payment, PDF, payout, accounting, or notification behavior appears before approval.
-- Any driver payout or PayNow leaks to customers.
+- Any driver payout or PayNow payout leaks to customers.
 - Any customer billing leaks to drivers.
 - Any short-notice customer booking is directly confirmed instead of going to `Admin Review Required`.
 - Any `test:safe` membership is weakened.
 - Any protected check fails.
 - Working tree is not clean after the stage.
 
-## L. Future Implementation Sequence
+## M. Future Implementation Sequence
 
 Recommended future stages after this docs plan:
 
 1. Stage 4A-303 - Read-only checkpoint review after first real persistence acceptance criteria.
-2. Stage 4A-304 - Test-only guard implementation for no accidental Supabase/API/runtime calls.
-3. Stage 4A-305 - Read-only checkpoint review after test-only guards.
-4. Stage 4A-306 - Docs-only first persistence implementation plan with exact files and no commands.
-5. Only after explicit approval, implement the smallest real persistence workflow.
+2. Stage 4A-304 - Docs-only customer/driver price visibility boundary patch.
+3. Stage 4A-305 - Read-only checkpoint review after customer/driver price visibility boundary patch.
+4. Stage 4A-306 - Test-only guard implementation for no accidental Supabase/API/runtime calls.
+5. Stage 4A-307 - Read-only checkpoint review after test-only guards.
+6. Stage 4A-308 - Docs-only first persistence implementation plan with exact files and no commands.
+7. Only after explicit approval, implement the smallest real persistence workflow.
 
 The next stage should be read-only review, not implementation.

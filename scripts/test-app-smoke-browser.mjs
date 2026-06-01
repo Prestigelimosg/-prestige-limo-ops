@@ -34,6 +34,16 @@ const tabExpectedText = {
   Drivers: "Driver Database",
   Rates: "Load Rates",
 };
+const internalQaMockArchiveLabel = "Internal QA / Mock Workbench Archive — Mock Only";
+const internalQaMockArchiveGroupLabels = [
+  "Customer Intake / Account / Booking Review",
+  "Dispatch / Driver / Fleet Readiness",
+  "Route / Airport / Itinerary Readiness",
+  "Customer Service Recovery / Replacement / Completion",
+  "Finance / Extra Charges / Closeout",
+  "Quote / Risk / SLA / Audit",
+  "Legacy close-cycle / DSP / receivables / accounting QA",
+];
 const responsiveTabViewports = [
   { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
   { height: 915, label: "mobile 412px", mobile: true, scale: 2.625, width: 412 },
@@ -364,6 +374,117 @@ async function runChromeTest() {
       return result.result?.value;
     };
 
+    let openInternalQaMockArchiveAfterReload = false;
+
+    const getInternalQaMockArchiveState = () =>
+      evaluate(`(() => {
+        const archive = document.querySelector("[data-internal-qa-mock-archive]");
+        const toggle = document.querySelector("[data-internal-qa-mock-archive-toggle]");
+        const text = document.body?.innerText || "";
+        const archiveRect = archive?.getBoundingClientRect();
+        const groupLabels = ${JSON.stringify(internalQaMockArchiveGroupLabels)};
+        const visibleTabLabels = [...document.querySelectorAll("button[role='tab']")].map(
+          (button) => button.textContent.trim(),
+        );
+        const expectedTabLabels = ${JSON.stringify(tabLabels)};
+
+        return {
+          archiveHeight: Math.round(archiveRect?.height || 0),
+          archiveOpen: toggle?.getAttribute("aria-expanded") === "true",
+          archivePresent: Boolean(archive),
+          bodyGroupLabelLeaks: groupLabels.filter((label) => text.includes(label)),
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          labelVisible: text.includes(${JSON.stringify(internalQaMockArchiveLabel)}),
+          productionVisible:
+            expectedTabLabels.every((label) => visibleTabLabels.includes(label)) &&
+            text.includes("Dispatcher Intake") &&
+            text.includes("Job Card Preview") &&
+            text.includes("Driver Dispatch"),
+          toggleHeight: Math.round(toggle?.getBoundingClientRect().height || 0),
+        };
+      })()`);
+
+    const openInternalQaMockArchive = async () => {
+      const opened = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+        const toggle = document.querySelector("[data-internal-qa-mock-archive-toggle]");
+        if (!toggle) {
+          return false;
+        }
+
+        if (toggle.getAttribute("aria-expanded") !== "true") {
+          toggle.click();
+          return false;
+        }
+
+        return Boolean(document.querySelector("[data-internal-qa-mock-archive-content]"));
+      })()`),
+        10000,
+        "internal QA mock archive open",
+      );
+
+      assert.equal(opened, true, "expected internal QA mock archive to open");
+    };
+
+    const checkInternalQaMockArchiveDefaultState = async (context) => {
+      const state = await getInternalQaMockArchiveState();
+
+      assert.equal(state.archivePresent, true, `${context}: expected internal QA mock archive`);
+      assert.equal(state.archiveOpen, false, `${context}: expected archive collapsed by default`);
+      assert.equal(state.labelVisible, true, `${context}: expected archive label visible on admin dashboard`);
+      assert.deepEqual(
+        state.bodyGroupLabelLeaks,
+        [],
+        `${context}: expected archive groups hidden until archive opens`,
+      );
+      assert.equal(
+        state.productionVisible,
+        true,
+        `${context}: expected production-useful admin content visible without opening archive`,
+      );
+      assert.equal(state.toggleHeight >= 44, true, `${context}: expected touch-friendly archive summary`);
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${context}: expected collapsed archive not to create horizontal overflow`,
+      );
+
+      return state;
+    };
+
+    const checkNoInternalQaMockArchiveLeak = async (context) => {
+      const state = await evaluate(`(() => {
+        const text = document.body?.innerText || "";
+        const groupLabels = ${JSON.stringify(internalQaMockArchiveGroupLabels)};
+
+        return {
+          archivePresent: Boolean(document.querySelector("[data-internal-qa-mock-archive]")),
+          groupLabelLeaks: groupLabels.filter((label) => text.includes(label)),
+          labelVisible: text.includes(${JSON.stringify(internalQaMockArchiveLabel)}),
+        };
+      })()`);
+
+      assert.equal(state.archivePresent, false, `${context}: expected no internal QA mock archive`);
+      assert.equal(state.labelVisible, false, `${context}: expected no internal QA mock archive label`);
+      assert.deepEqual(state.groupLabelLeaks, [], `${context}: expected no internal QA mock archive groups`);
+
+      return state;
+    };
+
+    const withInternalQaMockArchiveOpen = async (callback) => {
+      const previous = openInternalQaMockArchiveAfterReload;
+      openInternalQaMockArchiveAfterReload = true;
+
+      try {
+        await openInternalQaMockArchive();
+        return await callback();
+      } finally {
+        openInternalQaMockArchiveAfterReload = previous;
+      }
+    };
+
     const telegramBoundarySnapshots = [];
     const assertNoTelegramBoundaryState = (state, options = {}) => {
       const allowMockPreviewUi = Boolean(options.allowMockPreviewUi);
@@ -537,6 +658,9 @@ async function runChromeTest() {
 
       await navigateWithLoadEvent(client, appUrl);
       await waitForTabs();
+      if (openInternalQaMockArchiveAfterReload) {
+        await openInternalQaMockArchive();
+      }
     };
 
     const checkResponsiveTabs = async (viewport) => {
@@ -9495,6 +9619,7 @@ async function runChromeTest() {
       const reloadEvent = client.once("Page.loadEventFired");
       await client.send("Page.reload", { ignoreCache: true });
       await reloadEvent;
+      await openInternalQaMockArchive();
       await waitForSelector(
         evaluate,
         "[data-mock-extra-charges-control-center]",
@@ -9528,6 +9653,7 @@ async function runChromeTest() {
         "extra charges control center override navigation back",
       );
       await clickTab("Dashboard");
+      await openInternalQaMockArchive();
       await waitForSelector(
         evaluate,
         "[data-mock-extra-charges-control-center]",
@@ -29018,98 +29144,105 @@ async function runChromeTest() {
         allowMockPreviewUi: label === "Dispatch",
       });
     }
+    await clickTab("Dispatch");
+    const internalQaMockArchiveDefault = await checkInternalQaMockArchiveDefaultState(
+      "admin dashboard default",
+    );
 
     const state = {
       buttonLabels: [...new Set(buttonLabels)],
       consoleErrors: await evaluate("window.__prestigeConsoleErrors || []"),
       errors: await evaluate("window.__prestigeErrors || []"),
+      internalQaMockArchiveDefault,
       visibleText: visibleSnapshots.join("\n\n"),
     };
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
-    state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
-    state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
-    state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
-    state.adminDriverDetailCollectionReadiness = await checkAdminDriverDetailCollectionReadiness();
-    state.adminDriverDetailsCustomerUpdateReadiness = await checkAdminDriverDetailsCustomerUpdateReadiness();
-    state.adminCustomerUpdateDeliveryReviewReadiness = await checkAdminCustomerUpdateDeliveryReviewReadiness();
-    state.adminDeliveryReviewDispatcherApprovalReadiness =
-      await checkAdminDeliveryReviewDispatcherApprovalReadiness();
-    state.adminDispatcherApprovalNotificationQueueReadiness =
-      await checkAdminDispatcherApprovalNotificationQueueReadiness();
-    state.adminFutureNotificationQueueCustomerUpdateAuditReadiness =
-      await checkAdminFutureNotificationQueueCustomerUpdateAuditReadiness();
-    state.adminMockDriverDetailCustomerUpdatePreview =
-      await checkAdminMockDriverDetailCustomerUpdatePreview();
-    state.adminMockDspUsageAccountingPreview = await checkAdminMockDspUsageAccountingPreview();
-    state.adminMockDspMonthlyRollupReview = await checkAdminMockDspMonthlyRollupReview();
-    state.adminMockDspReconciliationExceptionsReview =
-      await checkAdminMockDspReconciliationExceptionsReview();
-    state.adminMockDspApprovalPacketReview = await checkAdminMockDspApprovalPacketReview();
-    state.adminMockAccountingStatementPreview = await checkAdminMockAccountingStatementPreview();
-    state.adminMockStatementVarianceReview = await checkAdminMockStatementVarianceReview();
-    state.adminMockReceivablesHandoffReview = await checkAdminMockReceivablesHandoffReview();
-    state.adminMockReceivablesAgingFollowUpReview = await checkAdminMockReceivablesAgingFollowUpReview();
-    state.adminMockCollectionsCreditWriteoffReview = await checkAdminMockCollectionsCreditWriteoffReview();
-    state.adminMockPaymentAllocationRemittanceReview =
-      await checkAdminMockPaymentAllocationRemittanceReview();
-    state.adminMockMonthEndArCloseReview = await checkAdminMockMonthEndArCloseReview();
-    state.adminMockAccountingHandoffGlAuditReview =
-      await checkAdminMockAccountingHandoffGlAuditReview();
-    state.adminMockAuditEvidenceFinanceArchiveReview =
-      await checkAdminMockAuditEvidenceFinanceArchiveReview();
-    state.adminMockPostCloseAuditRetentionReview =
-      await checkAdminMockPostCloseAuditRetentionReview();
-    state.adminMockCloseCycleEvidenceResponseRetentionReview =
-      await checkAdminMockCloseCycleEvidenceResponseRetentionReview();
-    state.adminMockCloseCycleExceptionResolutionAuditHandoffReview =
-      await checkAdminMockCloseCycleExceptionResolutionAuditHandoffReview();
-    state.adminMockExtraChargesControlCenter = await checkAdminMockExtraChargesControlCenter();
-    if (
-      await evaluate(
-        `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
-      )
-    ) {
-      state.adminMockWaitingTimeExtraChargesPlanningReview =
-        await checkAdminMockWaitingTimeExtraChargesPlanningReview();
-      state.adminMockExtraChargesVarianceApprovalReconciliationReview =
-        await checkAdminMockExtraChargesVarianceApprovalReconciliationReview();
-      state.adminMockMidnightChargeAutoDetectionOverrideReview =
-        await checkAdminMockMidnightChargeAutoDetectionOverrideReview();
-      state.adminMockCombinedExtraChargesSummarySeparationReview =
-        await checkAdminMockCombinedExtraChargesSummarySeparationReview();
-      state.adminMockExtraChargesApprovalDecisionSeparationReview =
-        await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
-    }
-    state.adminMockCompletedJobCloseoutCenter = await checkAdminMockCompletedJobCloseoutCenter();
-    state.adminMockMonthEndCloseoutWorkbench = await checkAdminMockMonthEndCloseoutWorkbench();
-    state.adminMockFinanceExceptionResolutionWorkbench =
-      await checkAdminMockFinanceExceptionResolutionWorkbench();
-    state.adminMockDriverJobCompletionExceptionIntakeWorkbench =
-      await checkAdminMockDriverJobCompletionExceptionIntakeWorkbench();
-    state.adminMockReplacementVehicleServiceRecoveryWorkbench =
-      await checkAdminMockReplacementVehicleServiceRecoveryWorkbench();
-    state.adminMockCustomerServiceRecoveryCommunicationWorkbench =
-      await checkAdminMockCustomerServiceRecoveryCommunicationWorkbench();
-    state.adminMockFleetDriverReadinessWorkbench = await checkAdminMockFleetDriverReadinessWorkbench();
-    state.adminMockOperationsHandoverShiftBriefingWorkbench =
-      await checkAdminMockOperationsHandoverShiftBriefingWorkbench();
-    state.adminMockCustomerAccountServiceProfileWorkbench =
-      await checkAdminMockCustomerAccountServiceProfileWorkbench();
-    state.adminMockBookingIntakeAccountMatchingWorkbench =
-      await checkAdminMockBookingIntakeAccountMatchingWorkbench();
-    state.adminMockAirportFlightPickupReadinessWorkbench =
-      await checkAdminMockAirportFlightPickupReadinessWorkbench();
-    state.adminMockRouteItineraryReadinessWorkbench =
-      await checkAdminMockRouteItineraryReadinessWorkbench();
-    state.adminMockDriverAssignmentDispatchReadinessWorkbench =
-      await checkAdminMockDriverAssignmentDispatchReadinessWorkbench();
-    state.adminMockBookingLifecycleAuditReadinessWorkbench =
-      await checkAdminMockBookingLifecycleAuditReadinessWorkbench();
-    state.adminMockOperationsRiskSlaWatchlistWorkbench =
-      await checkAdminMockOperationsRiskSlaWatchlistWorkbench();
-    state.adminMockQuotePricingReviewReadinessWorkbench =
-      await checkAdminMockQuotePricingReviewReadinessWorkbench();
-    state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
+    await withInternalQaMockArchiveOpen(async () => {
+      state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
+      state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
+      state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
+      state.adminDriverDetailCollectionReadiness = await checkAdminDriverDetailCollectionReadiness();
+      state.adminDriverDetailsCustomerUpdateReadiness = await checkAdminDriverDetailsCustomerUpdateReadiness();
+      state.adminCustomerUpdateDeliveryReviewReadiness = await checkAdminCustomerUpdateDeliveryReviewReadiness();
+      state.adminDeliveryReviewDispatcherApprovalReadiness =
+        await checkAdminDeliveryReviewDispatcherApprovalReadiness();
+      state.adminDispatcherApprovalNotificationQueueReadiness =
+        await checkAdminDispatcherApprovalNotificationQueueReadiness();
+      state.adminFutureNotificationQueueCustomerUpdateAuditReadiness =
+        await checkAdminFutureNotificationQueueCustomerUpdateAuditReadiness();
+      state.adminMockDriverDetailCustomerUpdatePreview =
+        await checkAdminMockDriverDetailCustomerUpdatePreview();
+      state.adminMockDspUsageAccountingPreview = await checkAdminMockDspUsageAccountingPreview();
+      state.adminMockDspMonthlyRollupReview = await checkAdminMockDspMonthlyRollupReview();
+      state.adminMockDspReconciliationExceptionsReview =
+        await checkAdminMockDspReconciliationExceptionsReview();
+      state.adminMockDspApprovalPacketReview = await checkAdminMockDspApprovalPacketReview();
+      state.adminMockAccountingStatementPreview = await checkAdminMockAccountingStatementPreview();
+      state.adminMockStatementVarianceReview = await checkAdminMockStatementVarianceReview();
+      state.adminMockReceivablesHandoffReview = await checkAdminMockReceivablesHandoffReview();
+      state.adminMockReceivablesAgingFollowUpReview = await checkAdminMockReceivablesAgingFollowUpReview();
+      state.adminMockCollectionsCreditWriteoffReview = await checkAdminMockCollectionsCreditWriteoffReview();
+      state.adminMockPaymentAllocationRemittanceReview =
+        await checkAdminMockPaymentAllocationRemittanceReview();
+      state.adminMockMonthEndArCloseReview = await checkAdminMockMonthEndArCloseReview();
+      state.adminMockAccountingHandoffGlAuditReview =
+        await checkAdminMockAccountingHandoffGlAuditReview();
+      state.adminMockAuditEvidenceFinanceArchiveReview =
+        await checkAdminMockAuditEvidenceFinanceArchiveReview();
+      state.adminMockPostCloseAuditRetentionReview =
+        await checkAdminMockPostCloseAuditRetentionReview();
+      state.adminMockCloseCycleEvidenceResponseRetentionReview =
+        await checkAdminMockCloseCycleEvidenceResponseRetentionReview();
+      state.adminMockCloseCycleExceptionResolutionAuditHandoffReview =
+        await checkAdminMockCloseCycleExceptionResolutionAuditHandoffReview();
+      state.adminMockExtraChargesControlCenter = await checkAdminMockExtraChargesControlCenter();
+      if (
+        await evaluate(
+          `Boolean(document.querySelector("[data-mock-waiting-time-extra-charges-planning-review]"))`,
+        )
+      ) {
+        state.adminMockWaitingTimeExtraChargesPlanningReview =
+          await checkAdminMockWaitingTimeExtraChargesPlanningReview();
+        state.adminMockExtraChargesVarianceApprovalReconciliationReview =
+          await checkAdminMockExtraChargesVarianceApprovalReconciliationReview();
+        state.adminMockMidnightChargeAutoDetectionOverrideReview =
+          await checkAdminMockMidnightChargeAutoDetectionOverrideReview();
+        state.adminMockCombinedExtraChargesSummarySeparationReview =
+          await checkAdminMockCombinedExtraChargesSummarySeparationReview();
+        state.adminMockExtraChargesApprovalDecisionSeparationReview =
+          await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
+      }
+      state.adminMockCompletedJobCloseoutCenter = await checkAdminMockCompletedJobCloseoutCenter();
+      state.adminMockMonthEndCloseoutWorkbench = await checkAdminMockMonthEndCloseoutWorkbench();
+      state.adminMockFinanceExceptionResolutionWorkbench =
+        await checkAdminMockFinanceExceptionResolutionWorkbench();
+      state.adminMockDriverJobCompletionExceptionIntakeWorkbench =
+        await checkAdminMockDriverJobCompletionExceptionIntakeWorkbench();
+      state.adminMockReplacementVehicleServiceRecoveryWorkbench =
+        await checkAdminMockReplacementVehicleServiceRecoveryWorkbench();
+      state.adminMockCustomerServiceRecoveryCommunicationWorkbench =
+        await checkAdminMockCustomerServiceRecoveryCommunicationWorkbench();
+      state.adminMockFleetDriverReadinessWorkbench = await checkAdminMockFleetDriverReadinessWorkbench();
+      state.adminMockOperationsHandoverShiftBriefingWorkbench =
+        await checkAdminMockOperationsHandoverShiftBriefingWorkbench();
+      state.adminMockCustomerAccountServiceProfileWorkbench =
+        await checkAdminMockCustomerAccountServiceProfileWorkbench();
+      state.adminMockBookingIntakeAccountMatchingWorkbench =
+        await checkAdminMockBookingIntakeAccountMatchingWorkbench();
+      state.adminMockAirportFlightPickupReadinessWorkbench =
+        await checkAdminMockAirportFlightPickupReadinessWorkbench();
+      state.adminMockRouteItineraryReadinessWorkbench =
+        await checkAdminMockRouteItineraryReadinessWorkbench();
+      state.adminMockDriverAssignmentDispatchReadinessWorkbench =
+        await checkAdminMockDriverAssignmentDispatchReadinessWorkbench();
+      state.adminMockBookingLifecycleAuditReadinessWorkbench =
+        await checkAdminMockBookingLifecycleAuditReadinessWorkbench();
+      state.adminMockOperationsRiskSlaWatchlistWorkbench =
+        await checkAdminMockOperationsRiskSlaWatchlistWorkbench();
+      state.adminMockQuotePricingReviewReadinessWorkbench =
+        await checkAdminMockQuotePricingReviewReadinessWorkbench();
+      state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
+    });
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {
@@ -29126,6 +29259,21 @@ async function runChromeTest() {
     state.driverJobDemo = [];
     for (const viewport of driverDemoViewports) {
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));
+    }
+    state.internalQaMockArchiveRouteBoundaries = [];
+    for (const route of [
+      { context: "/book", expectedText: "Booking Request", url: customerBookingUrl },
+      { context: "/my-bookings", expectedText: "My Bookings", url: customerPortalUrl },
+      { context: "/customers", expectedText: "Customers", url: customerDashboardUrl },
+      { context: "/driver-job-demo", expectedText: "Prestige Limo Driver Job", url: driverDemoUrl },
+      { context: "/driver-job/[token]", expectedText: "Prestige Limo Driver Job", url: driverJobWorkflowUrl },
+    ]) {
+      await navigateWithLoadEvent(client, route.url);
+      await waitForBodyText(evaluate, route.expectedText, `${route.context} archive boundary`);
+      state.internalQaMockArchiveRouteBoundaries.push({
+        context: route.context,
+        ...(await checkNoInternalQaMockArchiveLeak(route.context)),
+      });
     }
     await checkTelegramBoundary("final browser state");
     state.telegramBoundaries = telegramBoundarySnapshots;

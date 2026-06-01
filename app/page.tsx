@@ -2546,6 +2546,7 @@ function isMockMidnightChargeDetected(value: string) {
 export default function Home() {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [activeTab, setActiveTab] = useState<AppTab>("dispatch");
+  const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
   const [parsedDebugBooking, setParsedDebugBooking] = useState<ParsedDebugBooking | null>(null);
@@ -7046,11 +7047,52 @@ export default function Home() {
           </div>
         </section>
 
-        <div
-          aria-label="Mock workflow review sections"
-          className="order-last grid gap-6"
+        <section
+          aria-label="Internal QA / Mock Workbench Archive — Mock Only"
+          className="order-last rounded-lg bg-white shadow-sm ring-1 ring-slate-200"
+          data-internal-qa-mock-archive="true"
           data-mock-workflow-review-group="true"
         >
+          <button
+            aria-expanded={isInternalQaMockArchiveOpen}
+            className="m-2 flex min-h-12 w-[calc(100%-1rem)] cursor-pointer flex-col gap-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-white sm:flex-row sm:items-center sm:justify-between"
+            data-internal-qa-mock-archive-toggle="true"
+            onClick={() => setIsInternalQaMockArchiveOpen((current) => !current)}
+            type="button"
+          >
+            <span className="font-semibold text-slate-950">
+              Internal QA / Mock Workbench Archive — Mock Only
+            </span>
+            <span className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+              {isInternalQaMockArchiveOpen ? "Expanded" : "Collapsed by default"}
+            </span>
+          </button>
+          {isInternalQaMockArchiveOpen ? (
+            <>
+          <div className="mx-2 mt-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            <p className="font-semibold uppercase tracking-[0.08em] text-slate-500">Archive groups</p>
+            <ul
+              className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3"
+              data-internal-qa-mock-archive-groups="true"
+            >
+              <li>Customer Intake / Account / Booking Review</li>
+              <li>Dispatch / Driver / Fleet Readiness</li>
+              <li>Route / Airport / Itinerary Readiness</li>
+              <li>Customer Service Recovery / Replacement / Completion</li>
+              <li>Finance / Extra Charges / Closeout</li>
+              <li>Quote / Risk / SLA / Audit</li>
+              <li>Legacy close-cycle / DSP / receivables / accounting QA</li>
+            </ul>
+            <p className="mt-2 text-[11px] leading-5">
+              Existing frozen mock/local/static admin review sections only. No real API, storage, Supabase, billing,
+              notification, parser, dispatch, booking save/load, or payment behavior.
+            </p>
+          </div>
+          <div
+            aria-label="Frozen mock/local/static workbench sections"
+            className="mt-4 grid gap-6"
+            data-internal-qa-mock-archive-content="true"
+          >
         <section
           aria-label="Customer request intake handoff"
           className="rounded-lg border border-indigo-100 bg-white px-3 py-2 shadow-sm"
@@ -13688,7 +13730,10 @@ export default function Home() {
             </div>
           </div>
         </section>
-        </div>
+          </div>
+            </>
+          ) : null}
+        </section>
 
         {activeTab === "dispatch" ? (
         <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">

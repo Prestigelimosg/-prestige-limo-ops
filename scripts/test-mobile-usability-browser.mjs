@@ -39,6 +39,16 @@ const viewports = [
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
 const appTabs = ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"];
+const internalQaMockArchiveLabel = "Internal QA / Mock Workbench Archive — Mock Only";
+const internalQaMockArchiveGroupLabels = [
+  "Customer Intake / Account / Booking Review",
+  "Dispatch / Driver / Fleet Readiness",
+  "Route / Airport / Itinerary Readiness",
+  "Customer Service Recovery / Replacement / Completion",
+  "Finance / Extra Charges / Closeout",
+  "Quote / Risk / SLA / Audit",
+  "Legacy close-cycle / DSP / receivables / accounting QA",
+];
 const dispatcherIntakeControlLabels = [
   "AI Assist Parse (Mock)",
   "Create Job Card",
@@ -698,6 +708,20 @@ async function runChromeTest() {
       const mockQuotePricingReviewReadinessWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-quote-pricing-review-readiness-workbench]"))`,
       );
+      const internalQaMockArchiveVisible = await evaluate(
+        `Boolean(document.querySelector("[data-internal-qa-mock-archive]"))`,
+      );
+      const internalQaMockArchiveTextLeaks = await evaluate(
+        `(() => {
+          const text = document.body.innerText || "";
+          const groupLabels = ${JSON.stringify(internalQaMockArchiveGroupLabels)};
+
+          return [
+            ${JSON.stringify(internalQaMockArchiveLabel)},
+            ...groupLabels,
+          ].filter((value) => text.includes(value));
+        })()`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -1096,6 +1120,16 @@ async function runChromeTest() {
         `${viewport.label} ${route.label}: expected important section text to remain visible`,
       );
       assert.equal(adminHubVisible, false, `${viewport.label} ${route.label}: expected no admin access hub`);
+      assert.equal(
+        internalQaMockArchiveVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no internal QA mock archive`,
+      );
+      assert.deepEqual(
+        internalQaMockArchiveTextLeaks,
+        [],
+        `${viewport.label} ${route.label}: expected no internal QA mock archive text`,
+      );
       assert.equal(
         customerIntakeHandoffVisible,
         false,
@@ -1603,6 +1637,114 @@ async function runChromeTest() {
         adminHubState.links.every((link) => link.height >= 32 && link.height <= 52 && link.width >= 64),
         true,
         `${viewport.label}: expected admin access hub links to stay compact and touchable`,
+      );
+
+      const internalQaMockArchiveDefaultState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const archive = document.querySelector("[data-internal-qa-mock-archive]");
+            const toggle = document.querySelector("[data-internal-qa-mock-archive-toggle]");
+            const text = document.body.innerText || "";
+            const toggleRect = toggle?.getBoundingClientRect();
+            const groupLabels = ${JSON.stringify(internalQaMockArchiveGroupLabels)};
+
+            if (!archive || !toggle) {
+              return false;
+            }
+
+            return {
+              archiveOpen: toggle.getAttribute("aria-expanded") === "true",
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              groupLabelLeaks: groupLabels.filter((label) => text.includes(label)),
+              labelVisible: text.includes(${JSON.stringify(internalQaMockArchiveLabel)}),
+              productionVisible:
+                ${JSON.stringify(appTabs)}.every((label) =>
+                  [...document.querySelectorAll("button[role='tab']")].some(
+                    (button) => button.textContent.trim() === label,
+                  ),
+                ) &&
+                text.includes("Dispatcher Intake") &&
+                text.includes("Job Card Preview") &&
+                text.includes("Driver Dispatch"),
+              toggleHeight: Math.round(toggleRect?.height || 0),
+              toggleWidth: Math.round(toggleRect?.width || 0),
+            };
+          })()`),
+        10000,
+        `${viewport.label} internal QA mock archive default`,
+      );
+      assert.equal(
+        internalQaMockArchiveDefaultState.archiveOpen,
+        false,
+        `${viewport.label}: expected internal QA mock archive collapsed by default`,
+      );
+      assert.equal(
+        internalQaMockArchiveDefaultState.labelVisible,
+        true,
+        `${viewport.label}: expected internal QA mock archive label on admin dashboard`,
+      );
+      assert.deepEqual(
+        internalQaMockArchiveDefaultState.groupLabelLeaks,
+        [],
+        `${viewport.label}: expected archive group labels hidden before opening archive`,
+      );
+      assert.equal(
+        internalQaMockArchiveDefaultState.productionVisible,
+        true,
+        `${viewport.label}: expected operational admin content visible before opening archive`,
+      );
+      assert.equal(
+        internalQaMockArchiveDefaultState.toggleHeight >= 44 && internalQaMockArchiveDefaultState.toggleWidth >= 240,
+        true,
+        `${viewport.label}: expected archive summary to be touch-friendly`,
+      );
+      assert.equal(
+        internalQaMockArchiveDefaultState.docScrollWidth <= internalQaMockArchiveDefaultState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected collapsed archive not to create horizontal overflow`,
+      );
+
+      const internalQaMockArchiveOpenState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+        const toggle = document.querySelector("[data-internal-qa-mock-archive-toggle]");
+        if (!toggle) {
+          return false;
+        }
+
+        if (toggle.getAttribute("aria-expanded") !== "true") {
+          toggle.click();
+          return false;
+        }
+
+        const text = document.body.innerText || "";
+        const groupLabels = ${JSON.stringify(internalQaMockArchiveGroupLabels)};
+
+        return {
+          archiveOpen: toggle.getAttribute("aria-expanded") === "true",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          groupLabelsVisible: groupLabels.filter((label) => text.includes(label)),
+        };
+      })()`),
+        10000,
+        `${viewport.label} internal QA mock archive open`,
+      );
+      assert.equal(
+        internalQaMockArchiveOpenState.archiveOpen,
+        true,
+        `${viewport.label}: expected internal QA mock archive to open inside admin dashboard`,
+      );
+      assert.deepEqual(
+        internalQaMockArchiveOpenState.groupLabelsVisible,
+        internalQaMockArchiveGroupLabels,
+        `${viewport.label}: expected archive grouping labels after opening archive`,
+      );
+      assert.equal(
+        internalQaMockArchiveOpenState.docScrollWidth <= internalQaMockArchiveOpenState.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected opened archive not to create horizontal overflow`,
       );
 
       const customerIntakeHandoffState = await waitForCondition(
@@ -9304,6 +9446,20 @@ async function runChromeTest() {
       const mockQuotePricingReviewReadinessWorkbenchVisible = await evaluate(
         `Boolean(document.querySelector("[data-mock-quote-pricing-review-readiness-workbench]"))`,
       );
+      const internalQaMockArchiveVisible = await evaluate(
+        `Boolean(document.querySelector("[data-internal-qa-mock-archive]"))`,
+      );
+      const internalQaMockArchiveTextLeaks = await evaluate(
+        `(() => {
+          const text = document.body.innerText || "";
+          const groupLabels = ${JSON.stringify(internalQaMockArchiveGroupLabels)};
+
+          return [
+            ${JSON.stringify(internalQaMockArchiveLabel)},
+            ...groupLabels,
+          ].filter((value) => text.includes(value));
+        })()`,
+      );
       const mockExtraChargesVarianceApprovalReconciliationTextLeaks = await evaluate(
         `(() => {
           const text = (document.body.innerText || "").toLowerCase();
@@ -9728,6 +9884,16 @@ async function runChromeTest() {
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
       assert.equal(adminHubVisible, false, `${viewport.label} ${context}: expected no admin access hub`);
+      assert.equal(
+        internalQaMockArchiveVisible,
+        false,
+        `${viewport.label} ${context}: expected no internal QA mock archive`,
+      );
+      assert.deepEqual(
+        internalQaMockArchiveTextLeaks,
+        [],
+        `${viewport.label} ${context}: expected no internal QA mock archive text`,
+      );
       assert.equal(
         driverAssignmentReadinessVisible,
         false,

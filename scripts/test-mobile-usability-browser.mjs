@@ -147,9 +147,40 @@ const mobileDriverPriceFinanceLeakPatterns = [
   { label: "mock QA/dev archive wording", pattern: /\bmock\s+qa\s*\/\s*dev\s+archive\b/i },
   { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
 ];
+const mobileAdminBookingPersistenceUiPatterns = [
+  { label: "admin booking persistence wording", pattern: /\badmin\s+booking\s+persistence\b/i },
+  { label: "save booking to database wording", pattern: /\bsave\s+booking\s+to\s+database\b/i },
+  { label: "save booking control wording", pattern: /\bsave\s+booking\b/i },
+  { label: "load booking control wording", pattern: /\bload\s+booking\b/i },
+  { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
+  { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
+  { label: "create booking record wording", pattern: /\bcreate\s+booking\s+record\b/i },
+  { label: "update booking record wording", pattern: /\bupdate\s+booking\s+record\b/i },
+  { label: "booking persistence API wording", pattern: /\bbooking\s+persistence\s+api\b/i },
+  { label: "admin save/load wording", pattern: /\badmin\s+save\s*\/\s*load\b/i },
+  { label: "internal save wording", pattern: /\binternal\s+save\b/i },
+  { label: "persistence prototype wording", pattern: /\bpersistence\s+prototype\b/i },
+];
+const mobileAdminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
+const mobileAdminBookingPersistenceApiPattern =
+  /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)/i;
 
 function findVisibleTextLeaks(text, patterns) {
   return patterns.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
+}
+
+function findMobileAdminBookingPersistenceLeaks(text) {
+  const leaks = findVisibleTextLeaks(text, mobileAdminBookingPersistenceUiPatterns);
+  const supabaseSaveLeaks = [...text.matchAll(mobileAdminBookingPersistenceSupabaseSavePattern)]
+    .filter((match) => {
+      const index = match.index || 0;
+      const sentenceStart = Math.max(text.lastIndexOf(".", index), text.lastIndexOf("\n", index));
+      const sentencePrefix = text.slice(Math.max(0, sentenceStart + 1), index).toLowerCase();
+
+      return !/\b(?:no|not|without)\b/.test(sentencePrefix);
+    });
+
+  return supabaseSaveLeaks.length > 0 ? [...leaks, "Supabase save wording"] : leaks;
 }
 
 function assertNoMobileCustomerFacingPriceLeaks(text, context) {
@@ -165,6 +196,22 @@ function assertNoMobileDriverPriceFinanceLeaks(text, context) {
     findVisibleTextLeaks(text, mobileDriverPriceFinanceLeakPatterns),
     [],
     `${context}: expected no mobile driver customer price, billing, payout, PayNow payout, finance, admin-note, customer-account, or archive leakage`,
+  );
+}
+
+function assertNoMobileAdminBookingPersistenceLeaks(text, context) {
+  assert.deepEqual(
+    findMobileAdminBookingPersistenceLeaks(text),
+    [],
+    `${context}: expected no mobile admin booking persistence save/load UI leakage`,
+  );
+}
+
+function assertNoMobileAdminPersistenceNetworkCalls(calls, context) {
+  assert.deepEqual(
+    calls.filter((call) => mobileAdminBookingPersistenceApiPattern.test(call)),
+    [],
+    `${context}: expected no mobile admin booking persistence API calls`,
   );
 }
 
@@ -264,6 +311,21 @@ async function runChromeTest() {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
+          const blockedAdminPersistenceApiPattern =
+            /\\/api\\/(?:admin-bookings?|bookings\\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)/i;
+
+          if (blockedAdminPersistenceApiPattern.test(url)) {
+            window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
+
+            return Promise.resolve(
+              new Response(JSON.stringify({
+                message: "Blocked admin booking persistence API call in mobile usability browser test.",
+              }), {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
 
           if (url.includes("/rest/v1/")) {
             window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
@@ -622,8 +684,10 @@ async function runChromeTest() {
 
     const checkResponsiveRouteViewport = async (viewport, route) => {
       await setViewport(viewport);
+      await evaluate(`window.__mobileUsabilityFetchCalls = []`);
       await navigate(new URL(route.path, appUrl).toString(), route.expectedText);
       const state = await layoutState();
+      const adminPersistenceNetworkCalls = await evaluate(`window.__mobileUsabilityFetchCalls || []`);
       const adminHubVisible = await evaluate(`Boolean(document.querySelector("[data-admin-access-hub]"))`);
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
@@ -1180,6 +1244,11 @@ async function runChromeTest() {
           `${viewport.label} ${route.label}`,
         );
       }
+      assertNoMobileAdminBookingPersistenceLeaks(state.visibleText, `${viewport.label} ${route.label}`);
+      assertNoMobileAdminPersistenceNetworkCalls(
+        adminPersistenceNetworkCalls,
+        `${viewport.label} ${route.label}`,
+      );
       assert.equal(adminHubVisible, false, `${viewport.label} ${route.label}: expected no admin access hub`);
       assert.equal(
         internalQaMockArchiveVisible,
@@ -9365,9 +9434,11 @@ async function runChromeTest() {
 
     const checkDriverRouteViewport = async (viewport, url, expectedText, labels, context) => {
       await setViewport(viewport);
+      await evaluate(`window.__mobileUsabilityFetchCalls = []`);
       await navigate(url, expectedText);
       const state = await layoutState();
       const buttons = await buttonState();
+      const adminPersistenceNetworkCalls = await evaluate(`window.__mobileUsabilityFetchCalls || []`);
       const adminHubVisible = await evaluate(`Boolean(document.querySelector("[data-admin-access-hub]"))`);
       const driverAssignmentReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-assignment-readiness]"))`,
@@ -9944,6 +10015,11 @@ async function runChromeTest() {
 
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertNoMobileDriverPriceFinanceLeaks(state.visibleText, `${viewport.label} ${context}`);
+      assertNoMobileAdminBookingPersistenceLeaks(state.visibleText, `${viewport.label} ${context}`);
+      assertNoMobileAdminPersistenceNetworkCalls(
+        adminPersistenceNetworkCalls,
+        `${viewport.label} ${context}`,
+      );
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
       assert.equal(adminHubVisible, false, `${viewport.label} ${context}: expected no admin access hub`);
       assert.equal(

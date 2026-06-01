@@ -313,11 +313,40 @@ const driverPriceFinanceLeakPatterns = [
   { label: "mock QA/dev archive wording", pattern: /\bmock\s+qa\s*\/\s*dev\s+archive\b/i },
   { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
 ];
+const adminBookingPersistenceUiPatterns = [
+  { label: "admin booking persistence wording", pattern: /\badmin\s+booking\s+persistence\b/i },
+  { label: "save booking to database wording", pattern: /\bsave\s+booking\s+to\s+database\b/i },
+  { label: "save booking control wording", pattern: /\bsave\s+booking\b/i },
+  { label: "load booking control wording", pattern: /\bload\s+booking\b/i },
+  { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
+  { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
+  { label: "create booking record wording", pattern: /\bcreate\s+booking\s+record\b/i },
+  { label: "update booking record wording", pattern: /\bupdate\s+booking\s+record\b/i },
+  { label: "booking persistence API wording", pattern: /\bbooking\s+persistence\s+api\b/i },
+  { label: "admin save/load wording", pattern: /\badmin\s+save\s*\/\s*load\b/i },
+  { label: "internal save wording", pattern: /\binternal\s+save\b/i },
+  { label: "persistence prototype wording", pattern: /\bpersistence\s+prototype\b/i },
+];
+const adminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const publicRouteRuntimeResourcePattern =
-  /supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
+  /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)|supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
 
 function findVisibleTextLeaks(text, patterns) {
   return patterns.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
+}
+
+function findAdminBookingPersistenceLeaks(text) {
+  const leaks = findVisibleTextLeaks(text, adminBookingPersistenceUiPatterns);
+  const supabaseSaveLeaks = [...text.matchAll(adminBookingPersistenceSupabaseSavePattern)]
+    .filter((match) => {
+      const index = match.index || 0;
+      const sentenceStart = Math.max(text.lastIndexOf(".", index), text.lastIndexOf("\n", index));
+      const sentencePrefix = text.slice(Math.max(0, sentenceStart + 1), index).toLowerCase();
+
+      return !/\b(?:no|not|without)\b/.test(sentencePrefix);
+    });
+
+  return supabaseSaveLeaks.length > 0 ? [...leaks, "Supabase save wording"] : leaks;
 }
 
 function assertNoCustomerFacingPriceVisibilityLeaks(text, context) {
@@ -333,6 +362,14 @@ function assertNoDriverPriceFinanceLeaks(text, context) {
     findVisibleTextLeaks(text, driverPriceFinanceLeakPatterns),
     [],
     `${context}: expected no customer price, billing, payout, PayNow payout, finance, admin-note, customer-account, or archive leakage`,
+  );
+}
+
+function assertNoAdminBookingPersistenceLeaks(text, context) {
+  assert.deepEqual(
+    findAdminBookingPersistenceLeaks(text),
+    [],
+    `${context}: expected no admin booking persistence save/load UI leakage`,
   );
 }
 
@@ -599,6 +636,21 @@ async function runChromeTest() {
       assert.deepEqual(state.groupLabelLeaks, [], `${context}: expected no internal QA mock archive groups`);
 
       return state;
+    };
+
+    const checkNoAdminBookingPersistenceUiLeak = async (context) => {
+      const state = await evaluate(`(() => ({
+        text: document.body?.innerText || "",
+      }))()`);
+      const visibleTextLeaks = findVisibleTextLeaks(state.text, adminBookingPersistenceUiPatterns);
+
+      assert.deepEqual(
+        visibleTextLeaks,
+        [],
+        `${context}: expected no admin booking persistence save/load controls or wording`,
+      );
+
+      return { visibleTextLeaks };
     };
 
     const withInternalQaMockArchiveOpen = async (callback) => {
@@ -17655,9 +17707,9 @@ async function runChromeTest() {
     };
 
     const blockedCustomerIntegrationPattern =
-      /stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|telegram|api\.telegram\.org|getUpdates|sendMessage|supabase|\/rest\/v1\//i;
+      /api\/admin-bookings?|api\/bookings\/admin|api\/persistence|api\/save-booking|api\/load-booking|stripe|hitpay|paypal|paynow|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|api\/email|api\/sms|api\/calendar|calendar|googleapis|maps\.google|maps\.gstatic|api\/maps|api\/google|openai|chatgpt|api\/openai|api\/ai-parse|graph\.microsoft|outlook|ical|ics|webhook|notification|whatsapp|email|sms|telegram|api\.telegram\.org|getUpdates|sendMessage|supabase|\/rest\/v1\//i;
     const blockedDriverJobIntegrationPattern =
-      /supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/upload|api\/storage|api\/file|api\/driver-upload|api\/driver-file|api\/driver-exception|api\/driver-replacement|api\/driver-reassign|api\/driver-assignment|api\/driver-cancel|api\/cancel-driver|api\/reassign-driver|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/telegram|api\/driver-alerts\/telegram|api\/notifications\/telegram|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|telegram|api\.telegram\.org|getUpdates|sendMessage|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
+      /api\/admin-bookings?|api\/bookings\/admin|api\/persistence|api\/save-booking|api\/load-booking|supabase|\/rest\/v1\/|api\/live-location|api\/driver-live-location|api\/driver-ots-photo|api\/photo-proof|api\/upload|api\/storage|api\/file|api\/driver-upload|api\/driver-file|api\/driver-exception|api\/driver-replacement|api\/driver-reassign|api\/driver-assignment|api\/driver-cancel|api\/cancel-driver|api\/reassign-driver|api\/flight|api\/reminder|api\/notification|api\/notify|api\/sms|api\/whatsapp|api\/email|api\/telegram|api\/driver-alerts\/telegram|api\/notifications\/telegram|api\/calendar|api\/payment|api\/bank|api\/invoice|api\/pdf|api\/statement|twilio|sendgrid|mailgun|postmark|telegram|api\.telegram\.org|getUpdates|sendMessage|stripe|hitpay|paypal|paynow|googleapis|maps\.google|maps\.gstatic/i;
 
     const assertNoPaymentIntegrationResources = (resourceCalls, context) => {
       assert.deepEqual(
@@ -24318,6 +24370,7 @@ async function runChromeTest() {
         "Expected /book not to show internal/admin/mock/finance wording",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(initialState.text, "/book desktop");
+      assertNoAdminBookingPersistenceLeaks(initialState.text, "/book desktop");
       assertNoPublicRouteRuntimeCalls(
         initialState.integrationCalls,
         initialState.resourceCalls,
@@ -24464,6 +24517,7 @@ async function runChromeTest() {
         "Expected invalid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(invalidState.text, "/book invalid submit");
+      assertNoAdminBookingPersistenceLeaks(invalidState.text, "/book invalid submit");
       assertNoPublicRouteRuntimeCalls(
         invalidState.integrationCalls,
         invalidState.resourceCalls,
@@ -24518,6 +24572,7 @@ async function runChromeTest() {
         "Expected valid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(validState.text, "/book valid submit");
+      assertNoAdminBookingPersistenceLeaks(validState.text, "/book valid submit");
       assertNoPublicRouteRuntimeCalls(
         validState.integrationCalls,
         validState.resourceCalls,
@@ -24551,6 +24606,7 @@ async function runChromeTest() {
         "Expected repeated same-date/same-time /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(sameTimeRepeatState.text, "/book repeated submit");
+      assertNoAdminBookingPersistenceLeaks(sameTimeRepeatState.text, "/book repeated submit");
       assertNoPublicRouteRuntimeCalls(
         sameTimeRepeatState.integrationCalls,
         sameTimeRepeatState.resourceCalls,
@@ -24708,6 +24764,7 @@ async function runChromeTest() {
         "Expected /book mobile view not to show internal/admin/mock/finance wording",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(mobileState.text, "/book mobile");
+      assertNoAdminBookingPersistenceLeaks(mobileState.text, "/book mobile");
       assertNoPublicRouteRuntimeCalls(
         mobileState.integrationCalls,
         mobileState.resourceCalls,
@@ -25615,6 +25672,7 @@ async function runChromeTest() {
         "Expected /my-bookings not to show internal/admin/mock/Supabase/payment/billing wording",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(initialState.text, "/my-bookings desktop");
+      assertNoAdminBookingPersistenceLeaks(initialState.text, "/my-bookings desktop");
       assertNoPublicRouteRuntimeCalls(
         initialState.integrationCalls,
         initialState.resourceCalls,
@@ -25782,6 +25840,7 @@ async function runChromeTest() {
         "Expected invalid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(invalidRequestState.text, "/my-bookings invalid request");
+      assertNoAdminBookingPersistenceLeaks(invalidRequestState.text, "/my-bookings invalid request");
       assertNoPublicRouteRuntimeCalls(
         invalidRequestState.integrationCalls,
         invalidRequestState.resourceCalls,
@@ -25816,6 +25875,7 @@ async function runChromeTest() {
         "Expected valid /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(validRequestState.text, "/my-bookings valid request");
+      assertNoAdminBookingPersistenceLeaks(validRequestState.text, "/my-bookings valid request");
       assertNoPublicRouteRuntimeCalls(
         validRequestState.integrationCalls,
         validRequestState.resourceCalls,
@@ -25842,6 +25902,7 @@ async function runChromeTest() {
         "Expected repeated same-date/same-time /my-bookings request not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(repeatedRequestState.text, "/my-bookings repeated request");
+      assertNoAdminBookingPersistenceLeaks(repeatedRequestState.text, "/my-bookings repeated request");
       assertNoPublicRouteRuntimeCalls(
         repeatedRequestState.integrationCalls,
         repeatedRequestState.resourceCalls,
@@ -25907,6 +25968,7 @@ async function runChromeTest() {
         "Expected request change not to call Supabase, payment, bank, notification, or calendar APIs",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(changeState.text, "/my-bookings change request");
+      assertNoAdminBookingPersistenceLeaks(changeState.text, "/my-bookings change request");
       assertNoPublicRouteRuntimeCalls(
         changeState.integrationCalls,
         changeState.resourceCalls,
@@ -26430,6 +26492,7 @@ async function runChromeTest() {
         "Expected /my-bookings mobile view not to show internal/admin/mock/Supabase/payment/billing wording",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(mobileState.text, "/my-bookings mobile");
+      assertNoAdminBookingPersistenceLeaks(mobileState.text, "/my-bookings mobile");
       assertNoPublicRouteRuntimeCalls(
         mobileState.integrationCalls,
         mobileState.resourceCalls,
@@ -26481,7 +26544,7 @@ async function runChromeTest() {
         `${viewport.label} driver job link route`,
       );
       await evaluate(`(() => {
-        const blockedDriverJobUrlPattern = /supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/upload|api\\/storage|api\\/file|api\\/driver-upload|api\\/driver-file|api\\/driver-exception|api\\/driver-replacement|api\\/driver-reassign|api\\/driver-assignment|api\\/driver-cancel|api\\/cancel-driver|api\\/reassign-driver|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
+        const blockedDriverJobUrlPattern = /api\\/admin-bookings?|api\\/bookings\\/admin|api\\/persistence|api\\/save-booking|api\\/load-booking|supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/upload|api\\/storage|api\\/file|api\\/driver-upload|api\\/driver-file|api\\/driver-exception|api\\/driver-replacement|api\\/driver-reassign|api\\/driver-assignment|api\\/driver-cancel|api\\/cancel-driver|api\\/reassign-driver|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
         window.__driverJobFetchCalls = [];
         window.__driverJobNetworkCalls = [];
         const originalFetch = window.__driverJobOriginalFetch || window.fetch.bind(window);
@@ -27038,6 +27101,7 @@ async function runChromeTest() {
         `${viewport.label}: expected no pricing, payout, CRM, invoice, payment, bank, or admin text on driver job link`,
       );
       assertNoDriverPriceFinanceLeaks(initialState.text, `${viewport.label} driver job link`);
+      assertNoAdminBookingPersistenceLeaks(initialState.text, `${viewport.label} driver job link`);
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState(`${viewport.label} driver job link load`),
         `${viewport.label} driver job link load`,
@@ -27417,7 +27481,7 @@ async function runChromeTest() {
       await evaluate(`(() => {
         window.__driverDemoFetchCalls = [];
         window.__driverDemoNetworkCalls = [];
-        const blockedDriverDemoUrlPattern = /supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/upload|api\\/storage|api\\/file|api\\/driver-upload|api\\/driver-file|api\\/driver-exception|api\\/driver-replacement|api\\/driver-reassign|api\\/driver-assignment|api\\/driver-cancel|api\\/cancel-driver|api\\/reassign-driver|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
+        const blockedDriverDemoUrlPattern = /api\\/admin-bookings?|api\\/bookings\\/admin|api\\/persistence|api\\/save-booking|api\\/load-booking|supabase|\\/rest\\/v1\\/|api\\/live-location|api\\/driver-live-location|api\\/driver-ots-photo|api\\/photo-proof|api\\/upload|api\\/storage|api\\/file|api\\/driver-upload|api\\/driver-file|api\\/driver-exception|api\\/driver-replacement|api\\/driver-reassign|api\\/driver-assignment|api\\/driver-cancel|api\\/cancel-driver|api\\/reassign-driver|api\\/flight|api\\/reminder|api\\/notification|api\\/notify|api\\/sms|api\\/whatsapp|api\\/email|api\\/calendar|api\\/payment|api\\/bank|api\\/invoice|api\\/pdf|api\\/statement|twilio|sendgrid|mailgun|postmark|stripe|hitpay|paypal|paynow|googleapis|maps\\.google|maps\\.gstatic/i;
         const originalFetch = window.__driverDemoOriginalFetch || window.fetch.bind(window);
         window.__driverDemoOriginalFetch = originalFetch;
         window.fetch = (...args) => {
@@ -28013,6 +28077,7 @@ async function runChromeTest() {
         `${viewport.label}: expected no pricing, payout, CRM, or admin text on driver demo`,
       );
       assertNoDriverPriceFinanceLeaks(initialState.text, `${viewport.label} driver demo`);
+      assertNoAdminBookingPersistenceLeaks(initialState.text, `${viewport.label} driver demo`);
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState(`${viewport.label} driver demo load`),
         `${viewport.label} driver demo load`,
@@ -29590,6 +29655,7 @@ async function runChromeTest() {
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));
     }
     state.internalQaMockArchiveRouteBoundaries = [];
+    state.adminBookingPersistenceRouteBoundaries = [];
     for (const route of [
       { context: "/book", expectedText: "Booking Request", url: customerBookingUrl },
       { context: "/my-bookings", expectedText: "My Bookings", url: customerPortalUrl },
@@ -29602,6 +29668,10 @@ async function runChromeTest() {
       state.internalQaMockArchiveRouteBoundaries.push({
         context: route.context,
         ...(await checkNoInternalQaMockArchiveLeak(route.context)),
+      });
+      state.adminBookingPersistenceRouteBoundaries.push({
+        context: route.context,
+        ...(await checkNoAdminBookingPersistenceUiLeak(route.context)),
       });
     }
     await checkTelegramBoundary("final browser state");

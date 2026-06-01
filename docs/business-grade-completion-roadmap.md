@@ -83,6 +83,8 @@ Use staged batches. Each stage should be small, test-protected, reversible, and 
 
 Plan how to reduce the internal dashboard from many mock sections into fewer business-grade panels. Decide what stays visible, what moves behind a QA/dev toggle, and what can be archived as planning context.
 
+Stage 4A-288 adds the dashboard information architecture plan to `docs/dashboard-consolidation-mock-section-hide-plan.md`. It keeps the next production direction focused on dashboard consolidation before real data, API, auth, billing, notification, or dispatch work.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -157,6 +159,8 @@ Before production launch, complete a final readiness checklist covering:
 
 The current internal/admin dashboard is now too mock-section-heavy for production. It has served its purpose as a safe exploration and protection surface, but it should not keep growing.
 
+Stage 4A-287 counted 52 mock/local/static admin dashboard sections or panels. Stage 4A-288 uses that inventory to define a production dashboard hierarchy, with core operations visible first and frozen mock workbenches moved toward a collapsed internal QA/dev archive.
+
 Future dashboard work should prefer one of these paths:
 
 - Consolidate related mock workbenches into fewer operational panels.
@@ -202,8 +206,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 10. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-287 - Read-only dashboard mock-section inventory.
+Recommended next stage: Stage 4A-289 - Read-only route leakage boundary map.
 
-Reason: before changing the dashboard or activating any real behavior, the project should inventory the current dashboard sections, mock labels, route boundaries, and browser/mobile protections. This keeps the direction practical and avoids starting another mock workbench cycle.
-
-An acceptable alternative is a docs-only dashboard information architecture plan, if the dashboard inventory has already been completed and the immediate priority is to design the consolidated internal dashboard shape.
+Reason: the dashboard inventory and information architecture plan are now documented. Before any runtime collapse/hide implementation, the next safest step is to map the customer/public/driver route boundaries that must keep admin-only dashboard content, private driver details, finance details, mock QA/dev sections, Supabase/API/storage behavior, and notification/send behavior out of public surfaces.

@@ -63,6 +63,128 @@ Inventory every current dashboard section, route exposure boundary, mock label, 
 
 Define the future internal dashboard structure: primary operational panels, secondary QA/dev area, collapsed mock areas, and route protection expectations.
 
+#### Dashboard Information Architecture Plan
+
+Stage 4A-288 is documentation-only. It records the dashboard information architecture direction after the Stage 4A-287 read-only inventory and does not approve or implement runtime collapse/hide behavior.
+
+##### A. Current Dashboard Structure
+
+Stage 4A-287 counted the current internal/admin dashboard surface:
+
+- `app/page.tsx` is 15,775 lines.
+- 52 mock/local/static admin dashboard sections or panels total.
+- 48 explicit mock/local/static admin sections in the pre-tab mock review block.
+- 4 embedded mock/local dispatch panels:
+  - Customer Match Suggestion.
+  - Replacement Car / Driver - Mock Only.
+  - Telegram Alert Preview - Mock Only.
+  - Manual Extra Charges Review.
+- Main internal/admin tabs:
+  - Dispatch.
+  - Bookings.
+  - Completed.
+  - Dashboard.
+  - Drivers.
+  - Rates.
+
+The current shape is useful as a protected prototype, but it is too broad for daily production staff. Production staff should see current operational work first, while mock QA material should move into a clearly separated archive area.
+
+##### B. Proposed Production Dashboard Hierarchy
+
+1. Today / Active Operations
+   - Live operational booking cards.
+   - Today's jobs.
+   - Pickup timing.
+   - Assigned driver summary.
+   - Dispatch status.
+   - Customer update readiness.
+
+2. Booking Intake & Review
+   - Booking form.
+   - Parser/manual intake review.
+   - Account/customer matching.
+   - Route readiness.
+   - Short-notice admin review status.
+
+3. Dispatch & Driver Readiness
+   - Proposed driver/vehicle.
+   - Driver contact readiness.
+   - Driver acknowledgement readiness.
+   - Schedule/overlap warning only.
+   - Dispatch handoff.
+
+4. Customer / Public / Driver Surfaces
+   - `/book`.
+   - `/my-bookings`.
+   - `/customers`.
+   - `/driver-job-demo`.
+   - Public driver token route.
+   - Route leakage boundaries.
+
+5. Finance / Extra Charges / Closeout
+   - Manual Extra Charges preview.
+   - Extra Charges Control Center.
+   - Completed job closeout.
+   - Month-end/finance review.
+   - All finance, billing, payment, invoice, PDF, payout, and accounting areas remain Mock Only until real finance behavior is explicitly approved.
+
+6. Internal QA / Mock Workbench Archive
+   - All frozen mock workbench sections.
+   - Hidden or collapsed by default.
+   - Clearly labeled Mock Only.
+   - Not visible to production staff by default.
+
+##### C. Section Treatment Matrix
+
+| Current area | Future treatment | Notes |
+| --- | --- | --- |
+| Main operational tabs: Dispatch, Bookings, Completed, Dashboard, Drivers, Rates | Keep visible for production staff | Keep as the primary navigation, with staff-facing operational content above mock QA material. |
+| Booking form / parser intake | Keep visible but simplify | Preserve manual review and parser safety. Do not change parser behavior or add parser learning. |
+| Manual Extra Charges field and preview | Keep visible but simplify | Keep local UI/form-state only. No totals, billing, invoice, payment, PDF, payout, storage, API, Supabase, or notifications. |
+| Extra Charges Control Center | Consolidate into a smaller production panel or QA panel | Keep Mock Only until real billing/payout/finance boundaries are separately approved. |
+| Job card, customer copy, driver dispatch copy, driver job link previews | Keep visible for production staff | Preserve customer/public/driver leakage boundaries and copy protections. |
+| Driver assignment mock sections | Move behind QA/dev toggle | Future real assignment must be a separate approved stage. Schedule conflicts should warn only, not block or hide drivers. |
+| Route, airport, and itinerary mock sections | Move behind QA/dev toggle | Do not activate maps, geocoding, traffic, route optimization, flight API, or live API behavior. |
+| Customer, account, and intake mock sections | Consolidate into Booking Intake & Review | Keep mock/local/static until a production data/auth/account plan is approved. |
+| Finance, month-end, receivables, accounting, and payment mock sections | Move behind QA/dev toggle | Collapse by default. Do not activate billing, invoice, payment, PDF, payout, accounting, or finance export behavior. |
+| Quote, pricing, risk, SLA, lifecycle, and audit mock sections | Move behind QA/dev toggle | Keep Mock Only. Do not activate quote automation, pricing automation, SLA automation, or audit trails. |
+| Completed job, recovery, replacement vehicle, and closeout mock sections | Collapse by default and consolidate | Remove later after approved real completion, recovery, and closeout workflows replace them. |
+
+##### D. Route Protection Information Architecture
+
+Admin/internal content must remain excluded from:
+
+- `/book`.
+- `/my-bookings`.
+- `/customers`.
+- `/driver-job-demo`.
+- Public driver token route.
+
+Browser and mobile checks must continue to guard against leakage of:
+
+- Admin-only dashboard panels.
+- Private driver details.
+- Billing, payout, and internal finance details.
+- Invoice, payment, PDF, and accounting details.
+- Mock QA/dev sections.
+- Supabase, API, and storage behavior.
+- Notification and send behavior.
+
+Public/customer/driver routes should stay compact, customer-safe, and role-appropriate. The internal/admin dashboard can link to those routes, but those routes must not inherit admin-only dashboard sections.
+
+##### E. Future Implementation Stages
+
+Recommended stages after this docs-only IA plan:
+
+1. Read-only route leakage boundary map.
+2. Docs-only mock-section collapse/hide UI plan.
+3. Implementation of a collapsed mock QA/dev archive area.
+4. Read-only checkpoint review.
+5. Production data/auth boundary plan.
+6. Only then select one real workflow to implement.
+
+No runtime collapse/hide implementation happens in Stage 4A-288.
+
 ### Stage C: Mock-Section Collapse/Hide UI Plan
 
 Plan the exact UI behavior for collapsed mock sections or a QA/dev area. This should still be design-only and should not activate persistence, storage, APIs, auth, billing, notification, or dispatch behavior.
@@ -159,6 +281,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 10. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-287 - Read-only dashboard mock-section inventory.
+Recommended next stage: Stage 4A-289 - Read-only route leakage boundary map.
 
-Reason: the safest next move is to inventory the current dashboard sections, mock labels, route boundaries, and browser/mobile protections before creating an information architecture plan or implementing collapse/hide behavior. This keeps the project out of another mock workbench cycle and avoids runtime changes before the dashboard shape is fully understood.
+Reason: after Stage 4A-287 inventory and Stage 4A-288 dashboard information architecture planning, the safest next move is to map exactly which admin-only sections must stay absent from `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and public driver token routes before any collapse/hide implementation is designed.

@@ -87,6 +87,8 @@ Stage 4A-288 adds the dashboard information architecture plan to `docs/dashboard
 
 Stage 4A-290 adds the mock-section collapse/hide UI plan. The next production direction is to collapse or hide frozen mock workbenches behind an internal QA/dev archive before any real data, API, auth, billing, notification, dispatch, or parser work.
 
+Stage 4A-291 defines QA/dev archive acceptance criteria. Future runtime implementation should be UI-only, bounded, and test-protected; mock workbenches remain frozen and real data/API/auth/billing/payment work remains blocked until later approved stages.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -165,6 +167,8 @@ Stage 4A-287 counted 52 mock/local/static admin dashboard sections or panels. St
 
 Stage 4A-290 defines the collapse/hide UI plan for those frozen sections. Runtime implementation must be separate, explicitly approved, and protected by browser/mobile route leakage checks, parser checks, build/lint, and post-commit `test:safe`.
 
+Stage 4A-291 defines the acceptance criteria for that future UI-only archive implementation. It keeps the next implementation bounded to reorganizing existing mock/local/static sections, with no new mock workbench and no real Supabase, API, auth, billing, payment, notification, dispatch, or parser behavior.
+
 Future dashboard work should prefer one of these paths:
 
 - Consolidate related mock workbenches into fewer operational panels.
@@ -210,6 +214,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 10. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-291 - Docs-only QA/dev archive acceptance criteria.
+Recommended next stage: Stage 4A-292 - Implementation of collapsed internal QA/dev archive shell and grouping only.
 
-Reason: the dashboard inventory, information architecture plan, route leakage map, and collapse/hide UI plan are now documented. Before any runtime collapse/hide implementation, the next safest step is to define exact acceptance criteria for the admin-only QA/dev archive and protected default production dashboard surface.
+Reason: the dashboard inventory, information architecture plan, route leakage map, collapse/hide UI plan, and QA/dev archive acceptance criteria are now documented. The next safe implementation can be a bounded runtime UI-only stage that groups existing frozen mock workbenches, keeps production work visible first, preserves public/customer/driver protections, and updates browser/mobile tests in the same approved stage.

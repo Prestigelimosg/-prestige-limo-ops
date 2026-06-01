@@ -335,15 +335,162 @@ Recommended next stage after Stage 4A-290: Stage 4A-291 - Docs-only QA/dev archi
 
 Reason: the route leakage map and collapse/hide UI plan are now documented, but a short acceptance-criteria stage should define the exact pass/fail expectations before editing `app/page.tsx`. That keeps the future implementation bounded, test-protected, and clearly separate from real data/API/auth work.
 
-### Stage D: Implement Collapsed Mock QA Area
+### Stage D: QA/dev Archive Acceptance Criteria
+
+Define exact pass/fail criteria for the future collapsed internal QA/dev archive before editing `app/page.tsx`.
+
+#### QA/dev Archive Acceptance Criteria
+
+Stage 4A-291 is documentation-only. It defines the acceptance criteria for a future runtime UI-only implementation of the collapsed internal QA/dev archive. It does not implement collapse/hide behavior and does not approve any real app, parser, API, storage, Supabase, auth, billing, invoice, payment, PDF, payout, notification, dispatch, live location, maps, flight, route, customer account, booking save/load, or parser-learning behavior.
+
+##### A. Acceptance Criteria Overview
+
+The future implementation is successful only if the internal/admin dashboard becomes easier for production staff while all existing route, parser, mobile, and browser protections remain intact.
+
+Acceptance rules:
+
+- The implementation must not add new mock sections.
+- The implementation must only reorganize existing mock/local/static admin sections.
+- Production staff must see operational work first.
+- Frozen mock workbenches must remain clearly labeled as Mock Only.
+- Public, customer, and driver routes must remain protected from internal/admin leakage.
+
+##### B. Default Visible Admin Dashboard Criteria
+
+Future implementation must keep these areas visible by default:
+
+- Main operational tabs: Dispatch, Bookings, Completed, Dashboard, Drivers, Rates.
+- Booking form / parser intake.
+- Job Card Preview.
+- Customer Copy Preview.
+- Driver Dispatch Preview.
+- Driver Job Link Preview.
+- Manual Extra Charges field and local preview.
+- Assigned driver controls / internal driver summary.
+- Operational booking cards.
+- Recent Bookings.
+- Completed Bookings.
+- Current operational dispatch controls needed for admin/staff use.
+
+Acceptance rule: production-useful admin content must remain reachable without opening the QA/dev archive.
+
+##### C. Collapsed Or Hidden Archive Criteria
+
+Future implementation must place frozen mock/local/static workbench content into a collapsed or hidden internal archive area.
+
+The archive label should be exactly or very close to:
+
+`Internal QA / Mock Workbench Archive — Mock Only`
+
+The archive must be:
+
+- Internal/admin-only.
+- Collapsed or hidden by default.
+- Clearly marked Mock Only.
+- Not visible on public/customer/driver routes.
+- Not treated as a production workflow.
+- Not connected to Supabase, APIs, billing, notifications, storage, or payments.
+- Not expanded automatically on page load.
+- Not added as another giant visible section above operational work.
+
+##### D. Archive Content Grouping Criteria
+
+Future implementation should group existing frozen sections into compact archive groups instead of leaving 52 separate full-width panels visible.
+
+Required archive groups:
+
+1. Customer Intake / Account / Booking Review.
+2. Dispatch / Driver / Fleet Readiness.
+3. Route / Airport / Itinerary Readiness.
+4. Customer Service Recovery / Replacement / Completion.
+5. Finance / Extra Charges / Closeout.
+6. Quote / Risk / SLA / Audit.
+7. Legacy close-cycle / DSP / receivables / accounting QA.
+
+Each group should contain existing mock/local/static content only. No new mock workbench content should be created.
+
+##### E. Public/Customer/Driver Route Criteria
+
+Future implementation must preserve Stage 4A-289 route boundaries.
+
+These routes must not show the QA/dev archive, archive groups, mock workbench labels, admin-only panels, billing/payout internals, parser internals, notification/API/storage wording, or driver-demo-only content:
+
+- `/book`.
+- `/my-bookings`.
+- `/customers`.
+- `/driver-job-demo`.
+- Public driver token/demo route.
+- `/driver-job/[token]`.
+
+Note: `/customers` is internal staff-only despite the customer-facing name, but it still must not receive admin dashboard mock workbench sprawl or driver-demo content.
+
+##### F. Mobile And Usability Criteria
+
+Future implementation must preserve:
+
+- No horizontal overflow.
+- Touch-friendly controls.
+- Readable text.
+- Compact layout.
+- No giant card stack above the operational dashboard.
+- Archive expand/collapse control, if added later, must be easy to tap on iOS and Android.
+- Action feedback must appear near the clicked control if any new control is added.
+
+##### G. Test Acceptance Criteria For Future Implementation
+
+Future implementation should add or preserve browser/mobile checks for:
+
+- Admin dashboard shows production-useful sections without opening the archive.
+- QA/dev archive is collapsed or hidden by default.
+- Archive content appears only after the internal/admin archive is opened, if an expand control exists.
+- Archive content never appears on `/book`.
+- Archive content never appears on `/my-bookings`.
+- Archive content never appears on `/customers`.
+- Archive content never appears on `/driver-job-demo`.
+- Archive content never appears on public driver token/demo routes.
+- No billing, payment, PDF, invoice, accounting, or payout leakage.
+- No Supabase, API, storage, fetch, XHR, sendBeacon, or WebSocket activation.
+- No WhatsApp, email, SMS, Telegram, notification, or send behavior.
+- No parser behavior changes.
+- Manual Extra Charges remains local UI/form-state only.
+- Mobile usability still passes with no horizontal overflow.
+- Existing `test:booking-ui-browser`, `test:parser`, `test:app-smoke-browser`, `test:mobile-usability-browser`, and `test:safe` checks still pass.
+
+##### H. Failure Criteria
+
+Future implementation should be considered failed if:
+
+- Any public/customer/driver route shows archive content.
+- Any mock workbench appears as a new top-level production panel.
+- Any new mock workbench is added.
+- Any parser behavior changes.
+- Any Supabase, API, storage, billing, payment, PDF, or notification behavior is activated.
+- Any booking save/load or customer account behavior is activated.
+- Any mobile horizontal overflow appears.
+- Any protected test fails.
+- `app/page.tsx` grows significantly without reducing visible dashboard sprawl.
+- Archive content is visible by default above operational work.
+
+##### I. Implementation Sequence Recommendation
+
+Recommended sequence after Stage 4A-291:
+
+1. Stage 4A-292 - Implementation of collapsed internal QA/dev archive shell and grouping only.
+2. Stage 4A-293 - Read-only checkpoint review after archive implementation.
+3. Stage 4A-294 - Production data/auth boundary plan.
+4. Only after that, select one real workflow for implementation.
+
+Stage 4A-292, if approved later, should be a bounded runtime UI-only implementation with browser test updates in the same stage. It must not activate real data, API, auth, billing, notification, dispatch, parser, Supabase, or package-script behavior.
+
+### Stage E: Implement Collapsed Mock QA Area
 
 Implement the approved collapse/hide behavior only. Keep all sections mock/local/static/display-only, keep Mock Only labels visible, and preserve browser/mobile route leakage protections.
 
-### Stage E: Real-Data Design Review Before Persistence
+### Stage F: Real-Data Design Review Before Persistence
 
 Review production data boundaries, auth, Supabase/RLS, rollback, and test strategy before any real database or API behavior is introduced.
 
-### Stage F: Choose One Real Production Workflow
+### Stage G: Choose One Real Production Workflow
 
 Only after the dashboard is consolidated and real-data design is approved, choose one bounded production workflow to implement with tests and a read-only checkpoint review.
 
@@ -427,6 +574,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 10. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-291 - Docs-only QA/dev archive acceptance criteria.
+Recommended next stage: Stage 4A-292 - Implementation of collapsed internal QA/dev archive shell and grouping only.
 
-Reason: Stage 4A-289 mapped the route leakage boundaries and Stage 4A-290 documents the collapse/hide UI direction. Before runtime edits, the safest move is to define precise acceptance criteria for the internal QA/dev archive and the default production dashboard surface.
+Reason: Stage 4A-291 defines the exact pass/fail criteria for the internal QA/dev archive and default production dashboard surface. The next safe runtime stage can be a bounded UI-only implementation that groups existing frozen mock/local/static sections, keeps production work visible first, preserves route leakage protections, and updates browser/mobile tests in the same approved stage.

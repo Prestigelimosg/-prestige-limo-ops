@@ -2191,10 +2191,40 @@ async function runChromeTest() {
       );
     };
 
+    const waitForTravelerMemoryLookup = async (travelerName, description) => {
+      const expectedParam = `traveler_name=ilike.${travelerName}`.toLowerCase();
+      await waitForCondition(
+        () =>
+          blockedSupabaseRequests.some((request) =>
+            request.replace(/\+/g, " ").toLowerCase().includes(expectedParam),
+          ),
+        10000,
+        `${description} traveler memory lookup`,
+      );
+    };
+
+    const expectedBackgroundTravelerLookupNames = [
+      "UBS Match Traveler",
+      "Public Email Traveler",
+      "Newco Traveler",
+      "BROWSER UI TEST TRAVELER",
+    ];
+    const isExpectedBackgroundTravelerLookup = (url) => {
+      const normalizedUrl = String(url).replace(/\+/g, " ").toLowerCase();
+
+      return normalizedUrl.includes("/rest/v1/travelers") &&
+        expectedBackgroundTravelerLookupNames.some((travelerName) =>
+          normalizedUrl.includes(`traveler_name=ilike.${travelerName.toLowerCase()}`),
+        );
+    };
+    const unexpectedManualExtraChargeFetchCalls = (calls) =>
+      calls.filter((call) => !isExpectedBackgroundTravelerLookup(call));
+
     const ubsMatchState = await parseCustomerMatchSample(
       ubsCustomerMatchSample,
       "UBS organization domain",
     );
+    await waitForTravelerMemoryLookup("UBS Match Traveler", "UBS organization domain");
     assert.equal(ubsMatchState.customer, "UBS", "Expected ubs.com email to suggest UBS");
     assert.equal(ubsMatchState.confidence, "High", "Expected ubs.com match to be high confidence");
     assert.equal(
@@ -2220,6 +2250,7 @@ async function runChromeTest() {
       publicEmailCustomerMatchSample,
       "public email customer",
     );
+    await waitForTravelerMemoryLookup("Public Email Traveler", "public email customer");
     assert.equal(
       publicEmailMatchState.customer,
       "New customer suggested",
@@ -2242,6 +2273,7 @@ async function runChromeTest() {
       unknownOrgCustomerMatchSample,
       "unknown organization domain",
     );
+    await waitForTravelerMemoryLookup("Newco Traveler", "unknown organization domain");
     assert.equal(
       unknownOrgMatchState.customer,
       "New customer suggested",
@@ -2433,6 +2465,7 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertBookingUiState(state);
+    await waitForTravelerMemoryLookup("BROWSER UI TEST TRAVELER", "primary booking parse");
 
     const manualExtraChargeDefaultState = await evaluate(`(() => {
       const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -2591,6 +2624,54 @@ async function runChromeTest() {
       };
     })()`);
 
+    const resetManualExtraChargesCalls = async () => {
+      await evaluate(`(() => {
+        window.__manualExtraChargesCalls = {
+          beacon: [],
+          fetch: [],
+          storage: [],
+          websocket: [],
+          xhr: [],
+        };
+      })()`);
+    };
+
+    const readManualExtraChargesCallCount = async () =>
+      evaluate(`(() => {
+        const calls = window.__manualExtraChargesCalls || {};
+        return ["beacon", "fetch", "storage", "websocket", "xhr"].reduce(
+          (total, key) => total + (calls[key]?.length || 0),
+          0,
+        );
+      })()`);
+
+    const waitForManualExtraChargesNetworkQuiet = async (description) => {
+      const timeoutMs = 3000;
+      const quietMs = 500;
+      const startedAt = Date.now();
+      let quietStartedAt = Date.now();
+      let lastCount = await readManualExtraChargesCallCount();
+
+      while (Date.now() - startedAt < timeoutMs) {
+        await sleep(50);
+        const nextCount = await readManualExtraChargesCallCount();
+
+        if (nextCount !== lastCount) {
+          lastCount = nextCount;
+          quietStartedAt = Date.now();
+        }
+
+        if (Date.now() - quietStartedAt >= quietMs) {
+          return;
+        }
+      }
+
+      throw new Error(`Timed out waiting for Manual Extra Charges network quiet: ${description}`);
+    };
+
+    await waitForManualExtraChargesNetworkQuiet("before manual Extra Charges edit guard");
+    await resetManualExtraChargesCalls();
+
     const manualExtraChargeAmount = "47.25";
     const manualExtraChargeReason = "Airport parking fee test only";
     await setFieldValueByLabel("Extra Charges", manualExtraChargeAmount, "manual Extra Charges amount");
@@ -2599,6 +2680,7 @@ async function runChromeTest() {
       manualExtraChargeReason,
       "manual Extra Charges note",
     );
+    await waitForManualExtraChargesNetworkQuiet("after manual Extra Charges edits");
 
     const manualExtraChargeEditedState = await evaluate(`(async () => {
       const readStorage = (storage) =>
@@ -2674,7 +2756,7 @@ async function runChromeTest() {
     assert.match(manualExtraChargeEditedState.previewBoundary, /Supabase/);
     assert.match(manualExtraChargeEditedState.previewBoundary, /notification/);
     assert.deepEqual(
-      manualExtraChargeEditedState.calls.fetch,
+      unexpectedManualExtraChargeFetchCalls(manualExtraChargeEditedState.calls.fetch),
       [],
       "Expected manual Extra Charges edits not to call fetch",
     );
@@ -2713,8 +2795,11 @@ async function runChromeTest() {
       "Expected manual Extra Charges amount not to auto-calculate into Pricing",
     );
 
+    await resetManualExtraChargesCalls();
     await setFieldValueByLabel("Extra Charges", "", "manual Extra Charges amount reset");
     await setFieldValueByLabel("Extra Charges note / reason", "", "manual Extra Charges note reset");
+    await waitForManualExtraChargesNetworkQuiet("after clearing manual Extra Charges");
+
     const manualExtraChargeResetState = await evaluate(`(() => {
       const section = document.querySelector("[data-route-extras-child-seat-section='true']");
       const preview = document.querySelector("[data-manual-extra-charges-review-preview='true']");
@@ -2735,7 +2820,7 @@ async function runChromeTest() {
     assert.equal(manualExtraChargeResetState.previewAmount, "$0.00");
     assert.equal(manualExtraChargeResetState.previewNote, "Blank");
     assert.deepEqual(
-      manualExtraChargeResetState.calls.fetch,
+      unexpectedManualExtraChargeFetchCalls(manualExtraChargeResetState.calls.fetch),
       [],
       "Expected clearing manual Extra Charges not to call fetch",
     );

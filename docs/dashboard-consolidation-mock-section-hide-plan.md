@@ -189,6 +189,152 @@ No runtime collapse/hide implementation happens in Stage 4A-288.
 
 Plan the exact UI behavior for collapsed mock sections or a QA/dev area. This should still be design-only and should not activate persistence, storage, APIs, auth, billing, notification, or dispatch behavior.
 
+#### Mock-Section Collapse / Hide UI Plan
+
+Stage 4A-290 is documentation-only. It defines the future UI behavior for collapsing, hiding, archiving, or consolidating the current mock/local/static admin dashboard sections. It does not implement runtime collapse/hide behavior and does not approve any real app, parser, API, storage, Supabase, billing, payment, PDF, payout, notification, dispatch, live location, maps, flight, route, auth, or customer account behavior.
+
+##### A. Design Goal
+
+The internal/admin dashboard is currently too mock-heavy for production staff. The future production-facing admin view should show operational work first, while frozen mock workbenches remain available only as a clearly labeled internal QA/dev archive.
+
+Planning rules:
+
+- No new mock workbenches.
+- No real behavior activated.
+- No runtime implementation in Stage 4A-290.
+- This section is only the plan for a future UI implementation stage.
+
+##### B. Default Production View
+
+The future production-facing admin dashboard should keep these areas visible by default:
+
+- Compact admin route/access hub, if still useful.
+- Primary tabs: Dispatch, Bookings, Completed, Dashboard, Drivers, Rates.
+- Booking form / parser intake.
+- Job Card Preview.
+- Customer Copy Preview.
+- Driver Dispatch Preview.
+- Driver Job Link Preview.
+- Manual Extra Charges field and local preview.
+- Assigned driver controls and internal driver summary.
+- Operational booking cards, recent bookings, completed bookings, and live operational content needed by dispatch staff.
+
+These areas remain internal/admin-only unless a future auth or role stage explicitly approves a different boundary. Public, customer, and driver routes must not inherit admin dashboard content.
+
+##### C. Collapsed-By-Default Areas
+
+These areas should be collapsed by default in a future UI implementation, while still being accessible for internal review:
+
+- Extra Charges Control Center.
+- Completed Job Closeout.
+- Month-End Closeout.
+- Finance Exception Resolution.
+- Customer/account and booking intake mock review sections.
+- Route/airport/itinerary mock review sections.
+- Driver/fleet/dispatch readiness mock review sections.
+- Customer service recovery, replacement vehicle, and driver completion mock sections.
+- Quote/pricing/risk/audit mock sections.
+
+Collapsed does not mean production-active. These areas remain Mock Only and must not calculate totals, save records, send messages, create billing artifacts, assign drivers, call live services, or change parser behavior.
+
+##### D. Internal QA / Mock Workbench Archive
+
+A future implementation should create or designate an internal archive area for frozen mock workbenches:
+
+- Label: `Internal QA / Mock Workbench Archive - Mock Only`.
+- Hidden or collapsed by default.
+- Not shown to production staff by default.
+- Never shown on public/customer/driver routes.
+- Protected by route leakage tests.
+- No real API, storage, Supabase, billing, payment, invoice, PDF, payout, accounting, notification, live location, maps, flight, route, or parser behavior.
+
+Stage 4A-287 counted 52 mock/local/static admin dashboard sections or panels: 48 explicit pre-tab mock review sections and 4 embedded dispatch panels. The archive should eventually contain, replace, or collapse the frozen pre-tab mock review block instead of leaving every mock section visible as a production staff surface.
+
+##### E. Consolidation Groups
+
+Frozen mock workbenches should be grouped into fewer archive categories:
+
+1. Customer Intake / Account / Booking Review
+   - Contains customer intake handoff, intake confirmation, booking intake quality, account matching, customer/account profile, parser/manual review, and customer match suggestion mock areas.
+   - These should not appear as many separate production panels because production staff need one intake review path, not repeated mock review examples.
+
+2. Dispatch / Driver / Fleet Readiness
+   - Contains driver assignment readiness, driver detail collection, driver update previews, fleet readiness, operations handover, assignment/dispatch readiness, and assigned-driver mock support panels.
+   - These should consolidate because real dispatch work needs a small set of actionable driver and vehicle readiness signals.
+
+3. Route / Airport / Itinerary Readiness
+   - Contains route readiness, airport flight monitoring, pickup readiness, itinerary and waypoint review, FBO/private airport notes, and route exception mock sections.
+   - These should remain archived until maps, traffic, route, geocoding, and flight API boundaries are approved.
+
+4. Customer Service Recovery / Replacement / Completion
+   - Contains replacement car/driver, customer service recovery communication, replacement vehicle recovery, driver job completion and exception intake, and completed job closeout mock sections.
+   - These should collapse together because they are recovery and completion review aids, not separate production workbenches yet.
+
+5. Finance / Extra Charges / Closeout
+   - Contains Manual Extra Charges review, Extra Charges Control Center, waiting-time and midnight charge mock reviews, completed closeout, month-end closeout, finance exception, receivables, payment allocation, and accounting mock areas.
+   - These should stay Mock Only and collapsed because real finance, billing, invoice, payment, PDF, payout, accounting, and export behavior require separate approval.
+
+6. Quote / Risk / SLA / Audit
+   - Contains Quote & Pricing Review, Operations Risk & SLA Watchlist, Booking Lifecycle Timeline & Internal Audit Readiness, and related risk/audit readiness mock sections.
+   - These should not appear as production panels until quote automation, pricing automation, SLA automation, and audit trails are separately designed.
+
+7. Legacy Close-Cycle / DSP / Receivables / Accounting QA
+   - Contains DSP usage rollups, DSP exceptions, approval packets, statement variance, receivables aging, collections, month-end AR close, GL/audit handoff, audit evidence, retention, and close-cycle evidence mock sections.
+   - These should be archived as QA examples because production staff should not see a full accounting close-cycle workbench by default.
+
+##### F. Future Implementation Rules
+
+A future runtime collapse/hide implementation must follow these rules:
+
+- Implement in one bounded stage.
+- Do not change parser behavior.
+- Do not change public/customer/driver route behavior.
+- Do not activate real data persistence.
+- Do not add new mock workbenches.
+- Keep action feedback near clicked controls if any controls are added later.
+- Keep mobile and no-horizontal-overflow protections.
+- Preserve data attributes where possible, or update browser tests deliberately in the same approved implementation stage.
+- Preserve all route leakage protections from Stage 4A-289.
+- Run the full required pre-commit test sequence and post-commit `npm run test:safe`.
+
+##### G. Future Browser/Mobile Test Requirements
+
+When collapse/hide behavior is implemented, tests should verify:
+
+- Admin dashboard still shows production-useful content first.
+- QA/dev archive is collapsed or hidden by default.
+- User can expand the QA/dev archive only inside the admin dashboard if the implementation adds that control.
+- Public/customer/driver routes never show archive content.
+- `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and public driver token/demo routes remain protected.
+- Mobile layouts have no horizontal overflow.
+- No admin-only leakage of billing, payout, finance, driver, parser, Supabase/API/storage, or notification/send details.
+- Existing booking UI, parser, app smoke, mobile usability, and `test:safe` checks continue to pass.
+
+Future implementation should preserve existing browser selectors whenever practical because current tests already use route leakage sentinels for many mock sections.
+
+##### H. What Not To Activate
+
+Collapse/hide implementation must not activate:
+
+- Supabase/database persistence.
+- Auth/customer accounts.
+- Booking save/load.
+- Billing/monthly invoice.
+- Invoice/PDF/payment links.
+- Payouts/accounting/finance export.
+- Driver assignment/dispatch persistence.
+- Notifications/message sending.
+- Live location/maps/flight/route APIs.
+- Proof/photo upload.
+- SLA/audit/quote/pricing automation.
+- Parser learning or parser rule changes.
+
+##### I. Recommended Next Safe Stage
+
+Recommended next stage after Stage 4A-290: Stage 4A-291 - Docs-only QA/dev archive acceptance criteria.
+
+Reason: the route leakage map and collapse/hide UI plan are now documented, but a short acceptance-criteria stage should define the exact pass/fail expectations before editing `app/page.tsx`. That keeps the future implementation bounded, test-protected, and clearly separate from real data/API/auth work.
+
 ### Stage D: Implement Collapsed Mock QA Area
 
 Implement the approved collapse/hide behavior only. Keep all sections mock/local/static/display-only, keep Mock Only labels visible, and preserve browser/mobile route leakage protections.
@@ -281,6 +427,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 10. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-289 - Read-only route leakage boundary map.
+Recommended next stage: Stage 4A-291 - Docs-only QA/dev archive acceptance criteria.
 
-Reason: after Stage 4A-287 inventory and Stage 4A-288 dashboard information architecture planning, the safest next move is to map exactly which admin-only sections must stay absent from `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and public driver token routes before any collapse/hide implementation is designed.
+Reason: Stage 4A-289 mapped the route leakage boundaries and Stage 4A-290 documents the collapse/hide UI direction. Before runtime edits, the safest move is to define precise acceptance criteria for the internal QA/dev archive and the default production dashboard surface.

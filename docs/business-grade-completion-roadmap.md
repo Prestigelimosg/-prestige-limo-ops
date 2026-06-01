@@ -85,6 +85,8 @@ Plan how to reduce the internal dashboard from many mock sections into fewer bus
 
 Stage 4A-288 adds the dashboard information architecture plan to `docs/dashboard-consolidation-mock-section-hide-plan.md`. It keeps the next production direction focused on dashboard consolidation before real data, API, auth, billing, notification, or dispatch work.
 
+Stage 4A-290 adds the mock-section collapse/hide UI plan. The next production direction is to collapse or hide frozen mock workbenches behind an internal QA/dev archive before any real data, API, auth, billing, notification, dispatch, or parser work.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -161,6 +163,8 @@ The current internal/admin dashboard is now too mock-section-heavy for productio
 
 Stage 4A-287 counted 52 mock/local/static admin dashboard sections or panels. Stage 4A-288 uses that inventory to define a production dashboard hierarchy, with core operations visible first and frozen mock workbenches moved toward a collapsed internal QA/dev archive.
 
+Stage 4A-290 defines the collapse/hide UI plan for those frozen sections. Runtime implementation must be separate, explicitly approved, and protected by browser/mobile route leakage checks, parser checks, build/lint, and post-commit `test:safe`.
+
 Future dashboard work should prefer one of these paths:
 
 - Consolidate related mock workbenches into fewer operational panels.
@@ -206,6 +210,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 10. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-289 - Read-only route leakage boundary map.
+Recommended next stage: Stage 4A-291 - Docs-only QA/dev archive acceptance criteria.
 
-Reason: the dashboard inventory and information architecture plan are now documented. Before any runtime collapse/hide implementation, the next safest step is to map the customer/public/driver route boundaries that must keep admin-only dashboard content, private driver details, finance details, mock QA/dev sections, Supabase/API/storage behavior, and notification/send behavior out of public surfaces.
+Reason: the dashboard inventory, information architecture plan, route leakage map, and collapse/hide UI plan are now documented. Before any runtime collapse/hide implementation, the next safest step is to define exact acceptance criteria for the admin-only QA/dev archive and protected default production dashboard surface.

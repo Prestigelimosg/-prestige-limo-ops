@@ -97,6 +97,8 @@ Stage 4A-298 adds docs-only Migration / RLS / API planning in `docs/supabase-mig
 
 Stage 4A-300 adds a docs-only test safety guard plan in `docs/supabase-api-runtime-test-guard-plan.md` for accidental Supabase/API/runtime calls. It does not edit tests, package scripts, app behavior, Supabase files, migrations, API routes, or persistence. Real implementation remains blocked until later approved stages, and the next safe stage should be Stage 4A-301 read-only checkpoint review.
 
+Stage 4A-302 adds docs-only first real persistence acceptance criteria in `docs/first-real-persistence-acceptance-criteria.md`. It does not edit app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, or persistence. Real implementation remains blocked until later approved stages, and the next safe stage should be Stage 4A-303 read-only checkpoint review.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -341,6 +343,8 @@ Stage 4A-298 adds docs-only Migration / RLS / API planning and keeps real migrat
 
 Stage 4A-300 adds docs-only test safety guard planning for accidental Supabase/API/runtime calls. It keeps test files, package scripts, app behavior, Supabase files, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior unchanged.
 
+Stage 4A-302 adds docs-only first real persistence acceptance criteria and keeps app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior unchanged.
+
 ## 9. Parser Safety Plateau
 
 Parser behavior should stay frozen unless there is a specific parser defect or an explicitly approved parser-improvement stage.
@@ -377,6 +381,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 11. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-301 - Read-only checkpoint review after test safety guard plan.
+Recommended next stage: Stage 4A-303 - Read-only checkpoint review after first real persistence acceptance criteria.
 
-Reason: Stage 4A-300 is a docs-only test safety guard plan. A read-only checkpoint should confirm the guard recommendations, route leakage protections, parser safety boundaries, package-script/test:safe protections, and no-runtime-change guardrails before any test implementation or real persistence workflow is selected.
+Reason: Stage 4A-302 is a docs-only acceptance-criteria plan. A read-only checkpoint should confirm the recommended first persistence candidate, data exclusions, route leakage protections, Supabase/API/network boundaries, parser boundaries, and no-runtime-change guardrails before any test implementation or real persistence workflow is selected.

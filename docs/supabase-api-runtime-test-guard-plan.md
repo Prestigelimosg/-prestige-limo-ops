@@ -215,9 +215,13 @@ Recommended future stages after this plan:
 
 1. Stage 4A-301 - Read-only checkpoint review after test safety guard plan.
 2. Stage 4A-302 - Docs-only first real persistence acceptance criteria.
-3. Stage 4A-303 - Test-only guard implementation for no accidental Supabase/API/runtime calls.
-4. Stage 4A-304 - Read-only checkpoint review after test-only guards.
-5. Only after explicit approval, implement the smallest real persistence workflow.
+3. Stage 4A-303 - Read-only checkpoint review after first real persistence acceptance criteria.
+4. Stage 4A-304 - Test-only guard implementation for no accidental Supabase/API/runtime calls.
+5. Stage 4A-305 - Read-only checkpoint review after test-only guards.
+6. Stage 4A-306 - Docs-only first persistence implementation plan with exact files and no commands.
+7. Only after explicit approval, implement the smallest real persistence workflow.
+
+Stage 4A-302 defines acceptance criteria before any first real persistence implementation. It does not change schema, migrations, API routes, tests, package scripts, runtime behavior, or persistence.
 
 First real workflow candidates, ranked by safety:
 

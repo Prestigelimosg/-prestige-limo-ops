@@ -91,6 +91,8 @@ Stage 4A-291 defines QA/dev archive acceptance criteria. Future runtime implemen
 
 Stage 4A-294 adds the production data/auth boundary plan after the collapsed archive implementation and read-only checkpoint review. The next production direction is boundary planning before any real Supabase, API, auth, booking save/load, customer account, billing, payment, notification, or driver workflow implementation.
 
+Stage 4A-296 adds a docs-only Supabase schema/data model plan in `docs/supabase-schema-data-model-plan.md`. It does not run Supabase commands, create migrations, add API routes, or activate real persistence. Real implementation remains blocked until later explicitly approved stages, and the next safe stage should be Stage 4A-297 read-only checkpoint review.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -329,6 +331,8 @@ Recommended sequence after Stage 4A-294:
 
 The next stage should still be a read-only review, not immediate real Supabase implementation.
 
+Stage 4A-296 adds the docs-only Supabase schema/data model plan. It keeps all Supabase commands, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior blocked until later approved stages.
+
 ## 9. Parser Safety Plateau
 
 Parser behavior should stay frozen unless there is a specific parser defect or an explicitly approved parser-improvement stage.
@@ -365,6 +369,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 11. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-295 - Read-only checkpoint review after production data/auth boundary plan.
+Recommended next stage: Stage 4A-297 - Read-only checkpoint review after Supabase schema/data model plan.
 
-Reason: Stage 4A-294 is a docs-only boundary plan. A read-only checkpoint should confirm the role, route, visibility, persistence, auth, and short-notice boundaries before any Supabase schema/data model plan or real workflow implementation is selected.
+Reason: Stage 4A-296 is a docs-only schema/data model plan. A read-only checkpoint should confirm the proposed tables, phase boundaries, privacy rules, and no-runtime-change guardrails before any migration/RLS/API planning or real workflow implementation is selected.

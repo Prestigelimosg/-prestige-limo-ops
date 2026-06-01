@@ -101,6 +101,8 @@ Stage 4A-302 adds docs-only first real persistence acceptance criteria in `docs/
 
 Stage 4A-304 patches customer/driver price visibility boundaries. Customer-facing pricing stays hidden unless a future quote/payment display stage is approved, and driver routes must stay free of customer price, billing, payout, PayNow payout, and finance details. It does not edit app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, or persistence, and the next safe stage should be Stage 4A-305 read-only checkpoint review.
 
+Stage 4A-308 adds a docs-only first persistence implementation plan with exact future files and no commands in `docs/first-persistence-implementation-plan.md`. It does not edit app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, or persistence. Real implementation remains blocked until later approved stages, and the next safe stage should be Stage 4A-309 read-only checkpoint review.
+
 No app behavior should change in the planning stage. A later implementation stage may hide or collapse mock sections only after the plan is approved.
 
 ### Stage B: Production Data Model Design Review Only
@@ -347,6 +349,8 @@ Stage 4A-300 adds docs-only test safety guard planning for accidental Supabase/A
 
 Stage 4A-302 adds docs-only first real persistence acceptance criteria and keeps app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior unchanged.
 
+Stage 4A-308 adds a docs-only first persistence implementation plan with exact future file boundaries, allowed/excluded data scope, route protections, short-notice requirements, and future test requirements. It keeps app behavior, tests, package scripts, Supabase files, migrations, API routes, auth, save/load behavior, billing, payment, notification, and runtime behavior unchanged.
+
 ## 9. Parser Safety Plateau
 
 Parser behavior should stay frozen unless there is a specific parser defect or an explicitly approved parser-improvement stage.
@@ -383,6 +387,6 @@ Do not change package scripts or `test:safe` membership without a separate expli
 
 ## 11. Recommended Next Safe Stage
 
-Recommended next stage: Stage 4A-303 - Read-only checkpoint review after first real persistence acceptance criteria.
+Recommended next stage: Stage 4A-309 - Read-only checkpoint review after first persistence implementation plan.
 
-Reason: Stage 4A-302 is a docs-only acceptance-criteria plan. A read-only checkpoint should confirm the recommended first persistence candidate, data exclusions, route leakage protections, Supabase/API/network boundaries, parser boundaries, and no-runtime-change guardrails before any test implementation or real persistence workflow is selected.
+Reason: Stage 4A-308 is a docs-only implementation plan. A read-only checkpoint should confirm the exact future file boundaries, data exclusions, route leakage protections, Supabase/API/network boundaries, short-notice requirements, parser boundaries, and no-runtime-change guardrails before any migration checklist, Supabase command, API route, auth, save/load implementation, or runtime behavior is activated.

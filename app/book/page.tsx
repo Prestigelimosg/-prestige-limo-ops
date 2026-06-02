@@ -101,6 +101,8 @@ const requiredFields: Array<keyof BookingRequestForm> = [
   "passengerName",
   "pickupDate",
   "pickupTime",
+  "pickupLocation",
+  "dropoffLocation",
 ];
 
 function fieldClass(hasError = false) {
@@ -135,6 +137,7 @@ function splitPickupTime(value: string) {
 export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
+  const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>({
     tone: "info",
     text: "Send a request and our staff will review the details before confirming availability.",
@@ -159,7 +162,7 @@ export default function CustomerBookingPage() {
     setMissingFields((current) => current.filter((item) => item !== "pickupTime"));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const missing = requiredFields.filter((field) => !form[field].trim());
@@ -167,16 +170,64 @@ export default function CustomerBookingPage() {
       setMissingFields(missing);
       setFeedback({
         tone: "error",
-        text: "Please complete contact no., passenger name, pickup date, and pickup time before submitting your request.",
+        text: "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
       });
       return;
     }
 
     setMissingFields([]);
+    setSubmitting(true);
     setFeedback({
-      tone: "success",
-      text: "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+      tone: "info",
+      text: "Submitting your booking request for review...",
     });
+
+    try {
+      const response = await fetch("/api/customer-booking-requests", {
+        body: JSON.stringify({
+          companyName: form.companyName,
+          contactNo: form.contactNo,
+          emailAddress: form.emailAddress,
+          passengerName: form.passengerName,
+          pickupDate: form.pickupDate,
+          pickupTime: form.pickupTime,
+          flightNumber: form.flightNumber,
+          pickupLocation: form.pickupLocation,
+          dropoffLocation: form.dropoffLocation,
+          serviceType: form.serviceType,
+          vehicleType: form.vehicleType,
+          passengerCount: form.passengerCount,
+          luggage: form.luggage,
+          extraStops: form.extraStops,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-customer-purpose": "customer-booking-request",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Booking request could not be submitted.");
+      }
+
+      const requestStatus = result?.request?.short_notice_review_status;
+      setFeedback({
+        tone: "success",
+        text:
+          requestStatus === "Admin Review Required"
+            ? "This booking is within 24 hours, so our team will review and confirm availability."
+            : "Booking request received. Our team will review and confirm availability.",
+      });
+    } catch {
+      setFeedback({
+        tone: "error",
+        text: "Booking request could not be submitted right now. Please contact Prestige Limo.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function isMissing(field: keyof BookingRequestForm) {
@@ -388,26 +439,30 @@ export default function CustomerBookingPage() {
                 </fieldset>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Pickup location
+                  Pickup location *
                   <input
-                    className={fieldClass()}
+                    aria-invalid={isMissing("pickupLocation")}
+                    className={fieldClass(isMissing("pickupLocation"))}
                     data-customer-booking-field="pickupLocation"
                     name="pickupLocation"
                     onChange={(event) => updateField("pickupLocation", event.target.value)}
                     placeholder="Hotel, airport terminal, home, or office"
+                    required
                     type="text"
                     value={form.pickupLocation}
                   />
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">
-                  Drop-off location
+                  Drop-off location *
                   <input
-                    className={fieldClass()}
+                    aria-invalid={isMissing("dropoffLocation")}
+                    className={fieldClass(isMissing("dropoffLocation"))}
                     data-customer-booking-field="dropoffLocation"
                     name="dropoffLocation"
                     onChange={(event) => updateField("dropoffLocation", event.target.value)}
                     placeholder="Destination or area"
+                    required
                     type="text"
                     value={form.dropoffLocation}
                   />
@@ -523,11 +578,12 @@ export default function CustomerBookingPage() {
                 After you submit, Prestige Limo will review the request and reply with the next step.
               </p>
               <button
-                className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
                 data-customer-booking-submit="true"
+                disabled={submitting}
                 type="submit"
               >
-                Submit Booking Request
+                {submitting ? "Submitting..." : "Submit Booking Request"}
               </button>
               <div
                 className={`rounded-md border px-3 py-3 text-sm leading-6 ${feedbackClass(feedback.tone)}`}

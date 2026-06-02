@@ -45,6 +45,23 @@ export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & 
   target_booking_reference: string;
 };
 
+export type CustomerBookingRequestInput = {
+  companyName?: string | null;
+  contactNo?: string | null;
+  emailAddress?: string | null;
+  passengerName?: string | null;
+  pickupDate?: string | null;
+  pickupTime?: string | null;
+  flightNumber?: string | null;
+  pickupLocation?: string | null;
+  dropoffLocation?: string | null;
+  serviceType?: string | null;
+  vehicleType?: string | null;
+  passengerCount?: string | number | null;
+  luggage?: string | number | null;
+  extraStops?: string | null;
+};
+
 export type AdminBookingPersistenceRecord = Required<
   Pick<AdminBookingRecordInput, "booking_reference">
 > &
@@ -63,6 +80,13 @@ type AdminBookingResult<T> =
       error: string;
       status: number;
     };
+
+type AdminBookingAuditInput = {
+  action: string;
+  actor_label: string;
+  change_summary: string;
+  source_route: string;
+};
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -83,6 +107,22 @@ const updatePayloadTopLevelFields = new Set([
   "booking",
   "route_points",
   "service_items",
+]);
+const customerBookingRequestFields = new Set([
+  "companyName",
+  "contactNo",
+  "emailAddress",
+  "passengerName",
+  "pickupDate",
+  "pickupTime",
+  "flightNumber",
+  "pickupLocation",
+  "dropoffLocation",
+  "serviceType",
+  "vehicleType",
+  "passengerCount",
+  "luggage",
+  "extraStops",
 ]);
 
 const bookingFields = new Set([
@@ -257,6 +297,48 @@ function validDateTime(value: string | null | undefined) {
   const parsedTime = value ? new Date(value).getTime() : Number.NaN;
 
   return Number.isFinite(parsedTime);
+}
+
+function createCustomerBookingRequestReference() {
+  const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const randomSuffix = Math.random().toString(36).replace(/[^a-z0-9]/gi, "").slice(2, 8).toUpperCase();
+
+  return `CUST-${timestamp}-${randomSuffix || "REQ001"}`;
+}
+
+function validCustomerPickupDateTime(dateValue: string | null, timeValue: string | null) {
+  const dateMatch = dateValue?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = timeValue?.match(/^(\d{2}):(\d{2})$/);
+
+  if (!dateMatch || !timeMatch) {
+    return null;
+  }
+
+  const hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  const pickupDateTime = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T${String(hours).padStart(2, "0")}:${String(
+    minutes,
+  ).padStart(2, "0")}:00+08:00`;
+
+  return validDateTime(pickupDateTime) ? pickupDateTime : null;
+}
+
+function splitCustomerExtraStops(value: string | null) {
+  const cleanedValue = textOrNull(value);
+
+  if (!cleanedValue) {
+    return [];
+  }
+
+  return cleanedValue
+    .split(/\s*(?:>|;|\n)\s*/g)
+    .map((part) => textOrNull(part))
+    .filter((part): part is string => Boolean(part));
 }
 
 function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
@@ -581,6 +663,132 @@ export function parseAdminBookingUpdatePayload(
   };
 }
 
+export function parseCustomerBookingRequestPayload(
+  value: unknown,
+): AdminBookingResult<AdminBookingPersistenceInput> {
+  const body = asRecord(value);
+  const forbiddenFields = findForbiddenFieldNames(body);
+
+  if (forbiddenFields.length > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Forbidden customer booking request fields rejected: ${forbiddenFields.join(", ")}`,
+    };
+  }
+
+  const unknownKeys = Object.keys(body).filter((key) => !customerBookingRequestFields.has(key));
+
+  if (unknownKeys.length > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Unknown customer booking request fields rejected: ${unknownKeys.join(", ")}`,
+    };
+  }
+
+  const companyName = textOrNull(body.companyName);
+  const contactNo = textOrNull(body.contactNo);
+  const emailAddress = textOrNull(body.emailAddress);
+  const passengerName = textOrNull(body.passengerName);
+  const pickupDate = textOrNull(body.pickupDate);
+  const pickupTime = textOrNull(body.pickupTime);
+  const pickupLocation = textOrNull(body.pickupLocation);
+  const dropoffLocation = textOrNull(body.dropoffLocation);
+  const pickupDateTime = validCustomerPickupDateTime(pickupDate, pickupTime);
+  const missingFields = [
+    !contactNo ? "contactNo" : "",
+    !passengerName ? "passengerName" : "",
+    !pickupDate ? "pickupDate" : "",
+    !pickupTime ? "pickupTime" : "",
+    !pickupLocation ? "pickupLocation" : "",
+    !dropoffLocation ? "dropoffLocation" : "",
+  ].filter(Boolean);
+
+  if (missingFields.length > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Missing required customer booking request fields: ${missingFields.join(", ")}`,
+    };
+  }
+
+  if (!pickupDateTime) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request pickup date/time rejected.",
+    };
+  }
+
+  const extraStopLocations = splitCustomerExtraStops(textOrNull(body.extraStops));
+  const routePoints: AdminBookingRoutePointInput[] = [
+    {
+      point_type: "pickup",
+      sequence_number: 1,
+      location_text: pickupLocation,
+      timing_note: null,
+    },
+    ...extraStopLocations.map((location, index) => ({
+      point_type: "stop" as const,
+      sequence_number: index + 2,
+      location_text: location,
+      timing_note: null,
+    })),
+    {
+      point_type: "dropoff",
+      sequence_number: extraStopLocations.length + 2,
+      location_text: dropoffLocation,
+      timing_note: null,
+    },
+  ];
+  const serviceItems: AdminBookingServiceItemInput[] =
+    extraStopLocations.length > 0
+      ? [
+          {
+            service_item_type: "extra_stop",
+            quantity: extraStopLocations.length,
+            blocks_count: null,
+          },
+        ]
+      : [];
+  const flightNumber = textOrNull(body.flightNumber);
+  const parserSourceReference = [
+    "Customer request via /book",
+    flightNumber ? `Flight ${flightNumber}` : "",
+    passengerName ? `Passenger ${passengerName}` : "",
+  ]
+    .filter(Boolean)
+    .join(" / ");
+  const operationalPayload = {
+    booking: {
+      booking_reference: createCustomerBookingRequestReference(),
+      source_channel: "customer-booking-request",
+      customer_id: null,
+      pickup_datetime: pickupDateTime,
+      pickup_location: pickupLocation,
+      dropoff_location: dropoffLocation,
+      route_type: textOrNull(body.serviceType) || "Other / To Confirm",
+      customer_display_name: companyName || passengerName,
+      contact_phone: contactNo,
+      contact_email: emailAddress,
+      pax_count: integerOrNull(body.passengerCount),
+      luggage_count: integerOrNull(body.luggage),
+      vehicle_type_or_category: textOrNull(body.vehicleType),
+      customer_facing_status: "Request Received",
+      admin_internal_status: adminReviewRequiredStatus,
+      short_notice_review_status: pickupIsUnderTwentyFourHours(pickupDateTime)
+        ? adminReviewRequiredStatus
+        : "Not Required",
+      parser_source_reference: parserSourceReference,
+    },
+    route_points: routePoints,
+    service_items: serviceItems,
+  } satisfies AdminBookingPersistenceInput;
+
+  return parseAdminBookingOperationalPayload(operationalPayload, createPayloadTopLevelFields);
+}
+
 function getAdminBookingClient(): AdminBookingResult<SupabaseClient> {
   const enabled = process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true";
 
@@ -721,6 +929,12 @@ async function fetchAdminBookingIdByReference(
 
 export async function createAdminBooking(
   input: AdminBookingPersistenceInput,
+  auditInput: AdminBookingAuditInput = {
+    action: "admin_booking_create",
+    source_route: "/",
+    actor_label: "Admin dashboard",
+    change_summary: "Operational booking fields saved through admin booking persistence prototype.",
+  },
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
   const clientResult = getAdminBookingClient();
 
@@ -781,10 +995,10 @@ export async function createAdminBooking(
   await client.from("audit_logs").insert({
     entity_type: "booking",
     entity_id: bookingId,
-    action: "admin_booking_create",
-    source_route: "/",
-    actor_label: "Admin dashboard",
-    change_summary: "Operational booking fields saved through admin booking persistence prototype.",
+    action: auditInput.action,
+    source_route: auditInput.source_route,
+    actor_label: auditInput.actor_label,
+    change_summary: auditInput.change_summary,
   });
 
   return fetchAdminBookingById(client, bookingId);

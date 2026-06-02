@@ -343,6 +343,7 @@ const adminBookingPersistenceUiPatterns = [
 const adminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const publicRouteRuntimeResourcePattern =
   /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)|supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
+const customerBookingRequestApiPattern = /\/api\/customer-booking-requests(?:[/?#]|$)/i;
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
@@ -396,14 +397,21 @@ function assertNoNativeAppOnlyLanguage(text, context) {
   );
 }
 
-function assertNoPublicRouteRuntimeCalls(integrationCalls, resourceCalls, context) {
+function assertNoPublicRouteRuntimeCalls(integrationCalls, resourceCalls, context, allowedRuntimeCallPattern = null) {
+  const unexpectedIntegrationCalls = allowedRuntimeCallPattern
+    ? integrationCalls.filter((call) => !allowedRuntimeCallPattern.test(call))
+    : integrationCalls;
+  const unexpectedResourceCalls = resourceCalls.filter(
+    (url) => publicRouteRuntimeResourcePattern.test(url) && !allowedRuntimeCallPattern?.test(url),
+  );
+
   assert.deepEqual(
-    integrationCalls,
+    unexpectedIntegrationCalls,
     [],
     `${context}: expected no public/customer fetch, XHR, sendBeacon, or WebSocket calls`,
   );
   assert.deepEqual(
-    resourceCalls.filter((url) => publicRouteRuntimeResourcePattern.test(url)),
+    unexpectedResourceCalls,
     [],
     `${context}: expected no Supabase, API, storage, payment, notification, or WebSocket resources`,
   );
@@ -947,7 +955,7 @@ async function runChromeTest() {
                 bookings: [
                   {
                     booking_reference: "LOADED-OPS-001",
-                    source_channel: "admin-dashboard",
+                    source_channel: "customer-booking-request",
                     customer_id: null,
                     pickup_datetime: "2026-06-02T08:15:00+08:00",
                     pickup_location: "Loaded Ops Pickup",
@@ -1175,6 +1183,10 @@ async function runChromeTest() {
                     .querySelector("[data-admin-booking-persistence-filter-summary]")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
+                  intakeGuidance: document
+                    .querySelector("[data-admin-booking-customer-intake-guidance]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
                 }
               : false;
           })()`),
@@ -1199,6 +1211,17 @@ async function runChromeTest() {
         /price|billing|invoice|payment|payout|finance/i.test(loadState.recordText),
         false,
         "Expected loaded operational record preview not to show finance/customer/driver payment wording",
+      );
+      assert.equal(
+        loadState.intakeGuidance.includes("Customer booking requests loaded here require admin review before confirmation"),
+        true,
+        "Expected admin-only customer request intake guidance inside persistence panel",
+      );
+      assert.equal(
+        loadState.recordText.includes("Customer request intake") &&
+          loadState.recordText.includes("Admin review required before confirmation"),
+        true,
+        "Expected loaded customer booking request to be shown as admin-review intake",
       );
       assert.equal(
         /Second Ops Customer/.test(loadState.secondRecordText),
@@ -2464,6 +2487,163 @@ async function runChromeTest() {
         );
       }
 
+      const customerBookingRequestApiUrl = new URL("/api/customer-booking-requests", appUrl);
+      const customerBookingRequestHeaders = {
+        "Content-Type": "application/json",
+        Origin: appUrl,
+        Referer: new URL("/book", appUrl).toString(),
+        "x-prestige-customer-purpose": "customer-booking-request",
+      };
+      const validCustomerBookingRequestApiPayload = {
+        companyName: "Direct Customer Company",
+        contactNo: "+65 9000 2222",
+        emailAddress: "direct-customer@example.com",
+        passengerName: "Direct Customer Passenger",
+        pickupDate: "2026-06-05",
+        pickupTime: "10:30",
+        flightNumber: "SQ222",
+        pickupLocation: "Direct Customer Pickup",
+        dropoffLocation: "Direct Customer Dropoff",
+        serviceType: "Airport Arrival",
+        vehicleType: "Alphard / Vellfire",
+        passengerCount: "2",
+        luggage: "1",
+        extraStops: "Direct Customer Stop",
+      };
+
+      const blockedCustomerRequestResponse = await fetch(customerBookingRequestApiUrl, {
+        body: JSON.stringify(validCustomerBookingRequestApiPayload),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-customer-purpose": "customer-booking-request",
+        },
+        method: "POST",
+      });
+      const blockedCustomerRequestBody = await blockedCustomerRequestResponse.json();
+
+      assert.equal(
+        blockedCustomerRequestResponse.status,
+        403,
+        "Expected customer booking request API to reject non-/book submissions",
+      );
+      assert.equal(
+        String(blockedCustomerRequestBody.error || "").includes("customer booking form"),
+        true,
+        "Expected customer booking request blocked-route safe message",
+      );
+
+      const customerForbiddenResponse = await fetch(customerBookingRequestApiUrl, {
+        body: JSON.stringify({
+          ...validCustomerBookingRequestApiPayload,
+          customerPrice: "999",
+        }),
+        headers: customerBookingRequestHeaders,
+        method: "POST",
+      });
+      const customerForbiddenBody = await customerForbiddenResponse.json();
+
+      assert.equal(
+        customerForbiddenResponse.status,
+        400,
+        "Expected customer booking request API to reject forbidden fields before database work",
+      );
+      assert.equal(
+        String(customerForbiddenBody.error || "").includes("approved request scope"),
+        true,
+        "Expected customer booking request API forbidden-field safe message",
+      );
+
+      const customerUnknownResponse = await fetch(customerBookingRequestApiUrl, {
+        body: JSON.stringify({
+          ...validCustomerBookingRequestApiPayload,
+          specialRequest: "Do not accept unknown customer note fields in this intake stage",
+        }),
+        headers: customerBookingRequestHeaders,
+        method: "POST",
+      });
+      const customerUnknownBody = await customerUnknownResponse.json();
+
+      assert.equal(
+        customerUnknownResponse.status,
+        400,
+        "Expected customer booking request API to reject unknown fields before database work",
+      );
+      assert.equal(
+        String(customerUnknownBody.error || "").includes("unknown request fields"),
+        true,
+        "Expected customer booking request API unknown-field safe message",
+      );
+
+      const customerMissingRequiredResponse = await fetch(customerBookingRequestApiUrl, {
+        body: JSON.stringify({
+          ...validCustomerBookingRequestApiPayload,
+          pickupLocation: "",
+        }),
+        headers: customerBookingRequestHeaders,
+        method: "POST",
+      });
+      const customerMissingRequiredBody = await customerMissingRequiredResponse.json();
+
+      assert.equal(
+        customerMissingRequiredResponse.status,
+        400,
+        "Expected customer booking request API to reject missing required operational fields",
+      );
+      assert.equal(
+        String(customerMissingRequiredBody.error || "").includes("missing required trip details"),
+        true,
+        "Expected customer booking request API missing-field safe message",
+      );
+
+      const customerMalformedResponse = await fetch(customerBookingRequestApiUrl, {
+        body: JSON.stringify({
+          ...validCustomerBookingRequestApiPayload,
+          pickupTime: "10:31:59",
+        }),
+        headers: customerBookingRequestHeaders,
+        method: "POST",
+      });
+      const customerMalformedBody = await customerMalformedResponse.json();
+
+      assert.equal(
+        customerMalformedResponse.status,
+        400,
+        "Expected customer booking request API to reject malformed pickup time",
+      );
+      assert.equal(
+        String(customerMalformedBody.error || "").includes("trip details need review"),
+        true,
+        "Expected customer booking request API malformed-trip safe message",
+      );
+
+      let customerDisabledConfigApiStatus = "skipped-enabled-config";
+
+      if (process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") {
+        const customerDisabledConfigResponse = await fetch(customerBookingRequestApiUrl, {
+          body: JSON.stringify(validCustomerBookingRequestApiPayload),
+          headers: customerBookingRequestHeaders,
+          method: "POST",
+        });
+        const customerDisabledConfigBody = await customerDisabledConfigResponse.json();
+        customerDisabledConfigApiStatus = customerDisabledConfigResponse.status;
+
+        assert.equal(
+          customerDisabledConfigResponse.status,
+          503,
+          "Expected valid customer booking request to fail safely when persistence config is disabled",
+        );
+        assert.equal(
+          /not enabled|configured/.test(String(customerDisabledConfigBody.error || "")),
+          true,
+          "Expected customer booking request disabled-config safe message",
+        );
+        assert.equal(
+          /service_role|sql|stack|secret|key/i.test(String(customerDisabledConfigBody.error || "")),
+          false,
+          "Expected customer booking request disabled-config response to hide server internals",
+        );
+      }
+
       return {
         forbiddenApiStatus: forbiddenResponse.status,
         missingRequiredApiStatus: missingRequiredResponse.status,
@@ -2473,6 +2653,14 @@ async function runChromeTest() {
         updateMismatchedTargetApiStatus: updateMismatchedTargetResponse.status,
         updateUnknownApiStatus: updateUnknownResponse.status,
         disabledConfigApiStatus: disabledConfigResponse.status,
+        customerBookingRequestApi: {
+          blockedStatus: blockedCustomerRequestResponse.status,
+          disabledConfigStatus: customerDisabledConfigApiStatus,
+          forbiddenStatus: customerForbiddenResponse.status,
+          malformedStatus: customerMalformedResponse.status,
+          missingRequiredStatus: customerMissingRequiredResponse.status,
+          unknownStatus: customerUnknownResponse.status,
+        },
         emptyApplyFeedback: emptyApplyState.feedback,
         emptyUpdateFeedback: emptyUpdateState.feedback,
         emptyLoadFeedback: emptyLoadState.feedback,
@@ -25501,12 +25689,63 @@ async function runChromeTest() {
       );
       await evaluate(`(() => {
         window.__customerBookingIntegrationCalls = [];
+        window.__customerBookingRequestCalls = [];
+        window.__customerBookingRequestMockMode = "success";
         const originalFetch = window.__customerBookingOriginalFetch || window.fetch.bind(window);
         window.__customerBookingOriginalFetch = originalFetch;
-        window.fetch = (...args) => {
+        window.fetch = async (...args) => {
           const target = args[0]?.url || args[0];
-          const method = args[1]?.method || args[0]?.method || "GET";
-          window.__customerBookingIntegrationCalls.push(\`\${method} \${String(target)}\`);
+          const options = args[1] || {};
+          const method = options?.method || args[0]?.method || "GET";
+          const url = String(target);
+          window.__customerBookingIntegrationCalls.push(\`\${method} \${url}\`);
+
+          if (url.includes("/api/customer-booking-requests")) {
+            let body = {};
+
+            try {
+              body = options?.body ? JSON.parse(String(options.body)) : {};
+            } catch {
+              body = {};
+            }
+
+            window.__customerBookingRequestCalls.push({ body, method, url });
+
+            if (window.__customerBookingRequestMockMode === "disabled") {
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: "Booking request intake is not enabled or configured on this server.",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 503 },
+              );
+            }
+
+            if (window.__customerBookingRequestMockMode === "save-failure") {
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: "insert failed with SQL details and SUPABASE_SERVICE_ROLE_KEY hint",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 500 },
+              );
+            }
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                request: {
+                  booking_reference: "CUST-REQUEST-001",
+                  customer_facing_status: "Request Received",
+                  admin_internal_status: "Admin Review Required",
+                  short_notice_review_status:
+                    body.pickupDate === "2026-06-02" ? "Admin Review Required" : "Not Required",
+                },
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
+          }
+
           return originalFetch(...args);
         };
 
@@ -25955,6 +26194,7 @@ async function runChromeTest() {
             "manual extra charge reason",
           ].filter((value) => lowerText.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
+          customerBookingRequestCalls: window.__customerBookingRequestCalls || [],
           sameTimeBlockingText: [
             "already booked",
             "same date",
@@ -26230,6 +26470,8 @@ async function runChromeTest() {
       assert.equal(initialState.fieldState.passengerName.required, true, "Expected passenger name to be required");
       assert.equal(initialState.fieldState.pickupDate.required, true, "Expected pickup date to be required");
       assert.equal(initialState.fieldState.pickupTime.required, true, "Expected pickup time to be required");
+      assert.equal(initialState.fieldState.pickupLocation.required, true, "Expected pickup location to be required");
+      assert.equal(initialState.fieldState.dropoffLocation.required, true, "Expected drop-off location to be required");
       assert.equal(
         initialState.fieldState.pickupTime.control,
         "selects",
@@ -26261,15 +26503,18 @@ async function runChromeTest() {
         "Expected /book not to show the removed pickup time helper sentence",
       );
       assert.equal(initialState.timeStepNote, "", "Expected /book pickup time helper sentence element to be removed");
-      assert.equal(initialState.fieldState.pickupLocation.required, false, "Expected pickup location to be optional");
-      assert.equal(initialState.fieldState.dropoffLocation.required, false, "Expected drop-off location to be optional");
       assert.equal(initialState.fieldState.vehicleType.required, false, "Expected vehicle type to be optional");
       assert.equal(
-        initialState.fieldState.pickupLocation.label.includes("*") ||
-          initialState.fieldState.dropoffLocation.label.includes("*") ||
-          initialState.fieldState.vehicleType.label.includes("*"),
+        initialState.fieldState.pickupLocation.label.includes("*") &&
+          initialState.fieldState.dropoffLocation.label.includes("*") &&
+          !initialState.fieldState.vehicleType.label.includes("*"),
+        true,
+        "Expected pickup and drop-off labels to show required stars while vehicle stays optional",
+      );
+      assert.equal(
+        initialState.fieldState.vehicleType.label.includes("*"),
         false,
-        "Expected pickup, drop-off, and vehicle labels not to show required stars",
+        "Expected vehicle label not to show a required star",
       );
       assert.deepEqual(
         initialState.serviceOptionLabels,
@@ -26349,8 +26594,8 @@ async function runChromeTest() {
       assert.equal(invalidState.feedbackTone, "error", "Expected invalid /book submit to show a local error");
       assert.deepEqual(
         invalidState.missingFields,
-        ["Contact no.", "Passenger name", "Pickup date", "Pickup time"],
-        "Expected invalid /book submit to list missing required fields only",
+        ["Contact no.", "Passenger name", "Pickup date", "Pickup time", "Pickup location", "Drop-off location"],
+        "Expected invalid /book submit to list required operational request fields only",
       );
       assert.equal(
         invalidState.feedbackDistanceFromSubmit < 160,
@@ -26380,20 +26625,42 @@ async function runChromeTest() {
       );
 
       await setCustomerBookingField("contactNo", "+65 9000 1111");
+      await setCustomerBookingField("emailAddress", "customer-test@example.com");
+      await setCustomerBookingField("companyName", "Customer Test Company");
       await setCustomerBookingField("passengerName", "Customer Test Passenger");
-      await setCustomerBookingField("pickupDate", "2026-05-29");
+      await setCustomerBookingField("pickupDate", "2026-06-05");
       await setCustomerBookingField("pickupTime", "09:30");
+      await setCustomerBookingField("flightNumber", "SQ888");
+      await setCustomerBookingField("pickupLocation", "Customer Test Pickup");
+      await setCustomerBookingField("dropoffLocation", "Customer Test Dropoff");
+      await setCustomerBookingField("serviceType", "Airport Arrival");
+      await setCustomerBookingField("vehicleType", "Alphard / Vellfire");
+      await setCustomerBookingField("passengerCount", "2");
+      await setCustomerBookingField("luggage", "2");
+      await setCustomerBookingField("extraStops", "Customer Test Stop");
       const requiredOnlyState = await readCustomerBookingPageState();
       assert.equal(requiredOnlyState.fieldState.pickupTime.value, "09:30", "Expected hour/minute selects to set pickupTime");
-      assert.equal(requiredOnlyState.fieldState.pickupLocation.value, "", "Expected pickup location to remain optional");
-      assert.equal(requiredOnlyState.fieldState.dropoffLocation.value, "", "Expected drop-off location to remain optional");
-      assert.equal(requiredOnlyState.fieldState.vehicleType.value, "", "Expected vehicle type to remain optional");
+      assert.equal(
+        requiredOnlyState.fieldState.pickupLocation.value,
+        "Customer Test Pickup",
+        "Expected pickup location to be included in the customer request payload source",
+      );
+      assert.equal(
+        requiredOnlyState.fieldState.dropoffLocation.value,
+        "Customer Test Dropoff",
+        "Expected drop-off location to be included in the customer request payload source",
+      );
+      assert.equal(
+        requiredOnlyState.fieldState.vehicleType.value,
+        "Alphard / Vellfire",
+        "Expected vehicle type to remain a safe optional customer request field",
+      );
 
       await clickCustomerBookingSubmit("valid customer booking request");
       const validState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText.includes("Booking request received for review")
+          return candidateState.feedbackText.includes("Booking request received. Our team will review")
             ? candidateState
             : false;
         },
@@ -26403,7 +26670,7 @@ async function runChromeTest() {
       assert.equal(validState.feedbackTone, "success", "Expected valid /book submit to show a local success message");
       assert.equal(
         validState.feedbackText,
-        "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+        "Booking request received. Our team will review and confirm availability.",
         "Expected customer-safe not-confirmed success feedback",
       );
       assert.equal(validState.feedbackDistanceFromSubmit < 160, true, "Expected valid /book feedback near the submit button");
@@ -26417,12 +26684,101 @@ async function runChromeTest() {
         [],
         "Expected valid /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assert.equal(
+        validState.customerBookingRequestCalls.length,
+        1,
+        "Expected valid /book submit to call the narrow customer booking request intake endpoint once",
+      );
+      assert.equal(validState.customerBookingRequestCalls[0].method, "POST");
+      assert.equal(
+        customerBookingRequestApiPattern.test(validState.customerBookingRequestCalls[0].url),
+        true,
+        "Expected valid /book submit to use only the customer request intake endpoint",
+      );
+      assert.deepEqual(
+        Object.keys(validState.customerBookingRequestCalls[0].body).sort(),
+        [
+          "companyName",
+          "contactNo",
+          "dropoffLocation",
+          "emailAddress",
+          "extraStops",
+          "flightNumber",
+          "luggage",
+          "passengerCount",
+          "passengerName",
+          "pickupDate",
+          "pickupLocation",
+          "pickupTime",
+          "serviceType",
+          "vehicleType",
+        ],
+        "Expected /book customer request payload to include only approved safe operational fields",
+      );
+      assert.deepEqual(
+        [
+          "customerPrice",
+          "quotedPrice",
+          "billing",
+          "invoice",
+          "payment",
+          "paynow",
+          "driverPayout",
+          "payout",
+          "financeNotes",
+          "internalAdminNotes",
+          "notification",
+          "auth",
+          "liveLocation",
+          "proofPhoto",
+          "parserLearning",
+          "specialRequest",
+        ].filter((key) => Object.prototype.hasOwnProperty.call(validState.customerBookingRequestCalls[0].body, key)),
+        [],
+        "Expected /book not to send forbidden finance/customer/driver/private fields",
+      );
+      assert.deepEqual(
+        {
+          companyName: validState.customerBookingRequestCalls[0].body.companyName,
+          contactNo: validState.customerBookingRequestCalls[0].body.contactNo,
+          dropoffLocation: validState.customerBookingRequestCalls[0].body.dropoffLocation,
+          emailAddress: validState.customerBookingRequestCalls[0].body.emailAddress,
+          extraStops: validState.customerBookingRequestCalls[0].body.extraStops,
+          flightNumber: validState.customerBookingRequestCalls[0].body.flightNumber,
+          luggage: validState.customerBookingRequestCalls[0].body.luggage,
+          passengerCount: validState.customerBookingRequestCalls[0].body.passengerCount,
+          passengerName: validState.customerBookingRequestCalls[0].body.passengerName,
+          pickupDate: validState.customerBookingRequestCalls[0].body.pickupDate,
+          pickupLocation: validState.customerBookingRequestCalls[0].body.pickupLocation,
+          pickupTime: validState.customerBookingRequestCalls[0].body.pickupTime,
+          serviceType: validState.customerBookingRequestCalls[0].body.serviceType,
+          vehicleType: validState.customerBookingRequestCalls[0].body.vehicleType,
+        },
+        {
+          companyName: "Customer Test Company",
+          contactNo: "+65 9000 1111",
+          dropoffLocation: "Customer Test Dropoff",
+          emailAddress: "customer-test@example.com",
+          extraStops: "Customer Test Stop",
+          flightNumber: "SQ888",
+          luggage: "2",
+          passengerCount: "2",
+          passengerName: "Customer Test Passenger",
+          pickupDate: "2026-06-05",
+          pickupLocation: "Customer Test Pickup",
+          pickupTime: "09:30",
+          serviceType: "Airport Arrival",
+          vehicleType: "Alphard / Vellfire",
+        },
+        "Expected /book payload values to match safe customer request fields",
+      );
       assertNoCustomerFacingPriceVisibilityLeaks(validState.text, "/book valid submit");
       assertNoAdminBookingPersistenceLeaks(validState.text, "/book valid submit");
       assertNoPublicRouteRuntimeCalls(
         validState.integrationCalls,
         validState.resourceCalls,
         "/book valid submit",
+        customerBookingRequestApiPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/book valid submit"),
@@ -26438,7 +26794,7 @@ async function runChromeTest() {
       const sameTimeRepeatState = await readCustomerBookingPageState();
       assert.equal(
         sameTimeRepeatState.feedbackText,
-        "Booking request received for review. This is not confirmed yet. Our staff will reply to confirm availability.",
+        "Booking request received. Our team will review and confirm availability.",
         "Expected same-date/same-time /book submit to remain a staff-reviewed request",
       );
       assert.deepEqual(
@@ -26451,12 +26807,77 @@ async function runChromeTest() {
         [],
         "Expected repeated same-date/same-time /book submit not to call Supabase, payment, bank, notification, or calendar APIs",
       );
+      assert.equal(
+        sameTimeRepeatState.customerBookingRequestCalls.length,
+        2,
+        "Expected repeated /book submit to use the same narrow customer intake endpoint without same-time blocking",
+      );
       assertNoCustomerFacingPriceVisibilityLeaks(sameTimeRepeatState.text, "/book repeated submit");
       assertNoAdminBookingPersistenceLeaks(sameTimeRepeatState.text, "/book repeated submit");
       assertNoPublicRouteRuntimeCalls(
         sameTimeRepeatState.integrationCalls,
         sameTimeRepeatState.resourceCalls,
         "/book repeated submit",
+        customerBookingRequestApiPattern,
+      );
+
+      await setCustomerBookingField("pickupDate", "2026-06-02");
+      await setCustomerBookingField("pickupTime", "09:30");
+      await clickCustomerBookingSubmit("short-notice customer booking request");
+      const shortNoticeState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText ===
+            "This booking is within 24 hours, so our team will review and confirm availability."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "short-notice customer booking request feedback",
+      );
+      assert.equal(shortNoticeState.feedbackTone, "success", "Expected short-notice submit to show success review message");
+      assert.equal(
+        shortNoticeState.customerBookingRequestCalls.at(-1)?.body.pickupDate,
+        "2026-06-02",
+        "Expected short-notice request payload to keep the customer pickup date",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(shortNoticeState.text, "/book short notice submit");
+      assertNoAdminBookingPersistenceLeaks(shortNoticeState.text, "/book short notice submit");
+      assertNoPublicRouteRuntimeCalls(
+        shortNoticeState.integrationCalls,
+        shortNoticeState.resourceCalls,
+        "/book short notice submit",
+        customerBookingRequestApiPattern,
+      );
+
+      const failureClicked = await evaluate(`(() => {
+        window.__customerBookingRequestMockMode = "disabled";
+        const button = document.querySelector("[data-customer-booking-submit]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(failureClicked, true, "Expected /book submit button for disabled intake check");
+      const disabledIntakeState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText.includes("Booking request could not be submitted right now")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "disabled customer booking request feedback",
+      );
+      assert.equal(disabledIntakeState.feedbackTone, "error", "Expected disabled intake to show safe customer error");
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(disabledIntakeState.feedbackText),
+        false,
+        "Expected disabled /book intake feedback to hide server internals",
+      );
+      assertNoPublicRouteRuntimeCalls(
+        disabledIntakeState.integrationCalls,
+        disabledIntakeState.resourceCalls,
+        "/book disabled intake submit",
+        customerBookingRequestApiPattern,
       );
 
       await setCustomerBookingViewportAndLoad(mobileViewport);

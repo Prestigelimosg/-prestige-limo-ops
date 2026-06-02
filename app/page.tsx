@@ -2694,6 +2694,20 @@ function adminBookingPersistencePrimaryStatus(record: AdminBookingPersistenceRec
     "Draft";
 }
 
+function adminBookingPersistenceSourceLabel(record: AdminBookingPersistenceRecord) {
+  const sourceChannel = clean(record.source_channel);
+
+  if (sourceChannel === "customer-booking-request") {
+    return "Customer request intake";
+  }
+
+  if (sourceChannel === "admin-dashboard") {
+    return "Admin dashboard snapshot";
+  }
+
+  return sourceChannel || "Operational snapshot";
+}
+
 function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceRecord) {
   return [
     clean(record.booking_reference),
@@ -15496,6 +15510,12 @@ export default function Home() {
                   <p className="mt-1 text-xs leading-5 text-emerald-900">
                     Internal admin-only operational fields. No price, billing, payout, payment, notification, or parser-learning data.
                   </p>
+                  <p
+                    className="mt-1 text-xs font-semibold leading-5 text-emerald-900"
+                    data-admin-booking-customer-intake-guidance="true"
+                  >
+                    Customer booking requests loaded here require admin review before confirmation.
+                  </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:min-w-56">
                   <button
@@ -15701,6 +15721,15 @@ export default function Home() {
                         {[record.customer_display_name, record.vehicle_type_or_category, record.route_type]
                           .filter(Boolean)
                           .join(" · ") || "Operational booking"}
+                      </p>
+                      <p
+                        className="mt-1 font-semibold text-emerald-900"
+                        data-admin-booking-persistence-record-source={record.booking_reference}
+                      >
+                        {adminBookingPersistenceSourceLabel(record)}
+                        {record.source_channel === "customer-booking-request"
+                          ? " · Admin review required before confirmation"
+                          : ""}
                       </p>
                       <p className="mt-1 break-words">
                         {[record.pickup_location || "Pickup TBC", record.dropoff_location || "Drop-off TBC"].join(

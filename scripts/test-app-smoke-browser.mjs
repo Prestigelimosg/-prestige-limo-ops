@@ -653,6 +653,273 @@ async function runChromeTest() {
       return { visibleTextLeaks };
     };
 
+    const checkAdminBookingPersistencePrototype = async () => {
+      await setViewportAndReload({
+        height: 900,
+        label: "desktop admin booking persistence",
+        mobile: false,
+        scale: 1,
+        width: 1440,
+      });
+      await clickTab("Dispatch");
+      await waitForSelector(
+        evaluate,
+        "[data-admin-booking-persistence-panel]",
+        "admin booking persistence panel",
+      );
+      await evaluate(`(() => {
+        window.__adminBookingPersistenceCalls = [];
+        window.__adminBookingPersistenceOriginalFetch =
+          window.__adminBookingPersistenceOriginalFetch || window.fetch.bind(window);
+        window.fetch = async (...args) => {
+          const [target, options = {}] = args;
+          const url = typeof target === "string" ? target : target?.url || "";
+          const method = options?.method || target?.method || "GET";
+
+          if (String(url).includes("/api/admin-bookings")) {
+            const body = options?.body ? JSON.parse(String(options.body)) : null;
+            window.__adminBookingPersistenceCalls.push({ body, method, url: String(url) });
+
+            if (method === "POST") {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  booking: {
+                    ...body.booking,
+                    route_points: body.route_points,
+                    service_items: body.service_items,
+                    created_at: "2026-06-02T00:00:00.000Z",
+                    updated_at: "2026-06-02T00:00:00.000Z",
+                  },
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                bookings: [
+                  {
+                    booking_reference: "LOADED-OPS-001",
+                    source_channel: "admin-dashboard",
+                    customer_id: null,
+                    pickup_datetime: "2026-06-04T10:30:00+08:00",
+                    pickup_location: "Loaded Ops Pickup",
+                    dropoff_location: "Loaded Ops Dropoff",
+                    route_type: "MNG",
+                    customer_display_name: "Loaded Ops Customer",
+                    contact_phone: "+65 8000 1000",
+                    contact_email: "loaded-ops@example.com",
+                    pax_count: 2,
+                    luggage_count: null,
+                    vehicle_type_or_category: "AVF",
+                    customer_facing_status: "Received",
+                    admin_internal_status: "Draft",
+                    short_notice_review_status: "Not Required",
+                    parser_source_reference: "Flight SQ001",
+                    created_at: "2026-06-02T00:00:00.000Z",
+                    updated_at: "2026-06-02T00:00:00.000Z",
+                    route_points: [
+                      {
+                        point_type: "pickup",
+                        sequence_number: 1,
+                        location_text: "Loaded Ops Pickup",
+                        timing_note: null,
+                      },
+                      {
+                        point_type: "dropoff",
+                        sequence_number: 2,
+                        location_text: "Loaded Ops Dropoff",
+                        timing_note: null,
+                      },
+                    ],
+                    service_items: [
+                      {
+                        service_item_type: "extra_stop",
+                        quantity: 1,
+                        blocks_count: null,
+                      },
+                    ],
+                  },
+                ],
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
+          }
+
+          return window.__adminBookingPersistenceOriginalFetch(...args);
+        };
+
+        const setField = (labelText, value) => {
+          const label = [...document.querySelectorAll("label")].find(
+            (candidate) => candidate.querySelector("span")?.textContent.trim() === labelText,
+          );
+          const field = label?.querySelector("input, textarea, select");
+          if (!field) {
+            return false;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(field.constructor.prototype, "value");
+          descriptor?.set?.call(field, value);
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        };
+
+        return [
+          setField("Company / Account", "OPS TEST CUSTOMER"),
+          setField("Booking type", "MNG"),
+          setField("Vehicle", "AVF"),
+          setField("Pickup date *", "2026-06-04"),
+          setField("Pickup time *", "1030"),
+          setField("Flight number", "SQ001"),
+          setField("Pickup *", "Ops Test Pickup"),
+          setField("Extra stop location", "Ops Test Stop"),
+          setField("Extra Stops", "1"),
+          setField("Drop-off *", "Ops Test Dropoff"),
+          setField("Booker *", "Ops Booker"),
+          setField("Booker WhatsApp / Contact", "+65 8000 1000"),
+          setField("Booker email (optional)", "ops@example.com"),
+          setField("Passenger name", "Ops Passenger"),
+          setField("Pax", "2"),
+        ].every(Boolean);
+      })()`);
+
+      const saveClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-save]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(saveClicked, true, "Expected admin operational snapshot save button");
+
+      const saveState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const calls = window.__adminBookingPersistenceCalls || [];
+            const postCall = calls.find((call) => call.method === "POST");
+            const body = postCall?.body;
+            if (!feedback.includes("Operational booking saved") || !body) {
+              return false;
+            }
+
+            const keys = [];
+            const collectKeys = (value) => {
+              if (Array.isArray(value)) {
+                value.forEach(collectKeys);
+                return;
+              }
+              if (!value || typeof value !== "object") {
+                return;
+              }
+              Object.entries(value).forEach(([key, nested]) => {
+                keys.push(key);
+                collectKeys(nested);
+              });
+            };
+            collectKeys(body);
+            const forbiddenKeyPattern =
+              /price|fare|amount|billing|invoice|payment|pdf|stripe|paynow|payout|finance|notification|telegram|proof|photo|live_location|auth|parser_learning|debug|qa_archive|mock_workbench|admin_note|internal_note|manual_extra_charge/i;
+
+            return {
+              body,
+              callCount: calls.length,
+              feedback,
+              forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
+              recordVisible: Boolean(document.querySelector("[data-admin-booking-persistence-records]")),
+            };
+          })()`),
+        10000,
+        "admin booking persistence save feedback",
+      );
+
+      assert.deepEqual(
+        saveState.forbiddenKeys,
+        [],
+        "Expected admin booking persistence save body to include only approved operational field names",
+      );
+      assert.equal(saveState.body.booking.customer_display_name, "OPS TEST CUSTOMER");
+      assert.equal(saveState.body.booking.contact_email, "ops@example.com");
+      assert.equal(saveState.body.booking.customer_facing_status, "Received");
+      assert.equal(saveState.body.booking.admin_internal_status, "Draft");
+      assert.equal(saveState.body.route_points.length, 3);
+      assert.deepEqual(
+        saveState.body.service_items.map((item) => item.service_item_type),
+        ["extra_stop"],
+        "Expected extra stop to stay a distinct operational service item",
+      );
+      assert.equal(saveState.recordVisible, true, "Expected saved operational record preview");
+
+      const loadClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-load]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(loadClicked, true, "Expected admin operational snapshots load button");
+
+      const loadState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
+            const calls = window.__adminBookingPersistenceCalls || [];
+
+            return feedback.includes("Loaded 1 operational booking records") && record
+              ? {
+                  feedback,
+                  getCalls: calls.filter((call) => call.method === "GET").length,
+                  postCalls: calls.filter((call) => call.method === "POST").length,
+                  recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence load feedback",
+      );
+
+      assert.equal(loadState.postCalls, 1, "Expected one mocked admin booking POST call");
+      assert.equal(loadState.getCalls, 1, "Expected one mocked admin booking GET call");
+      assert.equal(
+        /price|billing|invoice|payment|payout|finance/i.test(loadState.recordText),
+        false,
+        "Expected loaded operational record preview not to show finance/customer/driver payment wording",
+      );
+
+      await evaluate(`window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch`);
+
+      const forbiddenResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          booking: {
+            booking_reference: "FORBIDDEN-OPS-001",
+            customer_price: 100,
+          },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const forbiddenBody = await forbiddenResponse.json();
+
+      assert.equal(forbiddenResponse.status, 400, "Expected admin booking API to reject forbidden fields");
+      assert.equal(
+        String(forbiddenBody.error || "").includes("Forbidden admin booking fields rejected"),
+        true,
+        "Expected admin booking API forbidden-field message",
+      );
+
+      return {
+        forbiddenApiStatus: forbiddenResponse.status,
+        loadedRecord: loadState.recordText,
+        postedBookingFields: Object.keys(saveState.body.booking),
+        routePointCount: saveState.body.route_points.length,
+        serviceItemTypes: saveState.body.service_items.map((item) => item.service_item_type),
+      };
+    };
+
     const withInternalQaMockArchiveOpen = async (callback) => {
       const previous = openInternalQaMockArchiveAfterReload;
       openInternalQaMockArchiveAfterReload = true;
@@ -29637,6 +29904,7 @@ async function runChromeTest() {
         await checkAdminMockQuotePricingReviewReadinessWorkbench();
       state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     });
+    state.adminBookingPersistence = await checkAdminBookingPersistencePrototype();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {

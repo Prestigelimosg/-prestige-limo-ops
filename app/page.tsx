@@ -236,6 +236,65 @@ type CopyEditState = {
 
 type BookingCopyTarget = "driverDispatch" | "jobCard";
 
+type AdminBookingPersistenceRecord = {
+  booking_reference: string;
+  source_channel?: string | null;
+  customer_id?: number | null;
+  pickup_datetime?: string | null;
+  pickup_location?: string | null;
+  dropoff_location?: string | null;
+  route_type?: string | null;
+  customer_display_name?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  pax_count?: number | null;
+  luggage_count?: number | null;
+  vehicle_type_or_category?: string | null;
+  customer_facing_status?: string | null;
+  admin_internal_status?: string | null;
+  short_notice_review_status?: string | null;
+  parser_source_reference?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  route_points?: Array<{
+    point_type?: "pickup" | "dropoff" | "stop" | "waypoint";
+    sequence_number?: number | null;
+    location_text?: string | null;
+    timing_note?: string | null;
+  }>;
+  service_items?: Array<{
+    service_item_type?: "child_seat" | "extra_stop" | "waiting_time" | "midnight_charge";
+    quantity?: number | null;
+    blocks_count?: number | null;
+  }>;
+};
+
+type AdminBookingPersistenceRequestBody = {
+  booking: {
+    booking_reference: string;
+    source_channel: string;
+    customer_id: number | null;
+    pickup_datetime: string | null;
+    pickup_location: string | null;
+    dropoff_location: string | null;
+    route_type: string | null;
+    customer_display_name: string | null;
+    contact_phone: string | null;
+    contact_email: string | null;
+    pax_count: number | null;
+    luggage_count: number | null;
+    vehicle_type_or_category: string | null;
+    customer_facing_status: string;
+    admin_internal_status: string;
+    short_notice_review_status: string | null;
+    parser_source_reference: string | null;
+  };
+  route_points: NonNullable<AdminBookingPersistenceRecord["route_points"]>;
+  service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
+};
+
+type AdminBookingPersistenceAction = "save" | "load";
+
 type AppTab = "dispatch" | "bookings" | "completed" | "dashboard" | "drivers" | "rates";
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
@@ -2417,6 +2476,161 @@ function parsePickupDateTimeMs(dateValue: string, timeValue: string | null | und
   return Number.isFinite(pickupTimeMs) ? pickupTimeMs : null;
 }
 
+function formatAdminBookingPickupDateTime(bookingValue: BookingForm) {
+  const date = clean(bookingValue.date);
+  const time = normalizePickupTimeForStorage(bookingValue.time);
+
+  if (!date || time.length < 4) {
+    return null;
+  }
+
+  const hours = Number(time.slice(0, 2));
+  const minutes = Number(time.slice(2, 4));
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  return `${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+08:00`;
+}
+
+function isAdminShortNoticeReviewRequired(bookingValue: BookingForm, currentTimeMs: number) {
+  const pickupTimeMs = parsePickupDateTimeMs(bookingValue.date, bookingValue.time);
+
+  return pickupTimeMs !== null && pickupTimeMs - currentTimeMs < 24 * 60 * 60 * 1000;
+}
+
+function createAdminBookingReference() {
+  return `ADM-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+}
+
+function getAdminExtraStopLocations(value: string) {
+  const cleanedValue = clean(value);
+
+  if (!cleanedValue) {
+    return [];
+  }
+
+  const itineraryStops = parseItineraryDisplayStops(cleanedValue);
+
+  if (itineraryStops.length > 0) {
+    return itineraryStops.map((stop) => stop.location);
+  }
+
+  return cleanedValue
+    .split(/\s*(?:>|;|\n)\s*/g)
+    .map((part) => clean(part))
+    .filter(Boolean);
+}
+
+function buildAdminBookingPersistencePayload(
+  bookingValue: BookingForm,
+  currentTimeMs: number,
+): AdminBookingPersistenceRequestBody {
+  const shortNoticeReviewRequired = isAdminShortNoticeReviewRequired(bookingValue, currentTimeMs);
+  const pickupLocation = clean(bookingValue.pickup) || null;
+  const dropoffLocation = clean(bookingValue.dropoff) || null;
+  const extraStopLocations = getAdminExtraStopLocations(bookingValue.extraStopLocation);
+  const routePointCandidates: Array<AdminBookingPersistenceRequestBody["route_points"][number] | null> = [
+    pickupLocation
+      ? {
+          point_type: "pickup" as const,
+          sequence_number: 1,
+          location_text: pickupLocation,
+          timing_note: null,
+        }
+      : null,
+    ...extraStopLocations.map((location, index) => ({
+      point_type: "stop" as const,
+      sequence_number: index + 2,
+      location_text: location,
+      timing_note: null,
+    })),
+    dropoffLocation
+      ? {
+          point_type: "dropoff" as const,
+          sequence_number: extraStopLocations.length + 2,
+          location_text: dropoffLocation,
+          timing_note: null,
+        }
+      : null,
+  ];
+  const routePoints = routePointCandidates.filter(
+    (routePoint): routePoint is AdminBookingPersistenceRequestBody["route_points"][number] =>
+      Boolean(routePoint),
+  );
+  const childSeatCount =
+    clean(bookingValue.childSeatRequired) === "yes"
+      ? normalizeChildSeatCount(bookingValue.childSeatRequired, bookingValue.childSeatCount)
+      : 0;
+  const extraStopCount = normalizeExtraStopCount(bookingValue.extraStopCount);
+  const serviceItemCandidates: Array<AdminBookingPersistenceRequestBody["service_items"][number] | null> = [
+    childSeatCount > 0
+      ? {
+          service_item_type: "child_seat" as const,
+          quantity: childSeatCount,
+          blocks_count: null,
+        }
+      : null,
+    extraStopCount > 0
+      ? {
+          service_item_type: "extra_stop" as const,
+          quantity: extraStopCount,
+          blocks_count: null,
+        }
+      : null,
+    isMockMidnightChargeDetected(bookingValue.time)
+      ? {
+          service_item_type: "midnight_charge" as const,
+          quantity: 1,
+          blocks_count: null,
+        }
+      : null,
+  ];
+  const serviceItems = serviceItemCandidates.filter(
+    (serviceItem): serviceItem is AdminBookingPersistenceRequestBody["service_items"][number] =>
+      Boolean(serviceItem),
+  );
+  const customerDisplayName =
+    normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail) ||
+    clean(bookingValue.booker) ||
+    clean(bookingValue.name) ||
+    null;
+
+  return {
+    booking: {
+      booking_reference: createAdminBookingReference(),
+      source_channel: "admin-dashboard",
+      customer_id: null,
+      pickup_datetime: formatAdminBookingPickupDateTime(bookingValue),
+      pickup_location: pickupLocation,
+      dropoff_location: dropoffLocation,
+      route_type: clean(bookingValue.bookingType) || null,
+      customer_display_name: customerDisplayName,
+      contact_phone: clean(bookingValue.bookerContact) || null,
+      contact_email: clean(bookingValue.bookerEmail) || null,
+      pax_count: Number(clean(bookingValue.pax)) || null,
+      luggage_count: null,
+      vehicle_type_or_category: clean(bookingValue.vehicle) || null,
+      customer_facing_status: "Received",
+      admin_internal_status: shortNoticeReviewRequired ? "Admin Review Required" : "Draft",
+      short_notice_review_status: shortNoticeReviewRequired ? "Admin Review Required" : "Not Required",
+      parser_source_reference: parsedSourceReference(bookingValue),
+    },
+    route_points: routePoints,
+    service_items: serviceItems,
+  };
+}
+
+function parsedSourceReference(bookingValue: BookingForm) {
+  const flight = clean(bookingValue.flight);
+  const booker = clean(bookingValue.booker);
+
+  return [flight ? `Flight ${flight}` : "", booker ? `Booker ${booker}` : ""]
+    .filter(Boolean)
+    .join(" / ") || null;
+}
+
 function customerLiveLocationState(
   booking: BookingForm,
   currentTimeMs: number,
@@ -2606,6 +2820,12 @@ export default function Home() {
   const [rateOverrideListMessages, setRateOverrideListMessages] =
     useState<{ company?: RateOverrideListMessage; boss?: RateOverrideListMessage }>({});
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
+  const [adminBookingPersistenceRecords, setAdminBookingPersistenceRecords] =
+    useState<AdminBookingPersistenceRecord[]>([]);
+  const [adminBookingPersistenceMessage, setAdminBookingPersistenceMessage] =
+    useState<Message | null>(null);
+  const [adminBookingPersistenceAction, setAdminBookingPersistenceAction] =
+    useState<AdminBookingPersistenceAction | null>(null);
   const [customerMatchFeedback, setCustomerMatchFeedback] = useState<CustomerMatchFeedback | null>(null);
   const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
@@ -5401,6 +5621,96 @@ export default function Home() {
       tone: "success",
       text: `Booking ${bookingRecord.id || clean(bookingRecord.flight_no) || getBookingDateKey(bookingRecord)} loaded.`,
     });
+  }
+
+  async function saveAdminBookingOperationalSnapshot() {
+    const payload = buildAdminBookingPersistencePayload(booking, currentTimeMs);
+
+    setAdminBookingPersistenceAction("save");
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: "Saving operational booking fields...",
+    });
+
+    try {
+      const response = await fetch("/api/admin-bookings", {
+        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Admin booking save failed.");
+      }
+
+      const savedBooking = result.booking as AdminBookingPersistenceRecord;
+      setAdminBookingPersistenceRecords((current) => [
+        savedBooking,
+        ...current.filter(
+          (record) => record.booking_reference !== savedBooking.booking_reference,
+        ),
+      ]);
+      setAdminBookingPersistenceMessage({
+        tone: "success",
+        text: `Operational booking saved: ${savedBooking.booking_reference}`,
+      });
+    } catch (error) {
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: `Operational booking save failed: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+      });
+    } finally {
+      setAdminBookingPersistenceAction(null);
+    }
+  }
+
+  async function loadAdminBookingOperationalSnapshots() {
+    setAdminBookingPersistenceAction("load");
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: "Loading operational booking fields...",
+    });
+
+    try {
+      const response = await fetch("/api/admin-bookings", {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Admin booking load failed.");
+      }
+
+      const loadedBookings = Array.isArray(result.bookings)
+        ? (result.bookings as AdminBookingPersistenceRecord[])
+        : [];
+      setAdminBookingPersistenceRecords(loadedBookings);
+      setAdminBookingPersistenceMessage({
+        tone: loadedBookings.length > 0 ? "success" : "info",
+        text:
+          loadedBookings.length > 0
+            ? `Loaded ${loadedBookings.length} operational booking records.`
+            : "No operational booking records loaded.",
+      });
+    } catch (error) {
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: `Operational booking load failed: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+      });
+    } finally {
+      setAdminBookingPersistenceAction(null);
+    }
   }
 
   function getDispatchCopyText(target: DispatchCopyTarget) {
@@ -14674,6 +14984,90 @@ export default function Home() {
                 {bookingSaveMessage.text}
               </div>
             ) : null}
+
+            <section
+              className="mt-5 rounded-md border border-emerald-200 bg-emerald-50/60 p-3"
+              data-admin-booking-persistence-panel="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-emerald-950">
+                    Admin Booking Persistence
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-emerald-900">
+                    Operational fields only. No price, billing, payout, payment, notification, or parser-learning data.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:min-w-56">
+                  <button
+                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    data-admin-booking-persistence-save="true"
+                    disabled={adminBookingPersistenceAction !== null}
+                    onClick={saveAdminBookingOperationalSnapshot}
+                    type="button"
+                  >
+                    {adminBookingPersistenceAction === "save" ? "Saving..." : "Save Operational Snapshot"}
+                  </button>
+                  <button
+                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    data-admin-booking-persistence-load="true"
+                    disabled={adminBookingPersistenceAction !== null}
+                    onClick={loadAdminBookingOperationalSnapshots}
+                    type="button"
+                  >
+                    {adminBookingPersistenceAction === "load" ? "Loading..." : "Load Operational Snapshots"}
+                  </button>
+                </div>
+              </div>
+              {adminBookingPersistenceMessage ? (
+                <p
+                  className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
+                    adminBookingPersistenceMessage.tone,
+                  )}`}
+                  data-admin-booking-persistence-feedback="true"
+                >
+                  {adminBookingPersistenceMessage.text}
+                </p>
+              ) : null}
+              {adminBookingPersistenceRecords.length > 0 ? (
+                <div className="mt-3 grid gap-2" data-admin-booking-persistence-records="true">
+                  {adminBookingPersistenceRecords.slice(0, 3).map((record) => (
+                    <article
+                      className="rounded-md border border-emerald-100 bg-white px-3 py-2 text-xs text-slate-700"
+                      data-admin-booking-persistence-record={record.booking_reference}
+                      key={record.booking_reference}
+                    >
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="font-semibold text-emerald-950">
+                          {record.booking_reference}
+                        </p>
+                        <p className="text-slate-500">
+                          {record.admin_internal_status || "Draft"}
+                        </p>
+                      </div>
+                      <p className="mt-1 break-words">
+                        {[record.customer_display_name, record.vehicle_type_or_category, record.route_type]
+                          .filter(Boolean)
+                          .join(" · ") || "Operational booking"}
+                      </p>
+                      <p className="mt-1 break-words">
+                        {[record.pickup_location || "Pickup TBC", record.dropoff_location || "Drop-off TBC"].join(
+                          " > ",
+                        )}
+                      </p>
+                      <p className="mt-1 text-slate-500">
+                        {record.pickup_datetime
+                          ? new Date(record.pickup_datetime).toLocaleString("en-SG", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          : "Pickup time TBC"}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </section>
           </div>
 
           <aside className="flex min-w-0 flex-col gap-5">

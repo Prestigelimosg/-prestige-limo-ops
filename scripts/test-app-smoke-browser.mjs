@@ -318,6 +318,8 @@ const adminBookingPersistenceUiPatterns = [
   { label: "save booking to database wording", pattern: /\bsave\s+booking\s+to\s+database\b/i },
   { label: "save booking control wording", pattern: /\bsave\s+booking\b/i },
   { label: "load booking control wording", pattern: /\bload\s+booking\b/i },
+  { label: "apply operational snapshot wording", pattern: /\bapply\s+operational\s+snapshot\b/i },
+  { label: "apply latest snapshot wording", pattern: /\bapply\s+latest\s+snapshot\b/i },
   { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
   { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
   { label: "create booking record wording", pattern: /\bcreate\s+booking\s+record\b/i },
@@ -747,6 +749,40 @@ async function runChromeTest() {
               );
             }
 
+            if (window.__adminBookingPersistenceMockMode === "load-malformed") {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  bookings: [
+                    {
+                      booking_reference: "BROKEN-OPS-001",
+                      source_channel: "admin-dashboard",
+                      customer_id: null,
+                      pickup_datetime: null,
+                      pickup_location: "",
+                      dropoff_location: "",
+                      route_type: "MNG",
+                      customer_display_name: "Broken Ops Customer",
+                      contact_phone: "+65 8000 0000",
+                      contact_email: "broken-ops@example.com",
+                      pax_count: 1,
+                      luggage_count: null,
+                      vehicle_type_or_category: "AVF",
+                      customer_facing_status: "Received",
+                      admin_internal_status: "Draft",
+                      short_notice_review_status: "Not Required",
+                      parser_source_reference: null,
+                      created_at: "2026-06-02T00:00:00.000Z",
+                      updated_at: "2026-06-02T00:00:00.000Z",
+                      route_points: [],
+                      service_items: [],
+                    },
+                  ],
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
             return new Response(
               JSON.stringify({
                 ok: true,
@@ -755,7 +791,7 @@ async function runChromeTest() {
                     booking_reference: "LOADED-OPS-001",
                     source_channel: "admin-dashboard",
                     customer_id: null,
-                    pickup_datetime: "2026-06-04T10:30:00+08:00",
+                    pickup_datetime: "2026-06-02T08:15:00+08:00",
                     pickup_location: "Loaded Ops Pickup",
                     dropoff_location: "Loaded Ops Dropoff",
                     route_type: "MNG",
@@ -766,9 +802,13 @@ async function runChromeTest() {
                     luggage_count: null,
                     vehicle_type_or_category: "AVF",
                     customer_facing_status: "Received",
-                    admin_internal_status: "Draft",
-                    short_notice_review_status: "Not Required",
+                    admin_internal_status: "Admin Review Required",
+                    short_notice_review_status: "Admin Review Required",
                     parser_source_reference: "Flight SQ001",
+                    customer_price: "9999-SHOULD-NOT-APPLY",
+                    driver_payout: "8888-SHOULD-NOT-APPLY",
+                    internal_admin_note: "DO-NOT-LEAK-OPS-NOTE",
+                    payment_link: "https://payments.example.invalid/blocked",
                     created_at: "2026-06-02T00:00:00.000Z",
                     updated_at: "2026-06-02T00:00:00.000Z",
                     route_points: [
@@ -779,13 +819,24 @@ async function runChromeTest() {
                         timing_note: null,
                       },
                       {
-                        point_type: "dropoff",
+                        point_type: "stop",
                         sequence_number: 2,
+                        location_text: "Loaded Ops Stop",
+                        timing_note: null,
+                      },
+                      {
+                        point_type: "dropoff",
+                        sequence_number: 3,
                         location_text: "Loaded Ops Dropoff",
                         timing_note: null,
                       },
                     ],
                     service_items: [
+                      {
+                        service_item_type: "child_seat",
+                        quantity: 2,
+                        blocks_count: null,
+                      },
                       {
                         service_item_type: "extra_stop",
                         quantity: 1,
@@ -937,6 +988,97 @@ async function runChromeTest() {
         "Expected loaded operational record preview not to show finance/customer/driver payment wording",
       );
 
+      const applyClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(applyClicked, true, "Expected apply control for loaded operational snapshot");
+
+      const appliedSnapshotState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const getField = (labelText) => {
+              const label = [...document.querySelectorAll("label")].find(
+                (candidate) => candidate.querySelector("span")?.textContent.trim() === labelText,
+              );
+              const field = label?.querySelector("input, textarea, select");
+              return field ? field.value : "";
+            };
+            const fields = {
+              booker: getField("Booker *"),
+              bookerContact: getField("Booker WhatsApp / Contact"),
+              bookerEmail: getField("Booker email (optional)"),
+              bookingType: getField("Booking type"),
+              childSeatCount: getField("Child seat count"),
+              company: getField("Company / Account"),
+              customerPriceOverride: getField("Customer Price Override"),
+              dropoff: getField("Drop-off *"),
+              driverName: getField("Driver Name"),
+              extraStopCount: getField("Extra Stops"),
+              extraStopLocation: getField("Extra stop location"),
+              flight: getField("Flight number"),
+              manualExtraCharges: getField("Extra Charges"),
+              manualExtraChargesNote: getField("Extra Charges note / reason"),
+              name: getField("Passenger name"),
+              pax: getField("Pax"),
+              pickup: getField("Pickup *"),
+              pickupDate: getField("Pickup date *"),
+              pickupTime: getField("Pickup time *"),
+              vehicle: getField("Vehicle"),
+            };
+            const fieldText = Object.values(fields).join("\\n");
+            const bodyText = document.body.innerText || "";
+            const baitPattern =
+              /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i;
+
+            return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
+              fields.pickup === "Loaded Ops Pickup"
+              ? {
+                  bodyBaitLeaked: baitPattern.test(bodyText),
+                  feedback,
+                  fields,
+                  fieldText,
+                  fieldBaitLeaked: baitPattern.test(fieldText),
+                }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence apply snapshot feedback",
+      );
+
+      assert.equal(appliedSnapshotState.fields.company, "Loaded Ops Customer");
+      assert.equal(appliedSnapshotState.fields.booker, "Loaded Ops Customer");
+      assert.equal(appliedSnapshotState.fields.name, "Loaded Ops Customer");
+      assert.equal(appliedSnapshotState.fields.bookerContact, "+65 8000 1000");
+      assert.equal(appliedSnapshotState.fields.bookerEmail, "loaded-ops@example.com");
+      assert.equal(appliedSnapshotState.fields.bookingType, "MNG");
+      assert.equal(appliedSnapshotState.fields.vehicle, "AVF");
+      assert.equal(appliedSnapshotState.fields.pickupDate, "2026-06-02");
+      assert.match(appliedSnapshotState.fields.pickupTime, /^0815/);
+      assert.equal(appliedSnapshotState.fields.flight, "SQ001");
+      assert.equal(appliedSnapshotState.fields.pickup, "Loaded Ops Pickup");
+      assert.equal(appliedSnapshotState.fields.extraStopLocation, "Loaded Ops Stop");
+      assert.equal(appliedSnapshotState.fields.extraStopCount, "1");
+      assert.equal(appliedSnapshotState.fields.dropoff, "Loaded Ops Dropoff");
+      assert.equal(appliedSnapshotState.fields.pax, "2");
+      assert.equal(appliedSnapshotState.fields.childSeatCount, "2");
+      assert.equal(appliedSnapshotState.fields.customerPriceOverride, "");
+      assert.equal(appliedSnapshotState.fields.driverName, "");
+      assert.equal(appliedSnapshotState.fields.manualExtraCharges, "");
+      assert.equal(appliedSnapshotState.fields.manualExtraChargesNote, "");
+      assert.equal(
+        appliedSnapshotState.feedback.includes("Admin Review Required"),
+        true,
+        "Expected short-notice loaded snapshot status to remain Admin Review Required",
+      );
+      assert.equal(
+        appliedSnapshotState.fieldBaitLeaked || appliedSnapshotState.bodyBaitLeaked,
+        false,
+        "Expected forbidden mocked snapshot fields not to populate form fields or visible UI",
+      );
+
       const saveFailureClicked = await evaluate(`(() => {
         window.__adminBookingPersistenceMockMode = "save-failure";
         const button = document.querySelector("[data-admin-booking-persistence-save]");
@@ -1021,6 +1163,26 @@ async function runChromeTest() {
         "Expected empty admin booking persistence load to clear record previews",
       );
 
+      const emptyApplyClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply-latest]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(emptyApplyClicked, true, "Expected latest snapshot apply button");
+
+      const emptyApplyState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+
+            return feedback.includes("No operational booking records loaded to apply")
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence empty apply feedback",
+      );
+
       const loadFailureClicked = await evaluate(`(() => {
         window.__adminBookingPersistenceMockMode = "load-failure";
         const button = document.querySelector("[data-admin-booking-persistence-load]");
@@ -1073,6 +1235,57 @@ async function runChromeTest() {
         /supabase|service_role|sql|stack|secret|key/i.test(disabledLoadState.feedback),
         false,
         "Expected admin booking disabled load feedback to hide persistence internals",
+      );
+
+      const malformedLoadClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "load-malformed";
+        const button = document.querySelector("[data-admin-booking-persistence-load]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(malformedLoadClicked, true, "Expected admin operational snapshots load button for malformed check");
+
+      const malformedLoadState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const record = document.querySelector("[data-admin-booking-persistence-record='BROKEN-OPS-001']");
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-load]")?.disabled;
+
+            return feedback.includes("Loaded 1 operational booking records") && record && buttonReady
+              ? {
+                  feedback,
+                  recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence malformed load feedback",
+      );
+
+      const malformedApplyClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply='BROKEN-OPS-001']");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(malformedApplyClicked, true, "Expected malformed operational snapshot apply control");
+
+      const malformedApplyState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+
+            return feedback.includes("Operational snapshot could not be applied")
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence malformed apply feedback",
+      );
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(malformedApplyState.feedback),
+        false,
+        "Expected malformed apply feedback to hide persistence internals",
       );
 
       await evaluate(`window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch`);
@@ -1252,7 +1465,12 @@ async function runChromeTest() {
         missingRequiredApiStatus: missingRequiredResponse.status,
         unknownApiStatus: unknownResponse.status,
         disabledConfigApiStatus: disabledConfigResponse.status,
+        emptyApplyFeedback: emptyApplyState.feedback,
         emptyLoadFeedback: emptyLoadState.feedback,
+        malformedApplyFeedback: malformedApplyState.feedback,
+        malformedLoadedRecord: malformedLoadState.recordText,
+        appliedSnapshotFields: appliedSnapshotState.fields,
+        appliedSnapshotFeedback: appliedSnapshotState.feedback,
         loadedRecord: loadState.recordText,
         safeFailureFeedback: saveFailureState.feedback,
         postedBookingFields: Object.keys(saveState.body.booking),

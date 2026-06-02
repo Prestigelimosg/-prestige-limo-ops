@@ -295,6 +295,17 @@ type AdminBookingPersistenceRequestBody = {
 
 type AdminBookingPersistenceAction = "save" | "load";
 
+type AdminBookingSnapshotApplyResult =
+  | {
+      booking: BookingForm;
+      ok: true;
+      reviewStatus: string;
+    }
+  | {
+      error: string;
+      ok: false;
+    };
+
 type AppTab = "dispatch" | "bookings" | "completed" | "dashboard" | "drivers" | "rates";
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
@@ -2661,6 +2672,147 @@ function adminBookingPersistenceFailureMessage(
   }
 
   return `${prefix} safely.`;
+}
+
+function adminSnapshotPickupDateTimeParts(value: string | null | undefined) {
+  const rawValue = clean(value);
+  const directMatch = rawValue.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+
+  if (directMatch) {
+    return {
+      date: directMatch[1],
+      time: `${directMatch[2]}${directMatch[3]}`,
+    };
+  }
+
+  const parsedDate = new Date(rawValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(parsedDate);
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const year = partValue("year");
+  const month = partValue("month");
+  const day = partValue("day");
+  const hour = partValue("hour");
+  const minute = partValue("minute");
+
+  return year && month && day && hour && minute
+    ? {
+        date: `${year}-${month}-${day}`,
+        time: `${hour}${minute}`,
+      }
+    : null;
+}
+
+function adminSnapshotSortedRoutePoints(record: AdminBookingPersistenceRecord) {
+  return Array.isArray(record.route_points)
+    ? [...record.route_points].sort(
+        (left, right) =>
+          (left.sequence_number ?? Number.MAX_SAFE_INTEGER) -
+          (right.sequence_number ?? Number.MAX_SAFE_INTEGER),
+      )
+    : [];
+}
+
+function adminSnapshotServiceItemQuantity(record: AdminBookingPersistenceRecord, serviceItemType: string) {
+  if (!Array.isArray(record.service_items)) {
+    return 0;
+  }
+
+  return record.service_items
+    .filter((item) => item.service_item_type === serviceItemType)
+    .reduce((total, item) => {
+      const quantity = Number(item.quantity);
+
+      return Number.isInteger(quantity) && quantity > 0 ? total + quantity : total;
+    }, 0);
+}
+
+function adminSnapshotFlightReference(record: AdminBookingPersistenceRecord) {
+  const sourceReference = clean(record.parser_source_reference);
+  const flightMatch = sourceReference.match(/\bflight\s+([A-Z0-9-]+)/i);
+
+  return flightMatch?.[1]?.toUpperCase() || "";
+}
+
+function adminOperationalSnapshotToBookingForm(
+  record: AdminBookingPersistenceRecord,
+): AdminBookingSnapshotApplyResult {
+  const bookingReference = clean(record.booking_reference);
+  const dateTimeParts = adminSnapshotPickupDateTimeParts(record.pickup_datetime);
+  const routePoints = adminSnapshotSortedRoutePoints(record);
+  const pickupLocation =
+    clean(routePoints.find((point) => point.point_type === "pickup")?.location_text) ||
+    clean(record.pickup_location);
+  const dropoffLocation =
+    clean(routePoints.find((point) => point.point_type === "dropoff")?.location_text) ||
+    clean(record.dropoff_location);
+  const stopLocations = routePoints
+    .filter((point) => point.point_type === "stop" || point.point_type === "waypoint")
+    .map((point) => clean(point.location_text))
+    .filter(Boolean);
+  const routeType = clean(record.route_type);
+  const customerDisplayName = clean(record.customer_display_name);
+  const contactPhone = clean(record.contact_phone);
+
+  if (!bookingReference || !dateTimeParts || !pickupLocation || !dropoffLocation || !routeType) {
+    return {
+      error: "Operational snapshot is missing required route details.",
+      ok: false,
+    };
+  }
+
+  if (!customerDisplayName || !contactPhone) {
+    return {
+      error: "Operational snapshot is missing required customer contact details.",
+      ok: false,
+    };
+  }
+
+  const childSeatCount = adminSnapshotServiceItemQuantity(record, "child_seat");
+  const extraStopCount =
+    adminSnapshotServiceItemQuantity(record, "extra_stop") || stopLocations.length;
+  const paxCount = Number(record.pax_count);
+
+  return {
+    booking: {
+      ...createInitialBooking(),
+      booker: customerDisplayName,
+      bookerContact: contactPhone,
+      bookerEmail: clean(record.contact_email),
+      bookingType: routeType,
+      childSeatCount: childSeatCount > 0 ? String(childSeatCount) : "",
+      childSeatRequired: childSeatCount > 0 ? "yes" : "",
+      company: customerDisplayName,
+      date: dateTimeParts.date,
+      dropoff: dropoffLocation,
+      extraStopCount: extraStopCount > 0 ? String(extraStopCount) : "",
+      extraStopLocation: stopLocations.join(" > "),
+      flight: adminSnapshotFlightReference(record),
+      name: customerDisplayName,
+      pax: Number.isInteger(paxCount) && paxCount > 0 ? String(paxCount) : "1",
+      pickup: pickupLocation,
+      time: dateTimeParts.time,
+      vehicle: clean(record.vehicle_type_or_category) || "AVF",
+    },
+    ok: true,
+    reviewStatus:
+      clean(record.short_notice_review_status) ||
+      clean(record.admin_internal_status) ||
+      clean(record.customer_facing_status),
+  };
 }
 
 function customerLiveLocationState(
@@ -5739,6 +5891,47 @@ export default function Home() {
     } finally {
       setAdminBookingPersistenceAction(null);
     }
+  }
+
+  function applyAdminBookingOperationalSnapshot(
+    record: AdminBookingPersistenceRecord | null | undefined,
+  ) {
+    if (!record) {
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: "No operational booking records loaded to apply.",
+      });
+      return;
+    }
+
+    const appliedSnapshot = adminOperationalSnapshotToBookingForm(record);
+
+    if (!appliedSnapshot.ok) {
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: "Operational snapshot could not be applied: required operational details are missing.",
+      });
+      return;
+    }
+
+    const bookingReference = clean(record.booking_reference) || "selected snapshot";
+    const reviewSuffix =
+      appliedSnapshot.reviewStatus === "Admin Review Required"
+        ? " Admin Review Required."
+        : "";
+
+    setBooking(() => appliedSnapshot.booking);
+    setLoadedBookingId("");
+    setActiveTab("dispatch");
+    clearBookingMessageInput();
+    setAdminBookingPersistenceMessage({
+      tone: "success",
+      text: `Operational snapshot applied: ${bookingReference}.${reviewSuffix}`,
+    });
+  }
+
+  function applyLatestAdminBookingOperationalSnapshot() {
+    applyAdminBookingOperationalSnapshot(adminBookingPersistenceRecords[0]);
   }
 
   function getDispatchCopyText(target: DispatchCopyTarget) {
@@ -15045,6 +15238,15 @@ export default function Home() {
                   >
                     {adminBookingPersistenceAction === "load" ? "Loading..." : "Load Operational Snapshots"}
                   </button>
+                  <button
+                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    data-admin-booking-persistence-apply-latest="true"
+                    disabled={adminBookingPersistenceAction !== null}
+                    onClick={applyLatestAdminBookingOperationalSnapshot}
+                    type="button"
+                  >
+                    Apply Latest Snapshot
+                  </button>
                 </div>
               </div>
               {adminBookingPersistenceMessage ? (
@@ -15091,6 +15293,15 @@ export default function Home() {
                             })
                           : "Pickup time TBC"}
                       </p>
+                      <button
+                        className="mt-2 min-h-9 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-xs font-semibold text-emerald-950 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-admin-booking-persistence-apply={record.booking_reference}
+                        disabled={adminBookingPersistenceAction !== null}
+                        onClick={() => applyAdminBookingOperationalSnapshot(record)}
+                        type="button"
+                      >
+                        Apply Operational Snapshot
+                      </button>
                     </article>
                   ))}
                 </div>

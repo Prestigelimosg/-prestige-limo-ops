@@ -2739,6 +2739,23 @@ function getAdminBookingPersistenceStatusOptions(records: AdminBookingPersistenc
   ).sort((first, second) => first.localeCompare(second));
 }
 
+function findAdminBookingPersistenceRecordByReference(
+  records: AdminBookingPersistenceRecord[],
+  reference: string,
+) {
+  const cleanedReference = clean(reference);
+
+  if (!cleanedReference) {
+    return null;
+  }
+
+  return (
+    records.find(
+      (record) => clean(record.booking_reference) === cleanedReference,
+    ) || null
+  );
+}
+
 function adminBookingPersistenceFailureMessage(
   action: AdminBookingPersistenceAction,
   rawError: unknown,
@@ -3164,18 +3181,17 @@ export default function Home() {
     Boolean(clean(adminBookingPersistenceSearch)) ||
     adminBookingPersistenceStatusFilter !== adminBookingPersistenceAllStatusFilter;
   const appliedAdminBookingSnapshot = useMemo(() => {
-    const appliedReference = clean(appliedAdminBookingSnapshotReference);
-
-    if (!appliedReference) {
-      return null;
-    }
-
-    return (
-      adminBookingPersistenceRecords.find(
-        (record) => clean(record.booking_reference) === appliedReference,
-      ) || null
+    return findAdminBookingPersistenceRecordByReference(
+      adminBookingPersistenceRecords,
+      appliedAdminBookingSnapshotReference,
     );
   }, [adminBookingPersistenceRecords, appliedAdminBookingSnapshotReference]);
+  const appliedAdminBookingSnapshotHiddenByFilters =
+    Boolean(appliedAdminBookingSnapshot) &&
+    !findAdminBookingPersistenceRecordByReference(
+      filteredAdminBookingPersistenceRecords,
+      appliedAdminBookingSnapshotReference,
+    );
 
   const telegramAlertPreviewTemplate = useMemo(
     () =>
@@ -6016,20 +6032,29 @@ export default function Home() {
       const loadedBookings = Array.isArray(result.bookings)
         ? (result.bookings as AdminBookingPersistenceRecord[])
         : [];
+      const currentAppliedReference = clean(appliedAdminBookingSnapshotReference);
+      const loadedAppliedSnapshot = findAdminBookingPersistenceRecordByReference(
+        loadedBookings,
+        currentAppliedReference,
+      );
       setAdminBookingPersistenceRecords(loadedBookings);
       setAdminBookingPersistenceSearch("");
       setAdminBookingPersistenceStatusFilter(adminBookingPersistenceAllStatusFilter);
-      setAppliedAdminBookingSnapshotReference((currentReference) =>
-        loadedBookings.some((record) => clean(record.booking_reference) === currentReference)
-          ? currentReference
-          : "",
+      setAppliedAdminBookingSnapshotReference(
+        loadedAppliedSnapshot ? currentAppliedReference : "",
       );
       setAdminBookingPersistenceMessage({
         tone: loadedBookings.length > 0 ? "success" : "info",
         text:
           loadedBookings.length > 0
-            ? `Loaded ${loadedBookings.length} operational booking records.`
-            : "No operational booking records loaded.",
+            ? `Loaded ${loadedBookings.length} operational booking records.${
+                currentAppliedReference && !loadedAppliedSnapshot
+                  ? " Applied snapshot cleared because it is no longer in the loaded list."
+                  : ""
+              }`
+            : `No operational booking records loaded.${
+                currentAppliedReference ? " Applied snapshot cleared." : ""
+              }`,
       });
     } catch (error) {
       setAdminBookingPersistenceMessage({
@@ -6045,9 +6070,10 @@ export default function Home() {
     record: AdminBookingPersistenceRecord | null | undefined,
   ) {
     if (!record) {
+      setAppliedAdminBookingSnapshotReference("");
       setAdminBookingPersistenceMessage({
         tone: "info",
-        text: "No operational booking records loaded to apply.",
+        text: "No operational booking records loaded to apply. Applied snapshot selection cleared.",
       });
       return;
     }
@@ -6055,9 +6081,10 @@ export default function Home() {
     const appliedSnapshot = adminOperationalSnapshotToBookingForm(record);
 
     if (!appliedSnapshot.ok) {
+      setAppliedAdminBookingSnapshotReference("");
       setAdminBookingPersistenceMessage({
         tone: "error",
-        text: "Operational snapshot could not be applied: required operational details are missing.",
+        text: "Operational snapshot could not be applied: required operational details are missing. Applied snapshot selection cleared.",
       });
       return;
     }
@@ -6096,8 +6123,17 @@ export default function Home() {
   }
 
   function clearAdminBookingPersistenceFilters() {
+    const hadActiveFilters = adminBookingPersistenceHasActiveFilters;
+
     setAdminBookingPersistenceSearch("");
     setAdminBookingPersistenceStatusFilter(adminBookingPersistenceAllStatusFilter);
+
+    if (hadActiveFilters) {
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: "Operational snapshot filters cleared.",
+      });
+    }
   }
 
   function clearAppliedAdminBookingOperationalSnapshot() {
@@ -15458,7 +15494,7 @@ export default function Home() {
                     Admin Booking Persistence
                   </h3>
                   <p className="mt-1 text-xs leading-5 text-emerald-900">
-                    Operational fields only. No price, billing, payout, payment, notification, or parser-learning data.
+                    Internal admin-only operational fields. No price, billing, payout, payment, notification, or parser-learning data.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:min-w-56">
@@ -15545,8 +15581,16 @@ export default function Home() {
                       className="leading-5 text-emerald-900"
                       data-admin-booking-persistence-duplicate-guidance="true"
                     >
-                      Save Operational Snapshot creates a new saved snapshot. Update Applied Snapshot updates this applied one.
+                      Save Operational Snapshot creates a new saved snapshot from the current form. Update Applied Snapshot updates this applied one.
                     </p>
+                    {appliedAdminBookingSnapshotHiddenByFilters ? (
+                      <p
+                        className="rounded-md border border-emerald-200 bg-white px-3 py-2 leading-5 text-emerald-900"
+                        data-admin-booking-persistence-applied-filter-note="true"
+                      >
+                        Current filters are hiding the applied snapshot in the loaded list.
+                      </p>
+                    ) : null}
                     <button
                       className="min-h-9 w-fit rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                       data-admin-booking-persistence-clear-applied="true"

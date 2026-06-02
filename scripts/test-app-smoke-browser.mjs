@@ -325,6 +325,9 @@ const adminBookingPersistenceUiPatterns = [
   { label: "clear applied snapshot wording", pattern: /\bclear\s+applied\s+snapshot\b/i },
   { label: "no applied operational snapshot wording", pattern: /\bno\s+loaded\s+operational\s+snapshot\s+is\s+currently\s+applied\b/i },
   { label: "duplicate snapshot guidance wording", pattern: /\bcreates\s+a\s+new\s+saved\s+snapshot\b/i },
+  { label: "applied hidden by filters wording", pattern: /\bfilters\s+are\s+hiding\s+the\s+applied\s+snapshot\b/i },
+  { label: "snapshot filters cleared wording", pattern: /\boperational\s+snapshot\s+filters\s+cleared\b/i },
+  { label: "applied selection cleared wording", pattern: /\bapplied\s+snapshot\s+selection\s+cleared\b/i },
   { label: "search operational snapshots wording", pattern: /\bsearch\s+operational\s+snapshots\b/i },
   { label: "snapshot status filter wording", pattern: /\bsnapshot\s+status\b/i },
   { label: "snapshot filter empty wording", pattern: /\bno\s+loaded\s+operational\s+snapshots\s+match\b/i },
@@ -764,6 +767,53 @@ async function runChromeTest() {
               );
             }
 
+            if (window.__adminBookingPersistenceMockMode === "load-without-applied") {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  bookings: [
+                    {
+                      booking_reference: "SECOND-OPS-002",
+                      source_channel: "admin-dashboard",
+                      customer_id: null,
+                      pickup_datetime: "2026-06-05T14:45:00+08:00",
+                      pickup_location: "Second Ops Pickup",
+                      dropoff_location: "Second Ops Dropoff",
+                      route_type: "DEP",
+                      customer_display_name: "Second Ops Customer",
+                      contact_phone: "+65 8000 2222",
+                      contact_email: "second-ops@example.com",
+                      pax_count: 1,
+                      luggage_count: null,
+                      vehicle_type_or_category: "VVV",
+                      customer_facing_status: "Confirmed",
+                      admin_internal_status: "Confirmed",
+                      short_notice_review_status: "Not Required",
+                      parser_source_reference: "Flight SQ002",
+                      created_at: "2026-06-02T00:10:00.000Z",
+                      updated_at: "2026-06-02T00:10:00.000Z",
+                      route_points: [
+                        {
+                          point_type: "pickup",
+                          sequence_number: 1,
+                          location_text: "Second Ops Pickup",
+                          timing_note: null,
+                        },
+                        {
+                          point_type: "dropoff",
+                          sequence_number: 2,
+                          location_text: "Second Ops Dropoff",
+                          timing_note: null,
+                        },
+                      ],
+                      service_items: [],
+                    },
+                  ],
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
             if (window.__adminBookingPersistenceMockMode === "load-empty") {
               return new Response(
                 JSON.stringify({
@@ -799,6 +849,59 @@ async function runChromeTest() {
                 JSON.stringify({
                   ok: true,
                   bookings: [
+                    {
+                      booking_reference: "LOADED-OPS-001",
+                      source_channel: "admin-dashboard",
+                      customer_id: null,
+                      pickup_datetime: "2026-06-02T08:15:00+08:00",
+                      pickup_location: "Loaded Ops Pickup",
+                      dropoff_location: "Loaded Ops Dropoff",
+                      route_type: "MNG",
+                      customer_display_name: "Loaded Ops Customer",
+                      contact_phone: "+65 8000 1000",
+                      contact_email: "loaded-ops@example.com",
+                      pax_count: 2,
+                      luggage_count: null,
+                      vehicle_type_or_category: "AVF",
+                      customer_facing_status: "Received",
+                      admin_internal_status: "Admin Review Required",
+                      short_notice_review_status: "Admin Review Required",
+                      parser_source_reference: "Flight SQ001",
+                      created_at: "2026-06-02T00:00:00.000Z",
+                      updated_at: "2026-06-02T00:00:00.000Z",
+                      route_points: [
+                        {
+                          point_type: "pickup",
+                          sequence_number: 1,
+                          location_text: "Loaded Ops Pickup",
+                          timing_note: null,
+                        },
+                        {
+                          point_type: "stop",
+                          sequence_number: 2,
+                          location_text: "Loaded Ops Stop",
+                          timing_note: null,
+                        },
+                        {
+                          point_type: "dropoff",
+                          sequence_number: 3,
+                          location_text: "Loaded Ops Dropoff",
+                          timing_note: null,
+                        },
+                      ],
+                      service_items: [
+                        {
+                          service_item_type: "child_seat",
+                          quantity: 2,
+                          blocks_count: null,
+                        },
+                        {
+                          service_item_type: "extra_stop",
+                          quantity: 1,
+                          blocks_count: null,
+                        },
+                      ],
+                    },
                     {
                       booking_reference: "BROKEN-OPS-001",
                       source_channel: "admin-dashboard",
@@ -1131,7 +1234,11 @@ async function runChromeTest() {
           const text = document.body.innerText || "";
 
           return {
+            appliedFilterNoteVisible: Boolean(
+              document.querySelector("[data-admin-booking-persistence-applied-filter-note]"),
+            ),
             emptyVisible: Boolean(document.querySelector("[data-admin-booking-persistence-filter-empty]")),
+            feedback: document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "",
             getCalls: calls.filter((call) => call.method === "GET").length,
             patchCalls: calls.filter((call) => call.method === "PATCH").length,
             postCalls: calls.filter((call) => call.method === "POST").length,
@@ -1172,6 +1279,11 @@ async function runChromeTest() {
         "admin booking persistence clear status filter",
       );
       assert.equal(restoredAfterStatusFilter.summary.includes("Showing 2 of 2"), true);
+      assert.equal(
+        restoredAfterStatusFilter.feedback.includes("Operational snapshot filters cleared"),
+        true,
+        "Expected clear filters to give safe admin feedback",
+      );
 
       assert.equal(await setAdminSnapshotSearch("SECOND-OPS-002"), true, "Expected snapshot search control");
       const referenceFilterState = await waitForCondition(
@@ -1227,6 +1339,11 @@ async function runChromeTest() {
         "admin booking persistence clear search filter",
       );
       assert.equal(restoredFilterState.summary.includes("Showing 2 of 2"), true);
+      assert.equal(
+        restoredFilterState.feedback.includes("Operational snapshot filters cleared"),
+        true,
+        "Expected no-match clear filters to give safe admin feedback",
+      );
 
       assert.equal(await setAdminSnapshotSearch("+65 8000 1000"), true, "Expected phone search control");
       const phoneFilterState = await waitForCondition(
@@ -1372,6 +1489,41 @@ async function runChromeTest() {
         false,
         "Expected forbidden mocked snapshot fields not to populate form fields, identity summary, or visible UI",
       );
+
+      assert.equal(await setAdminSnapshotSearch("SECOND-OPS-002"), true);
+      const appliedHiddenByFilterState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 1 &&
+            state.records[0] === "SECOND-OPS-002" &&
+            state.appliedFilterNoteVisible
+            ? state
+            : false;
+        },
+        10000,
+        "admin booking persistence applied snapshot hidden by filter note",
+      );
+      assert.equal(
+        appliedHiddenByFilterState.getCalls,
+        1,
+        "Expected applied hidden-by-filter note to stay local",
+      );
+      assert.equal(
+        appliedHiddenByFilterState.patchCalls,
+        0,
+        "Expected applied hidden-by-filter note not to update",
+      );
+
+      assert.equal(await clearAdminSnapshotFilters(), true, "Expected clear filters after applied hidden note");
+      const appliedVisibleAfterFilterClearState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 2 && !state.appliedFilterNoteVisible ? state : false;
+        },
+        10000,
+        "admin booking persistence applied snapshot visible after clear filters",
+      );
+      assert.equal(appliedVisibleAfterFilterClearState.summary.includes("Showing 2 of 2"), true);
 
       const editedAppliedSnapshot = await evaluate(`(() => {
         const setField = (labelText, value) => {
@@ -1545,6 +1697,99 @@ async function runChromeTest() {
         "Expected admin booking disabled update feedback to hide persistence internals",
       );
 
+      const patchCallsBeforeLoadWithoutApplied = await evaluate(`(() => {
+        const calls = window.__adminBookingPersistenceCalls || [];
+        return calls.filter((call) => call.method === "PATCH").length;
+      })()`);
+
+      const loadWithoutAppliedClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "load-without-applied";
+        const button = document.querySelector("[data-admin-booking-persistence-load]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(loadWithoutAppliedClicked, true, "Expected load control for stale applied snapshot check");
+
+      const loadWithoutAppliedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const calls = window.__adminBookingPersistenceCalls || [];
+            const loadedRecordVisible = Boolean(
+              document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']"),
+            );
+
+            return feedback.includes("Applied snapshot cleared because it is no longer in the loaded list") &&
+              loadedRecordVisible
+              ? {
+                  clearAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-clear-applied]")),
+                  feedback,
+                  getCalls: calls.filter((call) => call.method === "GET").length,
+                  noAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-no-applied]")),
+                  oldAppliedVisible: Boolean(
+                    document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']"),
+                  ),
+                  patchCalls: calls.filter((call) => call.method === "PATCH").length,
+                }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence load clears missing applied snapshot",
+      );
+      assert.equal(loadWithoutAppliedState.noAppliedVisible, true);
+      assert.equal(loadWithoutAppliedState.clearAppliedVisible, false);
+      assert.equal(loadWithoutAppliedState.oldAppliedVisible, false);
+      assert.equal(
+        loadWithoutAppliedState.patchCalls,
+        patchCallsBeforeLoadWithoutApplied,
+        "Expected stale-load clearing not to PATCH",
+      );
+
+      const reloadAfterStaleClearClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "success";
+        const button = document.querySelector("[data-admin-booking-persistence-load]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(reloadAfterStaleClearClicked, true, "Expected reload control after stale applied check");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
+            const secondRecord = document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']");
+
+            return feedback.includes("Loaded 2 operational booking records") &&
+              Boolean(record) &&
+              Boolean(secondRecord);
+          })()`),
+        10000,
+        "admin booking persistence reload after stale applied clear",
+      );
+
+      const reapplyClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(reapplyClicked, true, "Expected reapply control after stale applied clear");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const appliedReference = document
+              .querySelector("[data-admin-booking-persistence-applied-reference]")
+              ?.textContent.trim() || "";
+
+            return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
+              appliedReference.includes("LOADED-OPS-001");
+          })()`),
+        10000,
+        "admin booking persistence reapply after stale applied clear",
+      );
+
       const patchCallsBeforeClearedUpdate = await evaluate(`(() => {
         const calls = window.__adminBookingPersistenceCalls || [];
         return calls.filter((call) => call.method === "PATCH").length;
@@ -1591,8 +1836,8 @@ async function runChromeTest() {
         false,
         "Expected duplicate-save guidance to hide after clearing applied state",
       );
-      assert.equal(clearedAppliedState.pickup, "Updated Ops Pickup");
-      assert.equal(clearedAppliedState.dropoff, "Updated Ops Dropoff");
+      assert.equal(clearedAppliedState.pickup, "Loaded Ops Pickup");
+      assert.equal(clearedAppliedState.dropoff, "Loaded Ops Dropoff");
 
       const clearedUpdateClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
@@ -1814,9 +2059,10 @@ async function runChromeTest() {
           evaluate(`(() => {
             const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
             const record = document.querySelector("[data-admin-booking-persistence-record='BROKEN-OPS-001']");
+            const validRecord = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
             const buttonReady = !document.querySelector("[data-admin-booking-persistence-load]")?.disabled;
 
-            return feedback.includes("Loaded 1 operational booking records") && record && buttonReady
+            return feedback.includes("Loaded 2 operational booking records") && record && validRecord && buttonReady
               ? {
                   feedback,
                   recordText: record.textContent.replace(/\\s+/g, " ").trim(),
@@ -1825,6 +2071,32 @@ async function runChromeTest() {
           })()`),
         10000,
         "admin booking persistence malformed load feedback",
+      );
+
+      const validBeforeMalformedApplyClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(
+        validBeforeMalformedApplyClicked,
+        true,
+        "Expected valid apply control before malformed operational snapshot check",
+      );
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const appliedReference = document
+              .querySelector("[data-admin-booking-persistence-applied-reference]")
+              ?.textContent.trim() || "";
+
+            return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
+              appliedReference.includes("LOADED-OPS-001");
+          })()`),
+        10000,
+        "admin booking persistence valid apply before malformed check",
       );
 
       const malformedApplyClicked = await evaluate(`(() => {
@@ -1839,12 +2111,27 @@ async function runChromeTest() {
           evaluate(`(() => {
             const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
 
-            return feedback.includes("Operational snapshot could not be applied")
-              ? { feedback }
+            return feedback.includes("Operational snapshot could not be applied") &&
+              feedback.includes("Applied snapshot selection cleared")
+              ? {
+                  clearAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-clear-applied]")),
+                  feedback,
+                  noAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-no-applied]")),
+                }
               : false;
           })()`),
         10000,
         "admin booking persistence malformed apply feedback",
+      );
+      assert.equal(
+        malformedApplyState.noAppliedVisible,
+        true,
+        "Expected malformed apply to clear stale applied snapshot identity",
+      );
+      assert.equal(
+        malformedApplyState.clearAppliedVisible,
+        false,
+        "Expected malformed apply to exit update mode",
       );
       assert.equal(
         /supabase|service_role|sql|stack|secret|key/i.test(malformedApplyState.feedback),
@@ -1870,6 +2157,36 @@ async function runChromeTest() {
           })()`),
         10000,
         "admin booking persistence malformed update feedback",
+      );
+
+      const adminPersistenceStorageState = await evaluate(`(() => {
+        const readStorageLeakCount = (storage, leakPattern) => {
+          let leakCount = 0;
+
+          for (let index = 0; index < storage.length; index += 1) {
+            const key = storage.key(index) || "";
+            const value = storage.getItem(key) || "";
+
+            if (leakPattern.test([key, value].join("\\n"))) {
+              leakCount += 1;
+            }
+          }
+
+          return leakCount;
+        };
+        const leakPattern =
+          /LOADED-OPS-001|SECOND-OPS-002|BROKEN-OPS-001|Operational snapshot|admin-booking-persistence|Loaded Ops Customer|Second Ops Customer/i;
+
+        return {
+          leakCount:
+            readStorageLeakCount(window.localStorage, leakPattern) +
+            readStorageLeakCount(window.sessionStorage, leakPattern),
+        };
+      })()`);
+      assert.equal(
+        adminPersistenceStorageState.leakCount,
+        0,
+        "Expected admin booking persistence state not to be written to browser storage",
       );
 
       await evaluate(`window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch`);

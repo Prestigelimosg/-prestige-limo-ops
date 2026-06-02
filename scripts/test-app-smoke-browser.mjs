@@ -321,6 +321,10 @@ const adminBookingPersistenceUiPatterns = [
   { label: "apply operational snapshot wording", pattern: /\bapply\s+operational\s+snapshot\b/i },
   { label: "apply latest snapshot wording", pattern: /\bapply\s+latest\s+snapshot\b/i },
   { label: "update applied snapshot wording", pattern: /\bupdate\s+applied\s+snapshot\b/i },
+  { label: "applied operational snapshot wording", pattern: /\bapplied\s+operational\s+snapshot\b/i },
+  { label: "clear applied snapshot wording", pattern: /\bclear\s+applied\s+snapshot\b/i },
+  { label: "no applied operational snapshot wording", pattern: /\bno\s+loaded\s+operational\s+snapshot\s+is\s+currently\s+applied\b/i },
+  { label: "duplicate snapshot guidance wording", pattern: /\bcreates\s+a\s+new\s+saved\s+snapshot\b/i },
   { label: "search operational snapshots wording", pattern: /\bsearch\s+operational\s+snapshots\b/i },
   { label: "snapshot status filter wording", pattern: /\bsnapshot\s+status\b/i },
   { label: "snapshot filter empty wording", pattern: /\bno\s+loaded\s+operational\s+snapshots\s+match\b/i },
@@ -1050,6 +1054,7 @@ async function runChromeTest() {
                   filterControlsVisible: Boolean(document.querySelector("[data-admin-booking-persistence-filters]")),
                   feedback,
                   getCalls: calls.filter((call) => call.method === "GET").length,
+                  noAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-no-applied]")),
                   postCalls: calls.filter((call) => call.method === "POST").length,
                   recordText: record.textContent.replace(/\\s+/g, " ").trim(),
                   secondRecordText: secondRecord.textContent.replace(/\\s+/g, " ").trim(),
@@ -1067,6 +1072,11 @@ async function runChromeTest() {
       assert.equal(loadState.postCalls, 1, "Expected one mocked admin booking POST call");
       assert.equal(loadState.getCalls, 1, "Expected one mocked admin booking GET call");
       assert.equal(loadState.filterControlsVisible, true, "Expected loaded operational snapshot filters");
+      assert.equal(
+        loadState.noAppliedVisible,
+        true,
+        "Expected no-applied operational snapshot guidance before applying a loaded record",
+      );
       assert.equal(
         loadState.summary.includes("Showing 2 of 2"),
         true,
@@ -1272,6 +1282,14 @@ async function runChromeTest() {
             };
             const fieldText = Object.values(fields).join("\\n");
             const bodyText = document.body.innerText || "";
+            const identityText = document
+              .querySelector("[data-admin-booking-persistence-applied-identity]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+            const duplicateGuidance = document
+              .querySelector("[data-admin-booking-persistence-duplicate-guidance]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
             const baitPattern =
               /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i;
 
@@ -1279,10 +1297,16 @@ async function runChromeTest() {
               fields.pickup === "Loaded Ops Pickup"
               ? {
                   bodyBaitLeaked: baitPattern.test(bodyText),
+                  clearAppliedVisible: Boolean(
+                    document.querySelector("[data-admin-booking-persistence-clear-applied]"),
+                  ),
+                  duplicateGuidance,
                   feedback,
                   fields,
                   fieldText,
                   fieldBaitLeaked: baitPattern.test(fieldText),
+                  identityBaitLeaked: baitPattern.test(identityText),
+                  identityText,
                 }
               : false;
           })()`),
@@ -1310,15 +1334,43 @@ async function runChromeTest() {
       assert.equal(appliedSnapshotState.fields.driverName, "");
       assert.equal(appliedSnapshotState.fields.manualExtraCharges, "");
       assert.equal(appliedSnapshotState.fields.manualExtraChargesNote, "");
+      assert.equal(appliedSnapshotState.clearAppliedVisible, true, "Expected clear applied snapshot control");
+      assert.equal(
+        appliedSnapshotState.duplicateGuidance.includes("Save Operational Snapshot creates a new saved snapshot"),
+        true,
+        "Expected duplicate-save guidance after applying a snapshot",
+      );
+      assert.equal(
+        appliedSnapshotState.identityText.includes("LOADED-OPS-001"),
+        true,
+        "Expected applied snapshot identity to show the booking reference",
+      );
+      assert.equal(
+        appliedSnapshotState.identityText.includes("Loaded Ops Customer"),
+        true,
+        "Expected applied snapshot identity to show the safe customer display name",
+      );
+      assert.equal(
+        appliedSnapshotState.identityText.includes("Loaded Ops Pickup > Loaded Ops Dropoff"),
+        true,
+        "Expected applied snapshot identity to show the safe pickup/drop-off summary",
+      );
+      assert.equal(
+        appliedSnapshotState.identityText.includes("Admin Review Required"),
+        true,
+        "Expected applied snapshot identity to show the safe review/admin status",
+      );
       assert.equal(
         appliedSnapshotState.feedback.includes("Admin Review Required"),
         true,
         "Expected short-notice loaded snapshot status to remain Admin Review Required",
       );
       assert.equal(
-        appliedSnapshotState.fieldBaitLeaked || appliedSnapshotState.bodyBaitLeaked,
+        appliedSnapshotState.fieldBaitLeaked ||
+          appliedSnapshotState.bodyBaitLeaked ||
+          appliedSnapshotState.identityBaitLeaked,
         false,
-        "Expected forbidden mocked snapshot fields not to populate form fields or visible UI",
+        "Expected forbidden mocked snapshot fields not to populate form fields, identity summary, or visible UI",
       );
 
       const editedAppliedSnapshot = await evaluate(`(() => {
@@ -1491,6 +1543,84 @@ async function runChromeTest() {
         /supabase|service_role|sql|stack|secret|key/i.test(disabledUpdateState.feedback),
         false,
         "Expected admin booking disabled update feedback to hide persistence internals",
+      );
+
+      const patchCallsBeforeClearedUpdate = await evaluate(`(() => {
+        const calls = window.__adminBookingPersistenceCalls || [];
+        return calls.filter((call) => call.method === "PATCH").length;
+      })()`);
+      const clearAppliedClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-clear-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(clearAppliedClicked, true, "Expected clear applied snapshot control");
+
+      const clearedAppliedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const getField = (labelText) => {
+              const label = [...document.querySelectorAll("label")].find(
+                (candidate) => candidate.querySelector("span")?.textContent.trim() === labelText,
+              );
+              const field = label?.querySelector("input, textarea, select");
+              return field ? field.value : "";
+            };
+
+            return feedback.includes("Applied operational snapshot cleared")
+              ? {
+                  clearVisible: Boolean(document.querySelector("[data-admin-booking-persistence-clear-applied]")),
+                  duplicateGuidanceVisible: Boolean(
+                    document.querySelector("[data-admin-booking-persistence-duplicate-guidance]"),
+                  ),
+                  feedback,
+                  noAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-no-applied]")),
+                  pickup: getField("Pickup *"),
+                  dropoff: getField("Drop-off *"),
+                }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence clear applied snapshot feedback",
+      );
+      assert.equal(clearedAppliedState.noAppliedVisible, true, "Expected no-applied state after clearing");
+      assert.equal(clearedAppliedState.clearVisible, false, "Expected clear applied control to hide after clearing");
+      assert.equal(
+        clearedAppliedState.duplicateGuidanceVisible,
+        false,
+        "Expected duplicate-save guidance to hide after clearing applied state",
+      );
+      assert.equal(clearedAppliedState.pickup, "Updated Ops Pickup");
+      assert.equal(clearedAppliedState.dropoff, "Updated Ops Dropoff");
+
+      const clearedUpdateClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(clearedUpdateClicked, true, "Expected update applied snapshot button after clearing");
+
+      const clearedUpdateState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const calls = window.__adminBookingPersistenceCalls || [];
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+
+            return feedback.includes("Apply a loaded operational snapshot before updating")
+              ? {
+                  feedback,
+                  patchCalls: calls.filter((call) => call.method === "PATCH").length,
+                }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence update after clear feedback",
+      );
+      assert.equal(
+        clearedUpdateState.patchCalls,
+        patchCallsBeforeClearedUpdate,
+        "Expected cleared applied snapshot update to fail locally without another PATCH",
       );
 
       const saveFailureClicked = await evaluate(`(() => {

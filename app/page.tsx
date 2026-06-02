@@ -2674,6 +2674,26 @@ function adminBookingPersistencePickupSearchValues(record: AdminBookingPersisten
   ];
 }
 
+function adminBookingPersistencePickupDisplay(record: AdminBookingPersistenceRecord) {
+  const pickupValues = adminBookingPersistencePickupSearchValues(record);
+
+  return pickupValues[1] || pickupValues[0] || "Pickup time TBC";
+}
+
+function adminBookingPersistenceRouteSummary(record: AdminBookingPersistenceRecord) {
+  return [
+    clean(record.pickup_location) || "Pickup TBC",
+    clean(record.dropoff_location) || "Drop-off TBC",
+  ].join(" > ");
+}
+
+function adminBookingPersistencePrimaryStatus(record: AdminBookingPersistenceRecord) {
+  return clean(record.admin_internal_status) ||
+    clean(record.short_notice_review_status) ||
+    clean(record.customer_facing_status) ||
+    "Draft";
+}
+
 function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceRecord) {
   return [
     clean(record.booking_reference),
@@ -3143,6 +3163,19 @@ export default function Home() {
   const adminBookingPersistenceHasActiveFilters =
     Boolean(clean(adminBookingPersistenceSearch)) ||
     adminBookingPersistenceStatusFilter !== adminBookingPersistenceAllStatusFilter;
+  const appliedAdminBookingSnapshot = useMemo(() => {
+    const appliedReference = clean(appliedAdminBookingSnapshotReference);
+
+    if (!appliedReference) {
+      return null;
+    }
+
+    return (
+      adminBookingPersistenceRecords.find(
+        (record) => clean(record.booking_reference) === appliedReference,
+      ) || null
+    );
+  }, [adminBookingPersistenceRecords, appliedAdminBookingSnapshotReference]);
 
   const telegramAlertPreviewTemplate = useMemo(
     () =>
@@ -6065,6 +6098,14 @@ export default function Home() {
   function clearAdminBookingPersistenceFilters() {
     setAdminBookingPersistenceSearch("");
     setAdminBookingPersistenceStatusFilter(adminBookingPersistenceAllStatusFilter);
+  }
+
+  function clearAppliedAdminBookingOperationalSnapshot() {
+    setAppliedAdminBookingSnapshotReference("");
+    setAdminBookingPersistenceMessage({
+      tone: "success",
+      text: "Applied operational snapshot cleared. Current dispatch form values were kept.",
+    });
   }
 
   async function updateAppliedAdminBookingOperationalSnapshot() {
@@ -15461,14 +15502,70 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              {appliedAdminBookingSnapshotReference ? (
-                <p
-                  className="mt-3 text-xs font-semibold text-emerald-900"
-                  data-admin-booking-persistence-applied-reference="true"
-                >
-                  Applied snapshot: {appliedAdminBookingSnapshotReference}
-                </p>
-              ) : null}
+              <div
+                className="mt-3 border-t border-emerald-200 pt-3 text-xs text-emerald-950"
+                data-admin-booking-persistence-applied-identity="true"
+              >
+                {appliedAdminBookingSnapshotReference ? (
+                  <div className="grid gap-2">
+                    <div className="grid gap-1">
+                      <p className="font-semibold text-emerald-950">
+                        Applied operational snapshot
+                      </p>
+                      <p
+                        className="break-words font-semibold text-emerald-900"
+                        data-admin-booking-persistence-applied-reference="true"
+                      >
+                        {clean(appliedAdminBookingSnapshotReference)}
+                      </p>
+                      <p className="break-words">
+                        {[
+                          appliedAdminBookingSnapshot?.customer_display_name,
+                          appliedAdminBookingSnapshot?.pickup_datetime
+                            ? adminBookingPersistencePickupDisplay(appliedAdminBookingSnapshot)
+                            : "",
+                        ]
+                          .map((value) => clean(value || ""))
+                          .filter(Boolean)
+                          .join(" · ") || "Loaded operational snapshot"}
+                      </p>
+                      <p className="break-words">
+                        {appliedAdminBookingSnapshot
+                          ? adminBookingPersistenceRouteSummary(appliedAdminBookingSnapshot)
+                          : "Pickup TBC > Drop-off TBC"}
+                      </p>
+                      <p className="font-semibold text-emerald-900">
+                        Status:{" "}
+                        {appliedAdminBookingSnapshot
+                          ? adminBookingPersistencePrimaryStatus(appliedAdminBookingSnapshot)
+                          : "Applied"}
+                      </p>
+                    </div>
+                    <p
+                      className="leading-5 text-emerald-900"
+                      data-admin-booking-persistence-duplicate-guidance="true"
+                    >
+                      Save Operational Snapshot creates a new saved snapshot. Update Applied Snapshot updates this applied one.
+                    </p>
+                    <button
+                      className="min-h-9 w-fit rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-admin-booking-persistence-clear-applied="true"
+                      disabled={adminBookingPersistenceAction !== null}
+                      onClick={clearAppliedAdminBookingOperationalSnapshot}
+                      type="button"
+                    >
+                      Clear Applied Snapshot
+                    </button>
+                  </div>
+                ) : (
+                  <p
+                    className="font-semibold text-emerald-900"
+                    data-admin-booking-persistence-no-applied="true"
+                  >
+                    No loaded operational snapshot is currently applied.
+                  </p>
+                )}
+              </div>
               {adminBookingPersistenceMessage ? (
                 <p
                   className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(

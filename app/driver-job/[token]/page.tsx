@@ -637,6 +637,12 @@ export default function DriverJobPage() {
         <header className="space-y-2 border-b border-stone-200 pb-4">
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
           <h1 className="text-2xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
+          <p
+            className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
+            data-driver-job-mobile-web-note="true"
+          >
+            Mobile web driver card. Keep this link private and use it only for this assigned job.
+          </p>
         </header>
 
         {pageState.kind === "loading" ? (

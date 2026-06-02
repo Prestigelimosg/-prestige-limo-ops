@@ -22,6 +22,8 @@ const chromeBinary =
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9228);
 const browserErrors = [];
 const browserConsoleErrors = [];
+const nativeAppOnlyLanguagePattern =
+  /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
 function driverJobUrl(token) {
   return new URL(`/driver-job/${token}`, appUrl).toString();
@@ -60,6 +62,11 @@ function assertNoSensitiveText(state) {
   assert.doesNotMatch(text, /\b99\b/, "Driver job page should not expose workflow driver payout.");
   assert.doesNotMatch(text, /\b160\b/, "Driver job page should not expose customer price.");
   assert.doesNotMatch(text, /\b95\b/, "Driver job page should not expose driver payout.");
+  assert.doesNotMatch(
+    text,
+    nativeAppOnlyLanguagePattern,
+    "Driver job page should stay mobile-web/PWA-first without native app assumptions.",
+  );
   assert.equal(text.includes("Driver Database"), false, "Driver job page should not expose Driver Database UI.");
   assert.deepEqual(
     state.fetchCalls.filter((call) => call.includes("/rest/v1/drivers")),
@@ -1022,6 +1029,11 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("SQ889"));
     assert.ok(validState.visibleText.includes("Mock Workflow Passenger"));
     assert.ok(validState.visibleText.includes("Mock Workflow Driver"));
+    assert.ok(
+      validState.visibleText.includes(
+        "Mobile web driver card. Keep this link private and use it only for this assigned job.",
+      ),
+    );
     const startingStatusText = validState.statusText || "Assigned";
     assert.ok(validState.visibleText.includes("Acknowledge Job"));
     assert.ok(validState.visibleText.includes("Mock Live Location"));
@@ -1187,6 +1199,11 @@ async function runChromeTest() {
     assert.ok(arrivalState.visibleText.includes("SQ777"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Passenger"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Driver"));
+    assert.ok(
+      arrivalState.visibleText.includes(
+        "Mobile web driver card. Keep this link private and use it only for this assigned job.",
+      ),
+    );
     assert.ok(arrivalState.visibleText.includes("Mock Driver Reminder"));
     assert.ok(arrivalState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"));
     assert.equal(arrivalState.workflowSummaryRows["job-acknowledged"], "Waiting");

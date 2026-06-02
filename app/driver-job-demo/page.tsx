@@ -793,6 +793,12 @@ export default function DriverJobDemoPage() {
             >
               Demo only — not connected to live bookings yet.
             </p>
+            <p
+              className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
+              data-driver-demo-mobile-web-note="true"
+            >
+              Mobile web driver card. Keep this link with the assigned job and review route details before each status update.
+            </p>
           </div>
         </header>
 

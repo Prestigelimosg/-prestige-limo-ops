@@ -198,6 +198,12 @@ export default function CustomerBookingPage() {
             Share the trip details you have now. Your booking is not confirmed until Prestige
             Limo staff replies.
           </p>
+          <p
+            className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
+            data-customer-booking-mobile-web-note="true"
+          >
+            Mobile web request form for trip details only. Prestige Limo will reply before confirmation.
+          </p>
           <ol
             aria-label="Booking request next steps"
             className="mt-4 grid gap-2 text-sm sm:grid-cols-3"

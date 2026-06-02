@@ -55,8 +55,20 @@ const dispatcherIntakeControlLabels = [
   "Clear Message",
 ];
 const responsiveRoutes = [
-  { expectedText: "Booking Request", label: "/book", path: "/book" },
-  { expectedText: "My Bookings", label: "/my-bookings", path: "/my-bookings" },
+  {
+    expectedMobileWebText:
+      "Mobile web request form for trip details only. Prestige Limo will reply before confirmation.",
+    expectedText: "Booking Request",
+    label: "/book",
+    path: "/book",
+  },
+  {
+    expectedMobileWebText:
+      "Mobile web trip view for your confirmed and requested rides. Use request review for changes.",
+    expectedText: "My Bookings",
+    label: "/my-bookings",
+    path: "/my-bookings",
+  },
   { expectedText: "Customers", label: "/customers", path: "/customers" },
 ];
 const tabExpectedText = {
@@ -164,6 +176,8 @@ const mobileAdminBookingPersistenceUiPatterns = [
 const mobileAdminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const mobileAdminBookingPersistenceApiPattern =
   /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)/i;
+const mobileNativeAppOnlyLanguagePattern =
+  /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
 function findVisibleTextLeaks(text, patterns) {
   return patterns.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
@@ -212,6 +226,14 @@ function assertNoMobileAdminPersistenceNetworkCalls(calls, context) {
     calls.filter((call) => mobileAdminBookingPersistenceApiPattern.test(call)),
     [],
     `${context}: expected no mobile admin booking persistence API calls`,
+  );
+}
+
+function assertNoMobileNativeAppOnlyLanguage(text, context) {
+  assert.equal(
+    mobileNativeAppOnlyLanguagePattern.test(text),
+    false,
+    `${context}: expected mobile web/PWA-first language without native app assumptions`,
   );
 }
 
@@ -1238,6 +1260,14 @@ async function runChromeTest() {
         true,
         `${viewport.label} ${route.label}: expected important section text to remain visible`,
       );
+      if (route.expectedMobileWebText) {
+        assert.equal(
+          state.visibleText.includes(route.expectedMobileWebText),
+          true,
+          `${viewport.label} ${route.label}: expected mobile-web route guidance`,
+        );
+      }
+      assertNoMobileNativeAppOnlyLanguage(state.visibleText, `${viewport.label} ${route.label}`);
       if (route.path === "/book" || route.path === "/my-bookings") {
         assertNoMobileCustomerFacingPriceLeaks(
           state.visibleText,
@@ -10016,6 +10046,7 @@ async function runChromeTest() {
       assertNoHorizontalOverflow(state, `${viewport.label} ${context}`);
       assertNoMobileDriverPriceFinanceLeaks(state.visibleText, `${viewport.label} ${context}`);
       assertNoMobileAdminBookingPersistenceLeaks(state.visibleText, `${viewport.label} ${context}`);
+      assertNoMobileNativeAppOnlyLanguage(state.visibleText, `${viewport.label} ${context}`);
       assertNoMobileAdminPersistenceNetworkCalls(
         adminPersistenceNetworkCalls,
         `${viewport.label} ${context}`,
@@ -10269,6 +10300,13 @@ async function runChromeTest() {
       );
       if (context === "driver job demo") {
         assert.equal(
+          state.visibleText.includes(
+            "Mobile web driver card. Keep this link with the assigned job and review route details before each status update.",
+          ),
+          true,
+          `${viewport.label} ${context}: expected mobile-web driver demo guidance`,
+        );
+        assert.equal(
           driverDemoDetailWorkflowState.visible,
           true,
           `${viewport.label} ${context}: expected mock driver detail workflow`,
@@ -10309,6 +10347,13 @@ async function runChromeTest() {
           `${viewport.label} ${context}: expected mock DSP usage workflow text`,
         );
       } else {
+        assert.equal(
+          state.visibleText.includes(
+            "Mobile web driver card. Keep this link private and use it only for this assigned job.",
+          ),
+          true,
+          `${viewport.label} ${context}: expected mobile-web driver job guidance`,
+        );
         assert.equal(
           driverDemoDetailWorkflowState.visible,
           false,

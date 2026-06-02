@@ -343,6 +343,8 @@ const adminBookingPersistenceUiPatterns = [
 const adminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const publicRouteRuntimeResourcePattern =
   /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)|supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
+const nativeAppOnlyLanguagePattern =
+  /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
 function findVisibleTextLeaks(text, patterns) {
   return patterns.filter(({ pattern }) => pattern.test(text)).map(({ label }) => label);
@@ -383,6 +385,14 @@ function assertNoAdminBookingPersistenceLeaks(text, context) {
     findAdminBookingPersistenceLeaks(text),
     [],
     `${context}: expected no admin booking persistence save/load UI leakage`,
+  );
+}
+
+function assertNoNativeAppOnlyLanguage(text, context) {
+  assert.equal(
+    nativeAppOnlyLanguagePattern.test(text),
+    false,
+    `${context}: expected PWA-first/mobile-web language without native app assumptions`,
   );
 }
 
@@ -26161,6 +26171,14 @@ async function runChromeTest() {
         ],
         "Expected /book customer next-step guidance",
       );
+      assert.equal(
+        initialState.text.includes(
+          "Mobile web request form for trip details only. Prestige Limo will reply before confirmation.",
+        ),
+        true,
+        "Expected /book to show mobile-web request guidance",
+      );
+      assertNoNativeAppOnlyLanguage(initialState.text, "/book desktop");
       for (const expectedField of [
         "Customer / company name",
         "Contact no.",
@@ -27470,6 +27488,14 @@ async function runChromeTest() {
           `Expected /my-bookings guidance text: ${expectedGuidanceText}`,
         );
       }
+      assert.equal(
+        initialState.text.includes(
+          "Mobile web trip view for your confirmed and requested rides. Use request review for changes.",
+        ),
+        true,
+        "Expected /my-bookings to show mobile-web trip guidance",
+      );
+      assertNoNativeAppOnlyLanguage(initialState.text, "/my-bookings desktop");
       assert.equal(initialState.searchVisible, true, "Expected /my-bookings search input to be visible");
       assert.equal(
         initialState.searchHelper,
@@ -28923,6 +28949,14 @@ async function runChromeTest() {
         `${viewport.label}: expected no driver demo DSP usage workflow on public driver job link`,
       );
       assert.equal(initialState.currentStatus, "Assigned", `${viewport.label}: expected driver job link to start assigned`);
+      assert.equal(
+        initialState.text.includes(
+          "Mobile web driver card. Keep this link private and use it only for this assigned job.",
+        ),
+        true,
+        `${viewport.label}: expected driver job link to show mobile-web privacy guidance`,
+      );
+      assertNoNativeAppOnlyLanguage(initialState.text, `${viewport.label} driver job link`);
       assert.deepEqual(
         initialState.forbiddenText,
         [],
@@ -29899,6 +29933,14 @@ async function runChromeTest() {
         ["Review Mock DSP Usage"],
         `${viewport.label}: expected only the mock DSP usage review control`,
       );
+      assert.equal(
+        initialState.text.includes(
+          "Mobile web driver card. Keep this link with the assigned job and review route details before each status update.",
+        ),
+        true,
+        `${viewport.label}: expected driver demo to show mobile-web driver guidance`,
+      );
+      assertNoNativeAppOnlyLanguage(initialState.text, `${viewport.label} driver demo`);
       assert.deepEqual(
         initialState.forbiddenText,
         [],

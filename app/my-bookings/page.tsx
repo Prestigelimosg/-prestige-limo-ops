@@ -696,6 +696,12 @@ export default function CustomerPortalPage() {
           <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">
             Customers can view booking requests and booking history here after staff confirmation.
           </p>
+          <p
+            className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
+            data-customer-portal-mobile-web-note="true"
+          >
+            Mobile web trip view for your confirmed and requested rides. Use request review for changes.
+          </p>
           <div
             className="mt-4 grid gap-2 text-sm sm:grid-cols-3"
             data-customer-portal-guidance="true"

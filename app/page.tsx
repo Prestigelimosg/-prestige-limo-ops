@@ -293,7 +293,7 @@ type AdminBookingPersistenceRequestBody = {
   service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
 };
 
-type AdminBookingPersistenceAction = "save" | "load";
+type AdminBookingPersistenceAction = "save" | "load" | "update";
 
 type AdminBookingSnapshotApplyResult =
   | {
@@ -2537,6 +2537,7 @@ function getAdminExtraStopLocations(value: string) {
 function buildAdminBookingPersistencePayload(
   bookingValue: BookingForm,
   currentTimeMs: number,
+  bookingReference = createAdminBookingReference(),
 ): AdminBookingPersistenceRequestBody {
   const shortNoticeReviewRequired = isAdminShortNoticeReviewRequired(bookingValue, currentTimeMs);
   const pickupLocation = clean(bookingValue.pickup) || null;
@@ -2610,7 +2611,7 @@ function buildAdminBookingPersistencePayload(
 
   return {
     booking: {
-      booking_reference: createAdminBookingReference(),
+      booking_reference: bookingReference,
       source_channel: "admin-dashboard",
       customer_id: null,
       pickup_datetime: formatAdminBookingPickupDateTime(bookingValue),
@@ -2647,7 +2648,11 @@ function adminBookingPersistenceFailureMessage(
   rawError: unknown,
 ) {
   const prefix =
-    action === "save" ? "Operational booking save failed" : "Operational booking load failed";
+    action === "save"
+      ? "Operational booking save failed"
+      : action === "update"
+        ? "Operational booking update failed"
+        : "Operational booking load failed";
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
 
@@ -3010,6 +3015,8 @@ export default function Home() {
     useState<Message | null>(null);
   const [adminBookingPersistenceAction, setAdminBookingPersistenceAction] =
     useState<AdminBookingPersistenceAction | null>(null);
+  const [appliedAdminBookingSnapshotReference, setAppliedAdminBookingSnapshotReference] =
+    useState("");
   const [customerMatchFeedback, setCustomerMatchFeedback] = useState<CustomerMatchFeedback | null>(null);
   const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
@@ -5876,6 +5883,11 @@ export default function Home() {
         ? (result.bookings as AdminBookingPersistenceRecord[])
         : [];
       setAdminBookingPersistenceRecords(loadedBookings);
+      setAppliedAdminBookingSnapshotReference((currentReference) =>
+        loadedBookings.some((record) => clean(record.booking_reference) === currentReference)
+          ? currentReference
+          : "",
+      );
       setAdminBookingPersistenceMessage({
         tone: loadedBookings.length > 0 ? "success" : "info",
         text:
@@ -5922,6 +5934,7 @@ export default function Home() {
 
     setBooking(() => appliedSnapshot.booking);
     setLoadedBookingId("");
+    setAppliedAdminBookingSnapshotReference(bookingReference);
     setActiveTab("dispatch");
     clearBookingMessageInput();
     setAdminBookingPersistenceMessage({
@@ -5932,6 +5945,74 @@ export default function Home() {
 
   function applyLatestAdminBookingOperationalSnapshot() {
     applyAdminBookingOperationalSnapshot(adminBookingPersistenceRecords[0]);
+  }
+
+  async function updateAppliedAdminBookingOperationalSnapshot() {
+    const targetBookingReference = clean(appliedAdminBookingSnapshotReference);
+
+    if (!targetBookingReference) {
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: "Apply a loaded operational snapshot before updating.",
+      });
+      return;
+    }
+
+    const payload = buildAdminBookingPersistencePayload(
+      booking,
+      currentTimeMs,
+      targetBookingReference,
+    );
+
+    setAdminBookingPersistenceAction("update");
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: "Updating applied operational booking fields...",
+    });
+
+    try {
+      const response = await fetch("/api/admin-bookings", {
+        body: JSON.stringify({
+          target_booking_reference: targetBookingReference,
+          ...payload,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Admin booking update failed.");
+      }
+
+      const updatedBooking = result.booking as AdminBookingPersistenceRecord;
+      const updatedBookingReference = clean(updatedBooking.booking_reference) || targetBookingReference;
+      setAdminBookingPersistenceRecords((current) => [
+        updatedBooking,
+        ...current.filter(
+          (record) => record.booking_reference !== updatedBookingReference,
+        ),
+      ]);
+      setAppliedAdminBookingSnapshotReference(updatedBookingReference);
+      setAdminBookingPersistenceMessage({
+        tone: "success",
+        text: `Operational booking updated: ${updatedBookingReference}${
+          updatedBooking.short_notice_review_status === "Admin Review Required"
+            ? ". Admin Review Required."
+            : "."
+        }`,
+      });
+    } catch (error) {
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: adminBookingPersistenceFailureMessage("update", error),
+      });
+    } finally {
+      setAdminBookingPersistenceAction(null);
+    }
   }
 
   function getDispatchCopyText(target: DispatchCopyTarget) {
@@ -15247,8 +15328,27 @@ export default function Home() {
                   >
                     Apply Latest Snapshot
                   </button>
+                  <button
+                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    data-admin-booking-persistence-update-applied="true"
+                    disabled={adminBookingPersistenceAction !== null}
+                    onClick={updateAppliedAdminBookingOperationalSnapshot}
+                    type="button"
+                  >
+                    {adminBookingPersistenceAction === "update"
+                      ? "Updating..."
+                      : "Update Applied Snapshot"}
+                  </button>
                 </div>
               </div>
+              {appliedAdminBookingSnapshotReference ? (
+                <p
+                  className="mt-3 text-xs font-semibold text-emerald-900"
+                  data-admin-booking-persistence-applied-reference="true"
+                >
+                  Applied snapshot: {appliedAdminBookingSnapshotReference}
+                </p>
+              ) : null}
               {adminBookingPersistenceMessage ? (
                 <p
                   className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(

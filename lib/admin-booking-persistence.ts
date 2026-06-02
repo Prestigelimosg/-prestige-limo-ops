@@ -41,6 +41,10 @@ export type AdminBookingPersistenceInput = {
   service_items: AdminBookingServiceItemInput[];
 };
 
+export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & {
+  target_booking_reference: string;
+};
+
 export type AdminBookingPersistenceRecord = Required<
   Pick<AdminBookingRecordInput, "booking_reference">
 > &
@@ -70,6 +74,16 @@ const maxServiceItems = 12;
 const safeSaveError = "Admin booking persistence save failed safely.";
 const safeLoadError = "Admin booking persistence load failed safely.";
 const safeReloadError = "Saved booking could not be safely reloaded.";
+const safeUpdateError = "Admin booking persistence update failed safely.";
+const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
+
+const createPayloadTopLevelFields = new Set(["booking", "route_points", "service_items"]);
+const updatePayloadTopLevelFields = new Set([
+  "target_booking_reference",
+  "booking",
+  "route_points",
+  "service_items",
+]);
 
 const bookingFields = new Set([
   "booking_reference",
@@ -219,6 +233,12 @@ function textOrNull(value: unknown) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed.slice(0, maxTextLength) : null;
+}
+
+function validTargetBookingReference(value: string | null | undefined) {
+  const cleaned = textOrNull(value);
+
+  return cleaned && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned) ? cleaned : null;
 }
 
 function integerOrNull(value: unknown) {
@@ -429,8 +449,9 @@ function validateRequiredRoutePoints(
   };
 }
 
-export function parseAdminBookingPersistencePayload(
+function parseAdminBookingOperationalPayload(
   value: unknown,
+  allowedTopLevelFields: Set<string>,
 ): AdminBookingResult<AdminBookingPersistenceInput> {
   const body = asRecord(value);
   const forbiddenFields = findForbiddenFieldNames(body);
@@ -443,9 +464,7 @@ export function parseAdminBookingPersistencePayload(
     };
   }
 
-  const unknownTopLevelKeys = Object.keys(body).filter(
-    (key) => key !== "booking" && key !== "route_points" && key !== "service_items",
-  );
+  const unknownTopLevelKeys = Object.keys(body).filter((key) => !allowedTopLevelFields.has(key));
   const bookingRecord = asRecord(body.booking);
   const routePointRecords = asArray(body.route_points).map(asRecord);
   const serviceItemRecords = asArray(body.service_items).map(asRecord);
@@ -515,6 +534,49 @@ export function parseAdminBookingPersistencePayload(
       booking,
       route_points: routePointsResult.data,
       service_items: serviceItemsResult.data,
+    },
+  };
+}
+
+export function parseAdminBookingPersistencePayload(
+  value: unknown,
+): AdminBookingResult<AdminBookingPersistenceInput> {
+  return parseAdminBookingOperationalPayload(value, createPayloadTopLevelFields);
+}
+
+export function parseAdminBookingUpdatePayload(
+  value: unknown,
+): AdminBookingResult<AdminBookingPersistenceUpdateInput> {
+  const body = asRecord(value);
+  const parsed = parseAdminBookingOperationalPayload(value, updatePayloadTopLevelFields);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const targetBookingReference = validTargetBookingReference(body.target_booking_reference as string | null);
+
+  if (!targetBookingReference) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Missing or malformed target admin booking reference.",
+    };
+  }
+
+  if (parsed.data.booking.booking_reference !== targetBookingReference) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Target admin booking reference must match booking.booking_reference.",
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...parsed.data,
+      target_booking_reference: targetBookingReference,
     },
   };
 }
@@ -623,6 +685,40 @@ async function fetchAdminBookingById(
   };
 }
 
+async function fetchAdminBookingIdByReference(
+  client: SupabaseClient,
+  bookingReference: string,
+): Promise<AdminBookingResult<number>> {
+  const { data, error } = await client
+    .from("bookings")
+    .select("id")
+    .eq("booking_reference", bookingReference)
+    .limit(1)
+    .maybeSingle();
+  const bookingId = integerOrNull(asRecord(data).id);
+
+  if (error) {
+    return {
+      ok: false,
+      status: 500,
+      error: safeUpdateError,
+    };
+  }
+
+  if (!bookingId) {
+    return {
+      ok: false,
+      status: 404,
+      error: safeUpdateTargetMissingError,
+    };
+  }
+
+  return {
+    ok: true,
+    data: bookingId,
+  };
+}
+
 export async function createAdminBooking(
   input: AdminBookingPersistenceInput,
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
@@ -689,6 +785,112 @@ export async function createAdminBooking(
     source_route: "/",
     actor_label: "Admin dashboard",
     change_summary: "Operational booking fields saved through admin booking persistence prototype.",
+  });
+
+  return fetchAdminBookingById(client, bookingId);
+}
+
+export async function updateAdminBooking(
+  input: AdminBookingPersistenceUpdateInput,
+): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
+  const clientResult = getAdminBookingClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const client = clientResult.data;
+  const bookingIdResult = await fetchAdminBookingIdByReference(client, input.target_booking_reference);
+
+  if (!bookingIdResult.ok) {
+    return bookingIdResult;
+  }
+
+  const bookingId = bookingIdResult.data;
+  const { error: bookingError } = await client
+    .from("bookings")
+    .update({
+      ...input.booking,
+      booking_reference: input.target_booking_reference,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", bookingId);
+
+  if (bookingError) {
+    return {
+      ok: false,
+      status: 500,
+      error: safeUpdateError,
+    };
+  }
+
+  const { error: routeDeleteError } = await client
+    .from("booking_route_points")
+    .delete()
+    .eq("booking_id", bookingId);
+
+  if (routeDeleteError) {
+    return {
+      ok: false,
+      status: 500,
+      error: safeUpdateError,
+    };
+  }
+
+  if (input.route_points.length > 0) {
+    const { error } = await client.from("booking_route_points").insert(
+      input.route_points.map((routePoint) => ({
+        ...routePoint,
+        booking_id: bookingId,
+      })),
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        status: 500,
+        error: safeUpdateError,
+      };
+    }
+  }
+
+  const { error: serviceDeleteError } = await client
+    .from("booking_service_items")
+    .delete()
+    .eq("booking_id", bookingId);
+
+  if (serviceDeleteError) {
+    return {
+      ok: false,
+      status: 500,
+      error: safeUpdateError,
+    };
+  }
+
+  if (input.service_items.length > 0) {
+    const { error } = await client.from("booking_service_items").insert(
+      input.service_items.map((serviceItem) => ({
+        ...serviceItem,
+        booking_id: bookingId,
+      })),
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        status: 500,
+        error: safeUpdateError,
+      };
+    }
+  }
+
+  await client.from("audit_logs").insert({
+    entity_type: "booking",
+    entity_id: bookingId,
+    action: "admin_booking_update",
+    source_route: "/",
+    actor_label: "Admin dashboard",
+    change_summary: "Operational booking fields updated through admin booking persistence prototype.",
   });
 
   return fetchAdminBookingById(client, bookingId);

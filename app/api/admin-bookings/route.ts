@@ -2,6 +2,8 @@ import {
   createAdminBooking,
   listAdminBookings,
   parseAdminBookingPersistencePayload,
+  parseAdminBookingUpdatePayload,
+  updateAdminBooking,
 } from "../../../lib/admin-booking-persistence";
 
 export const dynamic = "force-dynamic";
@@ -109,6 +111,45 @@ export async function POST(request: Request) {
     }
 
     const result = await createAdminBooking(parsed.data);
+
+    if (!result.ok) {
+      return Response.json(
+        {
+          ok: false,
+          error: result.error,
+        },
+        { status: result.status },
+      );
+    }
+
+    return Response.json({
+      ok: true,
+      booking: result.data,
+    });
+  } catch {
+    return safeFailureResponse();
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    if (!isAdminDashboardRequest(request)) {
+      return blockedResponse();
+    }
+
+    const parsed = parseAdminBookingUpdatePayload(await readJsonBody(request));
+
+    if (!parsed.ok) {
+      return Response.json(
+        {
+          ok: false,
+          error: parsed.error,
+        },
+        { status: parsed.status },
+      );
+    }
+
+    const result = await updateAdminBooking(parsed.data);
 
     if (!result.ok) {
       return Response.json(

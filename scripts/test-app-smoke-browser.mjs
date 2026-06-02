@@ -320,6 +320,7 @@ const adminBookingPersistenceUiPatterns = [
   { label: "load booking control wording", pattern: /\bload\s+booking\b/i },
   { label: "apply operational snapshot wording", pattern: /\bapply\s+operational\s+snapshot\b/i },
   { label: "apply latest snapshot wording", pattern: /\bapply\s+latest\s+snapshot\b/i },
+  { label: "update applied snapshot wording", pattern: /\bupdate\s+applied\s+snapshot\b/i },
   { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
   { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
   { label: "create booking record wording", pattern: /\bcreate\s+booking\s+record\b/i },
@@ -719,6 +720,43 @@ async function runChromeTest() {
               );
             }
 
+            if (method === "PATCH") {
+              if (window.__adminBookingPersistenceMockMode === "update-failure") {
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    error: "update failed with SQL details and SUPABASE_SERVICE_ROLE_KEY hint",
+                  }),
+                  { headers: { "Content-Type": "application/json" }, status: 500 },
+                );
+              }
+
+              if (window.__adminBookingPersistenceMockMode === "update-disabled") {
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    error: "Admin booking persistence server configuration is incomplete.",
+                  }),
+                  { headers: { "Content-Type": "application/json" }, status: 503 },
+                );
+              }
+
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  booking: {
+                    ...body.booking,
+                    booking_reference: body.target_booking_reference,
+                    route_points: body.route_points,
+                    service_items: body.service_items,
+                    created_at: "2026-06-02T00:00:00.000Z",
+                    updated_at: "2026-06-02T01:00:00.000Z",
+                  },
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
             if (window.__adminBookingPersistenceMockMode === "load-empty") {
               return new Response(
                 JSON.stringify({
@@ -1079,6 +1117,178 @@ async function runChromeTest() {
         "Expected forbidden mocked snapshot fields not to populate form fields or visible UI",
       );
 
+      const editedAppliedSnapshot = await evaluate(`(() => {
+        const setField = (labelText, value) => {
+          const label = [...document.querySelectorAll("label")].find(
+            (candidate) => candidate.querySelector("span")?.textContent.trim() === labelText,
+          );
+          const field = label?.querySelector("input, textarea, select");
+          if (!field) {
+            return false;
+          }
+
+          const descriptor = Object.getOwnPropertyDescriptor(field.constructor.prototype, "value");
+          descriptor?.set?.call(field, value);
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        };
+
+        return [
+          setField("Pickup *", "Updated Ops Pickup"),
+          setField("Extra stop location", "Updated Ops Stop"),
+          setField("Drop-off *", "Updated Ops Dropoff"),
+          setField("Booker WhatsApp / Contact", "+65 8000 2000"),
+          setField("Booker email (optional)", "updated-ops@example.com"),
+          setField("Pax", "3"),
+          setField("Child seat count", "1"),
+        ].every(Boolean);
+      })()`);
+      assert.equal(editedAppliedSnapshot, true, "Expected applied snapshot operational fields to be editable");
+
+      const updateClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(updateClicked, true, "Expected update control for applied operational snapshot");
+
+      const updateState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const appliedReference = document
+              .querySelector("[data-admin-booking-persistence-applied-reference]")
+              ?.textContent.trim() || "";
+            const calls = window.__adminBookingPersistenceCalls || [];
+            const patchCall = calls.find((call) => call.method === "PATCH");
+            const body = patchCall?.body;
+
+            if (!feedback.includes("Operational booking updated: LOADED-OPS-001") || !body) {
+              return false;
+            }
+
+            const keys = [];
+            const collectKeys = (value) => {
+              if (Array.isArray(value)) {
+                value.forEach(collectKeys);
+                return;
+              }
+              if (!value || typeof value !== "object") {
+                return;
+              }
+              Object.entries(value).forEach(([key, nested]) => {
+                keys.push(key);
+                collectKeys(nested);
+              });
+            };
+            collectKeys(body);
+            const forbiddenKeyPattern =
+              /price|fare|amount|billing|invoice|payment|pdf|stripe|paynow|payout|finance|notification|telegram|proof|photo|live_location|auth|parser_learning|debug|qa_archive|mock_workbench|admin_note|internal_note|manual_extra_charge/i;
+
+            return {
+              appliedReference,
+              body,
+              feedback,
+              forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
+              patchCalls: calls.filter((call) => call.method === "PATCH").length,
+            };
+          })()`),
+        10000,
+        "admin booking persistence update feedback",
+      );
+
+      assert.equal(updateState.patchCalls, 1, "Expected one mocked admin booking PATCH call");
+      assert.equal(updateState.body.target_booking_reference, "LOADED-OPS-001");
+      assert.equal(updateState.body.booking.booking_reference, "LOADED-OPS-001");
+      assert.equal(updateState.body.booking.pickup_location, "Updated Ops Pickup");
+      assert.equal(updateState.body.booking.dropoff_location, "Updated Ops Dropoff");
+      assert.equal(updateState.body.booking.contact_phone, "+65 8000 2000");
+      assert.equal(updateState.body.booking.contact_email, "updated-ops@example.com");
+      assert.equal(updateState.body.booking.pax_count, 3);
+      assert.equal(updateState.body.booking.admin_internal_status, "Admin Review Required");
+      assert.equal(updateState.body.booking.short_notice_review_status, "Admin Review Required");
+      assert.deepEqual(
+        updateState.body.route_points.map((routePoint) => routePoint.location_text),
+        ["Updated Ops Pickup", "Updated Ops Stop", "Updated Ops Dropoff"],
+        "Expected update payload route points to use edited operational locations",
+      );
+      assert.deepEqual(
+        updateState.body.service_items.map((item) => item.service_item_type),
+        ["child_seat", "extra_stop"],
+        "Expected update payload service items to remain operational only",
+      );
+      assert.equal(updateState.body.service_items[0].quantity, 1);
+      assert.deepEqual(
+        updateState.forbiddenKeys,
+        [],
+        "Expected admin booking update body to include only approved operational field names",
+      );
+      assert.equal(
+        updateState.feedback.includes("Admin Review Required"),
+        true,
+        "Expected updated short-notice snapshot status to remain Admin Review Required",
+      );
+      assert.equal(
+        updateState.appliedReference.includes("LOADED-OPS-001"),
+        true,
+        "Expected applied snapshot reference to remain the update target",
+      );
+
+      const updateFailureClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "update-failure";
+        const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(updateFailureClicked, true, "Expected update control for failure check");
+
+      const updateFailureState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-update-applied]")?.disabled;
+
+            return feedback.includes("Operational booking update failed safely") && buttonReady
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence safe update failure feedback",
+      );
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(updateFailureState.feedback),
+        false,
+        "Expected admin booking update failure feedback to hide persistence internals",
+      );
+
+      const disabledUpdateClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "update-disabled";
+        const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(disabledUpdateClicked, true, "Expected update control for disabled-config check");
+
+      const disabledUpdateState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-update-applied]")?.disabled;
+
+            return feedback.includes("not enabled or configured on this server") && buttonReady
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence disabled update feedback",
+      );
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(disabledUpdateState.feedback),
+        false,
+        "Expected admin booking disabled update feedback to hide persistence internals",
+      );
+
       const saveFailureClicked = await evaluate(`(() => {
         window.__adminBookingPersistenceMockMode = "save-failure";
         const button = document.querySelector("[data-admin-booking-persistence-save]");
@@ -1161,6 +1371,26 @@ async function runChromeTest() {
         emptyLoadState.recordsVisible,
         false,
         "Expected empty admin booking persistence load to clear record previews",
+      );
+
+      const emptyUpdateClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(emptyUpdateClicked, true, "Expected update applied snapshot button");
+
+      const emptyUpdateState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+
+            return feedback.includes("Apply a loaded operational snapshot before updating")
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence empty update feedback",
       );
 
       const emptyApplyClicked = await evaluate(`(() => {
@@ -1286,6 +1516,26 @@ async function runChromeTest() {
         /supabase|service_role|sql|stack|secret|key/i.test(malformedApplyState.feedback),
         false,
         "Expected malformed apply feedback to hide persistence internals",
+      );
+
+      const malformedUpdateClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(malformedUpdateClicked, true, "Expected update control after malformed apply check");
+
+      const malformedUpdateState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+
+            return feedback.includes("Apply a loaded operational snapshot before updating")
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence malformed update feedback",
       );
 
       await evaluate(`window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch`);
@@ -1438,6 +1688,99 @@ async function runChromeTest() {
         "Expected admin booking API malformed-route message",
       );
 
+      const updateForbiddenResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          target_booking_reference: "VALID-OPS-001",
+          booking: {
+            booking_reference: "VALID-OPS-001",
+            customer_price: 100,
+          },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const updateForbiddenBody = await updateForbiddenResponse.json();
+
+      assert.equal(updateForbiddenResponse.status, 400, "Expected admin booking PATCH to reject forbidden fields");
+      assert.equal(
+        String(updateForbiddenBody.error || "").includes("Forbidden admin booking fields rejected"),
+        true,
+        "Expected admin booking PATCH forbidden-field message",
+      );
+
+      const updateUnknownResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          ...validAdminBookingApiPayload,
+          target_booking_reference: "VALID-OPS-001",
+          unexpected_admin_field: "blocked",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const updateUnknownBody = await updateUnknownResponse.json();
+
+      assert.equal(updateUnknownResponse.status, 400, "Expected admin booking PATCH to reject unknown fields");
+      assert.equal(
+        String(updateUnknownBody.error || "").includes("Unknown admin booking fields rejected"),
+        true,
+        "Expected admin booking PATCH unknown-field message",
+      );
+
+      const updateMissingTargetResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify(validAdminBookingApiPayload),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const updateMissingTargetBody = await updateMissingTargetResponse.json();
+
+      assert.equal(
+        updateMissingTargetResponse.status,
+        400,
+        "Expected admin booking PATCH to reject missing target reference",
+      );
+      assert.equal(
+        /target admin booking reference/i.test(String(updateMissingTargetBody.error || "")),
+        true,
+        "Expected admin booking PATCH missing-target message",
+      );
+
+      const updateMismatchedTargetResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          ...validAdminBookingApiPayload,
+          target_booking_reference: "OTHER-OPS-001",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const updateMismatchedTargetBody = await updateMismatchedTargetResponse.json();
+
+      assert.equal(
+        updateMismatchedTargetResponse.status,
+        400,
+        "Expected admin booking PATCH to reject mismatched target reference",
+      );
+      assert.equal(
+        /must match/.test(String(updateMismatchedTargetBody.error || "")),
+        true,
+        "Expected admin booking PATCH mismatched-target message",
+      );
+
       const disabledConfigResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         headers: {
           Referer: appUrl,
@@ -1464,13 +1807,21 @@ async function runChromeTest() {
         forbiddenApiStatus: forbiddenResponse.status,
         missingRequiredApiStatus: missingRequiredResponse.status,
         unknownApiStatus: unknownResponse.status,
+        updateForbiddenApiStatus: updateForbiddenResponse.status,
+        updateMissingTargetApiStatus: updateMissingTargetResponse.status,
+        updateMismatchedTargetApiStatus: updateMismatchedTargetResponse.status,
+        updateUnknownApiStatus: updateUnknownResponse.status,
         disabledConfigApiStatus: disabledConfigResponse.status,
         emptyApplyFeedback: emptyApplyState.feedback,
+        emptyUpdateFeedback: emptyUpdateState.feedback,
         emptyLoadFeedback: emptyLoadState.feedback,
         malformedApplyFeedback: malformedApplyState.feedback,
+        malformedUpdateFeedback: malformedUpdateState.feedback,
         malformedLoadedRecord: malformedLoadState.recordText,
         appliedSnapshotFields: appliedSnapshotState.fields,
         appliedSnapshotFeedback: appliedSnapshotState.feedback,
+        updateFeedback: updateState.feedback,
+        updatePayloadFields: Object.keys(updateState.body.booking),
         loadedRecord: loadState.recordText,
         safeFailureFeedback: saveFailureState.feedback,
         postedBookingFields: Object.keys(saveState.body.booking),

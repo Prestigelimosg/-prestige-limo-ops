@@ -331,6 +331,10 @@ const adminBookingPersistenceUiPatterns = [
   { label: "search operational snapshots wording", pattern: /\bsearch\s+operational\s+snapshots\b/i },
   { label: "snapshot status filter wording", pattern: /\bsnapshot\s+status\b/i },
   { label: "snapshot filter empty wording", pattern: /\bno\s+loaded\s+operational\s+snapshots\s+match\b/i },
+  { label: "customer request review decision wording", pattern: /\binternal\s+review\s+decision\s+only\b/i },
+  { label: "approve internally wording", pattern: /\bapprove\s+internally\b/i },
+  { label: "decline internally wording", pattern: /\bdecline\s+internally\b/i },
+  { label: "review decision saved wording", pattern: /\binternal\s+review\s+decision\s+saved\b/i },
   { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
   { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
   { label: "create booking record wording", pattern: /\bcreate\s+booking\s+record\b/i },
@@ -1224,6 +1228,19 @@ async function runChromeTest() {
         "Expected loaded customer booking request to be shown as admin-review intake",
       );
       assert.equal(
+        loadState.recordText.includes("Internal review decision only") &&
+          loadState.recordText.includes("Approve Internally") &&
+          loadState.recordText.includes("Decline Internally"),
+        true,
+        "Expected loaded customer request to expose compact internal review-decision controls",
+      );
+      assert.equal(
+        loadState.recordText.includes("+65 8000 1000") &&
+          loadState.recordText.includes("loaded-ops@example.com"),
+        true,
+        "Expected loaded customer request to show safe operational contact details",
+      );
+      assert.equal(
         /Second Ops Customer/.test(loadState.secondRecordText),
         true,
         "Expected second loaded operational record preview",
@@ -1390,6 +1407,102 @@ async function runChromeTest() {
       assert.equal(phoneFilterState.summary.includes("Showing 1 of 2"), true);
       assert.equal(phoneFilterState.getCalls, 1, "Expected phone search to stay local");
 
+      const decisionClicked = await evaluate(`(() => {
+        const button = document.querySelector(
+          "[data-admin-booking-customer-request-decision-button='LOADED-OPS-001:approve-internally']",
+        );
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(decisionClicked, true, "Expected internal review decision control for customer request");
+
+      const decisionState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
+            const calls = window.__adminBookingPersistenceCalls || [];
+            const patchCall = [...calls]
+              .reverse()
+              .find((call) => call.method === "PATCH" && call.body?.target_booking_reference === "LOADED-OPS-001");
+            const body = patchCall?.body;
+
+            if (!feedback.includes("Internal review decision saved for LOADED-OPS-001") || !body || !record) {
+              return false;
+            }
+
+            const keys = [];
+            const collectKeys = (value) => {
+              if (Array.isArray(value)) {
+                value.forEach(collectKeys);
+                return;
+              }
+              if (!value || typeof value !== "object") {
+                return;
+              }
+              Object.entries(value).forEach(([key, nested]) => {
+                keys.push(key);
+                collectKeys(nested);
+              });
+            };
+            collectKeys(body);
+            const forbiddenKeyPattern =
+              /price|fare|amount|billing|invoice|payment|pdf|stripe|paynow|payout|finance|notification|telegram|proof|photo|live_location|auth|parser_learning|debug|qa_archive|mock_workbench|admin_note|internal_note|manual_extra_charge/i;
+
+            return {
+              body,
+              feedback,
+              forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
+              recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+            };
+          })()`),
+        10000,
+        "admin customer request internal review decision feedback",
+      );
+      assert.deepEqual(
+        decisionState.forbiddenKeys,
+        [],
+        "Expected admin review decision body to include only approved operational/status field names",
+      );
+      assert.equal(decisionState.body.booking.source_channel, "customer-booking-request");
+      assert.equal(decisionState.body.booking.customer_facing_status, "Received");
+      assert.equal(decisionState.body.booking.admin_internal_status, "Admin Review Required");
+      assert.equal(decisionState.body.booking.short_notice_review_status, "Admin Review Required");
+      assert.equal(decisionState.body.booking.contact_phone, "+65 8000 1000");
+      assert.equal(decisionState.body.booking.contact_email, "loaded-ops@example.com");
+      assert.deepEqual(
+        decisionState.body.route_points.map((routePoint) => routePoint.location_text),
+        ["Loaded Ops Pickup", "Loaded Ops Stop", "Loaded Ops Dropoff"],
+        "Expected review decision update to preserve safe route points",
+      );
+      assert.deepEqual(
+        decisionState.body.service_items.map((item) => item.service_item_type),
+        ["child_seat", "extra_stop"],
+        "Expected review decision update to preserve operational service items only",
+      );
+      assert.equal(
+        decisionState.feedback.includes("Approved Internally") &&
+          decisionState.feedback.includes("No customer notification sent"),
+        true,
+        "Expected internal decision feedback to avoid customer notification behavior",
+      );
+      assert.equal(
+        decisionState.feedback.includes("Short-notice review remains Admin Review Required"),
+        true,
+        "Expected short-notice customer request to remain Admin Review Required after decision update",
+      );
+      assert.equal(
+        /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i.test(
+          decisionState.recordText,
+        ),
+        false,
+        "Expected forbidden mocked fields not to appear after review decision update",
+      );
+      const patchCallsAfterDecision = await evaluate(`(() => {
+        const calls = window.__adminBookingPersistenceCalls || [];
+        return calls.filter((call) => call.method === "PATCH").length;
+      })()`);
+
       const applyClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
         button?.click();
@@ -1543,7 +1656,7 @@ async function runChromeTest() {
       );
       assert.equal(
         appliedHiddenByFilterState.patchCalls,
-        0,
+        patchCallsAfterDecision,
         "Expected applied hidden-by-filter note not to update",
       );
 
@@ -1587,6 +1700,10 @@ async function runChromeTest() {
       })()`);
       assert.equal(editedAppliedSnapshot, true, "Expected applied snapshot operational fields to be editable");
 
+      const patchCallsBeforeAppliedUpdate = await evaluate(`(() => {
+        const calls = window.__adminBookingPersistenceCalls || [];
+        return calls.filter((call) => call.method === "PATCH").length;
+      })()`);
       const updateClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
         button?.click();
@@ -1602,7 +1719,9 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-applied-reference]")
               ?.textContent.trim() || "";
             const calls = window.__adminBookingPersistenceCalls || [];
-            const patchCall = calls.find((call) => call.method === "PATCH");
+            const patchCall = [...calls]
+              .reverse()
+              .find((call) => call.method === "PATCH" && call.body?.booking?.pickup_location === "Updated Ops Pickup");
             const body = patchCall?.body;
 
             if (!feedback.includes("Operational booking updated: LOADED-OPS-001") || !body) {
@@ -1639,7 +1758,11 @@ async function runChromeTest() {
         "admin booking persistence update feedback",
       );
 
-      assert.equal(updateState.patchCalls, 1, "Expected one mocked admin booking PATCH call");
+      assert.equal(
+        updateState.patchCalls,
+        patchCallsBeforeAppliedUpdate + 1,
+        "Expected applied snapshot update to add one mocked admin booking PATCH call",
+      );
       assert.equal(updateState.body.target_booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.pickup_location, "Updated Ops Pickup");
@@ -26791,7 +26914,17 @@ async function runChromeTest() {
       );
 
       await clickCustomerBookingSubmit("second valid customer booking request for same pickup date/time");
-      const sameTimeRepeatState = await readCustomerBookingPageState();
+      const sameTimeRepeatState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText ===
+            "Booking request received. Our team will review and confirm availability."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "same-date/same-time customer booking request feedback",
+      );
       assert.equal(
         sameTimeRepeatState.feedbackText,
         "Booking request received. Our team will review and confirm availability.",

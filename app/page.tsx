@@ -294,7 +294,36 @@ type AdminBookingPersistenceRequestBody = {
 };
 
 type AdminBookingPersistenceAction = "save" | "load" | "update";
+type AdminCustomerRequestReviewDecisionKey =
+  | "needs-review"
+  | "approve-internally"
+  | "decline-internally";
 const adminBookingPersistenceAllStatusFilter = "all";
+const adminCustomerRequestReviewDecisions: Array<{
+  adminInternalStatus: string;
+  key: AdminCustomerRequestReviewDecisionKey;
+  label: string;
+  successLabel: string;
+}> = [
+  {
+    adminInternalStatus: "Admin Review Required",
+    key: "needs-review",
+    label: "Needs Review",
+    successLabel: "Needs Review",
+  },
+  {
+    adminInternalStatus: "Ready for Confirmation",
+    key: "approve-internally",
+    label: "Approve Internally",
+    successLabel: "Approved Internally",
+  },
+  {
+    adminInternalStatus: "Declined Internally",
+    key: "decline-internally",
+    label: "Decline Internally",
+    successLabel: "Declined Internally",
+  },
+];
 
 type AdminBookingSnapshotApplyResult =
   | {
@@ -2629,6 +2658,135 @@ function buildAdminBookingPersistencePayload(
       admin_internal_status: shortNoticeReviewRequired ? "Admin Review Required" : "Draft",
       short_notice_review_status: shortNoticeReviewRequired ? "Admin Review Required" : "Not Required",
       parser_source_reference: parsedSourceReference(bookingValue),
+    },
+    route_points: routePoints,
+    service_items: serviceItems,
+  };
+}
+
+function safeAdminBookingPersistenceCount(value: number | null | undefined) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function adminBookingPersistenceRecordIsCustomerRequest(record: AdminBookingPersistenceRecord) {
+  return clean(record.source_channel) === "customer-booking-request";
+}
+
+function adminBookingPersistenceRecordIsShortNotice(
+  record: AdminBookingPersistenceRecord,
+  currentTimeMs: number,
+) {
+  const pickupDateTime = clean(record.pickup_datetime);
+  const pickupMs = pickupDateTime ? new Date(pickupDateTime).getTime() : Number.NaN;
+
+  return (
+    clean(record.short_notice_review_status) === "Admin Review Required" ||
+    (Number.isFinite(pickupMs) && pickupMs - currentTimeMs < 24 * 60 * 60 * 1000)
+  );
+}
+
+function adminCustomerRequestDecisionStatuses(
+  record: AdminBookingPersistenceRecord,
+  decision: (typeof adminCustomerRequestReviewDecisions)[number],
+  currentTimeMs: number,
+) {
+  const shortNoticeReviewRequired = adminBookingPersistenceRecordIsShortNotice(record, currentTimeMs);
+
+  return {
+    admin_internal_status:
+      decision.key === "approve-internally" && shortNoticeReviewRequired
+        ? "Admin Review Required"
+        : decision.adminInternalStatus,
+    customer_facing_status: clean(record.customer_facing_status) || "Request Received",
+    short_notice_review_status: shortNoticeReviewRequired ? "Admin Review Required" : "Not Required",
+    shortNoticeReviewRequired,
+  };
+}
+
+function buildAdminCustomerRequestDecisionPayload(
+  record: AdminBookingPersistenceRecord,
+  decision: (typeof adminCustomerRequestReviewDecisions)[number],
+  currentTimeMs: number,
+): AdminBookingPersistenceRequestBody | null {
+  const bookingReference = clean(record.booking_reference);
+  const pickupDateTime = clean(record.pickup_datetime);
+  const pickupLocation = clean(record.pickup_location);
+  const dropoffLocation = clean(record.dropoff_location);
+  const routeType = clean(record.route_type);
+  const customerDisplayName = clean(record.customer_display_name);
+  const contactPhone = clean(record.contact_phone);
+  const routePoints: AdminBookingPersistenceRequestBody["route_points"] = [];
+
+  for (const [index, routePoint] of (record.route_points || []).entries()) {
+    const locationText = clean(routePoint.location_text);
+
+    if (!routePoint.point_type || !locationText) {
+      continue;
+    }
+
+    routePoints.push({
+      point_type: routePoint.point_type,
+      sequence_number: safeAdminBookingPersistenceCount(routePoint.sequence_number) || index + 1,
+      location_text: locationText,
+      timing_note: clean(routePoint.timing_note) || null,
+    });
+  }
+
+  const hasPickupRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "pickup");
+  const hasDropoffRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "dropoff");
+
+  if (
+    !bookingReference ||
+    !pickupDateTime ||
+    !pickupLocation ||
+    !dropoffLocation ||
+    !routeType ||
+    !customerDisplayName ||
+    !contactPhone ||
+    !hasPickupRoutePoint ||
+    !hasDropoffRoutePoint
+  ) {
+    return null;
+  }
+
+  const serviceItems: AdminBookingPersistenceRequestBody["service_items"] = [];
+
+  for (const serviceItem of record.service_items || []) {
+    const quantity = safeAdminBookingPersistenceCount(serviceItem.quantity);
+    const blocksCount = safeAdminBookingPersistenceCount(serviceItem.blocks_count);
+
+    if (!serviceItem.service_item_type || ((quantity ?? 0) < 1 && (blocksCount ?? 0) < 1)) {
+      continue;
+    }
+
+    serviceItems.push({
+      service_item_type: serviceItem.service_item_type,
+      quantity,
+      blocks_count: blocksCount,
+    });
+  }
+
+  const statuses = adminCustomerRequestDecisionStatuses(record, decision, currentTimeMs);
+
+  return {
+    booking: {
+      booking_reference: bookingReference,
+      source_channel: "customer-booking-request",
+      customer_id: safeAdminBookingPersistenceCount(record.customer_id),
+      pickup_datetime: pickupDateTime,
+      pickup_location: pickupLocation,
+      dropoff_location: dropoffLocation,
+      route_type: routeType,
+      customer_display_name: customerDisplayName,
+      contact_phone: contactPhone,
+      contact_email: clean(record.contact_email) || null,
+      pax_count: safeAdminBookingPersistenceCount(record.pax_count),
+      luggage_count: safeAdminBookingPersistenceCount(record.luggage_count),
+      vehicle_type_or_category: clean(record.vehicle_type_or_category) || null,
+      customer_facing_status: statuses.customer_facing_status,
+      admin_internal_status: statuses.admin_internal_status,
+      short_notice_review_status: statuses.short_notice_review_status,
+      parser_source_reference: clean(record.parser_source_reference) || null,
     },
     route_points: routePoints,
     service_items: serviceItems,
@@ -6214,6 +6372,88 @@ export default function Home() {
           updatedBooking.short_notice_review_status === "Admin Review Required"
             ? ". Admin Review Required."
             : "."
+        }`,
+      });
+    } catch (error) {
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: adminBookingPersistenceFailureMessage("update", error),
+      });
+    } finally {
+      setAdminBookingPersistenceAction(null);
+    }
+  }
+
+  async function updateAdminCustomerRequestReviewDecision(
+    record: AdminBookingPersistenceRecord,
+    decisionKey: AdminCustomerRequestReviewDecisionKey,
+  ) {
+    const decision = adminCustomerRequestReviewDecisions.find((candidate) => candidate.key === decisionKey);
+    const targetBookingReference = clean(record.booking_reference);
+
+    if (!decision || !targetBookingReference || !adminBookingPersistenceRecordIsCustomerRequest(record)) {
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: "Customer request review decision could not be saved: loaded request details need review.",
+      });
+      return;
+    }
+
+    const payload = buildAdminCustomerRequestDecisionPayload(record, decision, currentTimeMs);
+
+    if (!payload) {
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: "Customer request review decision could not be saved: required operational details are missing.",
+      });
+      return;
+    }
+
+    const statuses = adminCustomerRequestDecisionStatuses(record, decision, currentTimeMs);
+
+    setAdminBookingPersistenceAction("update");
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: "Saving internal customer request review decision...",
+    });
+
+    try {
+      const response = await fetch("/api/admin-bookings", {
+        body: JSON.stringify({
+          target_booking_reference: targetBookingReference,
+          ...payload,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Admin review decision update failed.");
+      }
+
+      const updatedBooking = result.booking as AdminBookingPersistenceRecord;
+      const updatedBookingReference = clean(updatedBooking.booking_reference) || targetBookingReference;
+      setAdminBookingPersistenceRecords((current) => [
+        updatedBooking,
+        ...current.filter(
+          (currentRecord) => clean(currentRecord.booking_reference) !== updatedBookingReference,
+        ),
+      ]);
+
+      if (clean(appliedAdminBookingSnapshotReference) === targetBookingReference) {
+        setAppliedAdminBookingSnapshotReference(updatedBookingReference);
+      }
+
+      setAdminBookingPersistenceMessage({
+        tone: "success",
+        text: `Internal review decision saved for ${updatedBookingReference}: ${decision.successLabel}. No customer notification sent.${
+          statuses.shortNoticeReviewRequired
+            ? " Short-notice review remains Admin Review Required."
+            : ""
         }`,
       });
     } catch (error) {
@@ -15723,6 +15963,12 @@ export default function Home() {
                           .join(" · ") || "Operational booking"}
                       </p>
                       <p
+                        className="mt-1 break-words text-slate-500"
+                        data-admin-booking-persistence-record-contact={record.booking_reference}
+                      >
+                        Contact: {[record.contact_phone, record.contact_email].filter(Boolean).join(" · ") || "TBC"}
+                      </p>
+                      <p
                         className="mt-1 font-semibold text-emerald-900"
                         data-admin-booking-persistence-record-source={record.booking_reference}
                       >
@@ -15744,6 +15990,36 @@ export default function Home() {
                             })
                           : "Pickup time TBC"}
                       </p>
+                      {adminBookingPersistenceRecordIsCustomerRequest(record) ? (
+                        <div
+                          className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2"
+                          data-admin-booking-customer-request-decision={record.booking_reference}
+                        >
+                          <p className="font-semibold text-amber-950">
+                            Internal review decision only
+                          </p>
+                          <p
+                            className="mt-1 leading-5 text-amber-900"
+                            data-admin-booking-customer-request-decision-guidance={record.booking_reference}
+                          >
+                            Tracks admin decision status only. It does not contact customers or dispatch drivers.
+                          </p>
+                          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                            {adminCustomerRequestReviewDecisions.map((decision) => (
+                              <button
+                                className="min-h-9 rounded-md border border-amber-300 bg-white px-3 py-2 text-left text-xs font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                data-admin-booking-customer-request-decision-button={`${record.booking_reference}:${decision.key}`}
+                                disabled={adminBookingPersistenceAction !== null}
+                                key={decision.key}
+                                onClick={() => updateAdminCustomerRequestReviewDecision(record, decision.key)}
+                                type="button"
+                              >
+                                {decision.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <button
                         className="mt-2 min-h-9 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-xs font-semibold text-emerald-950 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         data-admin-booking-persistence-apply={record.booking_reference}

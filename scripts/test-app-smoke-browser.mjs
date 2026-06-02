@@ -669,6 +669,7 @@ async function runChromeTest() {
       );
       await evaluate(`(() => {
         window.__adminBookingPersistenceCalls = [];
+        window.__adminBookingPersistenceMockMode = "success";
         window.__adminBookingPersistenceOriginalFetch =
           window.__adminBookingPersistenceOriginalFetch || window.fetch.bind(window);
         window.fetch = async (...args) => {
@@ -681,6 +682,26 @@ async function runChromeTest() {
             window.__adminBookingPersistenceCalls.push({ body, method, url: String(url) });
 
             if (method === "POST") {
+              if (window.__adminBookingPersistenceMockMode === "save-failure") {
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    error: "relation bookings does not exist near SUPABASE_SERVICE_ROLE_KEY",
+                  }),
+                  { headers: { "Content-Type": "application/json" }, status: 500 },
+                );
+              }
+
+              if (window.__adminBookingPersistenceMockMode === "save-disabled") {
+                return new Response(
+                  JSON.stringify({
+                    ok: false,
+                    error: "Admin booking persistence is not enabled on this server.",
+                  }),
+                  { headers: { "Content-Type": "application/json" }, status: 503 },
+                );
+              }
+
               return new Response(
                 JSON.stringify({
                   ok: true,
@@ -693,6 +714,36 @@ async function runChromeTest() {
                   },
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
+            if (window.__adminBookingPersistenceMockMode === "load-empty") {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  bookings: [],
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
+            if (window.__adminBookingPersistenceMockMode === "load-failure") {
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: "select failed with internal SQL details and service-role hint",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 500 },
+              );
+            }
+
+            if (window.__adminBookingPersistenceMockMode === "load-disabled") {
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error: "Admin booking persistence server configuration is incomplete.",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 503 },
               );
             }
 
@@ -886,7 +937,188 @@ async function runChromeTest() {
         "Expected loaded operational record preview not to show finance/customer/driver payment wording",
       );
 
+      const saveFailureClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "save-failure";
+        const button = document.querySelector("[data-admin-booking-persistence-save]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(saveFailureClicked, true, "Expected admin operational snapshot save button for failure check");
+
+      const saveFailureState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-save]")?.disabled;
+
+            return feedback.includes("Operational booking save failed safely") && buttonReady
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence safe save failure feedback",
+      );
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(saveFailureState.feedback),
+        false,
+        "Expected admin booking save failure feedback to hide persistence internals",
+      );
+
+      const disabledSaveClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "save-disabled";
+        const button = document.querySelector("[data-admin-booking-persistence-save]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(disabledSaveClicked, true, "Expected admin operational snapshot save button for disabled check");
+
+      const disabledSaveState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-save]")?.disabled;
+
+            return feedback.includes("not enabled or configured on this server") && buttonReady
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence disabled save feedback",
+      );
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(disabledSaveState.feedback),
+        false,
+        "Expected admin booking disabled-config feedback to hide persistence internals",
+      );
+
+      const emptyLoadClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "load-empty";
+        const button = document.querySelector("[data-admin-booking-persistence-load]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(emptyLoadClicked, true, "Expected admin operational snapshots load button for empty-list check");
+
+      const emptyLoadState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-load]")?.disabled;
+
+            return feedback.includes("No operational booking records loaded") && buttonReady
+              ? {
+                  feedback,
+                  recordsVisible: Boolean(document.querySelector("[data-admin-booking-persistence-records]")),
+                }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence empty load feedback",
+      );
+      assert.equal(
+        emptyLoadState.recordsVisible,
+        false,
+        "Expected empty admin booking persistence load to clear record previews",
+      );
+
+      const loadFailureClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "load-failure";
+        const button = document.querySelector("[data-admin-booking-persistence-load]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(loadFailureClicked, true, "Expected admin operational snapshots load button for failure check");
+
+      const loadFailureState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-load]")?.disabled;
+
+            return feedback.includes("Operational booking load failed safely") && buttonReady
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence safe load failure feedback",
+      );
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(loadFailureState.feedback),
+        false,
+        "Expected admin booking load failure feedback to hide persistence internals",
+      );
+
+      const disabledLoadClicked = await evaluate(`(() => {
+        window.__adminBookingPersistenceMockMode = "load-disabled";
+        const button = document.querySelector("[data-admin-booking-persistence-load]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(disabledLoadClicked, true, "Expected admin operational snapshots load button for disabled check");
+
+      const disabledLoadState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const buttonReady = !document.querySelector("[data-admin-booking-persistence-load]")?.disabled;
+
+            return feedback.includes("not enabled or configured on this server") && buttonReady
+              ? { feedback }
+              : false;
+          })()`),
+        10000,
+        "admin booking persistence disabled load feedback",
+      );
+      assert.equal(
+        /supabase|service_role|sql|stack|secret|key/i.test(disabledLoadState.feedback),
+        false,
+        "Expected admin booking disabled load feedback to hide persistence internals",
+      );
+
       await evaluate(`window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch`);
+
+      const validAdminBookingApiPayload = {
+        booking: {
+          booking_reference: "VALID-OPS-001",
+          source_channel: "admin-dashboard",
+          customer_id: null,
+          pickup_datetime: "2026-06-04T10:30:00+08:00",
+          pickup_location: "Valid Ops Pickup",
+          dropoff_location: "Valid Ops Dropoff",
+          route_type: "MNG",
+          customer_display_name: "Valid Ops Customer",
+          contact_phone: "+65 8000 1000",
+          contact_email: "valid-ops@example.com",
+          pax_count: 2,
+          luggage_count: null,
+          vehicle_type_or_category: "AVF",
+          customer_facing_status: "Received",
+          admin_internal_status: "Draft",
+          short_notice_review_status: "Not Required",
+          parser_source_reference: "Flight SQ001",
+        },
+        route_points: [
+          {
+            point_type: "pickup",
+            sequence_number: 1,
+            location_text: "Valid Ops Pickup",
+            timing_note: null,
+          },
+          {
+            point_type: "dropoff",
+            sequence_number: 2,
+            location_text: "Valid Ops Dropoff",
+            timing_note: null,
+          },
+        ],
+        service_items: [
+          {
+            service_item_type: "extra_stop",
+            quantity: 1,
+            blocks_count: null,
+          },
+        ],
+      };
 
       const forbiddenResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
@@ -911,9 +1143,118 @@ async function runChromeTest() {
         "Expected admin booking API forbidden-field message",
       );
 
+      const unknownResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          ...validAdminBookingApiPayload,
+          unexpected_admin_field: "blocked",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const unknownBody = await unknownResponse.json();
+
+      assert.equal(unknownResponse.status, 400, "Expected admin booking API to reject unknown fields");
+      assert.equal(
+        String(unknownBody.error || "").includes("Unknown admin booking fields rejected"),
+        true,
+        "Expected admin booking API unknown-field message",
+      );
+
+      const missingRequiredResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          ...validAdminBookingApiPayload,
+          booking: {
+            ...validAdminBookingApiPayload.booking,
+            pickup_location: null,
+          },
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const missingRequiredBody = await missingRequiredResponse.json();
+
+      assert.equal(
+        missingRequiredResponse.status,
+        400,
+        "Expected admin booking API to reject missing required operational fields",
+      );
+      assert.equal(
+        String(missingRequiredBody.error || "").includes("Missing required operational booking fields"),
+        true,
+        "Expected admin booking API missing-required-field message",
+      );
+
+      const malformedRouteResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          ...validAdminBookingApiPayload,
+          route_points: [
+            {
+              point_type: "pickup",
+              sequence_number: 1,
+              location_text: "",
+              timing_note: null,
+            },
+            validAdminBookingApiPayload.route_points[1],
+          ],
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const malformedRouteBody = await malformedRouteResponse.json();
+
+      assert.equal(
+        malformedRouteResponse.status,
+        400,
+        "Expected admin booking API to reject malformed route points",
+      );
+      assert.equal(
+        /route_points|route location/.test(String(malformedRouteBody.error || "")),
+        true,
+        "Expected admin booking API malformed-route message",
+      );
+
+      const disabledConfigResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        headers: {
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const disabledConfigBody = await disabledConfigResponse.json();
+
+      if (disabledConfigResponse.status === 503) {
+        assert.equal(
+          /not enabled|configuration/.test(String(disabledConfigBody.error || "")),
+          true,
+          "Expected admin booking API disabled-config safe message",
+        );
+        assert.equal(
+          /service_role|sql|stack|secret|key/i.test(String(disabledConfigBody.error || "")),
+          false,
+          "Expected admin booking disabled-config API response to hide server internals",
+        );
+      }
+
       return {
         forbiddenApiStatus: forbiddenResponse.status,
+        missingRequiredApiStatus: missingRequiredResponse.status,
+        unknownApiStatus: unknownResponse.status,
+        disabledConfigApiStatus: disabledConfigResponse.status,
+        emptyLoadFeedback: emptyLoadState.feedback,
         loadedRecord: loadState.recordText,
+        safeFailureFeedback: saveFailureState.feedback,
         postedBookingFields: Object.keys(saveState.body.booking),
         routePointCount: saveState.body.route_points.length,
         serviceItemTypes: saveState.body.service_items.map((item) => item.service_item_type),

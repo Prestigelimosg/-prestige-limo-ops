@@ -67,6 +67,9 @@ const shortNoticeWindowMs = 24 * 60 * 60 * 1000;
 const maxTextLength = 1000;
 const maxRoutePoints = 20;
 const maxServiceItems = 12;
+const safeSaveError = "Admin booking persistence save failed safely.";
+const safeLoadError = "Admin booking persistence load failed safely.";
+const safeReloadError = "Saved booking could not be safely reloaded.";
 
 const bookingFields = new Set([
   "booking_reference",
@@ -106,6 +109,19 @@ const serviceItemFields = new Set([
   "created_at",
   "updated_at",
 ]);
+
+const requiredBookingTextFields: Array<keyof AdminBookingRecordInput> = [
+  "booking_reference",
+  "pickup_datetime",
+  "pickup_location",
+  "dropoff_location",
+  "route_type",
+  "customer_display_name",
+  "contact_phone",
+];
+
+const allowedRoutePointTypes = new Set(["pickup", "dropoff", "stop", "waypoint"]);
+const allowedServiceItemTypes = new Set(["child_seat", "extra_stop", "waiting_time", "midnight_charge"]);
 
 const forbiddenFieldFragments = [
   "customer_price",
@@ -191,6 +207,10 @@ function findUnknownKeys(record: UnknownRecord, allowedFields: Set<string>, path
     .map((key) => `${path}.${key}`);
 }
 
+function hasOwn(record: UnknownRecord, key: string) {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 function textOrNull(value: unknown) {
   if (typeof value !== "string") {
     return null;
@@ -211,6 +231,12 @@ function pickupIsUnderTwentyFourHours(value: string | null | undefined) {
   const pickupMs = value ? new Date(value).getTime() : Number.NaN;
 
   return Number.isFinite(pickupMs) && pickupMs - Date.now() < shortNoticeWindowMs;
+}
+
+function validDateTime(value: string | null | undefined) {
+  const parsedTime = value ? new Date(value).getTime() : Number.NaN;
+
+  return Number.isFinite(parsedTime);
 }
 
 function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
@@ -242,54 +268,165 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
   return sanitized;
 }
 
-function sanitizeRoutePoints(value: unknown[]) {
-  return value
-    .slice(0, maxRoutePoints)
-    .map((item, index): AdminBookingRoutePointInput | null => {
-      const record = asRecord(item);
-      const pointType = textOrNull(record.point_type);
-      const locationText = textOrNull(record.location_text);
+function sanitizeRoutePoints(value: unknown[]): AdminBookingResult<AdminBookingRoutePointInput[]> {
+  if (value.length > maxRoutePoints) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Too many admin booking route points rejected. Maximum allowed: ${maxRoutePoints}.`,
+    };
+  }
 
-      if (
-        !locationText ||
-        (pointType !== "pickup" && pointType !== "dropoff" && pointType !== "stop" && pointType !== "waypoint")
-      ) {
-        return null;
-      }
+  const routePoints: AdminBookingRoutePointInput[] = [];
 
+  for (const [index, item] of value.entries()) {
+    const record = asRecord(item);
+    const pointType = textOrNull(record.point_type);
+    const locationText = textOrNull(record.location_text);
+    const sequenceNumber = hasOwn(record, "sequence_number")
+      ? integerOrNull(record.sequence_number)
+      : index + 1;
+
+    if (!pointType || !allowedRoutePointTypes.has(pointType)) {
       return {
-        point_type: pointType,
-        sequence_number: integerOrNull(record.sequence_number) ?? index + 1,
-        location_text: locationText,
-        timing_note: textOrNull(record.timing_note),
+        ok: false,
+        status: 400,
+        error: `Malformed admin booking route point rejected at route_points[${index}].`,
       };
-    })
-    .filter((item): item is AdminBookingRoutePointInput => Boolean(item));
+    }
+
+    if (!locationText) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Missing required route location at route_points[${index}].location_text.`,
+      };
+    }
+
+    if (sequenceNumber === null || sequenceNumber < 1) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Malformed route sequence rejected at route_points[${index}].sequence_number.`,
+      };
+    }
+
+    routePoints.push({
+      point_type: pointType as AdminBookingRoutePointInput["point_type"],
+      sequence_number: sequenceNumber,
+      location_text: locationText,
+      timing_note: textOrNull(record.timing_note),
+    });
+  }
+
+  return {
+    ok: true,
+    data: routePoints,
+  };
 }
 
-function sanitizeServiceItems(value: unknown[]) {
-  return value
-    .slice(0, maxServiceItems)
-    .map((item): AdminBookingServiceItemInput | null => {
-      const record = asRecord(item);
-      const itemType = textOrNull(record.service_item_type);
+function sanitizeServiceItems(value: unknown[]): AdminBookingResult<AdminBookingServiceItemInput[]> {
+  if (value.length > maxServiceItems) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Too many admin booking service items rejected. Maximum allowed: ${maxServiceItems}.`,
+    };
+  }
 
-      if (
-        itemType !== "child_seat" &&
-        itemType !== "extra_stop" &&
-        itemType !== "waiting_time" &&
-        itemType !== "midnight_charge"
-      ) {
-        return null;
-      }
+  const serviceItems: AdminBookingServiceItemInput[] = [];
 
+  for (const [index, item] of value.entries()) {
+    const record = asRecord(item);
+    const itemType = textOrNull(record.service_item_type);
+    const quantityProvided = hasOwn(record, "quantity") && record.quantity !== null && record.quantity !== "";
+    const blocksProvided =
+      hasOwn(record, "blocks_count") && record.blocks_count !== null && record.blocks_count !== "";
+    const quantity = quantityProvided ? integerOrNull(record.quantity) : null;
+    const blocksCount = blocksProvided ? integerOrNull(record.blocks_count) : null;
+
+    if (!itemType || !allowedServiceItemTypes.has(itemType)) {
       return {
-        service_item_type: itemType,
-        quantity: integerOrNull(record.quantity),
-        blocks_count: integerOrNull(record.blocks_count),
+        ok: false,
+        status: 400,
+        error: `Malformed admin booking service item rejected at service_items[${index}].`,
       };
-    })
-    .filter((item): item is AdminBookingServiceItemInput => Boolean(item));
+    }
+
+    if ((quantityProvided && quantity === null) || (blocksProvided && blocksCount === null)) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Malformed service item quantity rejected at service_items[${index}].`,
+      };
+    }
+
+    if ((quantity ?? 0) < 1 && (blocksCount ?? 0) < 1) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Missing required service item count at service_items[${index}].`,
+      };
+    }
+
+    serviceItems.push({
+      service_item_type: itemType as AdminBookingServiceItemInput["service_item_type"],
+      quantity,
+      blocks_count: blocksCount,
+    });
+  }
+
+  return {
+    ok: true,
+    data: serviceItems,
+  };
+}
+
+function validateRequiredBookingFields(booking: AdminBookingRecordInput): AdminBookingResult<null> {
+  const missingFields = requiredBookingTextFields.filter((field) => !textOrNull(booking[field]));
+
+  if (missingFields.length > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Missing required operational booking fields: ${missingFields
+        .map((field) => `booking.${String(field)}`)
+        .join(", ")}`,
+    };
+  }
+
+  if (!validDateTime(booking.pickup_datetime)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed operational booking pickup_datetime rejected.",
+    };
+  }
+
+  return {
+    ok: true,
+    data: null,
+  };
+}
+
+function validateRequiredRoutePoints(
+  routePoints: AdminBookingRoutePointInput[],
+): AdminBookingResult<null> {
+  const hasPickup = routePoints.some((routePoint) => routePoint.point_type === "pickup" && routePoint.location_text);
+  const hasDropoff = routePoints.some((routePoint) => routePoint.point_type === "dropoff" && routePoint.location_text);
+
+  if (!hasPickup || !hasDropoff) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Missing required operational route data: pickup and dropoff route points are required.",
+    };
+  }
+
+  return {
+    ok: true,
+    data: null,
+  };
 }
 
 export function parseAdminBookingPersistencePayload(
@@ -331,22 +468,53 @@ export function parseAdminBookingPersistencePayload(
     };
   }
 
-  const booking = sanitizeBooking(bookingRecord);
-
-  if (!booking.booking_reference) {
+  if (hasOwn(body, "route_points") && !Array.isArray(body.route_points)) {
     return {
       ok: false,
       status: 400,
-      error: "booking.booking_reference is required.",
+      error: "Malformed admin booking route_points rejected.",
     };
+  }
+
+  if (hasOwn(body, "service_items") && !Array.isArray(body.service_items)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed admin booking service_items rejected.",
+    };
+  }
+
+  const booking = sanitizeBooking(bookingRecord);
+  const requiredBookingResult = validateRequiredBookingFields(booking);
+
+  if (!requiredBookingResult.ok) {
+    return requiredBookingResult;
+  }
+
+  const routePointsResult = sanitizeRoutePoints(routePointRecords);
+
+  if (!routePointsResult.ok) {
+    return routePointsResult;
+  }
+
+  const requiredRoutePointResult = validateRequiredRoutePoints(routePointsResult.data);
+
+  if (!requiredRoutePointResult.ok) {
+    return requiredRoutePointResult;
+  }
+
+  const serviceItemsResult = sanitizeServiceItems(serviceItemRecords);
+
+  if (!serviceItemsResult.ok) {
+    return serviceItemsResult;
   }
 
   return {
     ok: true,
     data: {
       booking,
-      route_points: sanitizeRoutePoints(routePointRecords),
-      service_items: sanitizeServiceItems(serviceItemRecords),
+      route_points: routePointsResult.data,
+      service_items: serviceItemsResult.data,
     },
   };
 }
@@ -445,7 +613,7 @@ async function fetchAdminBookingById(
     return {
       ok: false,
       status: 500,
-      error: error?.message || "Saved booking could not be reloaded.",
+      error: safeReloadError,
     };
   }
 
@@ -476,7 +644,7 @@ export async function createAdminBooking(
     return {
       ok: false,
       status: 500,
-      error: bookingError?.message || "Booking row was not created.",
+      error: safeSaveError,
     };
   }
 
@@ -492,7 +660,7 @@ export async function createAdminBooking(
       return {
         ok: false,
         status: 500,
-        error: error.message,
+        error: safeSaveError,
       };
     }
   }
@@ -509,7 +677,7 @@ export async function createAdminBooking(
       return {
         ok: false,
         status: 500,
-        error: error.message,
+        error: safeSaveError,
       };
     }
   }
@@ -545,7 +713,7 @@ export async function listAdminBookings(): Promise<AdminBookingResult<AdminBooki
     return {
       ok: false,
       status: 500,
-      error: error.message,
+      error: safeLoadError,
     };
   }
 

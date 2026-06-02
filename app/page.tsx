@@ -2631,6 +2631,38 @@ function parsedSourceReference(bookingValue: BookingForm) {
     .join(" / ") || null;
 }
 
+function adminBookingPersistenceFailureMessage(
+  action: AdminBookingPersistenceAction,
+  rawError: unknown,
+) {
+  const prefix =
+    action === "save" ? "Operational booking save failed" : "Operational booking load failed";
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return `${prefix}: admin booking persistence is not enabled or configured on this server.`;
+  }
+
+  if (/forbidden/.test(normalizedError)) {
+    return `${prefix}: request includes fields outside the approved operational booking scope.`;
+  }
+
+  if (/unknown/.test(normalizedError)) {
+    return `${prefix}: request includes unknown operational booking fields.`;
+  }
+
+  if (/missing|required/.test(normalizedError)) {
+    return `${prefix}: required operational booking details are missing.`;
+  }
+
+  if (/malformed|invalid|route_points|service_items|route point|service item/.test(normalizedError)) {
+    return `${prefix}: operational route or service item details need review.`;
+  }
+
+  return `${prefix} safely.`;
+}
+
 function customerLiveLocationState(
   booking: BookingForm,
   currentTimeMs: number,
@@ -5661,9 +5693,7 @@ export default function Home() {
     } catch (error) {
       setAdminBookingPersistenceMessage({
         tone: "error",
-        text: `Operational booking save failed: ${
-          error instanceof Error ? error.message : "Unknown error."
-        }`,
+        text: adminBookingPersistenceFailureMessage("save", error),
       });
     } finally {
       setAdminBookingPersistenceAction(null);
@@ -5704,9 +5734,7 @@ export default function Home() {
     } catch (error) {
       setAdminBookingPersistenceMessage({
         tone: "error",
-        text: `Operational booking load failed: ${
-          error instanceof Error ? error.message : "Unknown error."
-        }`,
+        text: adminBookingPersistenceFailureMessage("load", error),
       });
     } finally {
       setAdminBookingPersistenceAction(null);

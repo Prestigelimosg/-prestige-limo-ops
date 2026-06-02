@@ -53,60 +53,78 @@ function blockedResponse() {
   );
 }
 
+function safeFailureResponse() {
+  return Response.json(
+    {
+      ok: false,
+      error: "Admin booking persistence request failed safely.",
+    },
+    { status: 500 },
+  );
+}
+
 export async function GET(request: Request) {
-  if (!isAdminDashboardRequest(request)) {
-    return blockedResponse();
+  try {
+    if (!isAdminDashboardRequest(request)) {
+      return blockedResponse();
+    }
+
+    const result = await listAdminBookings();
+
+    if (!result.ok) {
+      return Response.json(
+        {
+          ok: false,
+          error: result.error,
+        },
+        { status: result.status },
+      );
+    }
+
+    return Response.json({
+      ok: true,
+      bookings: result.data,
+    });
+  } catch {
+    return safeFailureResponse();
   }
-
-  const result = await listAdminBookings();
-
-  if (!result.ok) {
-    return Response.json(
-      {
-        ok: false,
-        error: result.error,
-      },
-      { status: result.status },
-    );
-  }
-
-  return Response.json({
-    ok: true,
-    bookings: result.data,
-  });
 }
 
 export async function POST(request: Request) {
-  if (!isAdminDashboardRequest(request)) {
-    return blockedResponse();
+  try {
+    if (!isAdminDashboardRequest(request)) {
+      return blockedResponse();
+    }
+
+    const parsed = parseAdminBookingPersistencePayload(await readJsonBody(request));
+
+    if (!parsed.ok) {
+      return Response.json(
+        {
+          ok: false,
+          error: parsed.error,
+        },
+        { status: parsed.status },
+      );
+    }
+
+    const result = await createAdminBooking(parsed.data);
+
+    if (!result.ok) {
+      return Response.json(
+        {
+          ok: false,
+          error: result.error,
+        },
+        { status: result.status },
+      );
+    }
+
+    return Response.json({
+      ok: true,
+      booking: result.data,
+    });
+  } catch {
+    return safeFailureResponse();
   }
-
-  const parsed = parseAdminBookingPersistencePayload(await readJsonBody(request));
-
-  if (!parsed.ok) {
-    return Response.json(
-      {
-        ok: false,
-        error: parsed.error,
-      },
-      { status: parsed.status },
-    );
-  }
-
-  const result = await createAdminBooking(parsed.data);
-
-  if (!result.ok) {
-    return Response.json(
-      {
-        ok: false,
-        error: result.error,
-      },
-      { status: result.status },
-    );
-  }
-
-  return Response.json({
-    ok: true,
-    booking: result.data,
-  });
 }

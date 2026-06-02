@@ -321,6 +321,9 @@ const adminBookingPersistenceUiPatterns = [
   { label: "apply operational snapshot wording", pattern: /\bapply\s+operational\s+snapshot\b/i },
   { label: "apply latest snapshot wording", pattern: /\bapply\s+latest\s+snapshot\b/i },
   { label: "update applied snapshot wording", pattern: /\bupdate\s+applied\s+snapshot\b/i },
+  { label: "search operational snapshots wording", pattern: /\bsearch\s+operational\s+snapshots\b/i },
+  { label: "snapshot status filter wording", pattern: /\bsnapshot\s+status\b/i },
+  { label: "snapshot filter empty wording", pattern: /\bno\s+loaded\s+operational\s+snapshots\s+match\b/i },
   { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
   { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
   { label: "create booking record wording", pattern: /\bcreate\s+booking\s+record\b/i },
@@ -882,6 +885,42 @@ async function runChromeTest() {
                       },
                     ],
                   },
+                  {
+                    booking_reference: "SECOND-OPS-002",
+                    source_channel: "admin-dashboard",
+                    customer_id: null,
+                    pickup_datetime: "2026-06-05T14:45:00+08:00",
+                    pickup_location: "Second Ops Pickup",
+                    dropoff_location: "Second Ops Dropoff",
+                    route_type: "DEP",
+                    customer_display_name: "Second Ops Customer",
+                    contact_phone: "+65 8000 2222",
+                    contact_email: "second-ops@example.com",
+                    pax_count: 1,
+                    luggage_count: null,
+                    vehicle_type_or_category: "VVV",
+                    customer_facing_status: "Confirmed",
+                    admin_internal_status: "Confirmed",
+                    short_notice_review_status: "Not Required",
+                    parser_source_reference: "Flight SQ002",
+                    created_at: "2026-06-02T00:10:00.000Z",
+                    updated_at: "2026-06-02T00:10:00.000Z",
+                    route_points: [
+                      {
+                        point_type: "pickup",
+                        sequence_number: 1,
+                        location_text: "Second Ops Pickup",
+                        timing_note: null,
+                      },
+                      {
+                        point_type: "dropoff",
+                        sequence_number: 2,
+                        location_text: "Second Ops Dropoff",
+                        timing_note: null,
+                      },
+                    ],
+                    service_items: [],
+                  },
                 ],
               }),
               { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -1003,14 +1042,21 @@ async function runChromeTest() {
           evaluate(`(() => {
             const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
             const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
+            const secondRecord = document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']");
             const calls = window.__adminBookingPersistenceCalls || [];
 
-            return feedback.includes("Loaded 1 operational booking records") && record
+            return feedback.includes("Loaded 2 operational booking records") && record && secondRecord
               ? {
+                  filterControlsVisible: Boolean(document.querySelector("[data-admin-booking-persistence-filters]")),
                   feedback,
                   getCalls: calls.filter((call) => call.method === "GET").length,
                   postCalls: calls.filter((call) => call.method === "POST").length,
                   recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+                  secondRecordText: secondRecord.textContent.replace(/\\s+/g, " ").trim(),
+                  summary: document
+                    .querySelector("[data-admin-booking-persistence-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
                 }
               : false;
           })()`),
@@ -1020,11 +1066,169 @@ async function runChromeTest() {
 
       assert.equal(loadState.postCalls, 1, "Expected one mocked admin booking POST call");
       assert.equal(loadState.getCalls, 1, "Expected one mocked admin booking GET call");
+      assert.equal(loadState.filterControlsVisible, true, "Expected loaded operational snapshot filters");
+      assert.equal(
+        loadState.summary.includes("Showing 2 of 2"),
+        true,
+        "Expected loaded operational snapshot filter summary",
+      );
       assert.equal(
         /price|billing|invoice|payment|payout|finance/i.test(loadState.recordText),
         false,
         "Expected loaded operational record preview not to show finance/customer/driver payment wording",
       );
+      assert.equal(
+        /Second Ops Customer/.test(loadState.secondRecordText),
+        true,
+        "Expected second loaded operational record preview",
+      );
+
+      const setAdminSnapshotSearch = async (value) =>
+        evaluate(`(() => {
+          const field = document.querySelector("[data-admin-booking-persistence-search]");
+          if (!field) {
+            return false;
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(field.constructor.prototype, "value");
+          descriptor?.set?.call(field, ${JSON.stringify(value)});
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        })()`);
+      const setAdminSnapshotStatus = async (value) =>
+        evaluate(`(() => {
+          const field = document.querySelector("[data-admin-booking-persistence-status-filter]");
+          if (!field) {
+            return false;
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(field.constructor.prototype, "value");
+          descriptor?.set?.call(field, ${JSON.stringify(value)});
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        })()`);
+      const clearAdminSnapshotFilters = async () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-admin-booking-persistence-clear-filters]");
+          button?.click();
+          return Boolean(button);
+        })()`);
+      const collectAdminSnapshotFilterState = () =>
+        evaluate(`(() => {
+          const calls = window.__adminBookingPersistenceCalls || [];
+          const records = [...document.querySelectorAll("[data-admin-booking-persistence-record]")]
+            .map((record) => record.getAttribute("data-admin-booking-persistence-record"));
+          const text = document.body.innerText || "";
+
+          return {
+            emptyVisible: Boolean(document.querySelector("[data-admin-booking-persistence-filter-empty]")),
+            getCalls: calls.filter((call) => call.method === "GET").length,
+            patchCalls: calls.filter((call) => call.method === "PATCH").length,
+            postCalls: calls.filter((call) => call.method === "POST").length,
+            records,
+            searchValue: document.querySelector("[data-admin-booking-persistence-search]")?.value || "",
+            statusValue: document.querySelector("[data-admin-booking-persistence-status-filter]")?.value || "",
+            summary: document
+              .querySelector("[data-admin-booking-persistence-filter-summary]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+            textBaitLeaked: /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i.test(text),
+          };
+        })()`);
+
+      assert.equal(await setAdminSnapshotStatus("Confirmed"), true, "Expected status filter control");
+      const confirmedFilterState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 1 && state.records[0] === "SECOND-OPS-002" ? state : false;
+        },
+        10000,
+        "admin booking persistence status filter",
+      );
+      assert.equal(confirmedFilterState.summary.includes("Showing 1 of 2"), true);
+      assert.equal(confirmedFilterState.getCalls, 1, "Expected status filter to stay local");
+      assert.equal(confirmedFilterState.postCalls, 1, "Expected status filter not to save");
+      assert.equal(confirmedFilterState.patchCalls, 0, "Expected status filter not to update");
+
+      assert.equal(await clearAdminSnapshotFilters(), true, "Expected clear snapshot filters control");
+      const restoredAfterStatusFilter = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 2 && state.searchValue === "" && state.statusValue === "all"
+            ? state
+            : false;
+        },
+        10000,
+        "admin booking persistence clear status filter",
+      );
+      assert.equal(restoredAfterStatusFilter.summary.includes("Showing 2 of 2"), true);
+
+      assert.equal(await setAdminSnapshotSearch("SECOND-OPS-002"), true, "Expected snapshot search control");
+      const referenceFilterState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 1 && state.records[0] === "SECOND-OPS-002" ? state : false;
+        },
+        10000,
+        "admin booking persistence reference search",
+      );
+      assert.equal(referenceFilterState.summary.includes("Showing 1 of 2"), true);
+      assert.equal(referenceFilterState.getCalls, 1, "Expected reference search to stay local");
+
+      assert.equal(await setAdminSnapshotSearch("9999-SHOULD-NOT-APPLY"), true);
+      const forbiddenSearchState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.emptyVisible && state.records.length === 0 ? state : false;
+        },
+        10000,
+        "admin booking persistence forbidden bait search",
+      );
+      assert.equal(
+        forbiddenSearchState.summary.includes("Showing 0 of 2"),
+        true,
+        "Expected forbidden mocked fields not to be searchable",
+      );
+      assert.equal(forbiddenSearchState.textBaitLeaked, false, "Expected forbidden mocked fields not to become visible");
+      assert.equal(forbiddenSearchState.getCalls, 1, "Expected forbidden search to stay local");
+
+      assert.equal(await setAdminSnapshotSearch("NO-MATCH-OPS"), true);
+      const noMatchFilterState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.emptyVisible && state.records.length === 0 ? state : false;
+        },
+        10000,
+        "admin booking persistence no-match search",
+      );
+      assert.equal(
+        noMatchFilterState.summary.includes("Showing 0 of 2"),
+        true,
+        "Expected no-match search empty state summary",
+      );
+
+      assert.equal(await clearAdminSnapshotFilters(), true, "Expected clear snapshot filters after no-match");
+      const restoredFilterState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 2 && !state.emptyVisible ? state : false;
+        },
+        10000,
+        "admin booking persistence clear search filter",
+      );
+      assert.equal(restoredFilterState.summary.includes("Showing 2 of 2"), true);
+
+      assert.equal(await setAdminSnapshotSearch("+65 8000 1000"), true, "Expected phone search control");
+      const phoneFilterState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 1 && state.records[0] === "LOADED-OPS-001" ? state : false;
+        },
+        10000,
+        "admin booking persistence phone search",
+      );
+      assert.equal(phoneFilterState.summary.includes("Showing 1 of 2"), true);
+      assert.equal(phoneFilterState.getCalls, 1, "Expected phone search to stay local");
 
       const applyClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");

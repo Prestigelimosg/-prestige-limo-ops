@@ -294,6 +294,7 @@ type AdminBookingPersistenceRequestBody = {
 };
 
 type AdminBookingPersistenceAction = "save" | "load" | "update";
+const adminBookingPersistenceAllStatusFilter = "all";
 
 type AdminBookingSnapshotApplyResult =
   | {
@@ -2643,6 +2644,81 @@ function parsedSourceReference(bookingValue: BookingForm) {
     .join(" / ") || null;
 }
 
+function adminBookingPersistenceStatusValues(record: AdminBookingPersistenceRecord) {
+  return [
+    clean(record.admin_internal_status),
+    clean(record.short_notice_review_status),
+    clean(record.customer_facing_status),
+  ].filter(Boolean);
+}
+
+function adminBookingPersistencePickupSearchValues(record: AdminBookingPersistenceRecord) {
+  const rawPickupDateTime = clean(record.pickup_datetime);
+
+  if (!rawPickupDateTime) {
+    return [];
+  }
+
+  const parsedPickupDateTime = new Date(rawPickupDateTime);
+
+  if (Number.isNaN(parsedPickupDateTime.getTime())) {
+    return [rawPickupDateTime];
+  }
+
+  return [
+    rawPickupDateTime,
+    parsedPickupDateTime.toLocaleString("en-SG", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }),
+  ];
+}
+
+function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceRecord) {
+  return [
+    clean(record.booking_reference),
+    clean(record.customer_display_name),
+    clean(record.contact_phone),
+    clean(record.contact_email),
+    clean(record.pickup_location),
+    clean(record.dropoff_location),
+    clean(record.route_type),
+    clean(record.vehicle_type_or_category),
+    ...adminBookingPersistenceStatusValues(record),
+    ...adminBookingPersistencePickupSearchValues(record),
+  ].filter(Boolean);
+}
+
+function filterAdminBookingPersistenceRecords(
+  records: AdminBookingPersistenceRecord[],
+  searchValue: string,
+  statusFilter: string,
+) {
+  const normalizedSearchValue = clean(searchValue).toLowerCase();
+  const cleanedStatusFilter = clean(statusFilter);
+
+  return records.filter((record) => {
+    const statusValues = adminBookingPersistenceStatusValues(record);
+    const statusMatches =
+      cleanedStatusFilter === adminBookingPersistenceAllStatusFilter ||
+      statusValues.includes(cleanedStatusFilter);
+    const searchMatches =
+      !normalizedSearchValue ||
+      adminBookingPersistenceSearchValues(record)
+        .join("\n")
+        .toLowerCase()
+        .includes(normalizedSearchValue);
+
+    return statusMatches && searchMatches;
+  });
+}
+
+function getAdminBookingPersistenceStatusOptions(records: AdminBookingPersistenceRecord[]) {
+  return Array.from(
+    new Set(records.flatMap((record) => adminBookingPersistenceStatusValues(record))),
+  ).sort((first, second) => first.localeCompare(second));
+}
+
 function adminBookingPersistenceFailureMessage(
   action: AdminBookingPersistenceAction,
   rawError: unknown,
@@ -3017,6 +3093,10 @@ export default function Home() {
     useState<AdminBookingPersistenceAction | null>(null);
   const [appliedAdminBookingSnapshotReference, setAppliedAdminBookingSnapshotReference] =
     useState("");
+  const [adminBookingPersistenceSearch, setAdminBookingPersistenceSearch] =
+    useState("");
+  const [adminBookingPersistenceStatusFilter, setAdminBookingPersistenceStatusFilter] =
+    useState(adminBookingPersistenceAllStatusFilter);
   const [customerMatchFeedback, setCustomerMatchFeedback] = useState<CustomerMatchFeedback | null>(null);
   const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
@@ -3042,6 +3122,27 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  const adminBookingPersistenceStatusOptions = useMemo(
+    () => getAdminBookingPersistenceStatusOptions(adminBookingPersistenceRecords),
+    [adminBookingPersistenceRecords],
+  );
+  const filteredAdminBookingPersistenceRecords = useMemo(
+    () =>
+      filterAdminBookingPersistenceRecords(
+        adminBookingPersistenceRecords,
+        adminBookingPersistenceSearch,
+        adminBookingPersistenceStatusFilter,
+      ),
+    [
+      adminBookingPersistenceRecords,
+      adminBookingPersistenceSearch,
+      adminBookingPersistenceStatusFilter,
+    ],
+  );
+  const adminBookingPersistenceHasActiveFilters =
+    Boolean(clean(adminBookingPersistenceSearch)) ||
+    adminBookingPersistenceStatusFilter !== adminBookingPersistenceAllStatusFilter;
 
   const telegramAlertPreviewTemplate = useMemo(
     () =>
@@ -5883,6 +5984,8 @@ export default function Home() {
         ? (result.bookings as AdminBookingPersistenceRecord[])
         : [];
       setAdminBookingPersistenceRecords(loadedBookings);
+      setAdminBookingPersistenceSearch("");
+      setAdminBookingPersistenceStatusFilter(adminBookingPersistenceAllStatusFilter);
       setAppliedAdminBookingSnapshotReference((currentReference) =>
         loadedBookings.some((record) => clean(record.booking_reference) === currentReference)
           ? currentReference
@@ -5944,7 +6047,24 @@ export default function Home() {
   }
 
   function applyLatestAdminBookingOperationalSnapshot() {
-    applyAdminBookingOperationalSnapshot(adminBookingPersistenceRecords[0]);
+    if (
+      adminBookingPersistenceRecords.length > 0 &&
+      filteredAdminBookingPersistenceRecords.length === 0 &&
+      adminBookingPersistenceHasActiveFilters
+    ) {
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: "No loaded operational snapshots match this search/filter.",
+      });
+      return;
+    }
+
+    applyAdminBookingOperationalSnapshot(filteredAdminBookingPersistenceRecords[0]);
+  }
+
+  function clearAdminBookingPersistenceFilters() {
+    setAdminBookingPersistenceSearch("");
+    setAdminBookingPersistenceStatusFilter(adminBookingPersistenceAllStatusFilter);
   }
 
   async function updateAppliedAdminBookingOperationalSnapshot() {
@@ -15360,8 +15480,69 @@ export default function Home() {
                 </p>
               ) : null}
               {adminBookingPersistenceRecords.length > 0 ? (
+                <div
+                  className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,14rem)_auto] sm:items-end"
+                  data-admin-booking-persistence-filters="true"
+                >
+                  <label className="text-xs font-semibold text-emerald-950">
+                    <span>Search operational snapshots</span>
+                    <input
+                      className="mt-1 min-h-10 w-full min-w-0 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      data-admin-booking-persistence-search="true"
+                      onChange={(event) => setAdminBookingPersistenceSearch(event.target.value)}
+                      placeholder="Reference, customer, phone"
+                      type="search"
+                      value={adminBookingPersistenceSearch}
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-emerald-950">
+                    <span>Snapshot status</span>
+                    <select
+                      className="mt-1 min-h-10 w-full min-w-0 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      data-admin-booking-persistence-status-filter="true"
+                      onChange={(event) => setAdminBookingPersistenceStatusFilter(event.target.value)}
+                      value={adminBookingPersistenceStatusFilter}
+                    >
+                      <option value={adminBookingPersistenceAllStatusFilter}>All statuses</option>
+                      {adminBookingPersistenceStatusOptions.map((statusOption) => (
+                        <option key={statusOption} value={statusOption}>
+                          {statusOption}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    data-admin-booking-persistence-clear-filters="true"
+                    disabled={!adminBookingPersistenceHasActiveFilters}
+                    onClick={clearAdminBookingPersistenceFilters}
+                    type="button"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              ) : null}
+              {adminBookingPersistenceRecords.length > 0 ? (
+                <p
+                  className="mt-2 text-xs font-semibold text-emerald-900"
+                  data-admin-booking-persistence-filter-summary="true"
+                >
+                  Showing {filteredAdminBookingPersistenceRecords.length} of{" "}
+                  {adminBookingPersistenceRecords.length} loaded operational snapshots.
+                </p>
+              ) : null}
+              {adminBookingPersistenceRecords.length > 0 &&
+              filteredAdminBookingPersistenceRecords.length === 0 ? (
+                <p
+                  className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-900"
+                  data-admin-booking-persistence-filter-empty="true"
+                >
+                  No loaded operational snapshots match this search/filter.
+                </p>
+              ) : null}
+              {filteredAdminBookingPersistenceRecords.length > 0 ? (
                 <div className="mt-3 grid gap-2" data-admin-booking-persistence-records="true">
-                  {adminBookingPersistenceRecords.slice(0, 3).map((record) => (
+                  {filteredAdminBookingPersistenceRecords.slice(0, 3).map((record) => (
                     <article
                       className="rounded-md border border-emerald-100 bg-white px-3 py-2 text-xs text-slate-700"
                       data-admin-booking-persistence-record={record.booking_reference}

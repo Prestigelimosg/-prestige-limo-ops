@@ -991,6 +991,63 @@ export default function CustomerPortalPage() {
           </div>
         </section>
 
+        <section
+          aria-labelledby="customer-request-next-steps-title"
+          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          data-customer-request-next-steps="true"
+        >
+          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950" id="customer-request-next-steps-title">
+                What Happens Next
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-request-next-steps-helper="true">
+                Pending requests are not confirmed yet. Our team reviews availability before confirming your booking.
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                For urgent or short-notice requests, please contact our team directly.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ol
+                className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"
+                data-customer-request-next-steps-booking="true"
+              >
+                {["Request received", "Team reviews availability", "Team contacts you / confirms", "Booking confirmed only after review"].map(
+                  (step, index) => (
+                    <li className="flex gap-2" key={step}>
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
+                        {index + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ),
+                )}
+              </ol>
+
+              <ol
+                className="grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950"
+                data-customer-request-next-steps-change="true"
+              >
+                {[
+                  "Change request prepared",
+                  "Team reviews the requested change",
+                  "Change request does not change your booking yet",
+                  "Team confirms before any booking change",
+                ].map((step, index) => (
+                  <li className="flex gap-2" key={step}>
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-950 text-xs font-semibold text-white">
+                      {index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </section>
+
         <nav
           aria-label="Customer portal sections"
           className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-sm"

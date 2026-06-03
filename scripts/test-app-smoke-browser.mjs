@@ -27648,6 +27648,10 @@ async function runChromeTest() {
         const statusLookupInput = document.querySelector("[data-customer-request-status-lookup-input]");
         const statusLookupSubmit = document.querySelector("[data-customer-request-status-lookup-submit]");
         const statusLookupResult = document.querySelector("[data-customer-request-status-lookup-result]");
+        const nextSteps = document.querySelector("[data-customer-request-next-steps]");
+        const nextStepsRect = nextSteps?.getBoundingClientRect();
+        const nextStepsBooking = document.querySelector("[data-customer-request-next-steps-booking]");
+        const nextStepsChange = document.querySelector("[data-customer-request-next-steps-change]");
         const changeIntake = document.querySelector("[data-customer-change-request-intake]");
         const changeIntakeRect = changeIntake?.getBoundingClientRect();
         const changeSubmit = document.querySelector("[data-customer-change-request-submit]");
@@ -28034,6 +28038,17 @@ async function runChromeTest() {
             text: statusLookup?.innerText || "",
             title: document.querySelector("[data-customer-request-status-lookup-title]")?.textContent.trim() || "",
             visible: Boolean(statusLookupRect && statusLookupRect.width > 0 && statusLookupRect.height > 0),
+          },
+          requestNextSteps: {
+            bookingItems: [...document.querySelectorAll("[data-customer-request-next-steps-booking] li")]
+              .map((item) => item.textContent.trim()),
+            bookingText: nextStepsBooking?.textContent.trim() || "",
+            changeItems: [...document.querySelectorAll("[data-customer-request-next-steps-change] li")]
+              .map((item) => item.textContent.trim()),
+            changeText: nextStepsChange?.textContent.trim() || "",
+            helper: document.querySelector("[data-customer-request-next-steps-helper]")?.textContent.trim() || "",
+            text: nextSteps?.innerText || "",
+            visible: Boolean(nextStepsRect && nextStepsRect.width > 0 && nextStepsRect.height > 0),
           },
           changeRequestIntake: {
             closedWarning: document.querySelector("[data-customer-change-request-closed-warning]")?.textContent.trim() || "",
@@ -28586,6 +28601,41 @@ async function runChromeTest() {
         initialState.requestStatusLookup.detail,
         "Enter your request reference or passenger name to check status.",
         "Expected /my-bookings status lookup to start without a fake request reference",
+      );
+      assert.equal(initialState.requestNextSteps.visible, true, "Expected /my-bookings request next-steps timeline");
+      assert.equal(
+        initialState.requestNextSteps.helper,
+        "Pending requests are not confirmed yet. Our team reviews availability before confirming your booking.",
+        "Expected /my-bookings next-steps helper to say pending requests are not confirmed yet",
+      );
+      for (const expectedNextStep of [
+        "Request received",
+        "Team reviews availability",
+        "Team contacts you / confirms",
+        "Booking confirmed only after review",
+      ]) {
+        assert.equal(
+          initialState.requestNextSteps.bookingText.includes(expectedNextStep),
+          true,
+          `Expected /my-bookings booking next-step: ${expectedNextStep}`,
+        );
+      }
+      for (const expectedChangeStep of [
+        "Change request prepared",
+        "Team reviews the requested change",
+        "Change request does not change your booking yet",
+        "Team confirms before any booking change",
+      ]) {
+        assert.equal(
+          initialState.requestNextSteps.changeText.includes(expectedChangeStep),
+          true,
+          `Expected /my-bookings change next-step: ${expectedChangeStep}`,
+        );
+      }
+      assert.equal(
+        initialState.requestNextSteps.text.includes("For urgent or short-notice requests, please contact our team directly."),
+        true,
+        "Expected /my-bookings next-steps urgent/short-notice guidance",
       );
       assert.equal(initialState.changeRequestIntake.visible, true, "Expected /my-bookings change request intake");
       assert.equal(
@@ -29560,6 +29610,16 @@ async function runChromeTest() {
         mobileState.changeRequestIntake.submitVisible,
         true,
         "Expected /my-bookings mobile change request submit to stay touch-friendly",
+      );
+      assert.equal(
+        mobileState.requestNextSteps.visible,
+        true,
+        "Expected /my-bookings mobile request next-steps timeline",
+      );
+      assert.equal(
+        mobileState.requestNextSteps.text.includes("Change request does not change your booking yet"),
+        true,
+        "Expected /my-bookings mobile next-steps change request boundary",
       );
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
       assert.equal(

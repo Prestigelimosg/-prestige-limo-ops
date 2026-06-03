@@ -27648,6 +27648,17 @@ async function runChromeTest() {
         const statusLookupInput = document.querySelector("[data-customer-request-status-lookup-input]");
         const statusLookupSubmit = document.querySelector("[data-customer-request-status-lookup-submit]");
         const statusLookupResult = document.querySelector("[data-customer-request-status-lookup-result]");
+        const changeIntake = document.querySelector("[data-customer-change-request-intake]");
+        const changeIntakeRect = changeIntake?.getBoundingClientRect();
+        const changeSubmit = document.querySelector("[data-customer-change-request-submit]");
+        const changeSubmitRect = changeSubmit?.getBoundingClientRect();
+        const customerChangeFeedback = document.querySelector("[data-customer-change-request-feedback]");
+        const customerChangeFeedbackRect = customerChangeFeedback?.getBoundingClientRect();
+        const changeBookingSelect = document.querySelector("[data-customer-change-request-field='bookingId']");
+        const changeTypeSelect = document.querySelector("[data-customer-change-request-field='changeType']");
+        const changePickupHour = document.querySelector("[data-customer-change-request-pickup-hour]");
+        const changePickupMinute = document.querySelector("[data-customer-change-request-pickup-minute]");
+        const changeBookingOptions = changeBookingSelect ? [...changeBookingSelect.options] : [];
         const requestFieldState = (field) => {
           const control = document.querySelector(\`[data-customer-portal-request-field="\${field}"]\`);
           const rect = control?.getBoundingClientRect();
@@ -28024,6 +28035,34 @@ async function runChromeTest() {
             title: document.querySelector("[data-customer-request-status-lookup-title]")?.textContent.trim() || "",
             visible: Boolean(statusLookupRect && statusLookupRect.width > 0 && statusLookupRect.height > 0),
           },
+          changeRequestIntake: {
+            closedWarning: document.querySelector("[data-customer-change-request-closed-warning]")?.textContent.trim() || "",
+            feedbackDistanceFromSubmit:
+              changeSubmitRect && customerChangeFeedbackRect
+                ? Math.round(Math.abs(customerChangeFeedbackRect.top - changeSubmitRect.bottom))
+                : 999,
+            feedbackText: customerChangeFeedback?.textContent.trim() || "",
+            feedbackTone: customerChangeFeedback?.getAttribute("data-tone") || "",
+            helper: document.querySelector("[data-customer-change-request-helper]")?.textContent.trim() || "",
+            optionIds: changeBookingOptions.map((option) => option.value).filter(Boolean),
+            optionLabels: changeBookingOptions.map((option) => option.textContent.trim()).filter(Boolean),
+            pendingNote: document.querySelector("[data-customer-change-request-pending-note]")?.textContent.trim() || "",
+            selectedBookingId: changeBookingSelect?.value || "",
+            selectedChangeType: changeTypeSelect?.value || "",
+            selectionText: document.querySelector("[data-customer-change-request-selection]")?.textContent.trim() || "",
+            submitVisible: Boolean(changeSubmitRect && changeSubmitRect.width > 0 && changeSubmitRect.height >= 40),
+            text: changeIntake?.innerText || "",
+            values: {
+              newPickupDate:
+                document.querySelector("[data-customer-change-request-field='newPickupDate']")?.value || "",
+              newPickupTime: changePickupHour?.value ? \`\${changePickupHour.value}:\${changePickupMinute?.value || "00"}\` : "",
+              passengerContactChange:
+                document.querySelector("[data-customer-change-request-field='passengerContactChange']")?.value || "",
+              routeChange: document.querySelector("[data-customer-change-request-field='routeChange']")?.value || "",
+              teamNotes: document.querySelector("[data-customer-change-request-field='teamNotes']")?.value || "",
+            },
+            visible: Boolean(changeIntakeRect && changeIntakeRect.width > 0 && changeIntakeRect.height > 0),
+          },
           activeMonthLabel: document.querySelector("[data-customer-portal-active-month]")?.textContent.trim() || "",
           currentMonthActive: currentMonthButton?.getAttribute("data-active") === "true",
           monthGroupsVisible: Boolean(document.querySelector("[data-customer-portal-month-groups]")),
@@ -28086,6 +28125,59 @@ async function runChromeTest() {
         return true;
       })()`);
       assert.equal(submitted, true, "Expected customer request status lookup submit to be clickable");
+    };
+
+    const setCustomerChangeRequestField = async (field, value) => {
+      const actualValue = await evaluate(`(() => {
+        const control = document.querySelector(${JSON.stringify(`[data-customer-change-request-field="${field}"]`)});
+
+        if (!control) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, ${JSON.stringify(value)});
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return control.value;
+      })()`);
+      assert.equal(actualValue, value, `Expected customer change request field ${field} to accept test value`);
+    };
+
+    const setCustomerChangeRequestPickupTime = async (hour, minute) => {
+      const actualValue = await evaluate(`(() => {
+        const hourSelect = document.querySelector("[data-customer-change-request-pickup-hour]");
+        const minuteSelect = document.querySelector("[data-customer-change-request-pickup-minute]");
+
+        if (!hourSelect || !minuteSelect) {
+          return null;
+        }
+
+        hourSelect.value = ${JSON.stringify(hour)};
+        hourSelect.dispatchEvent(new Event("input", { bubbles: true }));
+        hourSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        minuteSelect.value = ${JSON.stringify(minute)};
+        minuteSelect.dispatchEvent(new Event("input", { bubbles: true }));
+        minuteSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return \`\${hourSelect.value}:\${minuteSelect.value}\`;
+      })()`);
+      assert.equal(actualValue, `${hour}:${minute}`, "Expected customer change request pickup time to accept test value");
+    };
+
+    const submitCustomerChangeRequest = async () => {
+      const submitted = await evaluate(`(() => {
+        const button = document.querySelector("[data-customer-change-request-submit]");
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(submitted, true, "Expected customer change request submit to be clickable");
     };
 
     const setCustomerPortalSearch = async (value) => {
@@ -28495,6 +28587,22 @@ async function runChromeTest() {
         "Enter your request reference or passenger name to check status.",
         "Expected /my-bookings status lookup to start without a fake request reference",
       );
+      assert.equal(initialState.changeRequestIntake.visible, true, "Expected /my-bookings change request intake");
+      assert.equal(
+        initialState.changeRequestIntake.helper,
+        "Choose from the currently visible bookings below. This prepares a request only and does not change your booking yet.",
+        "Expected /my-bookings change request intake helper",
+      );
+      assert.equal(
+        initialState.changeRequestIntake.feedbackText,
+        "Choose one of the visible bookings below and prepare a change request for team review.",
+        "Expected /my-bookings change request intake initial feedback",
+      );
+      assert.equal(
+        initialState.changeRequestIntake.submitVisible,
+        true,
+        "Expected /my-bookings change request intake submit",
+      );
       assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
       assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
       assert.equal(initialState.rowCount, 10, "Expected /my-bookings to show at most 10 rows by default");
@@ -28512,6 +28620,16 @@ async function runChromeTest() {
         initialState.rows.filter((row) => ["Completed", "Cancelled"].includes(row.status)).map((row) => row.status),
         [],
         "Expected Upcoming filter to hide completed and cancelled bookings",
+      );
+      assert.deepEqual(
+        initialState.changeRequestIntake.optionIds,
+        initialState.rowIds,
+        "Expected /my-bookings change request options to use current visible rows only",
+      );
+      assert.equal(
+        initialState.changeRequestIntake.optionIds.includes("booking-011"),
+        false,
+        "Expected /my-bookings change request options not to include hidden page-two rows",
       );
       assert.deepEqual(
         initialState.forbiddenVisibleText,
@@ -28622,6 +28740,147 @@ async function runChromeTest() {
       );
       assertNoCustomerFacingPriceVisibilityLeaks(disconnectedLookupState.text, "/my-bookings disconnected status lookup");
       assertNoAdminBookingPersistenceLeaks(disconnectedLookupState.text, "/my-bookings disconnected status lookup");
+
+      await setCustomerChangeRequestField("bookingId", "booking-002");
+      await setCustomerChangeRequestField("changeType", "Pickup date/time");
+      await setCustomerChangeRequestField("newPickupDate", "2026-06-01");
+      await setCustomerChangeRequestPickupTime("16", "25");
+      await setCustomerChangeRequestField("routeChange", "Please move pickup to Orchard entrance if available.");
+      await setCustomerChangeRequestField("teamNotes", "Passenger asked for a later pickup if possible.");
+      await submitCustomerChangeRequest();
+      const validChangeRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.changeRequestIntake.feedbackText.includes("Change request prepared for team review")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal valid change request intake feedback",
+      );
+      assert.equal(
+        validChangeRequestState.changeRequestIntake.selectedBookingId,
+        "booking-002",
+        "Expected /my-bookings change request to target the selected visible row",
+      );
+      assert.equal(
+        validChangeRequestState.changeRequestIntake.pendingNote,
+        "This booking request is still pending team review and is not confirmed yet.",
+        "Expected pending booking change intake not to imply confirmation",
+      );
+      assert.equal(
+        validChangeRequestState.changeRequestIntake.feedbackText.includes("This does not change your booking yet."),
+        true,
+        "Expected valid change request feedback not to imply saved booking changes",
+      );
+      assert.equal(
+        validChangeRequestState.changeRequestIntake.feedbackText.includes("This is request-only and not confirmed yet."),
+        true,
+        "Expected valid change request feedback to remain request-only",
+      );
+      assert.equal(
+        validChangeRequestState.changeRequestIntake.feedbackText.includes("For urgent changes, please contact our team directly."),
+        true,
+        "Expected valid change request feedback to direct urgent changes to the team",
+      );
+      assert.equal(
+        validChangeRequestState.changeRequestIntake.feedbackDistanceFromSubmit <= 24,
+        true,
+        `Expected change request feedback near submit button, got ${validChangeRequestState.changeRequestIntake.feedbackDistanceFromSubmit}px`,
+      );
+      assert.equal(
+        validChangeRequestState.rows.find((row) => row.id === "booking-002")?.status,
+        "Pending Staff Review",
+        "Expected change request intake not to confirm or change the booking row status",
+      );
+      assert.equal(
+        validChangeRequestState.changeRequestIntake.values.newPickupTime,
+        "16:25",
+        "Expected /my-bookings change request pickup time selectors to capture HH:mm",
+      );
+      assert.deepEqual(
+        validChangeRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected valid /my-bookings change request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(validChangeRequestState.text, "/my-bookings valid change request");
+      assertNoAdminBookingPersistenceLeaks(validChangeRequestState.text, "/my-bookings valid change request");
+      assertNoPublicRouteRuntimeCalls(
+        validChangeRequestState.integrationCalls,
+        validChangeRequestState.resourceCalls,
+        "/my-bookings valid change request",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings valid change request"),
+        "/my-bookings valid change request",
+      );
+
+      await clickCustomerPortalFilter("Completed");
+      const completedForChangeRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.activeFilter === "Completed" && candidateState.rowIds.includes("booking-013")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal completed rows for closed change request",
+      );
+      assert.equal(
+        completedForChangeRequestState.changeRequestIntake.optionIds.includes("booking-013"),
+        true,
+        "Expected closed change request check to use visible completed row",
+      );
+      await setCustomerChangeRequestField("bookingId", "booking-013");
+      await submitCustomerChangeRequest();
+      const closedChangeRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.changeRequestIntake.feedbackText.includes("Completed or cancelled bookings cannot be changed here")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal closed booking change request feedback",
+      );
+      assert.equal(
+        closedChangeRequestState.changeRequestIntake.closedWarning,
+        "Completed or cancelled bookings cannot be changed here. Please contact our team.",
+        "Expected closed booking warning in change request intake",
+      );
+      assert.equal(
+        closedChangeRequestState.changeRequestIntake.feedbackText,
+        "Completed or cancelled bookings cannot be changed here. Please contact our team.",
+        "Expected completed booking change request submit to stay safe",
+      );
+      assert.deepEqual(
+        closedChangeRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected closed /my-bookings change request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(closedChangeRequestState.text, "/my-bookings closed change request");
+      assertNoAdminBookingPersistenceLeaks(closedChangeRequestState.text, "/my-bookings closed change request");
+      assertNoPublicRouteRuntimeCalls(
+        closedChangeRequestState.integrationCalls,
+        closedChangeRequestState.resourceCalls,
+        "/my-bookings closed change request",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings closed change request"),
+        "/my-bookings closed change request",
+      );
+
+      await clickCustomerPortalFilter("Upcoming");
+      await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.activeFilter === "Upcoming" && candidateState.showingText === "Showing 1-10 of 12 bookings"
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal Upcoming reset after closed change request check",
+      );
 
       await clickCustomerPortalPageButton("next");
       const upcomingPageTwoState = await waitForCondition(
@@ -29292,6 +29551,16 @@ async function runChromeTest() {
       );
       assert.equal(mobileState.guidance.visible, true, "Expected /my-bookings mobile guidance");
       assert.equal(mobileState.searchVisible, true, "Expected /my-bookings search to remain touch-friendly on mobile");
+      assert.equal(
+        mobileState.changeRequestIntake.visible,
+        true,
+        "Expected /my-bookings mobile change request intake",
+      );
+      assert.equal(
+        mobileState.changeRequestIntake.submitVisible,
+        true,
+        "Expected /my-bookings mobile change request submit to stay touch-friendly",
+      );
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
       assert.equal(
         mobileState.customerIntakeHandoffVisible,

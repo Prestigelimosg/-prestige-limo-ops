@@ -30,6 +30,27 @@ type BookingRequestFeedback = {
   text: string;
 };
 
+type ChangeRequestType =
+  | "Pickup date/time"
+  | "Pickup or drop-off"
+  | "Passenger/contact details"
+  | "Other request";
+
+type CustomerChangeRequestForm = {
+  bookingId: string;
+  changeType: ChangeRequestType;
+  newPickupDate: string;
+  newPickupTime: string;
+  passengerContactChange: string;
+  routeChange: string;
+  teamNotes: string;
+};
+
+type CustomerChangeRequestFeedback = {
+  tone: BookingRequestFeedback["tone"];
+  text: string;
+};
+
 type CustomerRequestLookupResult = {
   detail: string;
   status: "Cancelled" | "Completed" | "Confirmed" | "Not confirmed yet" | "Pending review" | "Request received";
@@ -141,6 +162,28 @@ const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [
   "pickupDate",
   "pickupTime",
 ];
+
+const changeRequestTypes: ChangeRequestType[] = [
+  "Pickup date/time",
+  "Pickup or drop-off",
+  "Passenger/contact details",
+  "Other request",
+];
+
+const initialCustomerChangeRequestForm: CustomerChangeRequestForm = {
+  bookingId: "",
+  changeType: "Pickup date/time",
+  newPickupDate: "",
+  newPickupTime: "",
+  passengerContactChange: "",
+  routeChange: "",
+  teamNotes: "",
+};
+
+const initialCustomerChangeRequestFeedback: CustomerChangeRequestFeedback = {
+  tone: "info",
+  text: "Choose one of the visible bookings below and prepare a change request for team review.",
+};
 
 const samplePickupLocations = [
   "Raffles Singapore",
@@ -561,6 +604,11 @@ export default function CustomerPortalPage() {
     tone: "info",
     text: "Submit a booking request and our staff will review availability before confirming.",
   });
+  const [changeRequestForm, setChangeRequestForm] =
+    useState<CustomerChangeRequestForm>(initialCustomerChangeRequestForm);
+  const [changeRequestFeedback, setChangeRequestFeedback] = useState<CustomerChangeRequestFeedback>(
+    initialCustomerChangeRequestFeedback,
+  );
 
   const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
@@ -627,6 +675,7 @@ export default function CustomerPortalPage() {
   const visibleBookings = scopedBookings.slice(firstVisibleBookingIndex, firstVisibleBookingIndex + visibleBookingLimit);
   const showingStart = scopedBookings.length === 0 ? 0 : firstVisibleBookingIndex + 1;
   const showingEnd = firstVisibleBookingIndex + visibleBookings.length;
+  const selectedChangeRequestBooking = visibleBookings.find((booking) => booking.id === changeRequestForm.bookingId);
   const selectedMonthOption = pastMonthOptions.find((month) => month.key === selectedBookingMonth);
   const activeMonthLabel = (() => {
     if (activeFilter === "Upcoming") {
@@ -641,6 +690,7 @@ export default function CustomerPortalPage() {
   })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
+  const changeRequestPickupTimeParts = splitPickupTime(changeRequestForm.newPickupTime);
   const requestStatusLookupMatch = useMemo(() => {
     const query = normalize(submittedRequestStatusLookupQuery);
 
@@ -658,12 +708,18 @@ export default function CustomerPortalPage() {
     ? getCustomerRequestLookupResult(requestStatusLookupMatch)
     : undefined;
 
+  function resetCustomerChangeRequestIntake() {
+    setChangeRequestForm(initialCustomerChangeRequestForm);
+    setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
+  }
+
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = section === "New Booking Request" ? "Upcoming" : section;
 
     setActiveSection(section);
     setExpandedBookingId("");
     setChangeFeedback({});
+    resetCustomerChangeRequestIntake();
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
   }
@@ -672,6 +728,7 @@ export default function CustomerPortalPage() {
     setSearchQuery(value);
     setExpandedBookingId("");
     setChangeFeedback({});
+    resetCustomerChangeRequestIntake();
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
   }
 
@@ -685,6 +742,7 @@ export default function CustomerPortalPage() {
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
     setExpandedBookingId("");
     setChangeFeedback({});
+    resetCustomerChangeRequestIntake();
   }
 
   function handlePageChange(direction: "next" | "previous") {
@@ -699,14 +757,83 @@ export default function CustomerPortalPage() {
     });
     setExpandedBookingId("");
     setChangeFeedback({});
+    resetCustomerChangeRequestIntake();
   }
 
   function handleRequestChange(booking: CustomerPortalBooking) {
     setExpandedBookingId(booking.id);
+    setChangeRequestForm((current) => ({ ...current, bookingId: booking.id }));
+    setChangeRequestFeedback({
+      tone: "info",
+      text: "Add the change details below and submit for team review. This does not change your booking yet.",
+    });
     setChangeFeedback((current) => ({
       ...current,
       [booking.id]: "Change request noted for review. Prestige Limo staff will review it before confirmation.",
     }));
+  }
+
+  function updateChangeRequestField(field: keyof CustomerChangeRequestForm, value: string) {
+    setChangeRequestForm((current) => ({ ...current, [field]: value }));
+    setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
+  }
+
+  function updateChangeRequestPickupTimePart(part: "hour" | "minute", value: string) {
+    setChangeRequestForm((currentForm) => {
+      const current = splitPickupTime(currentForm.newPickupTime);
+      const nextHour = part === "hour" ? value : current.hour;
+      const nextMinute = part === "minute" ? value : current.minute || "00";
+
+      return {
+        ...currentForm,
+        newPickupTime: nextHour ? `${nextHour}:${nextMinute || "00"}` : "",
+      };
+    });
+    setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
+  }
+
+  function handleChangeRequestSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedChangeRequestBooking) {
+      setChangeRequestFeedback({
+        tone: "error",
+        text: "Choose one of the visible bookings below before preparing a change request.",
+      });
+      return;
+    }
+
+    if (selectedChangeRequestBooking.status === "Completed" || selectedChangeRequestBooking.status === "Cancelled") {
+      setChangeRequestFeedback({
+        tone: "error",
+        text: "Completed or cancelled bookings cannot be changed here. Please contact our team.",
+      });
+      return;
+    }
+
+    const hasChangeDetails = [
+      changeRequestForm.newPickupDate,
+      changeRequestForm.newPickupTime,
+      changeRequestForm.passengerContactChange,
+      changeRequestForm.routeChange,
+      changeRequestForm.teamNotes,
+    ].some((value) => value.trim());
+
+    if (!hasChangeDetails) {
+      setChangeRequestFeedback({
+        tone: "error",
+        text: "Add the change details for our team to review before submitting.",
+      });
+      return;
+    }
+
+    setChangeRequestFeedback({
+      tone: "success",
+      text:
+        "Change request prepared for team review. This does not change your booking yet. " +
+        "This is request-only and not confirmed yet. Our team will review and confirm. " +
+        "For urgent changes, please contact our team directly.",
+    });
   }
 
   function updateBookingRequestField(field: keyof BookingRequestForm, value: string) {
@@ -1180,6 +1307,202 @@ export default function CustomerPortalPage() {
           </form>
         ) : (
           <>
+            <section
+              aria-labelledby="customer-change-request-title"
+              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+              data-customer-change-request-intake="true"
+            >
+              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950" id="customer-change-request-title">
+                    Request a Change
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-change-request-helper="true">
+                    Choose from the currently visible bookings below. This prepares a request only and does not change
+                    your booking yet.
+                  </p>
+                  {selectedChangeRequestBooking ? (
+                    <div
+                      className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
+                      data-customer-change-request-selection="true"
+                    >
+                      <p className="font-semibold text-slate-950">{selectedChangeRequestBooking.passengerName}</p>
+                      <p>
+                        {selectedChangeRequestBooking.id} - {selectedChangeRequestBooking.status}
+                      </p>
+                      <p>{selectedChangeRequestBooking.pickupDateTime}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <form className="flex flex-col gap-3" onSubmit={handleChangeRequestSubmit}>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
+                      Booking or request reference
+                      <select
+                        className={fieldClass()}
+                        data-customer-change-request-field="bookingId"
+                        name="changeRequestBookingId"
+                        onChange={(event) => updateChangeRequestField("bookingId", event.target.value)}
+                        value={changeRequestForm.bookingId}
+                      >
+                        <option value="">Choose a visible booking or request</option>
+                        {visibleBookings.map((booking) => (
+                          <option key={booking.id} value={booking.id}>
+                            {booking.id} - {booking.passengerName} - {booking.pickupDateTime} - {booking.status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="text-sm font-semibold text-slate-800">
+                      Change type
+                      <select
+                        className={fieldClass()}
+                        data-customer-change-request-field="changeType"
+                        name="changeRequestType"
+                        onChange={(event) =>
+                          updateChangeRequestField("changeType", event.target.value as ChangeRequestType)
+                        }
+                        value={changeRequestForm.changeType}
+                      >
+                        {changeRequestTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="text-sm font-semibold text-slate-800">
+                      New pickup date request
+                      <input
+                        className={fieldClass()}
+                        data-customer-change-request-field="newPickupDate"
+                        name="changeRequestNewPickupDate"
+                        onChange={(event) => updateChangeRequestField("newPickupDate", event.target.value)}
+                        type="date"
+                        value={changeRequestForm.newPickupDate}
+                      />
+                    </label>
+
+                    <fieldset className="text-sm font-semibold text-slate-800" data-customer-change-request-time="true">
+                      <legend>New pickup time request</legend>
+                      <div className="mt-2 grid grid-cols-2 gap-3">
+                        <label className="sr-only" htmlFor="change-request-pickup-hour">
+                          New pickup hour
+                        </label>
+                        <select
+                          className={fieldClass().replace("mt-2 ", "")}
+                          data-customer-change-request-pickup-hour="true"
+                          id="change-request-pickup-hour"
+                          name="changeRequestPickupHour"
+                          onChange={(event) => updateChangeRequestPickupTimePart("hour", event.target.value)}
+                          value={changeRequestPickupTimeParts.hour}
+                        >
+                          <option value="">HH</option>
+                          {pickupHourOptions.map((hour) => (
+                            <option key={hour} value={hour}>
+                              {hour}
+                            </option>
+                          ))}
+                        </select>
+                        <label className="sr-only" htmlFor="change-request-pickup-minute">
+                          New pickup minute
+                        </label>
+                        <select
+                          className={fieldClass().replace("mt-2 ", "")}
+                          data-customer-change-request-pickup-minute="true"
+                          id="change-request-pickup-minute"
+                          name="changeRequestPickupMinute"
+                          onChange={(event) => updateChangeRequestPickupTimePart("minute", event.target.value)}
+                          value={changeRequestPickupTimeParts.minute}
+                        >
+                          <option value="">MM</option>
+                          {pickupMinuteOptions.map((minute) => (
+                            <option key={minute} value={minute}>
+                              {minute}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </fieldset>
+
+                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
+                      Pickup or drop-off change request
+                      <textarea
+                        className={`${fieldClass()} min-h-24 resize-y`}
+                        data-customer-change-request-field="routeChange"
+                        name="changeRequestRoute"
+                        onChange={(event) => updateChangeRequestField("routeChange", event.target.value)}
+                        placeholder="Share the pickup, drop-off, or extra stop change"
+                        value={changeRequestForm.routeChange}
+                      />
+                    </label>
+
+                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
+                      Passenger or contact detail change request
+                      <textarea
+                        className={`${fieldClass()} min-h-24 resize-y`}
+                        data-customer-change-request-field="passengerContactChange"
+                        name="changeRequestPassengerContact"
+                        onChange={(event) => updateChangeRequestField("passengerContactChange", event.target.value)}
+                        placeholder="Share passenger name, phone, email, or contact updates for review"
+                        value={changeRequestForm.passengerContactChange}
+                      />
+                    </label>
+
+                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
+                      Notes for our team
+                      <textarea
+                        className={`${fieldClass()} min-h-24 resize-y`}
+                        data-customer-change-request-field="teamNotes"
+                        name="changeRequestTeamNotes"
+                        onChange={(event) => updateChangeRequestField("teamNotes", event.target.value)}
+                        placeholder="Add timing, urgency, or other details for review"
+                        value={changeRequestForm.teamNotes}
+                      />
+                    </label>
+                  </div>
+
+                  {selectedChangeRequestBooking?.status === "Completed" ||
+                  selectedChangeRequestBooking?.status === "Cancelled" ? (
+                    <p
+                      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+                      data-customer-change-request-closed-warning="true"
+                    >
+                      Completed or cancelled bookings cannot be changed here. Please contact our team.
+                    </p>
+                  ) : selectedChangeRequestBooking?.status === "Pending Staff Review" ||
+                    selectedChangeRequestBooking?.status === "Requested" ? (
+                    <p
+                      className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950"
+                      data-customer-change-request-pending-note="true"
+                    >
+                      This booking request is still pending team review and is not confirmed yet.
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-col gap-3 border-t border-slate-200 pt-3">
+                    <button
+                      className="min-h-11 w-full rounded-md bg-slate-950 px-4 py-2 text-base font-semibold text-white transition hover:bg-slate-800 sm:w-fit"
+                      data-customer-change-request-submit="true"
+                      type="submit"
+                    >
+                      Prepare Change Request
+                    </button>
+                    <p
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClass(changeRequestFeedback.tone)}`}
+                      data-customer-change-request-feedback="true"
+                      data-tone={changeRequestFeedback.tone}
+                    >
+                      {changeRequestFeedback.text}
+                    </p>
+                  </div>
+                </form>
+              </div>
+            </section>
+
             <section
               aria-labelledby="booking-search-title"
               className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"

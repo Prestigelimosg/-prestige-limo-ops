@@ -80,6 +80,16 @@ type CustomerPortalBooking = {
   vehicleType: string;
 };
 
+type CustomerDriverHandoff = {
+  detail: string;
+  label:
+    | "Details will be shared closer to pickup."
+    | "Driver assigned."
+    | "Driver details pending."
+    | "Read-only trip record.";
+  tone: "confirmed" | "pending" | "review";
+};
+
 const serviceOptions = [
   "Airport Arrival",
   "Airport Departure",
@@ -501,6 +511,8 @@ const bookings: CustomerPortalBooking[] = [
   ...pastCancelledMonthBookings,
 ];
 
+const customerVisibleDriverAssignedBookingIds = new Set(["booking-001", "booking-006", "booking-010"]);
+
 function rowMatchesFilter(booking: CustomerPortalBooking, filter: BookingFilter) {
   if (filter === "Completed") {
     return booking.status === "Completed";
@@ -606,6 +618,50 @@ function getCustomerRequestLookupResult(booking: CustomerPortalBooking): Custome
     status: "Cancelled",
     title: "Cancelled",
   };
+}
+
+function getCustomerDriverHandoff(booking: CustomerPortalBooking): CustomerDriverHandoff {
+  if (booking.status === "Confirmed") {
+    if (customerVisibleDriverAssignedBookingIds.has(booking.id)) {
+      return {
+        detail: "Driver assigned. Customer-facing driver details will be shared closer to pickup.",
+        label: "Driver assigned.",
+        tone: "confirmed",
+      };
+    }
+
+    return {
+      detail: "Driver details will be shared after our team assigns the driver.",
+      label: "Driver details pending.",
+      tone: "pending",
+    };
+  }
+
+  if (booking.status === "Completed" || booking.status === "Cancelled") {
+    return {
+      detail: "Completed or cancelled bookings stay read-only here. Contact our team if you need help.",
+      label: "Read-only trip record.",
+      tone: "review",
+    };
+  }
+
+  return {
+    detail: "This request is not confirmed yet. Driver details are available only after team review and confirmation.",
+    label: "Details will be shared closer to pickup.",
+    tone: "review",
+  };
+}
+
+function driverHandoffClass(tone: CustomerDriverHandoff["tone"]) {
+  if (tone === "confirmed") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
+
+  if (tone === "pending") {
+    return "border-sky-200 bg-sky-50 text-sky-950";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 export default function CustomerPortalPage() {
@@ -1765,6 +1821,66 @@ export default function CustomerPortalPage() {
                     </p>
                   </div>
                 </form>
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="customer-driver-handoff-title"
+              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+              data-customer-driver-handoff-status="true"
+            >
+              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950" id="customer-driver-handoff-title">
+                    Driver Details
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-driver-handoff-helper="true">
+                    Driver details are shown only after booking confirmation.
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600" data-customer-driver-handoff-urgent="true">
+                    For urgent same-day help, contact our team directly.
+                  </p>
+                </div>
+
+                {visibleBookings.length === 0 ? (
+                  <div
+                    className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700"
+                    data-customer-driver-handoff-empty="true"
+                  >
+                    No visible bookings to check for driver handoff status.
+                  </div>
+                ) : (
+                  <ul className="grid gap-2" data-customer-driver-handoff-list="true">
+                    {visibleBookings.map((booking) => {
+                      const driverHandoff = getCustomerDriverHandoff(booking);
+
+                      return (
+                        <li
+                          className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6"
+                          data-booking-status={booking.status}
+                          data-customer-driver-handoff-row={booking.id}
+                          data-driver-handoff-status={driverHandoff.label}
+                          key={booking.id}
+                        >
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-950">{booking.passengerName}</p>
+                              <p className="mt-1 text-slate-700">
+                                {booking.pickupDateTime} - {booking.status}
+                              </p>
+                            </div>
+                            <p
+                              className={`rounded-md border px-2 py-1 text-xs font-semibold ${driverHandoffClass(driverHandoff.tone)}`}
+                            >
+                              {driverHandoff.label}
+                            </p>
+                          </div>
+                          <p className="mt-2 text-slate-700">{driverHandoff.detail}</p>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             </section>
 

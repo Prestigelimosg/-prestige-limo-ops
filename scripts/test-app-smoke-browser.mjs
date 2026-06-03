@@ -27654,6 +27654,9 @@ async function runChromeTest() {
         const nextStepsChange = document.querySelector("[data-customer-request-next-steps-change]");
         const supportHandoff = document.querySelector("[data-customer-support-handoff]");
         const supportHandoffRect = supportHandoff?.getBoundingClientRect();
+        const driverHandoff = document.querySelector("[data-customer-driver-handoff-status]");
+        const driverHandoffRect = driverHandoff?.getBoundingClientRect();
+        const driverHandoffRows = [...document.querySelectorAll("[data-customer-driver-handoff-row]")];
         const changeIntake = document.querySelector("[data-customer-change-request-intake]");
         const changeIntakeRect = changeIntake?.getBoundingClientRect();
         const changeSubmit = document.querySelector("[data-customer-change-request-submit]");
@@ -28068,6 +28071,20 @@ async function runChromeTest() {
               .map((item) => item.textContent.trim()),
             text: supportHandoff?.innerText || "",
             visible: Boolean(supportHandoffRect && supportHandoffRect.width > 0 && supportHandoffRect.height > 0),
+          },
+          driverHandoff: {
+            emptyVisible: Boolean(document.querySelector("[data-customer-driver-handoff-empty]")),
+            helper: document.querySelector("[data-customer-driver-handoff-helper]")?.textContent.trim() || "",
+            rowIds: driverHandoffRows.map((row) => row.getAttribute("data-customer-driver-handoff-row") || ""),
+            rows: driverHandoffRows.map((row) => ({
+              bookingStatus: row.getAttribute("data-booking-status") || "",
+              handoffStatus: row.getAttribute("data-driver-handoff-status") || "",
+              id: row.getAttribute("data-customer-driver-handoff-row") || "",
+              text: row.innerText,
+            })),
+            text: driverHandoff?.innerText || "",
+            urgent: document.querySelector("[data-customer-driver-handoff-urgent]")?.textContent.trim() || "",
+            visible: Boolean(driverHandoffRect && driverHandoffRect.width > 0 && driverHandoffRect.height > 0),
           },
           changeRequestIntake: {
             closedWarning: document.querySelector("[data-customer-change-request-closed-warning]")?.textContent.trim() || "",
@@ -28735,6 +28752,46 @@ async function runChromeTest() {
           `Expected /my-bookings support handoff item: ${expectedSupportItem}`,
         );
       }
+      assert.equal(initialState.driverHandoff.visible, true, "Expected /my-bookings driver handoff status");
+      assert.equal(
+        initialState.driverHandoff.helper,
+        "Driver details are shown only after booking confirmation.",
+        "Expected /my-bookings driver handoff confirmation boundary",
+      );
+      assert.equal(
+        initialState.driverHandoff.urgent,
+        "For urgent same-day help, contact our team directly.",
+        "Expected /my-bookings driver handoff urgent same-day helper",
+      );
+      assert.deepEqual(
+        initialState.driverHandoff.rowIds,
+        initialState.rowIds,
+        "Expected /my-bookings driver handoff rows to use current visible bookings only",
+      );
+      assert.equal(
+        initialState.driverHandoff.rows.some((row) => row.handoffStatus === "Driver assigned."),
+        true,
+        "Expected /my-bookings driver handoff to show assigned status for confirmed visible bookings",
+      );
+      assert.equal(
+        initialState.driverHandoff.rows.some((row) => row.handoffStatus === "Driver details pending."),
+        true,
+        "Expected /my-bookings driver handoff to show pending status for confirmed visible bookings",
+      );
+      for (const pendingDriverHandoffRow of initialState.driverHandoff.rows.filter((row) =>
+        ["Pending Staff Review", "Requested"].includes(row.bookingStatus),
+      )) {
+        assert.equal(
+          pendingDriverHandoffRow.text.includes("not confirmed yet"),
+          true,
+          `Expected pending/request row ${pendingDriverHandoffRow.id} not to imply confirmation`,
+        );
+        assert.equal(
+          pendingDriverHandoffRow.handoffStatus === "Driver assigned.",
+          false,
+          `Expected pending/request row ${pendingDriverHandoffRow.id} not to show driver assigned`,
+        );
+      }
       assert.equal(initialState.changeRequestIntake.visible, true, "Expected /my-bookings change request intake");
       assert.equal(
         initialState.changeRequestIntake.helper,
@@ -29088,6 +29145,18 @@ async function runChromeTest() {
         completedForChangeRequestState.cancellationRequestIntake.closedWarning,
         "This booking cannot be cancelled here. Please contact our team if you need help.",
         "Expected closed booking warning in cancellation request intake",
+      );
+      assert.deepEqual(
+        completedForChangeRequestState.driverHandoff.rowIds,
+        completedForChangeRequestState.rowIds,
+        "Expected completed driver handoff rows to use visible completed rows only",
+      );
+      assert.equal(
+        completedForChangeRequestState.driverHandoff.rows.every(
+          (row) => row.handoffStatus === "Read-only trip record." && row.text.includes("read-only here"),
+        ),
+        true,
+        "Expected completed driver handoff rows to stay read-only",
       );
       await setCustomerChangeRequestField("bookingId", "booking-013");
       await submitCustomerChangeRequest();
@@ -29512,6 +29581,16 @@ async function runChromeTest() {
         0,
         "Expected completed bookings to be read-only without Request change buttons",
       );
+      assert.deepEqual(
+        completedState.driverHandoff.rowIds,
+        completedState.rowIds,
+        "Expected completed filter driver handoff rows to match visible rows",
+      );
+      assert.equal(
+        completedState.driverHandoff.rows.every((row) => row.handoffStatus === "Read-only trip record."),
+        true,
+        "Expected completed filter driver handoff to stay read-only",
+      );
 
       await clickCustomerPortalPageButton("next");
       const completedPageTwoState = await waitForCondition(
@@ -29695,6 +29774,18 @@ async function runChromeTest() {
         cancelledState.rows.reduce((total, row) => total + row.requestButtonCount, 0),
         0,
         "Expected cancelled bookings not to show Request change buttons",
+      );
+      assert.deepEqual(
+        cancelledState.driverHandoff.rowIds,
+        cancelledState.rowIds,
+        "Expected cancelled filter driver handoff rows to match visible rows",
+      );
+      assert.equal(
+        cancelledState.driverHandoff.rows.every(
+          (row) => row.handoffStatus === "Read-only trip record." && row.text.includes("read-only here"),
+        ),
+        true,
+        "Expected cancelled filter driver handoff to stay read-only",
       );
 
       await clickCustomerPortalPageButton("next");
@@ -29899,6 +29990,21 @@ async function runChromeTest() {
         mobileState.supportHandoff.boundary,
         "This section does not send a message yet. Your booking is not changed or cancelled from here.",
         "Expected /my-bookings mobile support handoff local-only boundary",
+      );
+      assert.equal(
+        mobileState.driverHandoff.visible,
+        true,
+        "Expected /my-bookings mobile driver handoff status",
+      );
+      assert.deepEqual(
+        mobileState.driverHandoff.rowIds,
+        mobileState.rowIds,
+        "Expected /my-bookings mobile driver handoff rows to use visible rows only",
+      );
+      assert.equal(
+        mobileState.driverHandoff.text.includes("For urgent same-day help, contact our team directly."),
+        true,
+        "Expected /my-bookings mobile driver handoff urgent helper",
       );
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
       assert.equal(

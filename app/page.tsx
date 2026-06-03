@@ -2855,6 +2855,83 @@ function adminBookingPersistencePickupDisplay(record: AdminBookingPersistenceRec
   return pickupValues[1] || pickupValues[0] || "Pickup time TBC";
 }
 
+function adminBookingPersistencePickupTimeMs(record: AdminBookingPersistenceRecord) {
+  const pickupDateTime = clean(record.pickup_datetime);
+
+  if (!pickupDateTime) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const pickupMs = new Date(pickupDateTime).getTime();
+
+  return Number.isFinite(pickupMs) ? pickupMs : Number.POSITIVE_INFINITY;
+}
+
+function adminCustomerRequestPriorityBucket(
+  record: AdminBookingPersistenceRecord,
+  currentTimeMs: number,
+) {
+  const adminInternalStatus = clean(record.admin_internal_status).toLowerCase();
+  const customerFacingStatus = clean(record.customer_facing_status).toLowerCase();
+
+  if (adminBookingPersistenceRecordIsShortNotice(record, currentTimeMs)) {
+    return 0;
+  }
+
+  if (adminInternalStatus === "admin review required") {
+    return 1;
+  }
+
+  if (adminInternalStatus === "needs review" || customerFacingStatus === "needs review") {
+    return 2;
+  }
+
+  return 3;
+}
+
+function orderAdminBookingPersistenceRecordsForCustomerRequestPriority(
+  records: AdminBookingPersistenceRecord[],
+  currentTimeMs: number,
+) {
+  return records
+    .map((record, index) => ({ index, record }))
+    .sort((left, right) => {
+      const leftIsCustomerRequest = adminBookingPersistenceRecordIsCustomerRequest(left.record);
+      const rightIsCustomerRequest = adminBookingPersistenceRecordIsCustomerRequest(right.record);
+
+      if (leftIsCustomerRequest !== rightIsCustomerRequest) {
+        return leftIsCustomerRequest ? -1 : 1;
+      }
+
+      if (!leftIsCustomerRequest || !rightIsCustomerRequest) {
+        return left.index - right.index;
+      }
+
+      const priorityBucketDifference =
+        adminCustomerRequestPriorityBucket(left.record, currentTimeMs) -
+        adminCustomerRequestPriorityBucket(right.record, currentTimeMs);
+
+      if (priorityBucketDifference !== 0) {
+        return priorityBucketDifference;
+      }
+
+      const pickupDifference =
+        adminBookingPersistencePickupTimeMs(left.record) -
+        adminBookingPersistencePickupTimeMs(right.record);
+
+      if (pickupDifference !== 0) {
+        return pickupDifference;
+      }
+
+      const bookingReferenceDifference = clean(left.record.booking_reference).localeCompare(
+        clean(right.record.booking_reference),
+      );
+
+      return bookingReferenceDifference || left.index - right.index;
+    })
+    .map(({ record }) => record);
+}
+
 function adminBookingPersistenceRouteSummary(record: AdminBookingPersistenceRecord) {
   return [
     clean(record.pickup_location) || "Pickup TBC",
@@ -3455,23 +3532,35 @@ export default function Home() {
   );
   const filteredAdminCustomerRequestRecords = useMemo(
     () =>
-      filterAdminCustomerRequestRecords(
-        filteredAdminBookingPersistenceRecords,
-        adminCustomerRequestSearch,
-        adminCustomerRequestStatusFilter,
+      orderAdminBookingPersistenceRecordsForCustomerRequestPriority(
+        filterAdminCustomerRequestRecords(
+          filteredAdminBookingPersistenceRecords,
+          adminCustomerRequestSearch,
+          adminCustomerRequestStatusFilter,
+        ),
+        currentTimeMs,
       ),
     [
       adminCustomerRequestSearch,
       adminCustomerRequestStatusFilter,
+      currentTimeMs,
       filteredAdminBookingPersistenceRecords,
     ],
   );
   const adminCustomerRequestHasActiveFilters =
     Boolean(clean(adminCustomerRequestSearch)) ||
     adminCustomerRequestStatusFilter !== adminCustomerRequestAllStatusFilter;
+  const prioritizedAdminBookingPersistenceRecords = useMemo(
+    () =>
+      orderAdminBookingPersistenceRecordsForCustomerRequestPriority(
+        filteredAdminBookingPersistenceRecords,
+        currentTimeMs,
+      ),
+    [currentTimeMs, filteredAdminBookingPersistenceRecords],
+  );
   const displayedAdminBookingPersistenceRecords = adminCustomerRequestHasActiveFilters
     ? filteredAdminCustomerRequestRecords
-    : filteredAdminBookingPersistenceRecords;
+    : prioritizedAdminBookingPersistenceRecords;
   const appliedAdminBookingSnapshot = useMemo(() => {
     return findAdminBookingPersistenceRecordByReference(
       adminBookingPersistenceRecords,
@@ -16113,6 +16202,12 @@ export default function Home() {
                   >
                     Showing {filteredAdminCustomerRequestRecords.length} of{" "}
                     {adminCustomerRequestRecords.length} customer booking requests in the current operational snapshot view.
+                  </p>
+                  <p
+                    className="mt-1 text-xs font-semibold text-amber-900"
+                    data-admin-booking-customer-request-priority-order="true"
+                  >
+                    Priority order: short-notice and needs-review requests first.
                   </p>
                 </div>
               ) : null}

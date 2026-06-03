@@ -355,6 +355,7 @@ const adminBookingPersistenceUiPatterns = [
   { label: "customer request status filter wording", pattern: /\bcustomer\s+request\s+status\b/i },
   { label: "clear request filters wording", pattern: /\bclear\s+request\s+filters\b/i },
   { label: "customer request filters cleared wording", pattern: /\bcustomer\s+request\s+filters\s+cleared\b/i },
+  { label: "customer request priority order wording", pattern: /\bpriority\s+order:\s+short-notice\s+and\s+needs-review\s+requests\s+first\b/i },
   { label: "customer request review decision wording", pattern: /\binternal\s+review\s+decision\s+only\b/i },
   { label: "customer request current review state wording", pattern: /\bcurrent\s+review\s+state\b/i },
   { label: "admin internal status wording", pattern: /\badmin[_\s-]+internal[_\s-]+status\b/i },
@@ -992,6 +993,42 @@ async function runChromeTest() {
                 ok: true,
                 bookings: [
                   {
+                    booking_reference: "LOW-REQ-003",
+                    source_channel: "customer-booking-request",
+                    customer_id: null,
+                    pickup_datetime: "2030-06-05T14:45:00+08:00",
+                    pickup_location: "Lower Priority Pickup",
+                    dropoff_location: "Lower Priority Dropoff",
+                    route_type: "DEP",
+                    customer_display_name: "Lower Priority Customer",
+                    contact_phone: "+65 8000 3333",
+                    contact_email: "lower-priority@example.com",
+                    pax_count: 1,
+                    luggage_count: null,
+                    vehicle_type_or_category: "VVV",
+                    customer_facing_status: "Received",
+                    admin_internal_status: "Draft",
+                    short_notice_review_status: "Not Required",
+                    parser_source_reference: "Flight SQ003",
+                    created_at: "2026-06-02T00:20:00.000Z",
+                    updated_at: "2026-06-02T00:20:00.000Z",
+                    route_points: [
+                      {
+                        point_type: "pickup",
+                        sequence_number: 1,
+                        location_text: "Lower Priority Pickup",
+                        timing_note: null,
+                      },
+                      {
+                        point_type: "dropoff",
+                        sequence_number: 2,
+                        location_text: "Lower Priority Dropoff",
+                        timing_note: null,
+                      },
+                    ],
+                    service_items: [],
+                  },
+                  {
                     booking_reference: "LOADED-OPS-001",
                     source_channel: "customer-booking-request",
                     customer_id: null,
@@ -1205,24 +1242,32 @@ async function runChromeTest() {
           evaluate(`(() => {
             const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
             const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
+            const lowerPriorityRecord = document.querySelector("[data-admin-booking-persistence-record='LOW-REQ-003']");
             const secondRecord = document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']");
             const reviewState = document.querySelector("[data-admin-booking-customer-request-review-state='LOADED-OPS-001']");
             const calls = window.__adminBookingPersistenceCalls || [];
 
-            return feedback.includes("Loaded 2 operational booking records") && record && secondRecord
+            return feedback.includes("Loaded 3 operational booking records") && record && lowerPriorityRecord && secondRecord
               ? {
                   filterControlsVisible: Boolean(document.querySelector("[data-admin-booking-persistence-filters]")),
                   feedback,
                   getCalls: calls.filter((call) => call.method === "GET").length,
+                  lowerPriorityRecordText: lowerPriorityRecord.textContent.replace(/\\s+/g, " ").trim(),
                   noAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-no-applied]")),
                   postCalls: calls.filter((call) => call.method === "POST").length,
                   recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+                  records: [...document.querySelectorAll("[data-admin-booking-persistence-record]")]
+                    .map((candidate) => candidate.getAttribute("data-admin-booking-persistence-record")),
                   requestFilterControlsVisible: Boolean(
                     document.querySelector("[data-admin-booking-customer-request-filters]"),
                   ),
                   requestFilterOptions: [
                     ...document.querySelectorAll("[data-admin-booking-customer-request-status-filter] option"),
                   ].map((option) => option.textContent.trim()),
+                  requestPriorityOrder: document
+                    .querySelector("[data-admin-booking-customer-request-priority-order]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
                   requestFilterSummary: document
                     .querySelector("[data-admin-booking-customer-request-filter-summary]")
                     ?.textContent.replace(/\\s+/g, " ")
@@ -1271,14 +1316,24 @@ async function runChromeTest() {
         "Expected no-applied operational snapshot guidance before applying a loaded record",
       );
       assert.equal(
-        loadState.summary.includes("Showing 2 of 2"),
+        loadState.summary.includes("Showing 3 of 3"),
         true,
         "Expected loaded operational snapshot filter summary",
       );
       assert.equal(
-        loadState.requestFilterSummary.includes("Showing 1 of 1 customer booking requests"),
+        loadState.requestFilterSummary.includes("Showing 2 of 2 customer booking requests"),
         true,
         "Expected customer request filter summary inside admin panel",
+      );
+      assert.deepEqual(
+        loadState.records,
+        ["LOADED-OPS-001", "LOW-REQ-003", "SECOND-OPS-002"],
+        "Expected short-notice/admin-review customer requests before lower-priority requests and snapshots",
+      );
+      assert.equal(
+        loadState.requestPriorityOrder.includes("Priority order: short-notice and needs-review requests first."),
+        true,
+        "Expected admin-only customer request priority helper",
       );
       assert.equal(
         /price|billing|invoice|payment|payout|finance/i.test(loadState.recordText),
@@ -1322,6 +1377,11 @@ async function runChromeTest() {
         /Second Ops Customer/.test(loadState.secondRecordText),
         true,
         "Expected second loaded operational record preview",
+      );
+      assert.equal(
+        /Lower Priority Customer/.test(loadState.lowerPriorityRecordText),
+        true,
+        "Expected lower-priority customer request preview",
       );
 
       const setAdminSnapshotSearch = async (value) =>
@@ -1431,7 +1491,7 @@ async function runChromeTest() {
         "admin customer request route-point search",
       );
       assert.equal(
-        requestRouteSearchState.requestSummary.includes("Showing 1 of 1 customer booking requests"),
+        requestRouteSearchState.requestSummary.includes("Showing 1 of 2 customer booking requests"),
         true,
         "Expected request route-point search summary",
       );
@@ -1449,12 +1509,12 @@ async function runChromeTest() {
         "admin customer request excludes non-request snapshot search",
       );
       assert.equal(
-        requestOnlySearchState.requestSummary.includes("Showing 0 of 1 customer booking requests"),
+        requestOnlySearchState.requestSummary.includes("Showing 0 of 2 customer booking requests"),
         true,
         "Expected request search to exclude non-request operational snapshots",
       );
       assert.equal(
-        requestOnlySearchState.summary.includes("Showing 0 of 2"),
+        requestOnlySearchState.summary.includes("Showing 0 of 3"),
         true,
         "Expected displayed operational list to follow active request filters",
       );
@@ -1472,7 +1532,7 @@ async function runChromeTest() {
       const requestSearchClearedState = await waitForCondition(
         async () => {
           const state = await collectAdminSnapshotFilterState();
-          return state.records.length === 2 &&
+          return state.records.length === 3 &&
             state.requestSearchValue === "" &&
             state.requestStatusValue === "all"
             ? state
@@ -1481,7 +1541,7 @@ async function runChromeTest() {
         10000,
         "admin customer request clear search filters",
       );
-      assert.equal(requestSearchClearedState.summary.includes("Showing 2 of 2"), true);
+      assert.equal(requestSearchClearedState.summary.includes("Showing 3 of 3"), true);
       assert.equal(
         requestSearchClearedState.feedback.includes("Customer request filters cleared"),
         true,
@@ -1502,7 +1562,7 @@ async function runChromeTest() {
         "admin customer request short-notice status filter",
       );
       assert.equal(
-        shortNoticeRequestState.requestSummary.includes("Showing 1 of 1 customer booking requests"),
+        shortNoticeRequestState.requestSummary.includes("Showing 1 of 2 customer booking requests"),
         true,
         "Expected short-notice request filter summary",
       );
@@ -1518,7 +1578,7 @@ async function runChromeTest() {
         "admin customer request approved status filter",
       );
       assert.equal(
-        approvedRequestState.requestSummary.includes("Showing 0 of 1 customer booking requests"),
+        approvedRequestState.requestSummary.includes("Showing 0 of 2 customer booking requests"),
         true,
         "Expected approved request filter empty summary before an approved request exists",
       );
@@ -1531,12 +1591,12 @@ async function runChromeTest() {
       const requestStatusClearedState = await waitForCondition(
         async () => {
           const state = await collectAdminSnapshotFilterState();
-          return state.records.length === 2 && state.requestStatusValue === "all" ? state : false;
+          return state.records.length === 3 && state.requestStatusValue === "all" ? state : false;
         },
         10000,
         "admin customer request clear status filter",
       );
-      assert.equal(requestStatusClearedState.summary.includes("Showing 2 of 2"), true);
+      assert.equal(requestStatusClearedState.summary.includes("Showing 3 of 3"), true);
 
       assert.equal(await setAdminSnapshotStatus("Confirmed"), true, "Expected status filter control");
       const confirmedFilterState = await waitForCondition(
@@ -1547,7 +1607,7 @@ async function runChromeTest() {
         10000,
         "admin booking persistence status filter",
       );
-      assert.equal(confirmedFilterState.summary.includes("Showing 1 of 2"), true);
+      assert.equal(confirmedFilterState.summary.includes("Showing 1 of 3"), true);
       assert.equal(confirmedFilterState.getCalls, 1, "Expected status filter to stay local");
       assert.equal(confirmedFilterState.postCalls, 1, "Expected status filter not to save");
       assert.equal(confirmedFilterState.patchCalls, 0, "Expected status filter not to update");
@@ -1556,14 +1616,14 @@ async function runChromeTest() {
       const restoredAfterStatusFilter = await waitForCondition(
         async () => {
           const state = await collectAdminSnapshotFilterState();
-          return state.records.length === 2 && state.searchValue === "" && state.statusValue === "all"
+          return state.records.length === 3 && state.searchValue === "" && state.statusValue === "all"
             ? state
             : false;
         },
         10000,
         "admin booking persistence clear status filter",
       );
-      assert.equal(restoredAfterStatusFilter.summary.includes("Showing 2 of 2"), true);
+      assert.equal(restoredAfterStatusFilter.summary.includes("Showing 3 of 3"), true);
       assert.equal(
         restoredAfterStatusFilter.feedback.includes("Operational snapshot filters cleared"),
         true,
@@ -1579,7 +1639,7 @@ async function runChromeTest() {
         10000,
         "admin booking persistence reference search",
       );
-      assert.equal(referenceFilterState.summary.includes("Showing 1 of 2"), true);
+      assert.equal(referenceFilterState.summary.includes("Showing 1 of 3"), true);
       assert.equal(referenceFilterState.getCalls, 1, "Expected reference search to stay local");
 
       assert.equal(await setAdminSnapshotSearch("9999-SHOULD-NOT-APPLY"), true);
@@ -1592,7 +1652,7 @@ async function runChromeTest() {
         "admin booking persistence forbidden bait search",
       );
       assert.equal(
-        forbiddenSearchState.summary.includes("Showing 0 of 2"),
+        forbiddenSearchState.summary.includes("Showing 0 of 3"),
         true,
         "Expected forbidden mocked fields not to be searchable",
       );
@@ -1609,7 +1669,7 @@ async function runChromeTest() {
         "admin booking persistence no-match search",
       );
       assert.equal(
-        noMatchFilterState.summary.includes("Showing 0 of 2"),
+        noMatchFilterState.summary.includes("Showing 0 of 3"),
         true,
         "Expected no-match search empty state summary",
       );
@@ -1618,12 +1678,12 @@ async function runChromeTest() {
       const restoredFilterState = await waitForCondition(
         async () => {
           const state = await collectAdminSnapshotFilterState();
-          return state.records.length === 2 && !state.emptyVisible ? state : false;
+          return state.records.length === 3 && !state.emptyVisible ? state : false;
         },
         10000,
         "admin booking persistence clear search filter",
       );
-      assert.equal(restoredFilterState.summary.includes("Showing 2 of 2"), true);
+      assert.equal(restoredFilterState.summary.includes("Showing 3 of 3"), true);
       assert.equal(
         restoredFilterState.feedback.includes("Operational snapshot filters cleared"),
         true,
@@ -1639,7 +1699,7 @@ async function runChromeTest() {
         10000,
         "admin booking persistence phone search",
       );
-      assert.equal(phoneFilterState.summary.includes("Showing 1 of 2"), true);
+      assert.equal(phoneFilterState.summary.includes("Showing 1 of 3"), true);
       assert.equal(phoneFilterState.getCalls, 1, "Expected phone search to stay local");
 
       const decisionClicked = await evaluate(`(() => {
@@ -1910,12 +1970,12 @@ async function runChromeTest() {
       const appliedVisibleAfterFilterClearState = await waitForCondition(
         async () => {
           const state = await collectAdminSnapshotFilterState();
-          return state.records.length === 2 && !state.appliedFilterNoteVisible ? state : false;
+          return state.records.length === 3 && !state.appliedFilterNoteVisible ? state : false;
         },
         10000,
         "admin booking persistence applied snapshot visible after clear filters",
       );
-      assert.equal(appliedVisibleAfterFilterClearState.summary.includes("Showing 2 of 2"), true);
+      assert.equal(appliedVisibleAfterFilterClearState.summary.includes("Showing 3 of 3"), true);
 
       const editedAppliedSnapshot = await evaluate(`(() => {
         const setField = (labelText, value) => {
@@ -2160,10 +2220,12 @@ async function runChromeTest() {
           evaluate(`(() => {
             const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
             const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
+            const lowerPriorityRecord = document.querySelector("[data-admin-booking-persistence-record='LOW-REQ-003']");
             const secondRecord = document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']");
 
-            return feedback.includes("Loaded 2 operational booking records") &&
+            return feedback.includes("Loaded 3 operational booking records") &&
               Boolean(record) &&
+              Boolean(lowerPriorityRecord) &&
               Boolean(secondRecord);
           })()`),
         10000,

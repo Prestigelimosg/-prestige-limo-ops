@@ -27643,6 +27643,11 @@ async function runChromeTest() {
         const monthButtons = [...document.querySelectorAll("[data-customer-portal-month-button]")];
         const activePastMonthButton = document.querySelector("[data-customer-portal-month-button][data-active='true']");
         const currentMonthButton = document.querySelector("[data-customer-portal-current-month]");
+        const statusLookup = document.querySelector("[data-customer-request-status-lookup]");
+        const statusLookupRect = statusLookup?.getBoundingClientRect();
+        const statusLookupInput = document.querySelector("[data-customer-request-status-lookup-input]");
+        const statusLookupSubmit = document.querySelector("[data-customer-request-status-lookup-submit]");
+        const statusLookupResult = document.querySelector("[data-customer-request-status-lookup-result]");
         const requestFieldState = (field) => {
           const control = document.querySelector(\`[data-customer-portal-request-field="\${field}"]\`);
           const rect = control?.getBoundingClientRect();
@@ -28008,6 +28013,17 @@ async function runChromeTest() {
             visible: Boolean(guidanceRect && guidanceRect.width > 0 && guidanceRect.height > 0),
           },
           integrationCalls: window.__customerPortalIntegrationCalls || [],
+          requestStatusLookup: {
+            detail: document.querySelector("[data-customer-request-status-lookup-detail]")?.textContent.trim() || "",
+            helper: document.querySelector("[data-customer-request-status-helper]")?.textContent.trim() || "",
+            inputValue: statusLookupInput?.value || "",
+            resultText: statusLookupResult?.textContent.trim() || "",
+            status: document.querySelector("[data-customer-request-status-lookup-status]")?.textContent.trim() || "",
+            submitVisible: Boolean(statusLookupSubmit?.getBoundingClientRect().height >= 40),
+            text: statusLookup?.innerText || "",
+            title: document.querySelector("[data-customer-request-status-lookup-title]")?.textContent.trim() || "",
+            visible: Boolean(statusLookupRect && statusLookupRect.width > 0 && statusLookupRect.height > 0),
+          },
           activeMonthLabel: document.querySelector("[data-customer-portal-active-month]")?.textContent.trim() || "",
           currentMonthActive: currentMonthButton?.getAttribute("data-active") === "true",
           monthGroupsVisible: Boolean(document.querySelector("[data-customer-portal-month-groups]")),
@@ -28039,6 +28055,38 @@ async function runChromeTest() {
           text,
         };
       })()`);
+
+    const setCustomerPortalRequestStatusLookup = async (value) => {
+      const actualValue = await evaluate(`(() => {
+        const input = document.querySelector("[data-customer-request-status-lookup-input]");
+
+        if (!input) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return input.value;
+      })()`);
+      assert.equal(actualValue, value, "Expected customer request status lookup to accept test value");
+    };
+
+    const submitCustomerPortalRequestStatusLookup = async () => {
+      const submitted = await evaluate(`(() => {
+        const button = document.querySelector("[data-customer-request-status-lookup-submit]");
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(submitted, true, "Expected customer request status lookup submit to be clickable");
+    };
 
     const setCustomerPortalSearch = async (value) => {
       const actualValue = await evaluate(`(() => {
@@ -28421,6 +28469,32 @@ async function runChromeTest() {
         "Search by passenger, pickup, drop-off, flight, or service. Use the tabs to switch between upcoming and past trips.",
         "Expected /my-bookings search guidance near lookup control",
       );
+      assert.equal(initialState.requestStatusLookup.visible, true, "Expected /my-bookings request status lookup");
+      assert.equal(
+        initialState.requestStatusLookup.helper,
+        "Have a booking request? Check its current status here.",
+        "Expected /my-bookings customer request status lookup helper",
+      );
+      assert.equal(
+        initialState.requestStatusLookup.text.includes(
+          "Pending review means our team has received your request but has not confirmed availability yet.",
+        ),
+        true,
+        "Expected /my-bookings pending review status helper not to imply confirmation",
+      );
+      assert.equal(
+        initialState.requestStatusLookup.text.includes(
+          "For urgent or short-notice requests, our team will review before confirming.",
+        ),
+        true,
+        "Expected /my-bookings urgent request review helper",
+      );
+      assert.equal(initialState.requestStatusLookup.submitVisible, true, "Expected /my-bookings status lookup submit");
+      assert.equal(
+        initialState.requestStatusLookup.detail,
+        "Enter your request reference or passenger name to check status.",
+        "Expected /my-bookings status lookup to start without a fake request reference",
+      );
       assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
       assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
       assert.equal(initialState.rowCount, 10, "Expected /my-bookings to show at most 10 rows by default");
@@ -28458,6 +28532,96 @@ async function runChromeTest() {
       assert.equal(/[A-Z]{2,}-\d{3,}/.test(initialState.text), false, "Expected /my-bookings not to create invoice-style numbers");
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
       await checkTelegramBoundary("/my-bookings desktop");
+
+      await setCustomerPortalRequestStatusLookup("Daniel Lim");
+      await submitCustomerPortalRequestStatusLookup();
+      const pendingLookupState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.requestStatusLookup.status === "Pending review" ? candidateState : false;
+        },
+        10000,
+        "customer portal pending request status lookup",
+      );
+      assert.equal(
+        pendingLookupState.requestStatusLookup.detail,
+        "Pending review means our team has received your request but has not confirmed availability yet.",
+        "Expected pending lookup to say not confirmed yet",
+      );
+      assert.equal(
+        pendingLookupState.requestStatusLookup.status === "Confirmed",
+        false,
+        "Expected pending lookup not to imply confirmation",
+      );
+      assert.deepEqual(
+        pendingLookupState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected pending /my-bookings status lookup not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(pendingLookupState.text, "/my-bookings pending status lookup");
+      assertNoAdminBookingPersistenceLeaks(pendingLookupState.text, "/my-bookings pending status lookup");
+      assertNoPublicRouteRuntimeCalls(
+        pendingLookupState.integrationCalls,
+        pendingLookupState.resourceCalls,
+        "/my-bookings pending status lookup",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings pending status lookup"),
+        "/my-bookings pending status lookup",
+      );
+
+      await setCustomerPortalRequestStatusLookup("Priya Shah");
+      await submitCustomerPortalRequestStatusLookup();
+      const receivedLookupState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.requestStatusLookup.status === "Request received" ? candidateState : false;
+        },
+        10000,
+        "customer portal received request status lookup",
+      );
+      assert.equal(
+        receivedLookupState.requestStatusLookup.detail.includes("review availability before confirming"),
+        true,
+        "Expected received request lookup to remain review-before-confirmation",
+      );
+
+      await setCustomerPortalRequestStatusLookup("Alicia Tan");
+      await submitCustomerPortalRequestStatusLookup();
+      const confirmedLookupState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.requestStatusLookup.status === "Confirmed" ? candidateState : false;
+        },
+        10000,
+        "customer portal confirmed request status lookup",
+      );
+      assert.equal(confirmedLookupState.requestStatusLookup.title, "Confirmed", "Expected confirmed lookup safe status");
+
+      await setCustomerPortalRequestStatusLookup("No Such Passenger");
+      await submitCustomerPortalRequestStatusLookup();
+      const disconnectedLookupState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.requestStatusLookup.detail.includes("Status lookup is not connected yet")
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal disconnected request status lookup",
+      );
+      assert.equal(
+        disconnectedLookupState.requestStatusLookup.detail,
+        "Status lookup is not connected yet. Please contact our team with your request details.",
+        "Expected disconnected /my-bookings lookup safe fallback",
+      );
+      assert.deepEqual(
+        disconnectedLookupState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected disconnected /my-bookings status lookup not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(disconnectedLookupState.text, "/my-bookings disconnected status lookup");
+      assertNoAdminBookingPersistenceLeaks(disconnectedLookupState.text, "/my-bookings disconnected status lookup");
 
       await clickCustomerPortalPageButton("next");
       const upcomingPageTwoState = await waitForCondition(

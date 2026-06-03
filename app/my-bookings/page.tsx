@@ -30,6 +30,12 @@ type BookingRequestFeedback = {
   text: string;
 };
 
+type CustomerRequestLookupResult = {
+  detail: string;
+  status: "Cancelled" | "Completed" | "Confirmed" | "Not confirmed yet" | "Pending review" | "Request received";
+  title: string;
+};
+
 type CustomerPortalBooking = {
   dropoffLocation: string;
   flightNumber?: string;
@@ -499,10 +505,52 @@ function splitPickupTime(value: string) {
   };
 }
 
+function getCustomerRequestLookupResult(booking: CustomerPortalBooking): CustomerRequestLookupResult {
+  if (booking.status === "Requested") {
+    return {
+      detail: "We have received this request. Our team will review availability before confirming.",
+      status: "Request received",
+      title: "Request received",
+    };
+  }
+
+  if (booking.status === "Pending Staff Review") {
+    return {
+      detail: "Pending review means our team has received your request but has not confirmed availability yet.",
+      status: "Pending review",
+      title: "Pending review",
+    };
+  }
+
+  if (booking.status === "Confirmed") {
+    return {
+      detail: "This booking is confirmed. Please contact our team if any details need to change.",
+      status: "Confirmed",
+      title: "Confirmed",
+    };
+  }
+
+  if (booking.status === "Completed") {
+    return {
+      detail: "This booking has been completed.",
+      status: "Completed",
+      title: "Completed",
+    };
+  }
+
+  return {
+    detail: "This booking has been cancelled. Please contact our team if you need a new request.",
+    status: "Cancelled",
+    title: "Cancelled",
+  };
+}
+
 export default function CustomerPortalPage() {
   const [activeSection, setActiveSection] = useState<PortalSection>("Upcoming");
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [requestStatusLookupQuery, setRequestStatusLookupQuery] = useState("");
+  const [submittedRequestStatusLookupQuery, setSubmittedRequestStatusLookupQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
@@ -593,6 +641,22 @@ export default function CustomerPortalPage() {
   })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
+  const requestStatusLookupMatch = useMemo(() => {
+    const query = normalize(submittedRequestStatusLookupQuery);
+
+    if (!query) {
+      return undefined;
+    }
+
+    return bookings.find((booking) =>
+      [booking.id, booking.passengerName, booking.pickupDateTime, booking.pickupLocation, booking.dropoffLocation]
+        .filter(Boolean)
+        .some((value) => normalize(String(value)).includes(query)),
+    );
+  }, [submittedRequestStatusLookupQuery]);
+  const requestStatusLookupResult = requestStatusLookupMatch
+    ? getCustomerRequestLookupResult(requestStatusLookupMatch)
+    : undefined;
 
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = section === "New Booking Request" ? "Upcoming" : section;
@@ -609,6 +673,11 @@ export default function CustomerPortalPage() {
     setExpandedBookingId("");
     setChangeFeedback({});
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
+  }
+
+  function handleRequestStatusLookupSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmittedRequestStatusLookupQuery(requestStatusLookupQuery);
   }
 
   function handleMonthSelect(monthKey: string) {
@@ -720,6 +789,80 @@ export default function CustomerPortalPage() {
             </p>
           </div>
         </header>
+
+        <section
+          aria-labelledby="request-status-lookup-title"
+          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          data-customer-request-status-lookup="true"
+        >
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr] lg:items-start">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950" id="request-status-lookup-title">
+                Request Status Lookup
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-request-status-helper="true">
+                Have a booking request? Check its current status here.
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Pending review means our team has received your request but has not confirmed availability yet. For
+                urgent or short-notice requests, our team will review before confirming.
+              </p>
+            </div>
+
+            <form className="flex flex-col gap-3" onSubmit={handleRequestStatusLookupSubmit}>
+              <label className="text-sm font-semibold text-slate-800" htmlFor="request-status-lookup">
+                Request reference or passenger name
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-950 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  data-customer-request-status-lookup-input="true"
+                  id="request-status-lookup"
+                  onChange={(event) => setRequestStatusLookupQuery(event.target.value)}
+                  placeholder="Enter request reference or passenger name"
+                  type="search"
+                  value={requestStatusLookupQuery}
+                />
+                <button
+                  className="min-h-11 rounded-md border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  data-customer-request-status-lookup-submit="true"
+                  type="submit"
+                >
+                  Check status
+                </button>
+              </div>
+
+              <div
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
+                data-customer-request-status-lookup-result="true"
+              >
+                {submittedRequestStatusLookupQuery.trim() ? (
+                  requestStatusLookupResult ? (
+                    <>
+                      <p className="font-semibold text-slate-950" data-customer-request-status-lookup-title="true">
+                        {requestStatusLookupResult.title}
+                      </p>
+                      <p className="mt-1" data-customer-request-status-lookup-status="true">
+                        {requestStatusLookupResult.status}
+                      </p>
+                      <p className="mt-1" data-customer-request-status-lookup-detail="true">
+                        {requestStatusLookupResult.detail}
+                      </p>
+                    </>
+                  ) : (
+                    <p data-customer-request-status-lookup-detail="true">
+                      Status lookup is not connected yet. Please contact our team with your request details.
+                    </p>
+                  )
+                ) : (
+                  <p data-customer-request-status-lookup-detail="true">
+                    Enter your request reference or passenger name to check status.
+                  </p>
+                )}
+              </div>
+            </form>
+          </div>
+        </section>
 
         <nav
           aria-label="Customer portal sections"

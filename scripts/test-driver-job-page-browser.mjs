@@ -199,6 +199,15 @@ async function runChromeTest() {
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
         visibleText: document.body?.innerText || "",
+        workflowHandoff: {
+          boundary: document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
+          helper: document.querySelector("[data-driver-job-workflow-handoff-helper]")?.textContent.trim() || "",
+          items: [...document.querySelectorAll("[data-driver-job-workflow-handoff-list] li")].map((item) =>
+            item.textContent.trim(),
+          ),
+          text: document.querySelector("[data-driver-job-workflow-handoff]")?.innerText || "",
+          visible: Boolean(document.querySelector("[data-driver-job-workflow-handoff]")),
+        },
         dispatcherExceptionText: [
           "cancel driver assignment",
           "cancel assignment",
@@ -1034,6 +1043,27 @@ async function runChromeTest() {
         "Mobile web driver card. Keep this link private and use it only for this assigned job.",
       ),
     );
+    assert.equal(validState.workflowHandoff.visible, true, "Expected public driver job workflow handoff guidance.");
+    assert.equal(
+      validState.workflowHandoff.helper,
+      "This is the driver page for this assigned job.",
+      "Expected driver handoff to identify this assigned job page.",
+    );
+    assert.deepEqual(
+      validState.workflowHandoff.items,
+      [
+        "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
+        "Use the job status buttons only when you are ready.",
+        "Helper actions here are local/demo steps unless the button feedback says a guarded status update was accepted.",
+        "For urgent issues, contact the dispatcher directly.",
+      ],
+      "Expected compact driver workflow handoff guidance.",
+    );
+    assert.equal(
+      validState.workflowHandoff.boundary,
+      "Private account and internal compensation details are not shown here.",
+      "Expected driver handoff to avoid private/internal account detail exposure.",
+    );
     const startingStatusText = validState.statusText || "Assigned";
     assert.ok(validState.visibleText.includes("Acknowledge Job"));
     assert.ok(validState.visibleText.includes("Mock Live Location"));
@@ -1203,6 +1233,12 @@ async function runChromeTest() {
       arrivalState.visibleText.includes(
         "Mobile web driver card. Keep this link private and use it only for this assigned job.",
       ),
+    );
+    assert.equal(arrivalState.workflowHandoff.visible, true, "Expected Arrival job to show workflow handoff guidance.");
+    assert.equal(
+      arrivalState.workflowHandoff.items.includes("For urgent issues, contact the dispatcher directly."),
+      true,
+      "Expected Arrival driver handoff to keep urgent dispatcher guidance.",
     );
     assert.ok(arrivalState.visibleText.includes("Mock Driver Reminder"));
     assert.ok(arrivalState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"));

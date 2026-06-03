@@ -30337,6 +30337,16 @@ async function runChromeTest() {
           buttonLabels: buttons.map((button) => button.text),
           buttons,
           currentStatus: document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "",
+          driverWorkflowHandoff: {
+            boundary:
+              document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
+            helper: document.querySelector("[data-driver-job-workflow-handoff-helper]")?.textContent.trim() || "",
+            items: [...document.querySelectorAll("[data-driver-job-workflow-handoff-list] li")].map((item) =>
+              item.textContent.trim()
+            ),
+            text: document.querySelector("[data-driver-job-workflow-handoff]")?.innerText || "",
+            visible: Boolean(document.querySelector("[data-driver-job-workflow-handoff]")),
+          },
           driverAssignmentReadinessVisible: Boolean(document.querySelector("[data-driver-assignment-readiness]")),
           driverDetailCollectionReadinessVisible: Boolean(
             document.querySelector("[data-driver-detail-collection-readiness]"),
@@ -30753,6 +30763,31 @@ async function runChromeTest() {
         true,
         `${viewport.label}: expected driver job link to show mobile-web privacy guidance`,
       );
+      assert.equal(
+        initialState.driverWorkflowHandoff.visible,
+        true,
+        `${viewport.label}: expected compact driver workflow handoff guidance`,
+      );
+      assert.equal(
+        initialState.driverWorkflowHandoff.helper,
+        "This is the driver page for this assigned job.",
+        `${viewport.label}: expected driver handoff to identify the assigned job page`,
+      );
+      assert.deepEqual(
+        initialState.driverWorkflowHandoff.items,
+        [
+          "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
+          "Use the job status buttons only when you are ready.",
+          "Helper actions here are local/demo steps unless the button feedback says a guarded status update was accepted.",
+          "For urgent issues, contact the dispatcher directly.",
+        ],
+        `${viewport.label}: expected driver handoff to explain review, status, local/demo, and urgent dispatcher steps`,
+      );
+      assert.equal(
+        initialState.driverWorkflowHandoff.boundary,
+        "Private account and internal compensation details are not shown here.",
+        `${viewport.label}: expected driver handoff to avoid private/internal account detail exposure`,
+      );
       assertNoNativeAppOnlyLanguage(initialState.text, `${viewport.label} driver job link`);
       assert.deepEqual(
         initialState.forbiddenText,
@@ -30776,6 +30811,7 @@ async function runChromeTest() {
         [
           "Prestige Limo Driver Job",
           "Job Summary",
+          "Driver Job Handoff",
           "Mock Workflow Pickup",
           "Mock Workflow Dropoff",
           "Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff",

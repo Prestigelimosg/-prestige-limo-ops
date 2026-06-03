@@ -690,6 +690,48 @@ export default function DriverJobPage() {
               </dl>
             </section>
 
+            <section
+              className="space-y-3 rounded-md border border-stone-200 bg-white p-3"
+              aria-labelledby="driver-workflow-handoff-heading"
+              data-driver-job-workflow-handoff="true"
+            >
+              <div className="space-y-1">
+                <h2 id="driver-workflow-handoff-heading" className="text-base font-semibold text-slate-900">
+                  Driver Job Handoff
+                </h2>
+                <p
+                  className="text-sm font-medium leading-6 text-slate-600"
+                  data-driver-job-workflow-handoff-helper="true"
+                >
+                  This is the driver page for this assigned job.
+                </p>
+              </div>
+              <ul
+                className="grid gap-2 text-sm font-medium leading-6 text-slate-700"
+                data-driver-job-workflow-handoff-list="true"
+              >
+                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                  Review pickup time, pickup place, drop-off, route, and job notes before starting.
+                </li>
+                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                  Use the job status buttons only when you are ready.
+                </li>
+                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                  Helper actions here are local/demo steps unless the button feedback says a guarded status update{" "}
+                  was accepted.
+                </li>
+                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                  For urgent issues, contact the dispatcher directly.
+                </li>
+              </ul>
+              <p
+                className="text-sm font-semibold leading-6 text-slate-700"
+                data-driver-job-workflow-handoff-boundary="true"
+              >
+                Private account and internal compensation details are not shown here.
+              </p>
+            </section>
+
             <section className="space-y-3" aria-labelledby="assigned-driver-heading">
               <h2 id="assigned-driver-heading" className="text-base font-semibold text-slate-900">
                 Assigned Driver

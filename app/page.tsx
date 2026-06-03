@@ -298,7 +298,14 @@ type AdminCustomerRequestReviewDecisionKey =
   | "needs-review"
   | "approve-internally"
   | "decline-internally";
+type AdminCustomerRequestStatusFilter =
+  | "all"
+  | "needs-review"
+  | "approved-internally"
+  | "declined-internally"
+  | "short-notice-review-required";
 const adminBookingPersistenceAllStatusFilter = "all";
+const adminCustomerRequestAllStatusFilter: AdminCustomerRequestStatusFilter = "all";
 const adminCustomerRequestReviewDecisions: Array<{
   adminInternalStatus: string;
   key: AdminCustomerRequestReviewDecisionKey;
@@ -323,6 +330,16 @@ const adminCustomerRequestReviewDecisions: Array<{
     label: "Decline Internally",
     successLabel: "Declined Internally",
   },
+];
+const adminCustomerRequestStatusFilterOptions: Array<{
+  key: AdminCustomerRequestStatusFilter;
+  label: string;
+}> = [
+  { key: "all", label: "All requests" },
+  { key: "needs-review", label: "Needs review" },
+  { key: "approved-internally", label: "Approved internally" },
+  { key: "declined-internally", label: "Declined internally" },
+  { key: "short-notice-review-required", label: "Short-notice review required" },
 ];
 
 type AdminBookingSnapshotApplyResult =
@@ -2881,6 +2898,82 @@ function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceReco
   ].filter(Boolean);
 }
 
+function adminCustomerRequestServiceItemSearchValues(record: AdminBookingPersistenceRecord) {
+  return (record.service_items || []).flatMap((serviceItem) => {
+    const serviceItemType = clean(serviceItem.service_item_type);
+    const friendlyServiceItemType = serviceItemType.replaceAll("_", " ");
+
+    return [
+      serviceItemType,
+      friendlyServiceItemType,
+      safeAdminBookingPersistenceCount(serviceItem.quantity)?.toString() || "",
+      safeAdminBookingPersistenceCount(serviceItem.blocks_count)?.toString() || "",
+    ].filter(Boolean);
+  });
+}
+
+function adminCustomerRequestSearchValues(record: AdminBookingPersistenceRecord) {
+  return [
+    ...adminBookingPersistenceSearchValues(record),
+    clean(record.source_channel),
+    adminBookingPersistenceSourceLabel(record),
+    ...(record.route_points || []).flatMap((routePoint) => [
+      clean(routePoint.point_type),
+      safeAdminBookingPersistenceCount(routePoint.sequence_number)?.toString() || "",
+      clean(routePoint.location_text),
+      clean(routePoint.timing_note),
+    ]),
+    ...adminCustomerRequestServiceItemSearchValues(record),
+  ].filter(Boolean);
+}
+
+function adminCustomerRequestMatchesStatusFilter(
+  record: AdminBookingPersistenceRecord,
+  statusFilter: AdminCustomerRequestStatusFilter,
+) {
+  if (statusFilter === "all") {
+    return true;
+  }
+
+  const adminInternalStatus = clean(record.admin_internal_status);
+  const shortNoticeReviewStatus = clean(record.short_notice_review_status);
+
+  if (statusFilter === "needs-review") {
+    return adminInternalStatus === "Admin Review Required";
+  }
+
+  if (statusFilter === "approved-internally") {
+    return adminInternalStatus === "Ready for Confirmation";
+  }
+
+  if (statusFilter === "declined-internally") {
+    return adminInternalStatus === "Declined Internally";
+  }
+
+  return shortNoticeReviewStatus === "Admin Review Required";
+}
+
+function filterAdminCustomerRequestRecords(
+  records: AdminBookingPersistenceRecord[],
+  searchValue: string,
+  statusFilter: AdminCustomerRequestStatusFilter,
+) {
+  const normalizedSearchValue = clean(searchValue).toLowerCase();
+
+  return records
+    .filter(adminBookingPersistenceRecordIsCustomerRequest)
+    .filter((record) => {
+      const searchMatches =
+        !normalizedSearchValue ||
+        adminCustomerRequestSearchValues(record)
+          .join("\n")
+          .toLowerCase()
+          .includes(normalizedSearchValue);
+
+      return searchMatches && adminCustomerRequestMatchesStatusFilter(record, statusFilter);
+    });
+}
+
 function filterAdminBookingPersistenceRecords(
   records: AdminBookingPersistenceRecord[],
   searchValue: string,
@@ -3306,6 +3399,10 @@ export default function Home() {
     useState("");
   const [adminBookingPersistenceStatusFilter, setAdminBookingPersistenceStatusFilter] =
     useState(adminBookingPersistenceAllStatusFilter);
+  const [adminCustomerRequestSearch, setAdminCustomerRequestSearch] =
+    useState("");
+  const [adminCustomerRequestStatusFilter, setAdminCustomerRequestStatusFilter] =
+    useState<AdminCustomerRequestStatusFilter>(adminCustomerRequestAllStatusFilter);
   const [customerMatchFeedback, setCustomerMatchFeedback] = useState<CustomerMatchFeedback | null>(null);
   const [deletingCompletedBookingId, setDeletingCompletedBookingId] = useState<string | null>(null);
   const [copyEditStates, setCopyEditStates] =
@@ -3352,6 +3449,29 @@ export default function Home() {
   const adminBookingPersistenceHasActiveFilters =
     Boolean(clean(adminBookingPersistenceSearch)) ||
     adminBookingPersistenceStatusFilter !== adminBookingPersistenceAllStatusFilter;
+  const adminCustomerRequestRecords = useMemo(
+    () => filteredAdminBookingPersistenceRecords.filter(adminBookingPersistenceRecordIsCustomerRequest),
+    [filteredAdminBookingPersistenceRecords],
+  );
+  const filteredAdminCustomerRequestRecords = useMemo(
+    () =>
+      filterAdminCustomerRequestRecords(
+        filteredAdminBookingPersistenceRecords,
+        adminCustomerRequestSearch,
+        adminCustomerRequestStatusFilter,
+      ),
+    [
+      adminCustomerRequestSearch,
+      adminCustomerRequestStatusFilter,
+      filteredAdminBookingPersistenceRecords,
+    ],
+  );
+  const adminCustomerRequestHasActiveFilters =
+    Boolean(clean(adminCustomerRequestSearch)) ||
+    adminCustomerRequestStatusFilter !== adminCustomerRequestAllStatusFilter;
+  const displayedAdminBookingPersistenceRecords = adminCustomerRequestHasActiveFilters
+    ? filteredAdminCustomerRequestRecords
+    : filteredAdminBookingPersistenceRecords;
   const appliedAdminBookingSnapshot = useMemo(() => {
     return findAdminBookingPersistenceRecordByReference(
       adminBookingPersistenceRecords,
@@ -3361,7 +3481,7 @@ export default function Home() {
   const appliedAdminBookingSnapshotHiddenByFilters =
     Boolean(appliedAdminBookingSnapshot) &&
     !findAdminBookingPersistenceRecordByReference(
-      filteredAdminBookingPersistenceRecords,
+      displayedAdminBookingPersistenceRecords,
       appliedAdminBookingSnapshotReference,
     );
 
@@ -6212,6 +6332,8 @@ export default function Home() {
       setAdminBookingPersistenceRecords(loadedBookings);
       setAdminBookingPersistenceSearch("");
       setAdminBookingPersistenceStatusFilter(adminBookingPersistenceAllStatusFilter);
+      setAdminCustomerRequestSearch("");
+      setAdminCustomerRequestStatusFilter(adminCustomerRequestAllStatusFilter);
       setAppliedAdminBookingSnapshotReference(
         loadedAppliedSnapshot ? currentAppliedReference : "",
       );
@@ -6281,17 +6403,19 @@ export default function Home() {
   function applyLatestAdminBookingOperationalSnapshot() {
     if (
       adminBookingPersistenceRecords.length > 0 &&
-      filteredAdminBookingPersistenceRecords.length === 0 &&
-      adminBookingPersistenceHasActiveFilters
+      displayedAdminBookingPersistenceRecords.length === 0 &&
+      (adminBookingPersistenceHasActiveFilters || adminCustomerRequestHasActiveFilters)
     ) {
       setAdminBookingPersistenceMessage({
         tone: "info",
-        text: "No loaded operational snapshots match this search/filter.",
+        text: adminCustomerRequestHasActiveFilters
+          ? "No customer booking requests match this search/filter."
+          : "No loaded operational snapshots match this search/filter.",
       });
       return;
     }
 
-    applyAdminBookingOperationalSnapshot(filteredAdminBookingPersistenceRecords[0]);
+    applyAdminBookingOperationalSnapshot(displayedAdminBookingPersistenceRecords[0]);
   }
 
   function clearAdminBookingPersistenceFilters() {
@@ -6304,6 +6428,20 @@ export default function Home() {
       setAdminBookingPersistenceMessage({
         tone: "info",
         text: "Operational snapshot filters cleared.",
+      });
+    }
+  }
+
+  function clearAdminCustomerRequestFilters() {
+    const hadActiveFilters = adminCustomerRequestHasActiveFilters;
+
+    setAdminCustomerRequestSearch("");
+    setAdminCustomerRequestStatusFilter(adminCustomerRequestAllStatusFilter);
+
+    if (hadActiveFilters) {
+      setAdminBookingPersistenceMessage({
+        tone: "info",
+        text: "Customer request filters cleared.",
       });
     }
   }
@@ -15923,27 +16061,84 @@ export default function Home() {
                   </button>
                 </div>
               ) : null}
+              {adminCustomerRequestRecords.length > 0 ? (
+                <div
+                  className="mt-3 rounded-md border border-amber-200 bg-amber-50/70 px-3 py-3"
+                  data-admin-booking-customer-request-filters="true"
+                >
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,15rem)_auto] sm:items-end">
+                    <label className="text-xs font-semibold text-amber-950">
+                      <span>Search customer booking requests</span>
+                      <input
+                        className="mt-1 min-h-10 w-full min-w-0 rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        data-admin-booking-customer-request-search="true"
+                        onChange={(event) => setAdminCustomerRequestSearch(event.target.value)}
+                        placeholder="Reference, customer, route, status"
+                        type="search"
+                        value={adminCustomerRequestSearch}
+                      />
+                    </label>
+                    <label className="text-xs font-semibold text-amber-950">
+                      <span>Customer request status</span>
+                      <select
+                        className="mt-1 min-h-10 w-full min-w-0 rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        data-admin-booking-customer-request-status-filter="true"
+                        onChange={(event) =>
+                          setAdminCustomerRequestStatusFilter(
+                            event.target.value as AdminCustomerRequestStatusFilter,
+                          )
+                        }
+                        value={adminCustomerRequestStatusFilter}
+                      >
+                        {adminCustomerRequestStatusFilterOptions.map((statusOption) => (
+                          <option key={statusOption.key} value={statusOption.key}>
+                            {statusOption.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      className="min-h-10 rounded-md border border-amber-300 bg-white px-3 py-2 text-left text-sm font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-admin-booking-customer-request-clear-filters="true"
+                      disabled={!adminCustomerRequestHasActiveFilters}
+                      onClick={clearAdminCustomerRequestFilters}
+                      type="button"
+                    >
+                      Clear Request Filters
+                    </button>
+                  </div>
+                  <p
+                    className="mt-2 text-xs font-semibold text-amber-900"
+                    data-admin-booking-customer-request-filter-summary="true"
+                  >
+                    Showing {filteredAdminCustomerRequestRecords.length} of{" "}
+                    {adminCustomerRequestRecords.length} customer booking requests in the current operational snapshot view.
+                  </p>
+                </div>
+              ) : null}
               {adminBookingPersistenceRecords.length > 0 ? (
                 <p
                   className="mt-2 text-xs font-semibold text-emerald-900"
                   data-admin-booking-persistence-filter-summary="true"
                 >
-                  Showing {filteredAdminBookingPersistenceRecords.length} of{" "}
+                  Showing {displayedAdminBookingPersistenceRecords.length} of{" "}
                   {adminBookingPersistenceRecords.length} loaded operational snapshots.
                 </p>
               ) : null}
               {adminBookingPersistenceRecords.length > 0 &&
-              filteredAdminBookingPersistenceRecords.length === 0 ? (
+              displayedAdminBookingPersistenceRecords.length === 0 ? (
                 <p
                   className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-900"
                   data-admin-booking-persistence-filter-empty="true"
                 >
-                  No loaded operational snapshots match this search/filter.
+                  {adminCustomerRequestHasActiveFilters
+                    ? "No customer booking requests match this search/filter."
+                    : "No loaded operational snapshots match this search/filter."}
                 </p>
               ) : null}
-              {filteredAdminBookingPersistenceRecords.length > 0 ? (
+              {displayedAdminBookingPersistenceRecords.length > 0 ? (
                 <div className="mt-3 grid gap-2" data-admin-booking-persistence-records="true">
-                  {filteredAdminBookingPersistenceRecords.slice(0, 3).map((record) => (
+                  {displayedAdminBookingPersistenceRecords.slice(0, 3).map((record) => (
                     <article
                       className="rounded-md border border-emerald-100 bg-white px-3 py-2 text-xs text-slate-700"
                       data-admin-booking-persistence-record={record.booking_reference}

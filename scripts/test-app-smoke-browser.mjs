@@ -350,17 +350,24 @@ const adminBookingPersistenceUiPatterns = [
   { label: "search operational snapshots wording", pattern: /\bsearch\s+operational\s+snapshots\b/i },
   { label: "snapshot status filter wording", pattern: /\bsnapshot\s+status\b/i },
   { label: "snapshot filter empty wording", pattern: /\bno\s+loaded\s+operational\s+snapshots\s+match\b/i },
+  { label: "customer request filters wording", pattern: /\bcustomer\s+request\s+filters?\b/i },
+  { label: "search customer booking requests wording", pattern: /\bsearch\s+customer\s+booking\s+requests\b/i },
+  { label: "customer request status filter wording", pattern: /\bcustomer\s+request\s+status\b/i },
+  { label: "clear request filters wording", pattern: /\bclear\s+request\s+filters\b/i },
+  { label: "customer request filters cleared wording", pattern: /\bcustomer\s+request\s+filters\s+cleared\b/i },
   { label: "customer request review decision wording", pattern: /\binternal\s+review\s+decision\s+only\b/i },
   { label: "customer request current review state wording", pattern: /\bcurrent\s+review\s+state\b/i },
   { label: "admin internal status wording", pattern: /\badmin[_\s-]+internal[_\s-]+status\b/i },
   { label: "customer-facing status wording", pattern: /\bcustomer[_\s-]+facing[_\s-]+status\b/i },
   { label: "short-notice review status wording", pattern: /\bshort[_\s-]+notice[_\s-]+review[_\s-]+status\b/i },
   { label: "needs review decision wording", pattern: /\bneeds\s+review\b/i },
+  { label: "approved internally wording", pattern: /\bapproved\s+internally\b/i },
   { label: "approve internally wording", pattern: /\bapprove\s+internally\b/i },
   { label: "decline internally wording", pattern: /\bdecline\s+internally\b/i },
   { label: "declined internally wording", pattern: /\bdeclined\s+internally\b/i },
   { label: "admin review required status wording", pattern: /\badmin\s+review\s+required\b/i },
   { label: "ready for confirmation status wording", pattern: /\bready\s+for\s+confirmation\b/i },
+  { label: "short-notice review required wording", pattern: /\bshort-notice\s+review\s+required\b/i },
   { label: "review decision saved wording", pattern: /\binternal\s+review\s+decision\s+saved\b/i },
   { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
   { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
@@ -1210,6 +1217,16 @@ async function runChromeTest() {
                   noAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-no-applied]")),
                   postCalls: calls.filter((call) => call.method === "POST").length,
                   recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+                  requestFilterControlsVisible: Boolean(
+                    document.querySelector("[data-admin-booking-customer-request-filters]"),
+                  ),
+                  requestFilterOptions: [
+                    ...document.querySelectorAll("[data-admin-booking-customer-request-status-filter] option"),
+                  ].map((option) => option.textContent.trim()),
+                  requestFilterSummary: document
+                    .querySelector("[data-admin-booking-customer-request-filter-summary]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
                   reviewStateText: (reviewState?.innerText || reviewState?.textContent || "")
                     .replace(/\\s+/g, " ")
                     .trim(),
@@ -1233,6 +1250,22 @@ async function runChromeTest() {
       assert.equal(loadState.getCalls, 1, "Expected one mocked admin booking GET call");
       assert.equal(loadState.filterControlsVisible, true, "Expected loaded operational snapshot filters");
       assert.equal(
+        loadState.requestFilterControlsVisible,
+        true,
+        "Expected loaded customer booking request filters",
+      );
+      assert.deepEqual(
+        loadState.requestFilterOptions,
+        [
+          "All requests",
+          "Needs review",
+          "Approved internally",
+          "Declined internally",
+          "Short-notice review required",
+        ],
+        "Expected compact safe customer request quick filters",
+      );
+      assert.equal(
         loadState.noAppliedVisible,
         true,
         "Expected no-applied operational snapshot guidance before applying a loaded record",
@@ -1241,6 +1274,11 @@ async function runChromeTest() {
         loadState.summary.includes("Showing 2 of 2"),
         true,
         "Expected loaded operational snapshot filter summary",
+      );
+      assert.equal(
+        loadState.requestFilterSummary.includes("Showing 1 of 1 customer booking requests"),
+        true,
+        "Expected customer request filter summary inside admin panel",
       );
       assert.equal(
         /price|billing|invoice|payment|payout|finance/i.test(loadState.recordText),
@@ -1310,9 +1348,39 @@ async function runChromeTest() {
           field.dispatchEvent(new Event("change", { bubbles: true }));
           return true;
         })()`);
+      const setAdminCustomerRequestSearch = async (value) =>
+        evaluate(`(() => {
+          const field = document.querySelector("[data-admin-booking-customer-request-search]");
+          if (!field) {
+            return false;
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(field.constructor.prototype, "value");
+          descriptor?.set?.call(field, ${JSON.stringify(value)});
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        })()`);
+      const setAdminCustomerRequestStatus = async (value) =>
+        evaluate(`(() => {
+          const field = document.querySelector("[data-admin-booking-customer-request-status-filter]");
+          if (!field) {
+            return false;
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(field.constructor.prototype, "value");
+          descriptor?.set?.call(field, ${JSON.stringify(value)});
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        })()`);
       const clearAdminSnapshotFilters = async () =>
         evaluate(`(() => {
           const button = document.querySelector("[data-admin-booking-persistence-clear-filters]");
+          button?.click();
+          return Boolean(button);
+        })()`);
+      const clearAdminCustomerRequestFilters = async () =>
+        evaluate(`(() => {
+          const button = document.querySelector("[data-admin-booking-customer-request-clear-filters]");
           button?.click();
           return Boolean(button);
         })()`);
@@ -1333,6 +1401,12 @@ async function runChromeTest() {
             patchCalls: calls.filter((call) => call.method === "PATCH").length,
             postCalls: calls.filter((call) => call.method === "POST").length,
             records,
+            requestSearchValue: document.querySelector("[data-admin-booking-customer-request-search]")?.value || "",
+            requestStatusValue: document.querySelector("[data-admin-booking-customer-request-status-filter]")?.value || "",
+            requestSummary: document
+              .querySelector("[data-admin-booking-customer-request-filter-summary]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
             searchValue: document.querySelector("[data-admin-booking-persistence-search]")?.value || "",
             statusValue: document.querySelector("[data-admin-booking-persistence-status-filter]")?.value || "",
             summary: document
@@ -1342,6 +1416,127 @@ async function runChromeTest() {
             textBaitLeaked: /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i.test(text),
           };
         })()`);
+
+      assert.equal(
+        await setAdminCustomerRequestSearch("Loaded Ops Stop"),
+        true,
+        "Expected customer request search control",
+      );
+      const requestRouteSearchState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 1 && state.records[0] === "LOADED-OPS-001" ? state : false;
+        },
+        10000,
+        "admin customer request route-point search",
+      );
+      assert.equal(
+        requestRouteSearchState.requestSummary.includes("Showing 1 of 1 customer booking requests"),
+        true,
+        "Expected request route-point search summary",
+      );
+      assert.equal(requestRouteSearchState.getCalls, 1, "Expected request search to stay local");
+      assert.equal(requestRouteSearchState.postCalls, 1, "Expected request search not to save");
+      assert.equal(requestRouteSearchState.patchCalls, 0, "Expected request search not to update");
+
+      assert.equal(await setAdminCustomerRequestSearch("Second Ops Customer"), true);
+      const requestOnlySearchState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.emptyVisible && state.records.length === 0 ? state : false;
+        },
+        10000,
+        "admin customer request excludes non-request snapshot search",
+      );
+      assert.equal(
+        requestOnlySearchState.requestSummary.includes("Showing 0 of 1 customer booking requests"),
+        true,
+        "Expected request search to exclude non-request operational snapshots",
+      );
+      assert.equal(
+        requestOnlySearchState.summary.includes("Showing 0 of 2"),
+        true,
+        "Expected displayed operational list to follow active request filters",
+      );
+      assert.equal(
+        requestOnlySearchState.textBaitLeaked,
+        false,
+        "Expected request search not to expose forbidden mocked fields",
+      );
+
+      assert.equal(
+        await clearAdminCustomerRequestFilters(),
+        true,
+        "Expected clear customer request filters control",
+      );
+      const requestSearchClearedState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 2 &&
+            state.requestSearchValue === "" &&
+            state.requestStatusValue === "all"
+            ? state
+            : false;
+        },
+        10000,
+        "admin customer request clear search filters",
+      );
+      assert.equal(requestSearchClearedState.summary.includes("Showing 2 of 2"), true);
+      assert.equal(
+        requestSearchClearedState.feedback.includes("Customer request filters cleared"),
+        true,
+        "Expected request clear filters to give safe admin feedback",
+      );
+
+      assert.equal(
+        await setAdminCustomerRequestStatus("short-notice-review-required"),
+        true,
+        "Expected customer request quick status filter",
+      );
+      const shortNoticeRequestState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 1 && state.records[0] === "LOADED-OPS-001" ? state : false;
+        },
+        10000,
+        "admin customer request short-notice status filter",
+      );
+      assert.equal(
+        shortNoticeRequestState.requestSummary.includes("Showing 1 of 1 customer booking requests"),
+        true,
+        "Expected short-notice request filter summary",
+      );
+      assert.equal(shortNoticeRequestState.getCalls, 1, "Expected request status filter to stay local");
+
+      assert.equal(await setAdminCustomerRequestStatus("approved-internally"), true);
+      const approvedRequestState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.emptyVisible && state.records.length === 0 ? state : false;
+        },
+        10000,
+        "admin customer request approved status filter",
+      );
+      assert.equal(
+        approvedRequestState.requestSummary.includes("Showing 0 of 1 customer booking requests"),
+        true,
+        "Expected approved request filter empty summary before an approved request exists",
+      );
+
+      assert.equal(
+        await clearAdminCustomerRequestFilters(),
+        true,
+        "Expected clear request filters after quick status",
+      );
+      const requestStatusClearedState = await waitForCondition(
+        async () => {
+          const state = await collectAdminSnapshotFilterState();
+          return state.records.length === 2 && state.requestStatusValue === "all" ? state : false;
+        },
+        10000,
+        "admin customer request clear status filter",
+      );
+      assert.equal(requestStatusClearedState.summary.includes("Showing 2 of 2"), true);
 
       assert.equal(await setAdminSnapshotStatus("Confirmed"), true, "Expected status filter control");
       const confirmedFilterState = await waitForCondition(

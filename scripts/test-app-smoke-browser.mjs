@@ -26288,9 +26288,11 @@ async function runChromeTest() {
         const lowerText = text.toLowerCase();
         const submit = document.querySelector("[data-customer-booking-submit]");
         const feedback = document.querySelector("[data-customer-booking-feedback]");
+        const confirmationStatus = document.querySelector("[data-customer-booking-confirmation-status]");
         const nextSteps = document.querySelector("[data-customer-booking-next-steps]");
         const submitRect = submit?.getBoundingClientRect();
         const feedbackRect = feedback?.getBoundingClientRect();
+        const confirmationStatusRect = confirmationStatus?.getBoundingClientRect();
         const nextStepsRect = nextSteps?.getBoundingClientRect();
 
         const fieldState = Object.fromEntries(
@@ -26351,6 +26353,16 @@ async function runChromeTest() {
             submitRect && feedbackRect ? Math.round(Math.abs(feedbackRect.top - submitRect.bottom)) : 999,
           feedbackText: feedback?.textContent.trim() || "",
           feedbackTone: feedback?.getAttribute("data-customer-booking-feedback-tone") || "",
+          confirmationStatus: {
+            detail:
+              document.querySelector("[data-customer-booking-confirmation-status-detail]")?.textContent.trim() || "",
+            text: confirmationStatus?.textContent.replace(/\s+/g, " ").trim() || "",
+            title:
+              document.querySelector("[data-customer-booking-confirmation-status-title]")?.textContent.trim() || "",
+            visible: Boolean(
+              confirmationStatusRect && confirmationStatusRect.width > 0 && confirmationStatusRect.height > 0,
+            ),
+          },
           customerIntakeHandoffVisible: Boolean(document.querySelector("[data-customer-intake-handoff]")),
           intakeConfirmationReadinessVisible: Boolean(
             document.querySelector("[data-intake-confirmation-readiness]"),
@@ -26714,6 +26726,7 @@ async function runChromeTest() {
         true,
         "Expected /book customer-safe submit button",
       );
+      assert.equal(initialState.confirmationStatus.visible, false, "Expected /book status panel to wait for submit");
       assert.equal(
         initialState.customerIntakeHandoffVisible,
         false,
@@ -27040,6 +27053,7 @@ async function runChromeTest() {
         "invalid customer booking request feedback",
       );
       assert.equal(invalidState.feedbackTone, "error", "Expected invalid /book submit to show a local error");
+      assert.equal(invalidState.confirmationStatus.visible, false, "Expected invalid /book submit not to show request status");
       assert.deepEqual(
         invalidState.missingFields,
         ["Contact no.", "Passenger name", "Pickup date", "Pickup time", "Pickup location", "Drop-off location"],
@@ -27120,6 +27134,17 @@ async function runChromeTest() {
         validState.feedbackText,
         "Booking request received. Our team will review and confirm availability.",
         "Expected customer-safe not-confirmed success feedback",
+      );
+      assert.equal(validState.confirmationStatus.visible, true, "Expected valid /book submit to show request status");
+      assert.equal(
+        validState.confirmationStatus.title,
+        "Request received - pending review",
+        "Expected /book status title to stay request-only",
+      );
+      assert.equal(
+        validState.confirmationStatus.detail,
+        "This is not confirmed yet. We will contact you after review.",
+        "Expected /book status detail to state request is not confirmed yet",
       );
       assert.equal(validState.feedbackDistanceFromSubmit < 160, true, "Expected valid /book feedback near the submit button");
       assert.equal(
@@ -27255,6 +27280,11 @@ async function runChromeTest() {
         "Booking request received. Our team will review and confirm availability.",
         "Expected same-date/same-time /book submit to remain a staff-reviewed request",
       );
+      assert.equal(
+        sameTimeRepeatState.confirmationStatus.detail,
+        "This is not confirmed yet. We will contact you after review.",
+        "Expected repeated /book submit to keep request-only status wording",
+      );
       assert.deepEqual(
         sameTimeRepeatState.sameTimeBlockingText,
         [],
@@ -27295,6 +27325,11 @@ async function runChromeTest() {
       );
       assert.equal(shortNoticeState.feedbackTone, "success", "Expected short-notice submit to show success review message");
       assert.equal(
+        shortNoticeState.confirmationStatus.detail,
+        "This booking is within 24 hours, so our team will review and confirm availability.",
+        "Expected short-notice status detail to preserve exact customer wording",
+      );
+      assert.equal(
         shortNoticeState.customerBookingRequestCalls.at(-1)?.body.pickupDate,
         "2026-06-02",
         "Expected short-notice request payload to keep the customer pickup date",
@@ -27326,6 +27361,11 @@ async function runChromeTest() {
         "disabled customer booking request feedback",
       );
       assert.equal(disabledIntakeState.feedbackTone, "error", "Expected disabled intake to show safe customer error");
+      assert.equal(
+        disabledIntakeState.confirmationStatus.visible,
+        false,
+        "Expected failed /book submit not to leave request status visible",
+      );
       assert.equal(
         /supabase|service_role|sql|stack|secret|key/i.test(disabledIntakeState.feedbackText),
         false,

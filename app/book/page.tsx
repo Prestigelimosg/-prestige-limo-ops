@@ -60,6 +60,11 @@ type Feedback = {
   text: string;
 };
 
+type CustomerBookingConfirmationStatus = {
+  detail: string;
+  title: string;
+};
+
 const initialForm: BookingRequestForm = {
   companyName: "",
   contactNo: "",
@@ -138,6 +143,7 @@ export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmationStatus, setConfirmationStatus] = useState<CustomerBookingConfirmationStatus | null>(null);
   const [feedback, setFeedback] = useState<Feedback>({
     tone: "info",
     text: "Send a request and our staff will review the details before confirming availability.",
@@ -146,6 +152,7 @@ export default function CustomerBookingPage() {
   function updateField(field: keyof BookingRequestForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
     setMissingFields((current) => current.filter((item) => item !== field));
+    setConfirmationStatus(null);
   }
 
   function updatePickupTimePart(part: "hour" | "minute", value: string) {
@@ -160,6 +167,7 @@ export default function CustomerBookingPage() {
       };
     });
     setMissingFields((current) => current.filter((item) => item !== "pickupTime"));
+    setConfirmationStatus(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -168,6 +176,7 @@ export default function CustomerBookingPage() {
     const missing = requiredFields.filter((field) => !form[field].trim());
     if (missing.length > 0) {
       setMissingFields(missing);
+      setConfirmationStatus(null);
       setFeedback({
         tone: "error",
         text: "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
@@ -177,6 +186,7 @@ export default function CustomerBookingPage() {
 
     setMissingFields([]);
     setSubmitting(true);
+    setConfirmationStatus(null);
     setFeedback({
       tone: "info",
       text: "Submitting your booking request for review...",
@@ -213,14 +223,22 @@ export default function CustomerBookingPage() {
       }
 
       const requestStatus = result?.request?.short_notice_review_status;
+      const shortNoticeReviewRequired = requestStatus === "Admin Review Required";
       setFeedback({
         tone: "success",
         text:
-          requestStatus === "Admin Review Required"
+          shortNoticeReviewRequired
             ? "This booking is within 24 hours, so our team will review and confirm availability."
             : "Booking request received. Our team will review and confirm availability.",
       });
+      setConfirmationStatus({
+        title: "Request received - pending review",
+        detail: shortNoticeReviewRequired
+          ? "This booking is within 24 hours, so our team will review and confirm availability."
+          : "This is not confirmed yet. We will contact you after review.",
+      });
     } catch {
+      setConfirmationStatus(null);
       setFeedback({
         tone: "error",
         text: "Booking request could not be submitted right now. Please contact Prestige Limo.",
@@ -593,6 +611,20 @@ export default function CustomerBookingPage() {
               >
                 {feedback.text}
               </div>
+              {confirmationStatus ? (
+                <section
+                  aria-label="Booking request status"
+                  className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm leading-6 text-emerald-950"
+                  data-customer-booking-confirmation-status="true"
+                >
+                  <p className="font-semibold" data-customer-booking-confirmation-status-title="true">
+                    {confirmationStatus.title}
+                  </p>
+                  <p className="mt-1" data-customer-booking-confirmation-status-detail="true">
+                    {confirmationStatus.detail}
+                  </p>
+                </section>
+              ) : null}
             </div>
           </div>
         </form>

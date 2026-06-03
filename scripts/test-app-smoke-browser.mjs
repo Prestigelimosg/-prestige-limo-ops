@@ -27663,6 +27663,14 @@ async function runChromeTest() {
         const changePickupHour = document.querySelector("[data-customer-change-request-pickup-hour]");
         const changePickupMinute = document.querySelector("[data-customer-change-request-pickup-minute]");
         const changeBookingOptions = changeBookingSelect ? [...changeBookingSelect.options] : [];
+        const cancellationIntake = document.querySelector("[data-customer-cancellation-request-intake]");
+        const cancellationIntakeRect = cancellationIntake?.getBoundingClientRect();
+        const cancellationSubmit = document.querySelector("[data-customer-cancellation-request-submit]");
+        const cancellationSubmitRect = cancellationSubmit?.getBoundingClientRect();
+        const cancellationFeedback = document.querySelector("[data-customer-cancellation-request-feedback]");
+        const cancellationFeedbackRect = cancellationFeedback?.getBoundingClientRect();
+        const cancellationBookingSelect = document.querySelector("[data-customer-cancellation-request-field='bookingId']");
+        const cancellationBookingOptions = cancellationBookingSelect ? [...cancellationBookingSelect.options] : [];
         const requestFieldState = (field) => {
           const control = document.querySelector(\`[data-customer-portal-request-field="\${field}"]\`);
           const rect = control?.getBoundingClientRect();
@@ -28078,6 +28086,30 @@ async function runChromeTest() {
             },
             visible: Boolean(changeIntakeRect && changeIntakeRect.width > 0 && changeIntakeRect.height > 0),
           },
+          cancellationRequestIntake: {
+            closedWarning:
+              document.querySelector("[data-customer-cancellation-request-closed-warning]")?.textContent.trim() || "",
+            feedbackDistanceFromSubmit:
+              cancellationSubmitRect && cancellationFeedbackRect
+                ? Math.round(Math.abs(cancellationFeedbackRect.top - cancellationSubmitRect.bottom))
+                : 999,
+            feedbackText: cancellationFeedback?.textContent.trim() || "",
+            feedbackTone: cancellationFeedback?.getAttribute("data-tone") || "",
+            helper: document.querySelector("[data-customer-cancellation-request-helper]")?.textContent.trim() || "",
+            optionIds: cancellationBookingOptions.map((option) => option.value).filter(Boolean),
+            optionLabels: cancellationBookingOptions.map((option) => option.textContent.trim()).filter(Boolean),
+            selectedBookingId: cancellationBookingSelect?.value || "",
+            selectionText:
+              document.querySelector("[data-customer-cancellation-request-selection]")?.textContent.trim() || "",
+            submitVisible: Boolean(
+              cancellationSubmitRect && cancellationSubmitRect.width > 0 && cancellationSubmitRect.height >= 40,
+            ),
+            text: cancellationIntake?.innerText || "",
+            values: {
+              reason: document.querySelector("[data-customer-cancellation-request-field='reason']")?.value || "",
+            },
+            visible: Boolean(cancellationIntakeRect && cancellationIntakeRect.width > 0 && cancellationIntakeRect.height > 0),
+          },
           activeMonthLabel: document.querySelector("[data-customer-portal-active-month]")?.textContent.trim() || "",
           currentMonthActive: currentMonthButton?.getAttribute("data-active") === "true",
           monthGroupsVisible: Boolean(document.querySelector("[data-customer-portal-month-groups]")),
@@ -28193,6 +28225,38 @@ async function runChromeTest() {
         return true;
       })()`);
       assert.equal(submitted, true, "Expected customer change request submit to be clickable");
+    };
+
+    const setCustomerCancellationRequestField = async (field, value) => {
+      const actualValue = await evaluate(`(() => {
+        const control = document.querySelector(${JSON.stringify(`[data-customer-cancellation-request-field="${field}"]`)});
+
+        if (!control) {
+          return null;
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
+        descriptor?.set?.call(control, ${JSON.stringify(value)});
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return control.value;
+      })()`);
+      assert.equal(actualValue, value, `Expected customer cancellation request field ${field} to accept test value`);
+    };
+
+    const submitCustomerCancellationRequest = async () => {
+      const submitted = await evaluate(`(() => {
+        const button = document.querySelector("[data-customer-cancellation-request-submit]");
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(submitted, true, "Expected customer cancellation request submit to be clickable");
     };
 
     const setCustomerPortalSearch = async (value) => {
@@ -28653,6 +28717,26 @@ async function runChromeTest() {
         true,
         "Expected /my-bookings change request intake submit",
       );
+      assert.equal(
+        initialState.cancellationRequestIntake.visible,
+        true,
+        "Expected /my-bookings cancellation request intake",
+      );
+      assert.equal(
+        initialState.cancellationRequestIntake.helper,
+        "Choose from the currently visible eligible bookings below. This prepares a request only and does not cancel your booking yet.",
+        "Expected /my-bookings cancellation request intake helper",
+      );
+      assert.equal(
+        initialState.cancellationRequestIntake.feedbackText,
+        "Choose one of the visible eligible bookings below and prepare a cancellation request for team review.",
+        "Expected /my-bookings cancellation request intake initial feedback",
+      );
+      assert.equal(
+        initialState.cancellationRequestIntake.submitVisible,
+        true,
+        "Expected /my-bookings cancellation request intake submit",
+      );
       assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
       assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
       assert.equal(initialState.rowCount, 10, "Expected /my-bookings to show at most 10 rows by default");
@@ -28676,10 +28760,20 @@ async function runChromeTest() {
         initialState.rowIds,
         "Expected /my-bookings change request options to use current visible rows only",
       );
+      assert.deepEqual(
+        initialState.cancellationRequestIntake.optionIds,
+        initialState.rowIds,
+        "Expected /my-bookings cancellation request options to use current visible eligible rows only",
+      );
       assert.equal(
         initialState.changeRequestIntake.optionIds.includes("booking-011"),
         false,
         "Expected /my-bookings change request options not to include hidden page-two rows",
+      );
+      assert.equal(
+        initialState.cancellationRequestIntake.optionIds.includes("booking-011"),
+        false,
+        "Expected /my-bookings cancellation request options not to include hidden page-two rows",
       );
       assert.deepEqual(
         initialState.forbiddenVisibleText,
@@ -28865,6 +28959,76 @@ async function runChromeTest() {
         "/my-bookings valid change request",
       );
 
+      await setCustomerCancellationRequestField("bookingId", "booking-004");
+      await setCustomerCancellationRequestField(
+        "reason",
+        "Passenger needs to cancel this trip and understands the team must review first.",
+      );
+      await submitCustomerCancellationRequest();
+      const validCancellationRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.cancellationRequestIntake.feedbackText.includes(
+            "Cancellation request prepared for team review",
+          )
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal valid cancellation request intake feedback",
+      );
+      assert.equal(
+        validCancellationRequestState.cancellationRequestIntake.selectedBookingId,
+        "booking-004",
+        "Expected /my-bookings cancellation request to target the selected visible row",
+      );
+      assert.equal(
+        validCancellationRequestState.cancellationRequestIntake.feedbackText.includes("Your booking is not cancelled yet."),
+        true,
+        "Expected valid cancellation request feedback not to imply direct cancellation",
+      );
+      assert.equal(
+        validCancellationRequestState.cancellationRequestIntake.feedbackText.includes("Our team must review first."),
+        true,
+        "Expected valid cancellation request feedback to require team review",
+      );
+      assert.equal(
+        validCancellationRequestState.cancellationRequestIntake.feedbackText.includes(
+          "For urgent or same-day cancellation, please contact our team directly.",
+        ),
+        true,
+        "Expected valid cancellation request feedback to direct urgent cancellations to the team",
+      );
+      assert.equal(
+        validCancellationRequestState.cancellationRequestIntake.feedbackDistanceFromSubmit <= 24,
+        true,
+        `Expected cancellation request feedback near submit button, got ${validCancellationRequestState.cancellationRequestIntake.feedbackDistanceFromSubmit}px`,
+      );
+      assert.equal(
+        validCancellationRequestState.rows.find((row) => row.id === "booking-004")?.status,
+        "Confirmed",
+        "Expected cancellation request intake not to cancel or change the booking row status",
+      );
+      assert.deepEqual(
+        validCancellationRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected valid /my-bookings cancellation request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(
+        validCancellationRequestState.text,
+        "/my-bookings valid cancellation request",
+      );
+      assertNoAdminBookingPersistenceLeaks(validCancellationRequestState.text, "/my-bookings valid cancellation request");
+      assertNoPublicRouteRuntimeCalls(
+        validCancellationRequestState.integrationCalls,
+        validCancellationRequestState.resourceCalls,
+        "/my-bookings valid cancellation request",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings valid cancellation request"),
+        "/my-bookings valid cancellation request",
+      );
+
       await clickCustomerPortalFilter("Completed");
       const completedForChangeRequestState = await waitForCondition(
         async () => {
@@ -28880,6 +29044,16 @@ async function runChromeTest() {
         completedForChangeRequestState.changeRequestIntake.optionIds.includes("booking-013"),
         true,
         "Expected closed change request check to use visible completed row",
+      );
+      assert.equal(
+        completedForChangeRequestState.cancellationRequestIntake.optionIds.includes("booking-013"),
+        false,
+        "Expected closed cancellation request check not to offer visible completed row as eligible",
+      );
+      assert.equal(
+        completedForChangeRequestState.cancellationRequestIntake.closedWarning,
+        "This booking cannot be cancelled here. Please contact our team if you need help.",
+        "Expected closed booking warning in cancellation request intake",
       );
       await setCustomerChangeRequestField("bookingId", "booking-013");
       await submitCustomerChangeRequest();
@@ -28918,6 +29092,52 @@ async function runChromeTest() {
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/my-bookings closed change request"),
         "/my-bookings closed change request",
+      );
+
+      await submitCustomerCancellationRequest();
+      const closedCancellationRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.cancellationRequestIntake.feedbackText.includes(
+            "This booking cannot be cancelled here",
+          )
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer portal closed booking cancellation request feedback",
+      );
+      assert.equal(
+        closedCancellationRequestState.cancellationRequestIntake.feedbackText,
+        "This booking cannot be cancelled here. Please contact our team if you need help.",
+        "Expected completed booking cancellation request submit to stay safe",
+      );
+      assert.equal(
+        closedCancellationRequestState.cancellationRequestIntake.optionIds.includes("booking-013"),
+        false,
+        "Expected completed booking not to become selectable for cancellation",
+      );
+      assert.deepEqual(
+        closedCancellationRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        [],
+        "Expected closed /my-bookings cancellation request not to call Supabase, payment, bank, notification, or calendar APIs",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(
+        closedCancellationRequestState.text,
+        "/my-bookings closed cancellation request",
+      );
+      assertNoAdminBookingPersistenceLeaks(
+        closedCancellationRequestState.text,
+        "/my-bookings closed cancellation request",
+      );
+      assertNoPublicRouteRuntimeCalls(
+        closedCancellationRequestState.integrationCalls,
+        closedCancellationRequestState.resourceCalls,
+        "/my-bookings closed cancellation request",
+      );
+      assertNoBrowserPersistenceLeaks(
+        await readBrowserPersistenceState("/my-bookings closed cancellation request"),
+        "/my-bookings closed cancellation request",
       );
 
       await clickCustomerPortalFilter("Upcoming");
@@ -29610,6 +29830,21 @@ async function runChromeTest() {
         mobileState.changeRequestIntake.submitVisible,
         true,
         "Expected /my-bookings mobile change request submit to stay touch-friendly",
+      );
+      assert.equal(
+        mobileState.cancellationRequestIntake.visible,
+        true,
+        "Expected /my-bookings mobile cancellation request intake",
+      );
+      assert.equal(
+        mobileState.cancellationRequestIntake.submitVisible,
+        true,
+        "Expected /my-bookings mobile cancellation request submit to stay touch-friendly",
+      );
+      assert.equal(
+        mobileState.cancellationRequestIntake.text.includes("does not cancel your booking yet"),
+        true,
+        "Expected /my-bookings mobile cancellation request boundary",
       );
       assert.equal(
         mobileState.requestNextSteps.visible,

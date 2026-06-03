@@ -51,6 +51,16 @@ type CustomerChangeRequestFeedback = {
   text: string;
 };
 
+type CustomerCancellationRequestForm = {
+  bookingId: string;
+  reason: string;
+};
+
+type CustomerCancellationRequestFeedback = {
+  tone: BookingRequestFeedback["tone"];
+  text: string;
+};
+
 type CustomerRequestLookupResult = {
   detail: string;
   status: "Cancelled" | "Completed" | "Confirmed" | "Not confirmed yet" | "Pending review" | "Request received";
@@ -183,6 +193,16 @@ const initialCustomerChangeRequestForm: CustomerChangeRequestForm = {
 const initialCustomerChangeRequestFeedback: CustomerChangeRequestFeedback = {
   tone: "info",
   text: "Choose one of the visible bookings below and prepare a change request for team review.",
+};
+
+const initialCustomerCancellationRequestForm: CustomerCancellationRequestForm = {
+  bookingId: "",
+  reason: "",
+};
+
+const initialCustomerCancellationRequestFeedback: CustomerCancellationRequestFeedback = {
+  tone: "info",
+  text: "Choose one of the visible eligible bookings below and prepare a cancellation request for team review.",
 };
 
 const samplePickupLocations = [
@@ -609,6 +629,11 @@ export default function CustomerPortalPage() {
   const [changeRequestFeedback, setChangeRequestFeedback] = useState<CustomerChangeRequestFeedback>(
     initialCustomerChangeRequestFeedback,
   );
+  const [cancellationRequestForm, setCancellationRequestForm] = useState<CustomerCancellationRequestForm>(
+    initialCustomerCancellationRequestForm,
+  );
+  const [cancellationRequestFeedback, setCancellationRequestFeedback] =
+    useState<CustomerCancellationRequestFeedback>(initialCustomerCancellationRequestFeedback);
 
   const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
@@ -676,6 +701,15 @@ export default function CustomerPortalPage() {
   const showingStart = scopedBookings.length === 0 ? 0 : firstVisibleBookingIndex + 1;
   const showingEnd = firstVisibleBookingIndex + visibleBookings.length;
   const selectedChangeRequestBooking = visibleBookings.find((booking) => booking.id === changeRequestForm.bookingId);
+  const cancellationEligibleBookings = visibleBookings.filter(
+    (booking) => booking.status !== "Completed" && booking.status !== "Cancelled",
+  );
+  const hasClosedVisibleBookings = visibleBookings.some(
+    (booking) => booking.status === "Completed" || booking.status === "Cancelled",
+  );
+  const selectedCancellationRequestBooking = cancellationEligibleBookings.find(
+    (booking) => booking.id === cancellationRequestForm.bookingId,
+  );
   const selectedMonthOption = pastMonthOptions.find((month) => month.key === selectedBookingMonth);
   const activeMonthLabel = (() => {
     if (activeFilter === "Upcoming") {
@@ -713,13 +747,23 @@ export default function CustomerPortalPage() {
     setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
   }
 
+  function resetCustomerCancellationRequestIntake() {
+    setCancellationRequestForm(initialCustomerCancellationRequestForm);
+    setCancellationRequestFeedback(initialCustomerCancellationRequestFeedback);
+  }
+
+  function resetCustomerReviewIntakes() {
+    resetCustomerChangeRequestIntake();
+    resetCustomerCancellationRequestIntake();
+  }
+
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = section === "New Booking Request" ? "Upcoming" : section;
 
     setActiveSection(section);
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerChangeRequestIntake();
+    resetCustomerReviewIntakes();
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
   }
@@ -728,7 +772,7 @@ export default function CustomerPortalPage() {
     setSearchQuery(value);
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerChangeRequestIntake();
+    resetCustomerReviewIntakes();
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
   }
 
@@ -742,7 +786,7 @@ export default function CustomerPortalPage() {
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerChangeRequestIntake();
+    resetCustomerReviewIntakes();
   }
 
   function handlePageChange(direction: "next" | "previous") {
@@ -757,7 +801,7 @@ export default function CustomerPortalPage() {
     });
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerChangeRequestIntake();
+    resetCustomerReviewIntakes();
   }
 
   function handleRequestChange(booking: CustomerPortalBooking) {
@@ -776,6 +820,11 @@ export default function CustomerPortalPage() {
   function updateChangeRequestField(field: keyof CustomerChangeRequestForm, value: string) {
     setChangeRequestForm((current) => ({ ...current, [field]: value }));
     setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
+  }
+
+  function updateCancellationRequestField(field: keyof CustomerCancellationRequestForm, value: string) {
+    setCancellationRequestForm((current) => ({ ...current, [field]: value }));
+    setCancellationRequestFeedback(initialCustomerCancellationRequestFeedback);
   }
 
   function updateChangeRequestPickupTimePart(part: "hour" | "minute", value: string) {
@@ -833,6 +882,41 @@ export default function CustomerPortalPage() {
         "Change request prepared for team review. This does not change your booking yet. " +
         "This is request-only and not confirmed yet. Our team will review and confirm. " +
         "For urgent changes, please contact our team directly.",
+    });
+  }
+
+  function handleCancellationRequestSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (cancellationEligibleBookings.length === 0) {
+      setCancellationRequestFeedback({
+        tone: "error",
+        text: "This booking cannot be cancelled here. Please contact our team if you need help.",
+      });
+      return;
+    }
+
+    if (!selectedCancellationRequestBooking) {
+      setCancellationRequestFeedback({
+        tone: "error",
+        text: "Choose one of the visible eligible bookings before preparing a cancellation request.",
+      });
+      return;
+    }
+
+    if (!cancellationRequestForm.reason.trim()) {
+      setCancellationRequestFeedback({
+        tone: "error",
+        text: "Add a short cancellation reason for our team to review before submitting.",
+      });
+      return;
+    }
+
+    setCancellationRequestFeedback({
+      tone: "success",
+      text:
+        "Cancellation request prepared for team review. Your booking is not cancelled yet. " +
+        "Our team must review first. For urgent or same-day cancellation, please contact our team directly.",
     });
   }
 
@@ -1554,6 +1638,96 @@ export default function CustomerPortalPage() {
                       data-tone={changeRequestFeedback.tone}
                     >
                       {changeRequestFeedback.text}
+                    </p>
+                  </div>
+                </form>
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="customer-cancellation-request-title"
+              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+              data-customer-cancellation-request-intake="true"
+            >
+              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950" id="customer-cancellation-request-title">
+                    Request Cancellation
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-cancellation-request-helper="true">
+                    Choose from the currently visible eligible bookings below. This prepares a request only and does not
+                    cancel your booking yet.
+                  </p>
+                  {selectedCancellationRequestBooking ? (
+                    <div
+                      className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
+                      data-customer-cancellation-request-selection="true"
+                    >
+                      <p className="font-semibold text-slate-950">
+                        {selectedCancellationRequestBooking.passengerName}
+                      </p>
+                      <p>
+                        {selectedCancellationRequestBooking.id} - {selectedCancellationRequestBooking.status}
+                      </p>
+                      <p>{selectedCancellationRequestBooking.pickupDateTime}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <form className="flex flex-col gap-3" onSubmit={handleCancellationRequestSubmit}>
+                  <label className="text-sm font-semibold text-slate-800">
+                    Booking or request reference
+                    <select
+                      className={fieldClass()}
+                      data-customer-cancellation-request-field="bookingId"
+                      name="cancellationRequestBookingId"
+                      onChange={(event) => updateCancellationRequestField("bookingId", event.target.value)}
+                      value={cancellationRequestForm.bookingId}
+                    >
+                      <option value="">Choose a visible eligible booking or request</option>
+                      {cancellationEligibleBookings.map((booking) => (
+                        <option key={booking.id} value={booking.id}>
+                          {booking.id} - {booking.passengerName} - {booking.pickupDateTime} - {booking.status}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-sm font-semibold text-slate-800">
+                    Cancellation reason
+                    <textarea
+                      className={`${fieldClass()} min-h-24 resize-y`}
+                      data-customer-cancellation-request-field="reason"
+                      name="cancellationRequestReason"
+                      onChange={(event) => updateCancellationRequestField("reason", event.target.value)}
+                      placeholder="Share the reason or timing details for our team to review"
+                      value={cancellationRequestForm.reason}
+                    />
+                  </label>
+
+                  {hasClosedVisibleBookings ? (
+                    <p
+                      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
+                      data-customer-cancellation-request-closed-warning="true"
+                    >
+                      This booking cannot be cancelled here. Please contact our team if you need help.
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-col gap-3 border-t border-slate-200 pt-3">
+                    <button
+                      className="min-h-11 w-full rounded-md bg-slate-950 px-4 py-2 text-base font-semibold text-white transition hover:bg-slate-800 sm:w-fit"
+                      data-customer-cancellation-request-submit="true"
+                      type="submit"
+                    >
+                      Prepare Cancellation Request
+                    </button>
+                    <p
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClass(cancellationRequestFeedback.tone)}`}
+                      data-customer-cancellation-request-feedback="true"
+                      data-tone={cancellationRequestFeedback.tone}
+                    >
+                      {cancellationRequestFeedback.text}
                     </p>
                   </div>
                 </form>

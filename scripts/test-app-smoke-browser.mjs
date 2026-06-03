@@ -356,6 +356,7 @@ const adminBookingPersistenceUiPatterns = [
   { label: "clear request filters wording", pattern: /\bclear\s+request\s+filters\b/i },
   { label: "customer request filters cleared wording", pattern: /\bcustomer\s+request\s+filters\s+cleared\b/i },
   { label: "customer request priority order wording", pattern: /\bpriority\s+order:\s+short-notice\s+and\s+needs-review\s+requests\s+first\b/i },
+  { label: "customer request wait time wording", pattern: /\bwaiting(?:\s+time)?:\s+(?:not\s+available|today|\d+\s+(?:min|hr|days?))\b/i },
   { label: "customer request review decision wording", pattern: /\binternal\s+review\s+decision\s+only\b/i },
   { label: "customer request current review state wording", pattern: /\bcurrent\s+review\s+state\b/i },
   { label: "admin internal status wording", pattern: /\badmin[_\s-]+internal[_\s-]+status\b/i },
@@ -1246,6 +1247,11 @@ async function runChromeTest() {
             const secondRecord = document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']");
             const reviewState = document.querySelector("[data-admin-booking-customer-request-review-state='LOADED-OPS-001']");
             const calls = window.__adminBookingPersistenceCalls || [];
+            const waitLabels = [...document.querySelectorAll("[data-admin-booking-customer-request-wait-time]")]
+              .map((label) => ({
+                reference: label.getAttribute("data-admin-booking-customer-request-wait-time"),
+                text: label.textContent.replace(/\\s+/g, " ").trim(),
+              }));
 
             return feedback.includes("Loaded 3 operational booking records") && record && lowerPriorityRecord && secondRecord
               ? {
@@ -1268,6 +1274,7 @@ async function runChromeTest() {
                     .querySelector("[data-admin-booking-customer-request-priority-order]")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
+                  requestWaitLabels: waitLabels,
                   requestFilterSummary: document
                     .querySelector("[data-admin-booking-customer-request-filter-summary]")
                     ?.textContent.replace(/\\s+/g, " ")
@@ -1334,6 +1341,16 @@ async function runChromeTest() {
         loadState.requestPriorityOrder.includes("Priority order: short-notice and needs-review requests first."),
         true,
         "Expected admin-only customer request priority helper",
+      );
+      assert.deepEqual(
+        loadState.requestWaitLabels.map((label) => label.reference),
+        ["LOADED-OPS-001", "LOW-REQ-003"],
+        "Expected wait-time labels only for customer booking requests",
+      );
+      assert.equal(
+        loadState.requestWaitLabels.every((label) => /^Waiting: (?:\d+ min|\d+ hr|\d+ days?|today)$/.test(label.text)),
+        true,
+        "Expected compact admin-only customer request wait-time labels",
       );
       assert.equal(
         /price|billing|invoice|payment|payout|finance/i.test(loadState.recordText),

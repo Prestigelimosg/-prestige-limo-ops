@@ -2855,6 +2855,39 @@ function adminBookingPersistencePickupDisplay(record: AdminBookingPersistenceRec
   return pickupValues[1] || pickupValues[0] || "Pickup time TBC";
 }
 
+function adminCustomerRequestWaitTimeLabel(
+  record: AdminBookingPersistenceRecord,
+  currentTimeMs: number,
+) {
+  const createdAt = clean(record.created_at);
+
+  if (!createdAt) {
+    return "Waiting time: not available";
+  }
+
+  const createdMs = new Date(createdAt).getTime();
+
+  if (!Number.isFinite(createdMs) || createdMs > currentTimeMs) {
+    return "Waiting time: not available";
+  }
+
+  const waitMinutes = Math.floor((currentTimeMs - createdMs) / (60 * 1000));
+
+  if (waitMinutes < 60) {
+    return `Waiting: ${Math.max(0, waitMinutes)} min`;
+  }
+
+  const waitHours = Math.floor(waitMinutes / 60);
+
+  if (waitHours < 24) {
+    return `Waiting: ${waitHours} hr`;
+  }
+
+  const waitDays = Math.floor(waitHours / 24);
+
+  return `Waiting: ${waitDays} ${waitDays === 1 ? "day" : "days"}`;
+}
+
 function adminBookingPersistencePickupTimeMs(record: AdminBookingPersistenceRecord) {
   const pickupDateTime = clean(record.pickup_datetime);
 
@@ -16267,6 +16300,14 @@ export default function Home() {
                           ? " · Admin review required before confirmation"
                           : ""}
                       </p>
+                      {adminBookingPersistenceRecordIsCustomerRequest(record) ? (
+                        <p
+                          className="mt-1 font-semibold text-amber-900"
+                          data-admin-booking-customer-request-wait-time={record.booking_reference}
+                        >
+                          {adminCustomerRequestWaitTimeLabel(record, currentTimeMs)}
+                        </p>
+                      ) : null}
                       <p className="mt-1 break-words">
                         {[record.pickup_location || "Pickup TBC", record.dropoff_location || "Drop-off TBC"].join(
                           " > ",

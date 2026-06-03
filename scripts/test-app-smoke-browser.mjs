@@ -20275,9 +20275,34 @@ async function runChromeTest() {
         const text = document.body.innerText;
         const searchInput = document.querySelector("[data-customer-search]");
         const searchRect = searchInput?.getBoundingClientRect();
+        const indexHandoff = document.querySelector("[data-customer-folder-index-handoff]");
         const internalStaffNotice = document.querySelector("[data-customer-internal-staff-notice]");
         const internalStaffNoticeRect = internalStaffNotice?.getBoundingClientRect();
         return {
+          customerFolderIndexHandoff: {
+            boundary:
+              indexHandoff
+                ?.querySelector("[data-customer-folder-index-handoff-boundary]")
+                ?.textContent.trim() || "",
+            buttonCount: indexHandoff?.querySelectorAll("button").length || 0,
+            count:
+              indexHandoff?.querySelector("[data-customer-folder-index-handoff-count]")?.textContent.trim() || "",
+            formCount: indexHandoff?.querySelectorAll("form").length || 0,
+            helper:
+              indexHandoff?.querySelector("[data-customer-folder-index-handoff-helper]")?.textContent.trim() || "",
+            inputCount: indexHandoff?.querySelectorAll("input, select, textarea").length || 0,
+            links: [...(indexHandoff?.querySelectorAll("[data-customer-folder-index-handoff-link]") || [])].map(
+              (link) => link.getAttribute("href") || "",
+            ),
+            rows: [...(indexHandoff?.querySelectorAll("[data-customer-folder-index-handoff-row]") || [])].map(
+              (row) => ({
+                id: row.getAttribute("data-customer-folder-index-handoff-row") || "",
+                text: row.textContent || "",
+              }),
+            ),
+            text: indexHandoff?.textContent || "",
+            visible: Boolean(indexHandoff),
+          },
           customerInternalStaffNotice: internalStaffNotice?.textContent.trim() || "",
           customerInternalStaffNoticeVisible: Boolean(
             internalStaffNoticeRect && internalStaffNoticeRect.width > 0 && internalStaffNoticeRect.height > 0,
@@ -20916,6 +20941,59 @@ async function runChromeTest() {
         dashboardState.jobHistoryClarityVisible,
         false,
         "Expected /customers dashboard not to show customer folder job-history clarity",
+      );
+      assert.equal(
+        dashboardState.customerFolderIndexHandoff.visible,
+        true,
+        "Expected /customers dashboard to show customer folder index handoff clarity",
+      );
+      assert.equal(
+        dashboardState.customerFolderIndexHandoff.count,
+        "Visible mock folders: 3",
+        "Expected customer folder index handoff to show visible mock folder count",
+      );
+      assert.equal(
+        dashboardState.customerFolderIndexHandoff.helper,
+        "Search the index, open the existing customer folder, then review job history context there. This handoff is staff-facing and not customer-facing.",
+        "Expected customer folder index handoff helper",
+      );
+      assert.equal(
+        dashboardState.customerFolderIndexHandoff.boundary,
+        "Read-only local guide. It does not create, save, send, assign work, or change customer records.",
+        "Expected customer folder index handoff read-only boundary",
+      );
+      assert.deepEqual(
+        dashboardState.customerFolderIndexHandoff.rows.map((row) => row.id),
+        ["ubs", "ritz-carlton", "vip-customer"],
+        "Expected customer folder index handoff rows to use existing mock customers",
+      );
+      assert.deepEqual(
+        dashboardState.customerFolderIndexHandoff.links,
+        ["/customers/ubs", "/customers/ritz-carlton", "/customers/vip-customer"],
+        "Expected customer folder index handoff to link to existing customer folders",
+      );
+      assert.equal(
+        dashboardState.customerFolderIndexHandoff.buttonCount +
+          dashboardState.customerFolderIndexHandoff.inputCount +
+          dashboardState.customerFolderIndexHandoff.formCount,
+        0,
+        "Expected customer folder index handoff to be read-only with no controls",
+      );
+      assert.deepEqual(
+        [
+          "payout",
+          "paynow",
+          "invoice",
+          "payment",
+          "finance",
+          "parser",
+          "debug",
+          "mock qa",
+          "private driver",
+          "admin note",
+        ].filter((value) => dashboardState.customerFolderIndexHandoff.text.toLowerCase().includes(value)),
+        [],
+        "Expected customer folder index handoff not to expose private/internal finance/debug wording",
       );
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
       assert.equal(
@@ -25984,6 +26062,9 @@ async function runChromeTest() {
               ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
+              customerFolderIndexHandoffVisible: Boolean(
+                document.querySelector("[data-customer-folder-index-handoff]"),
+              ),
               jobHistoryClarityVisible: Boolean(document.querySelector("[data-customer-job-history-clarity]")),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
@@ -26153,6 +26234,11 @@ async function runChromeTest() {
         mobileDashboardState.driverDemoDspUsageWorkflowVisible,
         false,
         "Expected mobile /customers not to show driver demo DSP usage workflow",
+      );
+      assert.equal(
+        mobileDashboardState.customerFolderIndexHandoffVisible,
+        true,
+        "Expected mobile /customers to show customer folder index handoff clarity",
       );
       assert.equal(
         mobileDashboardState.jobHistoryClarityVisible,
@@ -33440,6 +33526,7 @@ async function runChromeTest() {
     }
     state.internalQaMockArchiveRouteBoundaries = [];
     state.adminBookingPersistenceRouteBoundaries = [];
+    state.customerFolderIndexHandoffRouteBoundaries = [];
     for (const route of [
       { context: "/book", expectedText: "Booking Request", url: customerBookingUrl },
       { context: "/my-bookings", expectedText: "My Bookings", url: customerPortalUrl },
@@ -33457,6 +33544,18 @@ async function runChromeTest() {
         context: route.context,
         ...(await checkNoAdminBookingPersistenceUiLeak(route.context)),
       });
+      const customerFolderIndexHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-folder-index-handoff]"))`,
+      );
+      state.customerFolderIndexHandoffRouteBoundaries.push({
+        context: route.context,
+        visible: customerFolderIndexHandoffVisible,
+      });
+      assert.equal(
+        customerFolderIndexHandoffVisible,
+        route.context === "/customers",
+        `Expected customer folder index handoff visibility boundary for ${route.context}`,
+      );
     }
     await checkTelegramBoundary("final browser state");
     state.telegramBoundaries = telegramBoundarySnapshots;

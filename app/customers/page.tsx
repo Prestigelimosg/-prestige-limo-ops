@@ -20,6 +20,20 @@ const summaryCards = [
 
 const maxCustomerSearchResults = 8;
 
+const customerFolderIndexHandoffRows = mockCustomers.map((customer) => {
+  const upcomingJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Upcoming").length;
+  const completedJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Completed").length;
+
+  return {
+    completedJobs,
+    customerId: customer.id,
+    customerName: customer.companyName,
+    folderHref: `/customers/${customer.id}`,
+    historyRows: customer.bookingHistory.length,
+    upcomingJobs,
+  };
+});
+
 const regularCustomerRouteTypeOptions = [
   "Airport Arrival",
   "Airport Departure",
@@ -1404,6 +1418,71 @@ export default function MockCustomerDashboardPage() {
               <p className="mt-3 text-2xl font-bold text-slate-950">{card.value}</p>
             </div>
           ))}
+        </section>
+
+        <section
+          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          data-customer-folder-index-handoff="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                Staff folder handoff
+              </p>
+              <h2 className="mt-2 text-lg font-bold text-slate-950">
+                Customer Folder / Job History Handoff
+              </h2>
+              <p
+                className="mt-1 max-w-4xl text-sm leading-6 text-slate-600"
+                data-customer-folder-index-handoff-helper="true"
+              >
+                Search the index, open the existing customer folder, then review job history context there. This
+                handoff is staff-facing and not customer-facing.
+              </p>
+            </div>
+            <p
+              className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+              data-customer-folder-index-handoff-count="true"
+            >
+              Visible mock folders: {customerFolderIndexHandoffRows.length}
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            {customerFolderIndexHandoffRows.map((row) => (
+              <article
+                className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6"
+                data-customer-folder-index-handoff-row={row.customerId}
+                key={row.customerId}
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between lg:flex-col xl:flex-row">
+                  <div>
+                    <p className="font-bold text-slate-950">{row.customerName}</p>
+                    <p className="mt-1 text-slate-600">
+                      {row.historyRows} job-history row{row.historyRows === 1 ? "" : "s"}.
+                    </p>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      {row.upcomingJobs} upcoming / {row.completedJobs} completed
+                    </p>
+                  </div>
+                  <Link
+                    className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
+                    data-customer-folder-index-handoff-link={row.customerId}
+                    href={row.folderHref}
+                  >
+                    Review folder
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <p
+            className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"
+            data-customer-folder-index-handoff-boundary="true"
+          >
+            Read-only local guide. It does not create, save, send, assign work, or change customer records.
+          </p>
         </section>
 
         <section

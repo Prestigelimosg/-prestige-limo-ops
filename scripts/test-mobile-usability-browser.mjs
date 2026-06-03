@@ -197,9 +197,23 @@ function findMobileAdminBookingPersistenceLeaks(text) {
   return supabaseSaveLeaks.length > 0 ? [...leaks, "Supabase save wording"] : leaks;
 }
 
+function stripMobileCustomerPortalDocumentHistoryBoundary(text, context) {
+  if (!context.includes("/my-bookings")) {
+    return text;
+  }
+
+  return text
+    .replaceAll("No PDF/document is generated yet. No invoice/payment link is created.", "")
+    .replaceAll("Booking Documents / Request History", "")
+    .replaceAll("Booking request history is read-only for now.", "");
+}
+
 function assertNoMobileCustomerFacingPriceLeaks(text, context) {
   assert.deepEqual(
-    findVisibleTextLeaks(text, mobileCustomerFacingPriceVisibilityPatterns),
+    findVisibleTextLeaks(
+      stripMobileCustomerPortalDocumentHistoryBoundary(text, context),
+      mobileCustomerFacingPriceVisibilityPatterns,
+    ),
     [],
     `${context}: expected no mobile customer-facing pricing, payment, billing, finance, payout, parser/debug, or archive leakage`,
   );

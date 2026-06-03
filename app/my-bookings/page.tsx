@@ -652,6 +652,18 @@ function getCustomerDriverHandoff(booking: CustomerPortalBooking): CustomerDrive
   };
 }
 
+function getCustomerDocumentHistoryLabel(booking: CustomerPortalBooking) {
+  if (booking.status === "Confirmed") {
+    return "Read-only confirmed booking record.";
+  }
+
+  if (booking.status === "Completed" || booking.status === "Cancelled") {
+    return "Read-only past trip record.";
+  }
+
+  return "Request-only, pending team review.";
+}
+
 function driverHandoffClass(tone: CustomerDriverHandoff["tone"]) {
   if (tone === "confirmed") {
     return "border-emerald-200 bg-emerald-50 text-emerald-900";
@@ -1879,6 +1891,77 @@ export default function CustomerPortalPage() {
                         </li>
                       );
                     })}
+                  </ul>
+                )}
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="customer-booking-document-history-title"
+              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+              data-customer-booking-document-history="true"
+            >
+              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950" id="customer-booking-document-history-title">
+                    Booking Documents / Request History
+                  </h2>
+                  <p
+                    className="mt-2 text-sm leading-6 text-slate-700"
+                    data-customer-booking-document-history-helper="true"
+                  >
+                    Booking request history is read-only for now.
+                  </p>
+                  <div
+                    className="mt-3 grid gap-2 text-sm leading-6 text-slate-700"
+                    data-customer-booking-document-history-boundary="true"
+                  >
+                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      Change, cancellation, and support requests are request-only and reviewed by our team.
+                    </p>
+                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      No PDF/document is generated yet. No invoice/payment link is created.
+                    </p>
+                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      No request is sent automatically from this local section.
+                    </p>
+                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      No booking is changed, cancelled, or confirmed automatically. For urgent help, contact our team
+                      directly.
+                    </p>
+                  </div>
+                </div>
+
+                {visibleBookings.length === 0 ? (
+                  <div
+                    className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700"
+                    data-customer-booking-document-history-empty="true"
+                  >
+                    No visible booking records to show.
+                  </div>
+                ) : (
+                  <ul className="grid gap-2" data-customer-booking-document-history-list="true">
+                    {visibleBookings.map((booking) => (
+                      <li
+                        className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6"
+                        data-booking-status={booking.status}
+                        data-customer-booking-document-history-row={booking.id}
+                        key={booking.id}
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-950">{booking.passengerName}</p>
+                            <p className="mt-1 text-slate-700">
+                              {booking.id} - {booking.status}
+                            </p>
+                            <p className="mt-1 text-slate-700">{booking.pickupDateTime}</p>
+                          </div>
+                          <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                            {getCustomerDocumentHistoryLabel(booking)}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
                   </ul>
                 )}
               </div>

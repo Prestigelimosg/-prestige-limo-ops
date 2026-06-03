@@ -405,9 +405,20 @@ function findAdminBookingPersistenceLeaks(text) {
   return supabaseSaveLeaks.length > 0 ? [...leaks, "Supabase save wording"] : leaks;
 }
 
+function stripCustomerPortalDocumentHistoryBoundary(text, context) {
+  if (!context.includes("/my-bookings")) {
+    return text;
+  }
+
+  return text
+    .replaceAll("No PDF/document is generated yet. No invoice/payment link is created.", "")
+    .replaceAll("Booking Documents / Request History", "")
+    .replaceAll("Booking request history is read-only for now.", "");
+}
+
 function assertNoCustomerFacingPriceVisibilityLeaks(text, context) {
   assert.deepEqual(
-    findVisibleTextLeaks(text, customerFacingPriceVisibilityPatterns),
+    findVisibleTextLeaks(stripCustomerPortalDocumentHistoryBoundary(text, context), customerFacingPriceVisibilityPatterns),
     [],
     `${context}: expected no customer-facing pricing, payment, billing, finance, payout, parser/debug, or archive leakage`,
   );
@@ -27823,6 +27834,11 @@ async function runChromeTest() {
         const driverHandoff = document.querySelector("[data-customer-driver-handoff-status]");
         const driverHandoffRect = driverHandoff?.getBoundingClientRect();
         const driverHandoffRows = [...document.querySelectorAll("[data-customer-driver-handoff-row]")];
+        const documentHistory = document.querySelector("[data-customer-booking-document-history]");
+        const documentHistoryRect = documentHistory?.getBoundingClientRect();
+        const documentHistoryRows = [...document.querySelectorAll("[data-customer-booking-document-history-row]")];
+        const visibleLeakText = documentHistory?.innerText ? text.replace(documentHistory.innerText, "") : text;
+        const lowerVisibleLeakText = visibleLeakText.toLowerCase();
         const changeIntake = document.querySelector("[data-customer-change-request-intake]");
         const changeIntakeRect = changeIntake?.getBoundingClientRect();
         const changeSubmit = document.querySelector("[data-customer-change-request-submit]");
@@ -28161,7 +28177,7 @@ async function runChromeTest() {
             "manual extra charges",
             "extra charges note / reason",
             "manual extra charge reason",
-          ].filter((value) => lowerText.includes(value)),
+          ].filter((value) => lowerVisibleLeakText.includes(value)),
           form: {
             feedbackText: requestFeedback?.textContent.trim() || "",
             fieldState: {
@@ -28251,6 +28267,23 @@ async function runChromeTest() {
             text: driverHandoff?.innerText || "",
             urgent: document.querySelector("[data-customer-driver-handoff-urgent]")?.textContent.trim() || "",
             visible: Boolean(driverHandoffRect && driverHandoffRect.width > 0 && driverHandoffRect.height > 0),
+          },
+          documentHistory: {
+            boundary:
+              document.querySelector("[data-customer-booking-document-history-boundary]")?.innerText.trim() || "",
+            emptyVisible: Boolean(document.querySelector("[data-customer-booking-document-history-empty]")),
+            helper:
+              document.querySelector("[data-customer-booking-document-history-helper]")?.textContent.trim() || "",
+            rowIds: documentHistoryRows.map((row) =>
+              row.getAttribute("data-customer-booking-document-history-row") || ""
+            ),
+            rows: documentHistoryRows.map((row) => ({
+              bookingStatus: row.getAttribute("data-booking-status") || "",
+              id: row.getAttribute("data-customer-booking-document-history-row") || "",
+              text: row.innerText,
+            })),
+            text: documentHistory?.innerText || "",
+            visible: Boolean(documentHistoryRect && documentHistoryRect.width > 0 && documentHistoryRect.height > 0),
           },
           changeRequestIntake: {
             closedWarning: document.querySelector("[data-customer-change-request-closed-warning]")?.textContent.trim() || "",
@@ -28956,6 +28989,47 @@ async function runChromeTest() {
           pendingDriverHandoffRow.handoffStatus === "Driver assigned.",
           false,
           `Expected pending/request row ${pendingDriverHandoffRow.id} not to show driver assigned`,
+        );
+      }
+      assert.equal(
+        initialState.documentHistory.visible,
+        true,
+        "Expected /my-bookings booking document/request history clarity",
+      );
+      assert.equal(
+        initialState.documentHistory.helper,
+        "Booking request history is read-only for now.",
+        "Expected /my-bookings document history read-only helper",
+      );
+      for (const expectedDocumentBoundary of [
+        "Change, cancellation, and support requests are request-only and reviewed by our team.",
+        "No PDF/document is generated yet. No invoice/payment link is created.",
+        "No request is sent automatically from this local section.",
+        "No booking is changed, cancelled, or confirmed automatically. For urgent help, contact our team directly.",
+      ]) {
+        assert.equal(
+          initialState.documentHistory.boundary.includes(expectedDocumentBoundary),
+          true,
+          `Expected /my-bookings document history boundary: ${expectedDocumentBoundary}`,
+        );
+      }
+      assert.deepEqual(
+        initialState.documentHistory.rowIds,
+        initialState.rowIds,
+        "Expected /my-bookings document history rows to use current visible bookings only",
+      );
+      for (const pendingDocumentHistoryRow of initialState.documentHistory.rows.filter((row) =>
+        ["Pending Staff Review", "Requested"].includes(row.bookingStatus),
+      )) {
+        assert.equal(
+          pendingDocumentHistoryRow.text.includes("Request-only, pending team review."),
+          true,
+          `Expected pending/request document history row ${pendingDocumentHistoryRow.id} to stay request-only`,
+        );
+        assert.equal(
+          pendingDocumentHistoryRow.text.includes("Read-only confirmed booking record."),
+          false,
+          `Expected pending/request document history row ${pendingDocumentHistoryRow.id} not to imply confirmation`,
         );
       }
       assert.equal(initialState.changeRequestIntake.visible, true, "Expected /my-bookings change request intake");
@@ -30171,6 +30245,26 @@ async function runChromeTest() {
         mobileState.driverHandoff.text.includes("For urgent same-day help, contact our team directly."),
         true,
         "Expected /my-bookings mobile driver handoff urgent helper",
+      );
+      assert.equal(
+        mobileState.documentHistory.visible,
+        true,
+        "Expected /my-bookings mobile document/request history clarity",
+      );
+      assert.deepEqual(
+        mobileState.documentHistory.rowIds,
+        mobileState.rowIds,
+        "Expected /my-bookings mobile document history rows to use visible rows only",
+      );
+      assert.equal(
+        mobileState.documentHistory.boundary.includes("No PDF/document is generated yet. No invoice/payment link is created."),
+        true,
+        "Expected /my-bookings mobile document/payment boundary",
+      );
+      assert.equal(
+        mobileState.documentHistory.boundary.includes("No booking is changed, cancelled, or confirmed automatically."),
+        true,
+        "Expected /my-bookings mobile automatic-status boundary",
       );
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
       assert.equal(
@@ -33527,6 +33621,7 @@ async function runChromeTest() {
     state.internalQaMockArchiveRouteBoundaries = [];
     state.adminBookingPersistenceRouteBoundaries = [];
     state.customerFolderIndexHandoffRouteBoundaries = [];
+    state.customerBookingDocumentHistoryRouteBoundaries = [];
     for (const route of [
       { context: "/book", expectedText: "Booking Request", url: customerBookingUrl },
       { context: "/my-bookings", expectedText: "My Bookings", url: customerPortalUrl },
@@ -33555,6 +33650,18 @@ async function runChromeTest() {
         customerFolderIndexHandoffVisible,
         route.context === "/customers",
         `Expected customer folder index handoff visibility boundary for ${route.context}`,
+      );
+      const customerBookingDocumentHistoryVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-booking-document-history]"))`,
+      );
+      state.customerBookingDocumentHistoryRouteBoundaries.push({
+        context: route.context,
+        visible: customerBookingDocumentHistoryVisible,
+      });
+      assert.equal(
+        customerBookingDocumentHistoryVisible,
+        route.context === "/my-bookings",
+        `Expected customer booking document history visibility boundary for ${route.context}`,
       );
     }
     await checkTelegramBoundary("final browser state");

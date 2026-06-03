@@ -16004,6 +16004,39 @@ export default function Home() {
                           >
                             Tracks admin decision status only. It does not contact customers or dispatch drivers.
                           </p>
+                          <div
+                            className="mt-2 grid gap-2 rounded-md border border-amber-100 bg-white/75 px-3 py-2"
+                            data-admin-booking-customer-request-review-state={record.booking_reference}
+                          >
+                            <p className="text-[11px] font-semibold uppercase text-amber-900">
+                              Current review state
+                            </p>
+                            <dl className="grid gap-2 sm:grid-cols-3">
+                              {[
+                                {
+                                  label: "Admin internal status",
+                                  value: clean(record.admin_internal_status) || "Draft",
+                                },
+                                {
+                                  label: "Customer-facing status",
+                                  value: clean(record.customer_facing_status) || "Request Received",
+                                },
+                                {
+                                  label: "Short-notice review status",
+                                  value: clean(record.short_notice_review_status) || "Not Required",
+                                },
+                              ].map(({ label, value }) => (
+                                <div className="min-w-0" key={label}>
+                                  <dt className="text-[11px] font-semibold text-amber-800">
+                                    {label}
+                                  </dt>
+                                  <dd className="mt-0.5 break-words font-semibold text-amber-950">
+                                    {value}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
                           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                             {adminCustomerRequestReviewDecisions.map((decision) => (
                               <button

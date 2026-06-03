@@ -23,6 +23,12 @@ const browserName = (process.env.BROWSER || "chrome").toLowerCase();
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9226);
+const singaporeDateFormatter = new Intl.DateTimeFormat("en-SG", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "Asia/Singapore",
+  year: "numeric",
+});
 const browserErrors = [];
 const browserConsoleErrors = [];
 const tabLabels = ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"];
@@ -58,6 +64,19 @@ const driverJobWorkflowApiUrl = new URL(`/api/driver-job/${driverJobWorkflowToke
 const customerDashboardUrl = new URL("/customers", appUrl).toString();
 const customerBookingUrl = new URL("/book", appUrl).toString();
 const customerPortalUrl = new URL("/my-bookings", appUrl).toString();
+const nonShortNoticeAdminSnapshotPickupDate = singaporeDateFormatter
+  .formatToParts(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+  .reduce((parts, part) => {
+    if (part.type !== "literal") {
+      parts[part.type] = part.value;
+    }
+    return parts;
+  }, {});
+const nonShortNoticeAdminSnapshotPickupDateText = [
+  nonShortNoticeAdminSnapshotPickupDate.year,
+  nonShortNoticeAdminSnapshotPickupDate.month,
+  nonShortNoticeAdminSnapshotPickupDate.day,
+].join("-");
 const replacementLeakSentinels = {
   carPlate: "SXX9999Z-DO-NOT-LEAK",
   driverContact: "+65 9000 0000 DO NOT LEAK",
@@ -332,8 +351,16 @@ const adminBookingPersistenceUiPatterns = [
   { label: "snapshot status filter wording", pattern: /\bsnapshot\s+status\b/i },
   { label: "snapshot filter empty wording", pattern: /\bno\s+loaded\s+operational\s+snapshots\s+match\b/i },
   { label: "customer request review decision wording", pattern: /\binternal\s+review\s+decision\s+only\b/i },
+  { label: "customer request current review state wording", pattern: /\bcurrent\s+review\s+state\b/i },
+  { label: "admin internal status wording", pattern: /\badmin[_\s-]+internal[_\s-]+status\b/i },
+  { label: "customer-facing status wording", pattern: /\bcustomer[_\s-]+facing[_\s-]+status\b/i },
+  { label: "short-notice review status wording", pattern: /\bshort[_\s-]+notice[_\s-]+review[_\s-]+status\b/i },
+  { label: "needs review decision wording", pattern: /\bneeds\s+review\b/i },
   { label: "approve internally wording", pattern: /\bapprove\s+internally\b/i },
   { label: "decline internally wording", pattern: /\bdecline\s+internally\b/i },
+  { label: "declined internally wording", pattern: /\bdeclined\s+internally\b/i },
+  { label: "admin review required status wording", pattern: /\badmin\s+review\s+required\b/i },
+  { label: "ready for confirmation status wording", pattern: /\bready\s+for\s+confirmation\b/i },
   { label: "review decision saved wording", pattern: /\binternal\s+review\s+decision\s+saved\b/i },
   { label: "persisted booking wording", pattern: /\bpersisted\s+booking\b/i },
   { label: "database save wording", pattern: /\bdatabase\s+save\b/i },
@@ -1079,7 +1106,7 @@ async function runChromeTest() {
           setField("Company / Account", "OPS TEST CUSTOMER"),
           setField("Booking type", "MNG"),
           setField("Vehicle", "AVF"),
-          setField("Pickup date *", "2026-06-04"),
+          setField("Pickup date *", ${JSON.stringify(nonShortNoticeAdminSnapshotPickupDateText)}),
           setField("Pickup time *", "1030"),
           setField("Flight number", "SQ001"),
           setField("Pickup *", "Ops Test Pickup"),
@@ -1172,6 +1199,7 @@ async function runChromeTest() {
             const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
             const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
             const secondRecord = document.querySelector("[data-admin-booking-persistence-record='SECOND-OPS-002']");
+            const reviewState = document.querySelector("[data-admin-booking-customer-request-review-state='LOADED-OPS-001']");
             const calls = window.__adminBookingPersistenceCalls || [];
 
             return feedback.includes("Loaded 2 operational booking records") && record && secondRecord
@@ -1182,6 +1210,9 @@ async function runChromeTest() {
                   noAppliedVisible: Boolean(document.querySelector("[data-admin-booking-persistence-no-applied]")),
                   postCalls: calls.filter((call) => call.method === "POST").length,
                   recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+                  reviewStateText: (reviewState?.innerText || reviewState?.textContent || "")
+                    .replace(/\\s+/g, " ")
+                    .trim(),
                   secondRecordText: secondRecord.textContent.replace(/\\s+/g, " ").trim(),
                   summary: document
                     .querySelector("[data-admin-booking-persistence-filter-summary]")
@@ -1229,10 +1260,19 @@ async function runChromeTest() {
       );
       assert.equal(
         loadState.recordText.includes("Internal review decision only") &&
+          loadState.recordText.includes("Current review state") &&
           loadState.recordText.includes("Approve Internally") &&
-          loadState.recordText.includes("Decline Internally"),
+          loadState.recordText.includes("Decline Internally") &&
+          loadState.recordText.includes("Needs Review"),
         true,
-        "Expected loaded customer request to expose compact internal review-decision controls",
+        "Expected loaded customer request to expose compact internal review-decision controls and current state",
+      );
+      assert.equal(
+        loadState.reviewStateText.includes("Admin internal status Admin Review Required") &&
+          loadState.reviewStateText.includes("Customer-facing status Received") &&
+          loadState.reviewStateText.includes("Short-notice review status Admin Review Required"),
+        true,
+        "Expected loaded customer request to show current safe review/status fields before decision change",
       );
       assert.equal(
         loadState.recordText.includes("+65 8000 1000") &&
@@ -1421,6 +1461,7 @@ async function runChromeTest() {
           evaluate(`(() => {
             const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
             const record = document.querySelector("[data-admin-booking-persistence-record='LOADED-OPS-001']");
+            const reviewState = document.querySelector("[data-admin-booking-customer-request-review-state='LOADED-OPS-001']");
             const calls = window.__adminBookingPersistenceCalls || [];
             const patchCall = [...calls]
               .reverse()
@@ -1454,6 +1495,9 @@ async function runChromeTest() {
               feedback,
               forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
               recordText: record.textContent.replace(/\\s+/g, " ").trim(),
+              reviewStateText: (reviewState?.innerText || reviewState?.textContent || "")
+                .replace(/\\s+/g, " ")
+                .trim(),
             };
           })()`),
         10000,
@@ -1490,6 +1534,13 @@ async function runChromeTest() {
         decisionState.feedback.includes("Short-notice review remains Admin Review Required"),
         true,
         "Expected short-notice customer request to remain Admin Review Required after decision update",
+      );
+      assert.equal(
+        decisionState.reviewStateText.includes("Admin internal status Admin Review Required") &&
+          decisionState.reviewStateText.includes("Customer-facing status Received") &&
+          decisionState.reviewStateText.includes("Short-notice review status Admin Review Required"),
+        true,
+        "Expected review state readout to remain visible after internal decision update",
       );
       assert.equal(
         /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i.test(

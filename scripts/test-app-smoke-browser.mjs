@@ -27652,6 +27652,8 @@ async function runChromeTest() {
         const nextStepsRect = nextSteps?.getBoundingClientRect();
         const nextStepsBooking = document.querySelector("[data-customer-request-next-steps-booking]");
         const nextStepsChange = document.querySelector("[data-customer-request-next-steps-change]");
+        const supportHandoff = document.querySelector("[data-customer-support-handoff]");
+        const supportHandoffRect = supportHandoff?.getBoundingClientRect();
         const changeIntake = document.querySelector("[data-customer-change-request-intake]");
         const changeIntakeRect = changeIntake?.getBoundingClientRect();
         const changeSubmit = document.querySelector("[data-customer-change-request-submit]");
@@ -28057,6 +28059,15 @@ async function runChromeTest() {
             helper: document.querySelector("[data-customer-request-next-steps-helper]")?.textContent.trim() || "",
             text: nextSteps?.innerText || "",
             visible: Boolean(nextStepsRect && nextStepsRect.width > 0 && nextStepsRect.height > 0),
+          },
+          supportHandoff: {
+            boundary:
+              document.querySelector("[data-customer-support-handoff-boundary]")?.textContent.trim() || "",
+            helper: document.querySelector("[data-customer-support-handoff-helper]")?.textContent.trim() || "",
+            items: [...document.querySelectorAll("[data-customer-support-handoff-list] p")]
+              .map((item) => item.textContent.trim()),
+            text: supportHandoff?.innerText || "",
+            visible: Boolean(supportHandoffRect && supportHandoffRect.width > 0 && supportHandoffRect.height > 0),
           },
           changeRequestIntake: {
             closedWarning: document.querySelector("[data-customer-change-request-closed-warning]")?.textContent.trim() || "",
@@ -28701,6 +28712,29 @@ async function runChromeTest() {
         true,
         "Expected /my-bookings next-steps urgent/short-notice guidance",
       );
+      assert.equal(initialState.supportHandoff.visible, true, "Expected /my-bookings support handoff");
+      assert.equal(
+        initialState.supportHandoff.helper,
+        "For urgent booking help, changes, cancellation help, or short-notice trips, contact our team directly.",
+        "Expected /my-bookings support handoff helper",
+      );
+      assert.equal(
+        initialState.supportHandoff.boundary,
+        "This section does not send a message yet. Your booking is not changed or cancelled from here.",
+        "Expected /my-bookings support handoff local-only boundary",
+      );
+      for (const expectedSupportItem of [
+        "Urgent booking help",
+        "Change request help",
+        "Cancellation request help",
+        "Short-notice / same-day help",
+      ]) {
+        assert.equal(
+          initialState.supportHandoff.text.includes(expectedSupportItem),
+          true,
+          `Expected /my-bookings support handoff item: ${expectedSupportItem}`,
+        );
+      }
       assert.equal(initialState.changeRequestIntake.visible, true, "Expected /my-bookings change request intake");
       assert.equal(
         initialState.changeRequestIntake.helper,
@@ -29855,6 +29889,16 @@ async function runChromeTest() {
         mobileState.requestNextSteps.text.includes("Change request does not change your booking yet"),
         true,
         "Expected /my-bookings mobile next-steps change request boundary",
+      );
+      assert.equal(
+        mobileState.supportHandoff.visible,
+        true,
+        "Expected /my-bookings mobile support handoff",
+      );
+      assert.equal(
+        mobileState.supportHandoff.boundary,
+        "This section does not send a message yet. Your booking is not changed or cancelled from here.",
+        "Expected /my-bookings mobile support handoff local-only boundary",
       );
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
       assert.equal(

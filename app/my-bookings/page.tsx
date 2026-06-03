@@ -1132,6 +1132,40 @@ export default function CustomerPortalPage() {
           </div>
         </section>
 
+        <section
+          aria-labelledby="customer-support-handoff-title"
+          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          data-customer-support-handoff="true"
+        >
+          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950" id="customer-support-handoff-title">
+                Need urgent help?
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-support-handoff-helper="true">
+                For urgent booking help, changes, cancellation help, or short-notice trips, contact our team directly.
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-600" data-customer-support-handoff-boundary="true">
+                This section does not send a message yet. Your booking is not changed or cancelled from here.
+              </p>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2" data-customer-support-handoff-list="true">
+              {[
+                ["Urgent booking help", "Contact the team directly with your request reference or passenger name."],
+                ["Change request help", "Use the change request area below, then contact the team if timing is urgent."],
+                ["Cancellation request help", "Use the cancellation request area below, then contact the team for urgent help."],
+                ["Short-notice / same-day help", "Contact the team directly before making new plans."],
+              ].map(([title, detail]) => (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6" key={title}>
+                  <p className="font-semibold text-slate-950">{title}</p>
+                  <p className="mt-1 text-slate-700">{detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <nav
           aria-label="Customer portal sections"
           className="flex flex-wrap gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-sm"

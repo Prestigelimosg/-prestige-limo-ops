@@ -84,6 +84,7 @@ async function assertNoRealLocationImplementation() {
 
   assert.doesNotMatch(source, /navigator\.geolocation/i, "Driver pages must not call navigator.geolocation.");
   assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
+  assert.doesNotMatch(source, /localStorage|sessionStorage/i, "Driver pages must not add browser storage persistence.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?live-location/i, "Driver pages must not add live location endpoints.");
   assert.doesNotMatch(source, /\/api\/(?:driver-)?(?:ots-photo|photo-proof)/i, "Driver pages must not add photo upload endpoints.");
   assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:upload|storage|file)/i, "Driver pages must not add upload, storage, or file APIs.");
@@ -198,6 +199,15 @@ async function runChromeTest() {
           .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
+        statusBoundary: {
+          helper: document.querySelector("[data-driver-job-status-boundary-helper]")?.textContent.trim() || "",
+          items: [...document.querySelectorAll("[data-driver-job-status-boundary-list] li")].map((item) =>
+            item.textContent.trim(),
+          ),
+          text: document.querySelector("[data-driver-job-status-boundary]")?.innerText || "",
+          title: document.querySelector("[data-driver-job-status-boundary-title]")?.textContent.trim() || "",
+          visible: Boolean(document.querySelector("[data-driver-job-status-boundary]")),
+        },
         visibleText: document.body?.innerText || "",
         workflowHandoff: {
           boundary: document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
@@ -1064,6 +1074,39 @@ async function runChromeTest() {
       "Private account and internal compensation details are not shown here.",
       "Expected driver handoff to avoid private/internal account detail exposure.",
     );
+    assert.equal(validState.statusBoundary.visible, true, "Expected driver status boundary guidance.");
+    assert.equal(validState.statusBoundary.title, "Status Boundary");
+    assert.deepEqual(
+      validState.statusBoundary.items,
+      [
+        "Current flow: OTW, OTS, POB, then Job Completed.",
+        "Status buttons are local/demo boundary controls for this driver page.",
+        "Job Completed does not send a customer notification yet.",
+        "No billing, driver compensation, proof/photo, live-location, or accounting action is created here.",
+        "For urgent issues, contact the dispatcher directly.",
+      ],
+      "Expected compact driver completion/status boundary guidance.",
+    );
+    assert.equal(
+      validState.statusBoundary.helper,
+      "Feedback appears under the status button you tap.",
+      "Expected status boundary to keep feedback near clicked controls.",
+    );
+    assert.equal(
+      validState.visibleText.includes("customer price"),
+      false,
+      "Driver status boundary must not expose customer price wording.",
+    );
+    assert.equal(
+      validState.visibleText.includes("driver payout"),
+      false,
+      "Driver status boundary must not expose driver payout wording.",
+    );
+    assert.equal(
+      validState.visibleText.includes("invoice"),
+      false,
+      "Driver status boundary must avoid invoice wording on the public driver page.",
+    );
     const startingStatusText = validState.statusText || "Assigned";
     assert.ok(validState.visibleText.includes("Acknowledge Job"));
     assert.ok(validState.visibleText.includes("Mock Live Location"));
@@ -1235,6 +1278,18 @@ async function runChromeTest() {
       ),
     );
     assert.equal(arrivalState.workflowHandoff.visible, true, "Expected Arrival job to show workflow handoff guidance.");
+    assert.equal(arrivalState.statusBoundary.visible, true, "Expected Arrival job to show status boundary guidance.");
+    assert.deepEqual(
+      arrivalState.statusBoundary.items,
+      [
+        "Current flow: OTW, OTS, POB, then Job Completed.",
+        "Status buttons are local/demo boundary controls for this driver page.",
+        "Job Completed does not send a customer notification yet.",
+        "No billing, driver compensation, proof/photo, live-location, or accounting action is created here.",
+        "For urgent issues, contact the dispatcher directly.",
+      ],
+      "Expected Arrival job to keep driver status boundary guidance.",
+    );
     assert.equal(
       arrivalState.workflowHandoff.items.includes("For urgent issues, contact the dispatcher directly."),
       true,
@@ -1351,6 +1406,11 @@ async function runChromeTest() {
       assert.equal(blockedState.visibleText.includes("Mock Pickup A"), false);
       assert.equal(blockedState.visibleText.includes("Mock Dropoff A"), false);
       assert.equal(blockedState.visibleText.includes("Mock Waypoint A"), false);
+      assert.equal(
+        blockedState.statusBoundary.visible,
+        false,
+        `${label} token should not show driver status boundary guidance.`,
+      );
       assertNoSensitiveText(blockedState);
     }
 

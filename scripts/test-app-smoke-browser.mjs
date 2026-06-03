@@ -20351,6 +20351,7 @@ async function runChromeTest() {
           ),
           driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
           driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
+          jobHistoryClarityVisible: Boolean(document.querySelector("[data-customer-job-history-clarity]")),
           customerRows: [...document.querySelectorAll("[data-customer-row]")].map((row) =>
             row.getAttribute("data-customer-row"),
           ),
@@ -20911,6 +20912,11 @@ async function runChromeTest() {
       assert.deepEqual(dashboardState.links, [], "Expected no customer folder links before search");
       assert.equal(dashboardState.helperVisible, true, "Expected search helper before results");
       assert.equal(dashboardState.searchInputVisible, true, "Expected visible customer search input");
+      assert.equal(
+        dashboardState.jobHistoryClarityVisible,
+        false,
+        "Expected /customers dashboard not to show customer folder job-history clarity",
+      );
       assert.deepEqual(dashboardState.forbiddenText, [], "Expected no sensitive customer payment text");
       assert.equal(
         dashboardState.customerInternalStaffNoticeVisible,
@@ -25519,6 +25525,7 @@ async function runChromeTest() {
         customerId,
         customerName,
         excludedPaidInvoices,
+        expectedJobHistoryRows,
         expectedRows,
         expectedText,
         unrelatedInvoices,
@@ -25538,6 +25545,7 @@ async function runChromeTest() {
         const state = await evaluate(`(() => {
           const text = document.body.innerText;
           const detail = document.querySelector("[data-payment-collection-detail='${customerId}']");
+          const jobHistoryClarity = document.querySelector("[data-customer-job-history-clarity='${customerId}']");
           return {
             bookingHistory: document.querySelector("[data-customer-booking-history]")?.innerText || "",
             boundary: detail?.querySelector("[data-payment-collection-boundary]")?.textContent.trim() || "",
@@ -25644,6 +25652,27 @@ async function runChromeTest() {
             invoiceRulesText: document.querySelector("[data-customer-invoice-rules]")?.innerText || "",
             isolation:
               detail?.querySelector("[data-payment-collection-isolation]")?.textContent.trim() || "",
+            jobHistoryClarity: {
+              boundary:
+                jobHistoryClarity
+                  ?.querySelector("[data-customer-job-history-readonly-boundary]")
+                  ?.textContent.trim() || "",
+              buttonCount: jobHistoryClarity?.querySelectorAll("button").length || 0,
+              formCount: jobHistoryClarity?.querySelectorAll("form").length || 0,
+              helper:
+                jobHistoryClarity
+                  ?.querySelector("[data-customer-job-history-clarity-helper]")
+                  ?.textContent.trim() || "",
+              inputCount: jobHistoryClarity?.querySelectorAll("input, select, textarea").length || 0,
+              rows: [...(jobHistoryClarity?.querySelectorAll("[data-customer-job-history-clarity-row]") || [])].map(
+                (row) => ({
+                  id: row.getAttribute("data-customer-job-history-clarity-row"),
+                  text: row.innerText,
+                }),
+              ),
+              text: jobHistoryClarity?.textContent || "",
+              visible: Boolean(jobHistoryClarity),
+            },
             paymentHistory: document.body.innerText.includes("Payment history"),
             resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
             rows: [...(detail?.querySelectorAll("[data-payment-collection-row]") || [])].map((row) => ({
@@ -25672,6 +25701,45 @@ async function runChromeTest() {
           expectedRows,
           `Expected active collection rows for ${customerName}`,
         );
+        assert.equal(
+          state.jobHistoryClarity.visible,
+          true,
+          `Expected ${customerName} customer folder job-history clarity snapshot`,
+        );
+        assert.equal(
+          state.jobHistoryClarity.helper,
+          "Read-only staff snapshot from this customer folder's existing booking history.",
+          `Expected ${customerName} job-history clarity helper`,
+        );
+        assert.equal(
+          state.jobHistoryClarity.boundary,
+          "Read-only operational snapshot. No booking, request, change, cancellation, notification, or customer record is created or updated here.",
+          `Expected ${customerName} job-history clarity read-only boundary`,
+        );
+        assert.deepEqual(
+          state.jobHistoryClarity.rows.map((row) => row.id),
+          expectedJobHistoryRows,
+          `Expected ${customerName} customer folder job-history rows`,
+        );
+        assert.equal(
+          state.jobHistoryClarity.buttonCount + state.jobHistoryClarity.inputCount + state.jobHistoryClarity.formCount,
+          0,
+          `Expected ${customerName} job-history clarity to be read-only with no controls`,
+        );
+        for (const expectedSnapshotText of [
+          "Job history snapshot",
+          "Customer/account",
+          "Visible history rows",
+          "Recent trips and active bookings",
+          "Customer-facing status",
+          "Request/change status",
+          "Completed trip",
+        ]) {
+          assert.ok(
+            state.jobHistoryClarity.text.includes(expectedSnapshotText),
+            `Expected ${customerName} job-history clarity text: ${expectedSnapshotText}`,
+          );
+        }
         for (const invoiceNumber of excludedPaidInvoices) {
           assert.equal(
             state.detailText.includes(invoiceNumber),
@@ -25709,8 +25777,10 @@ async function runChromeTest() {
         customerId: "ubs",
         customerName: "UBS",
         excludedPaidInvoices: ["UBS-0002"],
+        expectedJobHistoryRows: ["UBS-0003", "UBS-0004", "UBS-0002"],
         expectedRows: ["ubs:UBS-0003", "ubs:UBS-0004"],
         expectedText: [
+          "Job history snapshot",
           "Payment Collection Detail",
           "UBS",
           "Fixed invoice prefix",
@@ -25748,8 +25818,10 @@ async function runChromeTest() {
         customerId: "ritz-carlton",
         customerName: "Ritz Carlton",
         excludedPaidInvoices: ["RITZ-0002"],
+        expectedJobHistoryRows: ["RITZ-0003", "RITZ-0002", "RITZ-0004"],
         expectedRows: ["ritz-carlton:RITZ-0003", "ritz-carlton:RITZ-0004"],
         expectedText: [
+          "Job history snapshot",
           "Payment Collection Detail",
           "Ritz Carlton",
           "Fixed invoice prefix",
@@ -25783,8 +25855,10 @@ async function runChromeTest() {
         customerId: "vip-customer",
         customerName: "Individual VIP Customer",
         excludedPaidInvoices: ["VIP-0002"],
+        expectedJobHistoryRows: ["VIP-0002", "VIP-0003"],
         expectedRows: ["vip-customer:VIP-0003"],
         expectedText: [
+          "Job history snapshot",
           "Payment Collection Detail",
           "Individual VIP Customer",
           "Fixed invoice prefix",
@@ -25910,6 +25984,7 @@ async function runChromeTest() {
               ),
               driverDemoDetailWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-detail-workflow]")),
               driverDemoDspUsageWorkflowVisible: Boolean(document.querySelector("[data-driver-demo-dsp-usage-workflow]")),
+              jobHistoryClarityVisible: Boolean(document.querySelector("[data-customer-job-history-clarity]")),
               internalStaffNotice:
                 document.querySelector("[data-customer-internal-staff-notice]")?.textContent.trim() || "",
               internalStaffNoticeVisible: Boolean(document.querySelector("[data-customer-internal-staff-notice]")),
@@ -26078,6 +26153,11 @@ async function runChromeTest() {
         mobileDashboardState.driverDemoDspUsageWorkflowVisible,
         false,
         "Expected mobile /customers not to show driver demo DSP usage workflow",
+      );
+      assert.equal(
+        mobileDashboardState.jobHistoryClarityVisible,
+        false,
+        "Expected mobile /customers not to show customer folder job-history clarity",
       );
       assert.ok(
         mobileDashboardState.docScrollWidth <= mobileDashboardState.docClientWidth + 2,

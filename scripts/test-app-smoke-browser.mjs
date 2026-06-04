@@ -357,6 +357,8 @@ const adminBookingPersistenceUiPatterns = [
   { label: "customer request filters cleared wording", pattern: /\bcustomer\s+request\s+filters\s+cleared\b/i },
   { label: "customer request priority order wording", pattern: /\bpriority\s+order:\s+short-notice\s+and\s+needs-review\s+requests\s+first\b/i },
   { label: "customer request wait time wording", pattern: /\bwaiting(?:\s+time)?:\s+(?:not\s+available|today|\d+\s+(?:min|hr|days?))\b/i },
+  { label: "customer amend/cancel review handoff wording", pattern: /\bamend\s*\/\s*cancel\s+review\s+handoff\b/i },
+  { label: "admin amend/cancel confirmation boundary wording", pattern: /\bnot\s+changed\s+or\s+cancelled\s+until\s+admin\s+confirms\b/i },
   { label: "customer request review decision wording", pattern: /\binternal\s+review\s+decision\s+only\b/i },
   { label: "customer request current review state wording", pattern: /\bcurrent\s+review\s+state\b/i },
   { label: "admin internal status wording", pattern: /\badmin[_\s-]+internal[_\s-]+status\b/i },
@@ -1287,6 +1289,10 @@ async function runChromeTest() {
                     .querySelector("[data-admin-booking-customer-request-priority-order]")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
+                  requestAmendCancelHandoff: document
+                    .querySelector("[data-admin-booking-customer-amend-cancel-handoff]")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
                   requestWaitLabels: waitLabels,
                   requestFilterSummary: document
                     .querySelector("[data-admin-booking-customer-request-filter-summary]")
@@ -1354,6 +1360,14 @@ async function runChromeTest() {
         loadState.requestPriorityOrder.includes("Priority order: short-notice and needs-review requests first."),
         true,
         "Expected admin-only customer request priority helper",
+      );
+      assert.equal(
+        loadState.requestAmendCancelHandoff.includes("Amend/cancel review handoff") &&
+          loadState.requestAmendCancelHandoff.includes("Customer change and cancellation requests need staff review") &&
+          loadState.requestAmendCancelHandoff.includes("not changed or cancelled until admin confirms") &&
+          loadState.requestAmendCancelHandoff.includes("urgent or short-notice cases manually with the dispatcher"),
+        true,
+        "Expected admin-only customer amend/cancel review handoff guidance",
       );
       assert.deepEqual(
         loadState.requestWaitLabels.map((label) => label.reference),
@@ -33696,6 +33710,7 @@ async function runChromeTest() {
     }
     state.internalQaMockArchiveRouteBoundaries = [];
     state.adminBookingPersistenceRouteBoundaries = [];
+    state.adminCustomerAmendCancelReviewRouteBoundaries = [];
     state.customerFolderIndexHandoffRouteBoundaries = [];
     state.customerBookingDocumentHistoryRouteBoundaries = [];
     state.customerBookingPreSubmitReviewRouteBoundaries = [];
@@ -33716,6 +33731,18 @@ async function runChromeTest() {
         context: route.context,
         ...(await checkNoAdminBookingPersistenceUiLeak(route.context)),
       });
+      const adminCustomerAmendCancelReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-booking-customer-amend-cancel-handoff]"))`,
+      );
+      state.adminCustomerAmendCancelReviewRouteBoundaries.push({
+        context: route.context,
+        visible: adminCustomerAmendCancelReviewVisible,
+      });
+      assert.equal(
+        adminCustomerAmendCancelReviewVisible,
+        false,
+        `Expected admin customer amend/cancel review handoff boundary for ${route.context}`,
+      );
       const customerFolderIndexHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-folder-index-handoff]"))`,
       );

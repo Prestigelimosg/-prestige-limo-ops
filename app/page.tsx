@@ -16242,6 +16242,22 @@ export default function Home() {
                   >
                     Priority order: short-notice and needs-review requests first.
                   </p>
+                  <div
+                    className="mt-2 rounded-md border border-amber-200 bg-white/80 px-3 py-2 text-xs leading-5 text-amber-900"
+                    data-admin-booking-customer-amend-cancel-handoff="true"
+                  >
+                    <p className="font-semibold text-amber-950">
+                      Amend/cancel review handoff
+                    </p>
+                    <p className="mt-1">
+                      Customer change and cancellation requests need staff review. Bookings are
+                      not changed or cancelled until admin confirms.
+                    </p>
+                    <p className="mt-1">
+                      Handle urgent or short-notice cases manually with the dispatcher before
+                      confirming any change.
+                    </p>
+                  </div>
                 </div>
               ) : null}
               {adminBookingPersistenceRecords.length > 0 ? (

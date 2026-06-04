@@ -446,8 +446,98 @@ The next real backend stage should be a narrow implementation, not another mock 
 
 Recommended next real backend phase: auth and role model implementation planning, followed by secure driver token design. Real booking/customer save/load should wait until those access boundaries are explicit.
 
-## 12. Recommended Next Safe Stage
+## 12. Stage 4A-365 - Auth Role Model Implementation Plan
 
-Recommended next stage: the first explicitly approved real backend phase, starting with auth and role model implementation planning before any production save/load.
+Stage 4A-365 is documentation-only. It turns the readiness gate into a practical first backend phase plan for auth and role boundaries. It does not implement auth, add API routes, add save/load behavior, create migrations, run Supabase commands, add browser storage, send notifications, activate billing/payment/PDF behavior, change parser behavior, or change runtime app behavior.
 
-Reason: Stage 4A-364 completes the production data/auth readiness gate. The safe foundation is now ready to move toward real backend planning only if the next stage is explicit about auth, roles, RLS, route boundaries, API validation, rollback, and no-leak tests.
+### A. Future Roles
+
+1. Admin / Dispatcher
+   - First real login role to implement.
+   - Owns internal operations: booking intake, booking review, operational customer records, driver/vehicle review, assignment review, status review, amend/cancel review, and audit review.
+   - Can see operational booking details needed to run dispatch.
+   - Should not automatically receive finance powers unless the user also has the future finance/admin billing role.
+
+2. Customer
+   - Later login role after admin/dispatcher auth is stable.
+   - Can see only their own customer-safe booking requests, confirmed bookings, request status, change/cancellation request status, driver handoff status, and support handoff wording.
+   - Must not see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, unrelated customer records, mock QA/dev archive content, or internal audit details.
+
+3. Driver
+   - Later secure-token/session model after role rules are clear.
+   - Can see only assigned job details needed to perform the trip: pickup date/time, pickup/drop-off, route, passenger-safe instructions, service items needed for the job, and driver-safe status controls.
+   - Must not see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, unrelated customer account details, mock QA/dev archive content, or parser/debug internals.
+
+4. Finance / Admin Billing
+   - Planned later, not part of the first auth implementation.
+   - Can be introduced for invoice/payment/payment-status views, finance review, payout review, and month-end closeout only after finance RLS and route boundaries are approved.
+   - Must remain separate from customer and driver surfaces.
+
+### B. Future Auth Sequence
+
+1. Admin/dispatcher login first.
+   - Protect `/`, `/customers`, and internal operational API routes before real internal records are exposed.
+   - Keep customer and driver routes unchanged until their own auth/token stages.
+
+2. Customer account login later.
+   - Scope `/my-bookings` to authenticated customer-owned records only.
+   - Keep `/book` public/customer-safe for request intake unless a later stage explicitly changes the flow.
+
+3. Secure driver token/session model after role rules are clear.
+   - Keep `/driver-job/[token]` single-job scoped.
+   - Use token hash storage, expiry, revocation, usage audit, and driver-safe DTOs before production driver job reads.
+
+4. Finance/admin billing role later.
+   - Add only after invoice/payment/PDF and payout boundaries have their own approval.
+
+### C. RLS Readiness Before Real Writes
+
+- Every production table must have an owner role and route-safe visibility rule before it stores real data.
+- RLS must be enabled and tested before customer, driver, finance, or public/token access is allowed.
+- Admin/dispatcher policies must not silently grant finance-only fields unless the finance role is present.
+- Customer policies must scope by customer account membership and never by browser-supplied IDs alone.
+- Driver policies must scope by assignment or valid token/session and never expose raw token rows.
+- Service-role usage must stay server-only and must never be exposed to browser code, logs, route payloads, or test output.
+
+### D. API Requirements Before Real Writes
+
+- API routes must require the correct auth role, except for explicitly approved public request intake.
+- API routes must validate input on the server and reject unknown or unsafe fields.
+- API routes must return route-safe DTOs, not raw table rows.
+- API routes must keep parser behavior separate from persistence behavior.
+- API routes must not create notification, invoice, payment, PDF, payout, live-location, proof/photo, or parser-learning side effects.
+- API errors must not expose Supabase internals, service-role secrets, SQL details, parser debug, or internal notes.
+
+### E. Audit Requirements
+
+Before real mutation workflows, audit coverage must be planned for:
+
+- Booking creation: actor, source route/API, created booking reference, customer/account link, source channel, short-notice review status, and safe before/after summary.
+- Amend request: requester role, target booking, requested fields, previous customer-safe values, requested values, review status, and staff decision later.
+- Cancellation request: requester role, target booking, reason/details, current booking status, review status, and staff decision later.
+- Driver assignment: staff actor, booking, driver/vehicle assignment, previous assignment if any, assignment status, and reason/notes with customer/driver redaction.
+- Driver status update: driver/token or staff actor, assignment/job, status value, event time, source route, and customer/driver-safe status mapping.
+
+Audit entries must stay internal by default. Customer and driver routes should receive safe status summaries only, never internal before/after values, staff identities, admin notes, finance notes, or parser/debug internals.
+
+### F. Tests Required Before Real Auth/Save/Load
+
+- Route-leak tests for `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and `/driver-job/[token]`.
+- Role visibility tests for admin/dispatcher, customer, driver, and future finance/admin billing.
+- Customer route tests proving no customer price appears unless a future approved quote/payment stage allows it.
+- Driver route tests proving no customer price, invoice/payment, payout, PayNow payout, finance notes, internal admin notes, or mock archive content leaks.
+- Customer route tests proving no driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock archive content leaks.
+- Browser checks proving no service-role or server-only secret reaches the browser.
+- Parser regression tests proving auth/save/load work did not change parser behavior.
+- Mobile/no-horizontal-overflow tests for customer and driver PWA-first surfaces and admin tablet/phone emergency use.
+- `npm run test:safe` before and after every approved implementation commit.
+
+### G. Next Backend Step
+
+The next different backend step should be admin/dispatcher auth boundary implementation planning or an explicitly approved admin/dispatcher auth implementation stage. Secure driver token planning should follow after the staff auth boundary is explicit. Real booking/customer save/load should still wait until admin/dispatcher auth and driver token boundaries are explicit.
+
+## 13. Recommended Next Safe Stage
+
+Recommended next stage: admin/dispatcher auth boundary implementation planning, or a tightly scoped admin/dispatcher auth implementation stage if explicitly approved.
+
+Reason: Stage 4A-365 defines the auth and role model implementation plan. The next distinct backend boundary is staff/admin auth for `/` and `/customers`, before any production internal records, secure driver token reads, or real booking/customer save/load.

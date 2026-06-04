@@ -333,13 +333,73 @@ Do not add or persist these until their own explicit stages approve them:
 5. Notifications later: `notification_outbox` only after a notification stage approves safe templates, approval flow, delivery logs, and no-send tests.
 6. Invoice/payment/PDF later: finance tables only after invoice/payment/PDF, payout, role visibility, and rollback approvals are complete.
 
-## 14. Future Implementation Sequence
+## 14. Auth Role Model Implementation Plan
+
+Stage 4A-365 is planning only. It defines the schema ownership and field visibility expectations for the first real auth phase, but it does not add auth code, create tables, create migrations, run Supabase commands, add API routes, or persist data.
+
+### Future Role Ownership Model
+
+| Role | Primary future table scope | Customer/driver-safe output boundary |
+| --- | --- | --- |
+| Admin / dispatcher | `customers`, `customer_contacts`, `bookings`, `booking_route_points`, `booking_service_items`, `drivers`, `vehicles`, `driver_assignments`, `job_status_events`, and internal `audit_logs`. | Can see operational booking details and internal review status. Finance-only fields should remain separate unless finance role is granted. |
+| Customer | Own customer/account-linked `bookings`, safe `booking_route_points`, safe `booking_service_items`, own request/change/cancellation status, and customer-safe driver handoff status. | Must receive customer-safe DTOs only: no driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, internal audit detail, unrelated customer rows, or mock QA/dev archive content. |
+| Driver | Assigned `bookings`, assigned `booking_route_points`, job-needed `booking_service_items`, assigned `driver_assignments`, and driver-safe `job_status_events` through assignment or secure token/session. | Must receive driver-safe DTOs only: no customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, unrelated customer account details, parser/debug internals, or mock QA/dev archive content. |
+| Finance / admin billing | Later `billing_accounts`, `billing_records`, `invoices`, `payments`, `driver_payouts`, and finance-approved audit records. | Planned later for invoice/payment/payment-status views. Must not be bundled into customer or driver visibility. |
+
+### Auth Sequence Impact On Schema
+
+1. Admin/dispatcher login first.
+   - Add staff user identity/role linkage before production operational records are exposed.
+   - Make `created_by`, `updated_by`, `assigned_by_user_id`, and audit actor fields meaningful only after this role exists.
+
+2. Customer account login later.
+   - Add customer account membership/linking before `/my-bookings` reads production rows.
+   - Customer-owned reads must be based on trusted membership, not browser-submitted customer IDs.
+
+3. Secure driver token/session model next.
+   - `driver_job_tokens` must store token hashes only.
+   - Token/session reads must resolve to one assignment/job and return only driver-safe fields.
+
+4. Finance/admin billing later.
+   - Finance fields and finance tables stay blocked until billing/payment/PDF and payout visibility are separately approved.
+
+### RLS And Field Readiness
+
+- `bookings` must separate customer-facing status from admin internal status.
+- `booking_service_items` must separate customer-safe labels from admin notes, pricing flags, and billing review fields.
+- `driver_assignments` must separate assignment status from payout terms and internal assignment notes.
+- `job_status_events` must separate safe status text from actor identity, source details, and internal notes.
+- `audit_logs` must be internal by default and must not become a customer or driver data source.
+- `driver_job_tokens` must never expose raw token values; token hash, usage metadata, expiry, and revocation details are internal.
+- Finance tables remain role-restricted and later-phase only.
+
+### Audit Data Requirements
+
+Future schema work should support audit entries for:
+
+- Booking creation: actor, source route/API, booking reference, customer/account link, source channel, short-notice status, and created status.
+- Amend request: requester, booking, requested fields, previous safe values, requested values, review status, and staff decision later.
+- Cancellation request: requester, booking, cancellation details, current status, review status, and staff decision later.
+- Driver assignment: staff actor, booking, driver, vehicle, previous assignment, assignment status, and redacted internal reason/note.
+- Driver status update: driver token/session or staff actor, assignment/job, status, event time, source route/API, and safe customer/driver status mapping.
+
+### Schema Test Requirements Before Real Auth/Save/Load
+
+- Role visibility tests for admin/dispatcher, customer, driver, and later finance/admin billing.
+- Route-leak tests covering `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and `/driver-job/[token]`.
+- Customer no-leak tests for driver payout, PayNow payout, admin notes, parser/debug internals, admin finance, and mock archive content.
+- Driver no-leak tests for customer price, billing, invoice/payment, payout comparisons, PayNow payout details, finance notes, admin notes, and mock archive content.
+- Browser secret tests proving service-role and server-only secrets never reach route payloads, page text, browser storage, logs, or bundles.
+- Parser regression tests before and after persistence/auth work.
+- Mobile/no-horizontal-overflow tests before and after customer or driver route changes.
+
+## 15. Future Implementation Sequence
 
 Recommended future stages after this readiness gate:
 
-1. Auth and role model implementation planning.
+1. Admin/dispatcher auth implementation planning.
 2. Secure driver token model planning.
-3. Smallest approved booking/customer save/load implementation.
+3. Smallest approved booking/customer save/load implementation after auth boundaries are explicit.
 4. Amend/cancel/assignment audit implementation.
 5. Notifications later.
 6. Invoice/payment/PDF later.
@@ -350,8 +410,8 @@ Stage 4A-300 plans future test guards for accidental Supabase/API/runtime calls 
 
 First real workflow candidates, ranked by safety:
 
-1. Auth and role model boundary implementation.
-2. Secure driver token model boundary implementation.
-3. Admin/customer booking persistence with strict tests after auth/RLS boundaries are explicit.
+1. Admin/dispatcher auth boundary implementation.
+2. Secure driver token model boundary planning.
+3. Admin/customer booking persistence with strict tests after auth/RLS planning is accepted.
 
 The next stage should be the first real backend phase only if it explicitly preserves the readiness gate above.

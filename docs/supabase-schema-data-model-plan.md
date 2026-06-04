@@ -536,14 +536,85 @@ Before implementation, tests must prove:
 - invalid role/session requests are blocked safely;
 - invalid, expired, revoked, or wrong-job driver token requests are blocked safely before driver production reads are enabled.
 
-## 17. Future Implementation Sequence
+## 17. Audit Records / Rollback Implementation Plan
+
+Stage 4A-370 is planning only. It defines audit record and rollback boundaries before any real booking/customer save-load implementation, but it does not create audit tables, create migrations, run Supabase commands, add API routes, add production reads, add production writes, add customer auth, add driver auth, persist data, or change runtime behavior.
+
+### Audit Workflows To Support Later
+
+Future audit planning must cover these mutation workflows before they become real:
+
+- booking created;
+- booking amended;
+- booking cancelled;
+- customer amend request reviewed;
+- customer cancellation request reviewed;
+- driver assigned;
+- driver status updated;
+- admin/dispatcher override.
+
+Audit records are internal operational records by default. Customer and driver routes must not read raw audit rows or internal before/after values.
+
+### Safe Audit Fields
+
+The first audit model should store only safe operational metadata such as:
+
+- actor role;
+- action type;
+- booking reference;
+- before/after safe operational snapshot;
+- reason or review note;
+- timestamp;
+- source surface.
+
+The before/after snapshot should include approved operational status, route, pickup, assignment, and request-review values only. It must not become a place to store finance, payout, parser/debug, notification, proof/photo, or billing payloads.
+
+### Blocked Audit Fields
+
+The first audit implementation must reject or omit:
+
+- pricing, customer charges, quote totals, invoice totals, or billing math;
+- driver payout, PayNow payout, payout comparisons, payout defaults, and payout review fields;
+- invoice, payment, PDF, Stripe, PayNow payout workflow, billing automation, statement, finance export, and accounting fields;
+- internal finance notes;
+- parser debug internals, raw parser payloads, parser-learning data, and mock QA/dev archive content;
+- live location, proof/photo content, storage paths, maps/geocoding/flight-provider payloads, or upload metadata.
+
+### Rollback Boundaries
+
+Rollback should be an explicit admin/dispatcher-reviewed operation, not an automatic side effect.
+
+- Rollback may restore approved safe operational fields only.
+- Rollback must not send automatic customer notifications.
+- Rollback must not send automatic driver notifications.
+- Rollback must not create billing, payment, invoice, PDF, payout, PayNow payout, finance, accounting, proof/photo, live-location, parser-learning, or notification side effects.
+- Rollback must not reverse billing/payment/payout state because those workflows are not part of the first save-load scope.
+- Sensitive changes require manual admin review before a rollback action is accepted.
+- Rollback responses must return route-safe DTOs, not raw audit rows or raw Supabase records.
+
+### Audit And Rollback Test Requirements
+
+Before audit or rollback implementation, tests must prove:
+
+- an audit record is created for each approved future write path;
+- customer and driver routes cannot see internal audit fields;
+- public, customer, driver, anonymous, malformed staff, and invalid-role requests cannot write audit records;
+- rollback cannot expose finance, payout, private driver, internal admin, parser/debug, billing/payment, invoice/PDF, proof/photo, live-location, or mock archive data;
+- rollback cannot create automatic customer or driver notifications;
+- route-leak coverage and mobile/no-horizontal-overflow coverage continue to pass.
+
+### Still Blocked After Stage 4A-370
+
+Real audit tables, rollback APIs, migrations, Supabase CLI commands, API routes, production reads, production writes, real save/load, customer auth, driver auth, notification sending, billing/payment/PDF behavior, Stripe, PayNow payout, finance automation, live location, proof/photo, parser-learning, payout behavior, and driver workflow automation remain blocked until later explicit implementation stages.
+
+## 18. Future Implementation Sequence
 
 Recommended future stages after this readiness gate:
 
 1. Admin/dispatcher auth implementation planning.
 2. Secure driver token/session boundary planning.
 3. Smallest approved booking/customer save-load implementation planning after auth and token boundaries are explicit.
-4. Amend/cancel/assignment audit implementation planning before mutation workflows.
+4. Audit records and rollback boundary planning before mutation workflows.
 5. Notifications later.
 6. Invoice/payment/PDF later.
 

@@ -533,3 +533,77 @@ Before real save/load implementation:
 ### Still Blocked After Stage 4A-369
 
 Real save/load, migrations, Supabase CLI commands, API routes, production reads, production writes, customer auth, driver auth, notification sending, billing/payment/PDF behavior, Stripe, PayNow payout, finance automation, live location, proof/photo, parser-learning, payout behavior, and driver workflow automation remain blocked until later explicit implementation stages.
+
+## Q. Audit Records / Rollback Implementation Plan
+
+Stage 4A-370 is planning only. It defines audit record and rollback API/RLS boundaries before any real booking/customer save-load implementation, but it does not create audit tables, create migrations, run Supabase commands, add API routes, add production reads, add production writes, add real save/load, add customer auth, add driver auth, notification sending, billing/payment/PDF behavior, payout behavior, live location, proof/photo, parser-learning, or runtime behavior.
+
+### Future Audit Coverage
+
+Future write paths must create internal audit records for approved mutations such as:
+
+| Workflow | Future audit requirement |
+| --- | --- |
+| Booking created | Actor role, action type, booking reference, safe created-field snapshot, reason/source if applicable, timestamp, and source surface. |
+| Booking amended | Actor role, action type, booking reference, before/after safe operational snapshot, review reason or note, timestamp, and source surface. |
+| Booking cancelled | Actor role, action type, booking reference, before/after safe status snapshot, cancellation reason or review note, timestamp, and source surface. |
+| Customer amend request reviewed | Staff actor role, action type, booking reference, request review decision, before/after safe request status snapshot, review note, timestamp, and source surface. |
+| Customer cancellation request reviewed | Staff actor role, action type, booking reference, cancellation review decision, before/after safe request status snapshot, review note, timestamp, and source surface. |
+| Driver assigned | Staff actor role, action type, booking reference, before/after safe assignment status snapshot, reason or review note, timestamp, and source surface. |
+| Driver status updated | Driver token/session or staff actor role, action type, booking reference, before/after safe driver status snapshot, timestamp, and source surface. |
+| Admin/dispatcher override | Admin/dispatcher actor role, override action type, booking reference, before/after safe operational snapshot, required reason/review note, timestamp, and source surface. |
+
+Audit rows must remain internal by default. Customer and driver APIs may receive only separately approved customer-safe or driver-safe status summaries, never raw audit rows.
+
+### Safe Audit Field Boundary
+
+The first audit implementation should allow only:
+
+- actor role;
+- action type;
+- booking reference;
+- before/after safe operational snapshot;
+- reason or review note;
+- timestamp;
+- source surface.
+
+The snapshot must be composed server-side from approved operational fields. API handlers must reject browser-submitted audit snapshots that include unknown, private, finance, parser/debug, notification, or file/storage fields.
+
+### Blocked Audit Field Boundary
+
+The first audit implementation must not store or return:
+
+- pricing, customer charges, quote totals, invoice totals, or billing math;
+- driver payout, PayNow payout, payout comparisons, payout defaults, or payout review fields;
+- invoice, payment, PDF, Stripe, PayNow payout workflow, billing automation, finance export, accounting, statement, or payment-link fields;
+- internal finance notes;
+- parser debug internals, raw parser payloads, parser-learning data, or mock QA/dev archive content;
+- live location, proof/photo content, storage paths, map/geocoding/flight-provider payloads, or upload metadata.
+
+### Rollback RLS/API Boundary
+
+Rollback must be planned as a separate explicit staff-reviewed operation, not as an automatic companion to writes.
+
+- Admin/dispatcher roles may request rollback only after server-side role checks, validation, and audit lookup are approved.
+- Rollback restores safe operational fields only.
+- Rollback must not expose raw audit rows, raw Supabase rows, private driver details, finance notes, parser/debug internals, service-role secrets, or server-only details.
+- Rollback must not send automatic customer or driver notifications.
+- Rollback must not create billing, invoice, PDF, payment, Stripe, PayNow payout, driver payout, finance, accounting, live-location, proof/photo, parser-learning, or notification side effects.
+- Rollback must not reverse billing/payment/payout state because those workflows remain out of scope.
+- Sensitive overrides require a manual admin/dispatcher reason or review note.
+- Rollback responses must return role-safe DTOs only.
+
+### Future Audit/Rollback Test Requirements
+
+Before implementation, tests must prove:
+
+- audit records are created for each approved future write path;
+- customer and driver routes cannot see internal audit fields or raw before/after snapshots;
+- public, customer, driver, anonymous, malformed staff, and invalid-role requests cannot write audit records;
+- rollback cannot expose pricing, payout, PayNow payout, invoice/payment/PDF, finance notes, internal admin notes, private driver data, parser/debug internals, live-location, proof/photo, or mock archive content;
+- rollback cannot send customer or driver notifications and cannot trigger billing/payment/payout side effects;
+- route-leak tests and mobile/no-horizontal-overflow tests remain protected.
+
+### Still Blocked After Stage 4A-370
+
+Real audit tables, rollback APIs, migrations, Supabase CLI commands, API routes, production reads, production writes, real save/load, customer auth, driver auth, notification sending, billing/payment/PDF behavior, Stripe, PayNow payout, finance automation, live location, proof/photo, parser-learning, payout behavior, and driver workflow automation remain blocked until later explicit implementation stages.

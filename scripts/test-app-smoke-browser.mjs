@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -22,7 +23,9 @@ const appUrl = process.env.APP_URL || "http://localhost:3000";
 const browserName = (process.env.BROWSER || "chrome").toLowerCase();
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9226);
+const configuredChromeDebugPort = process.env.CHROME_DEBUG_PORT
+  ? Number(process.env.CHROME_DEBUG_PORT)
+  : null;
 const singaporeDateFormatter = new Intl.DateTimeFormat("en-SG", {
   day: "2-digit",
   month: "2-digit",
@@ -502,7 +505,50 @@ function assertAppSmokeState(state) {
   );
 }
 
+async function getAvailableTcpPort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : null;
+
+      server.close(() => {
+        if (typeof port === "number") {
+          resolve(port);
+          return;
+        }
+
+        reject(new Error("Could not allocate a Chrome debug port"));
+      });
+    });
+  });
+}
+
+async function terminateChromeProcess(chrome) {
+  if (chrome.exitCode !== null || chrome.signalCode !== null) {
+    return;
+  }
+
+  chrome.kill("SIGTERM");
+  await waitForChildExit(chrome, 2000);
+
+  if (chrome.exitCode !== null || chrome.signalCode !== null) {
+    return;
+  }
+
+  chrome.kill("SIGKILL");
+  await waitForChildExit(chrome, 2000);
+}
+
 async function runChromeTest() {
+  const chromeDebugPort = configuredChromeDebugPort ?? (await getAvailableTcpPort());
+
+  if (!Number.isInteger(chromeDebugPort) || chromeDebugPort <= 0) {
+    throw new Error(`Invalid Chrome debug port: ${chromeDebugPort}`);
+  }
+
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "prestige-limo-app-smoke-chrome-"));
   const chrome = spawn(
     chromeBinary,
@@ -517,6 +563,7 @@ async function runChromeTest() {
       "--no-default-browser-check",
       "--no-service-autorun",
       `--user-data-dir=${userDataDir}`,
+      "--remote-debugging-address=127.0.0.1",
       `--remote-debugging-port=${chromeDebugPort}`,
       "about:blank",
     ],
@@ -34082,8 +34129,7 @@ async function runChromeTest() {
       await client.close();
     }
 
-    chrome.kill("SIGTERM");
-    await waitForChildExit(chrome);
+    await terminateChromeProcess(chrome);
     await rm(userDataDir, { force: true, recursive: true }).catch(() => {});
   }
 }

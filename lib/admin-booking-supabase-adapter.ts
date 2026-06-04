@@ -520,6 +520,19 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
     };
   }
 
+  if (
+    process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true" &&
+    (actor.boundary_mode !== "server-session-role-surface" ||
+      !["admin", "dispatcher"].includes(actor.actor_role) ||
+      actor.source_surface !== "admin_api")
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Admin booking persistence requires a verified admin or dispatcher server session.",
+    };
+  }
+
   return {
     ok: true,
     data: null,

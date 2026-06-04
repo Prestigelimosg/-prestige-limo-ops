@@ -24,6 +24,10 @@ const safeBlockedMessage =
 const serverSessionAuthMode = "server-session-token";
 const adminDispatcherRoles = new Set<AdminDispatcherBoundaryRole>(["admin", "dispatcher"]);
 
+function adminBookingPersistenceWritesEnabled() {
+  return process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true";
+}
+
 function hasSameOriginAdminDashboardReferer(request: Request) {
   const requestUrl = new URL(request.url);
   const origin = request.headers.get("origin");
@@ -99,6 +103,14 @@ export function resolveAdminDispatcherBoundary(
 
   if (process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE === serverSessionAuthMode) {
     return resolveServerSessionRole(request);
+  }
+
+  if (adminBookingPersistenceWritesEnabled()) {
+    return {
+      ok: false,
+      status: 403,
+      error: safeBlockedMessage,
+    };
   }
 
   // Future Supabase auth should replace the server-session-token source with

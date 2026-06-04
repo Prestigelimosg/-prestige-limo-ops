@@ -499,7 +499,7 @@ function adminActor() {
   return {
     actor_label: "Contract Test Admin",
     actor_role: "admin",
-    boundary_mode: "local-dev-admin-surface",
+    boundary_mode: "server-session-role-surface",
     source_surface: "admin_api",
   };
 }
@@ -979,29 +979,14 @@ try {
     ),
   );
 
-  assert.equal(customerCreateRoute.status, 200);
-  assert.equal(customerCreateRoute.body.ok, true);
-  assert.match(customerCreateRoute.body.request.booking_reference, /^CUST-/);
-  assert.equal(customerCreateRoute.body.request.customer_facing_status, "Request Received");
-  assert.equal(customerCreateRoute.body.request.admin_internal_status, "Admin Review Required");
-  assert.equal(
-    insertedOperation(customerCreateMock.client, "bookings").payload.source_surface,
-    "customer_booking_request",
-  );
-  assert.equal(
-    insertedOperation(customerCreateMock.client, "audit_logs").payload.actor_role,
-    "system",
-  );
-  assert.equal(
-    insertedOperation(customerCreateMock.client, "audit_logs").payload.source_surface,
-    "system",
-  );
-  assert.match(
-    insertedOperation(customerCreateMock.client, "audit_logs").payload.reason,
-    /Customer booking request/,
-  );
-  assertNoApiLeak(customerCreateRoute, "successful customer route response should hide server internals");
-  assertNoUnsafeKeys(customerCreateMock.client.operations, "customer booking request adapter writes");
+  assert.equal(customerCreateRoute.status, 403);
+  assert.deepEqual(customerCreateRoute.body, {
+    error: "Booking request could not be saved safely.",
+    ok: false,
+  });
+  assert.equal(customerCreateMock.createdClients.length, 0);
+  assert.equal(customerCreateMock.client.operations.length, 0);
+  assertNoApiLeak(customerCreateRoute, "blocked customer enabled-write response should hide server internals");
 } finally {
   restoreEnv();
   delete globalThis.__prestigeSupabaseAdapterMock;

@@ -193,20 +193,65 @@ The first persistence implementation must still block:
 - Real billing/month-end finance data.
 - Real notification delivery state.
 
-## J. Recommended Future Sequence
+## J. Production Data/Auth Readiness Gate
 
-Recommended future stages after this plan:
+Stage 4A-364 keeps this document as planning only and adds the entry gate for the next real backend phase. No migration, Supabase command, RLS policy, API route, auth implementation, or production persistence is created here.
 
-1. Stage 4A-299 - Read-only checkpoint review after Migration / RLS / API plan.
-2. Stage 4A-300 - Docs-only test safety guard plan for accidental Supabase/API/runtime calls.
-3. Stage 4A-301 - Read-only checkpoint review after test safety guard plan.
-4. Stage 4A-302 - Docs-only first real persistence acceptance criteria.
-5. Only after explicit approval, implement the smallest real persistence workflow.
+### Required Order Before Real Writes
+
+1. Auth and role model first
+   - Define admin/owner, dispatcher, finance, customer, driver, public booking requester, and public driver-token visitor roles.
+   - Decide claims/session shape and route ownership before any production table is exposed.
+   - Keep service-role keys server-only and never browser-visible.
+
+2. Secure driver token model
+   - Define one-token-to-one-job scope.
+   - Store token hashes only, not raw tokens.
+   - Plan expiry, revocation, last-used metadata, audit logging, and driver-route no-leak tests before using production rows.
+
+3. Booking/customer save/load
+   - Start with approved operational booking/customer fields only.
+   - Keep customer-facing short-notice requests in `Admin Review Required`.
+   - Do not include billing, invoices, payments, payouts, notifications, proof/photo, live location, or parser learning.
+
+4. Amend/cancel/assignment audit records
+   - Define audit rows before production amend, cancellation, or driver assignment changes can mutate booking records.
+   - Keep before/after values, actor identity, source route, and internal notes admin/staff-only.
+
+5. Notifications later
+   - Keep notification APIs and `notification_outbox` blocked until a separate notification stage approves templates, staff approval, retry/failure handling, consent, delivery logging, and kill switches.
+
+6. Invoice/payment/PDF later
+   - Keep invoice numbers, payment links, PDFs, statements, payouts, PayNow payout details, accounting records, and finance export blocked until a separate finance stage approves role boundaries and rollback.
+
+### API/RLS Gate Conditions
+
+- Every production write route must be auth-protected or explicitly public-request scoped.
+- Every route must return a route-safe DTO rather than raw table rows.
+- RLS must be enabled and tested before customer, driver, finance, or public routes touch production tables.
+- Public/customer/driver routes must continue to block admin notes, parser/debug internals, mock QA/dev archive content, pricing on customer/public pages unless approved, and all payout/finance data.
+- Browser tests must protect route leakage, no unintended Supabase/API calls, no notification sends, no storage writes, and mobile/no-horizontal-overflow behavior.
+- Rollback and staging validation must be documented before running migrations or production writes.
+
+### Still Blocked
+
+Supabase CLI commands, migrations, production writes, production reads, real auth, real secure tokens, real notifications, invoice/payment/PDF behavior, live location, proof/photo, parser learning, and finance/payout behavior remain blocked until a later explicit implementation stage approves them.
+
+## K. Recommended Future Sequence
+
+Recommended future stages after this readiness gate:
+
+1. Auth and role model implementation planning.
+2. Secure driver token model planning.
+3. Smallest approved booking/customer save/load implementation.
+4. Amend/cancel/assignment audit implementation.
+5. Notification outbox planning and implementation later.
+6. Invoice/payment/PDF planning and implementation later.
 
 First real workflow candidates, ranked by safety:
 
-1. Admin-only booking persistence prototype with strict route and no-leak tests.
-2. Customer booking request save with `Admin Review Required` short-notice support.
-3. Customer account linking only after auth plan is approved.
+1. Auth and role model boundary implementation.
+2. Secure driver token model boundary implementation.
+3. Admin/customer booking persistence with strict route and no-leak tests.
 
-The next stage should be read-only review, not migration or implementation.
+The next stage should be the first real backend phase only if it explicitly preserves the readiness gate above.

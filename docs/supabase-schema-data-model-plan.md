@@ -293,14 +293,56 @@ These require later explicit approved implementation stages:
 
 Stage 4A-296 does not persist any data. It only documents future boundaries.
 
-## 13. Future Implementation Sequence
+## 13. Production Data/Auth Readiness Gate
 
-Recommended future stages:
+Stage 4A-364 updates this schema plan with the final readiness gate before real backend work. It does not create migrations, run Supabase commands, add auth, add API routes, or persist data.
 
-1. Stage 4A-297 - Read-only checkpoint review after Supabase schema/data model plan.
-2. Stage 4A-298 - Docs-only migration/RLS/API planning, no commands.
-3. Stage 4A-299 - Optional test-only safety guard planning for no accidental Supabase runtime calls.
-4. Only after explicit approval, implement one smallest real persistence workflow.
+### Schema Work Must Wait For Access Boundaries
+
+Before any table below becomes production data, the implementation stage must define the auth/RLS owner for each row and the route-safe fields allowed to leave the server.
+
+| Future area | Required readiness before implementation |
+| --- | --- |
+| Customer accounts/auth | Customer identity, account membership, owned-record scoping, staff-only `/customers` boundary, and no unrelated customer data exposure. |
+| Secure driver job tokens | One-job scope, token hash storage, expiry, revocation, last-used metadata, audit logging, and driver-safe DTO tests. |
+| Real booking save/load | Approved operational fields, locked short-notice `Admin Review Required` behavior, parser/persistence separation, route leak tests, and rollback plan. |
+| Admin/customer/driver role boundaries | Admin/staff, dispatcher, finance, customer, driver, public requester, and public token visitor roles mapped before RLS policies are applied. |
+| RLS before real data | RLS enabled for customer, driver, finance, public/token, and staff paths before any production rows are exposed outside server-only admin code. |
+| API routes before real writes | Server-side validation, auth/role checks, route-safe DTO responses, no service-role secret exposure, no raw table row leaks, and no notification/payment side effects. |
+| Amend/cancel/driver assignment audit | `audit_logs` requirements for actor, entity, source route, before/after values, internal notes, and customer/driver redaction before production mutation workflows. |
+| Customer/driver notifications | Separate approval for templates, consent, staff approval, delivery logging, retries/failures, and kill switches before `notification_outbox` or sending is used. |
+| Invoice/payment/PDF | Separate finance approval for invoice numbers, PDFs, payment links, statements, payouts, PayNow payout details, accounting export, and customer/driver visibility. |
+
+### Data Still Blocked
+
+Do not add or persist these until their own explicit stages approve them:
+
+- Supabase migrations, production writes, and production reads.
+- Customer auth, driver auth, and secure driver token behavior.
+- Billing records, invoices, payments, PDFs, payment links, payouts, PayNow payout details, payout comparisons, finance posting, and accounting export.
+- Notification outbox entries, send logs, WhatsApp/email/SMS/Telegram behavior, and delivery state.
+- Live location, proof/photo uploads, file storage, route/provider calls, and parser learning.
+- Mock QA/dev archive content, parser/debug internals, internal admin notes, service-role secrets, or server-only secrets in browser-visible data.
+
+### Recommended Schema Implementation Order
+
+1. Auth and role model first: users, roles, claims/session shape, route ownership, server-only secret handling, and RLS ownership model.
+2. Secure driver token model: `driver_job_tokens` with token hashes, expiry/revocation, usage audit, and single-job route-safe reads.
+3. Booking/customer save/load: `customers`, `customer_contacts`, `bookings`, `booking_route_points`, and `booking_service_items` with approved operational fields only.
+4. Amend/cancel/assignment audit: `audit_logs`, `driver_assignments`, and `job_status_events` for reviewed operational changes.
+5. Notifications later: `notification_outbox` only after a notification stage approves safe templates, approval flow, delivery logs, and no-send tests.
+6. Invoice/payment/PDF later: finance tables only after invoice/payment/PDF, payout, role visibility, and rollback approvals are complete.
+
+## 14. Future Implementation Sequence
+
+Recommended future stages after this readiness gate:
+
+1. Auth and role model implementation planning.
+2. Secure driver token model planning.
+3. Smallest approved booking/customer save/load implementation.
+4. Amend/cancel/assignment audit implementation.
+5. Notifications later.
+6. Invoice/payment/PDF later.
 
 Stage 4A-298 plans future migration, RLS, and API boundaries for this schema. It does not create migrations, run Supabase commands, add API routes, or activate persistence.
 
@@ -308,8 +350,8 @@ Stage 4A-300 plans future test guards for accidental Supabase/API/runtime calls 
 
 First real workflow candidates, ranked by safety:
 
-1. Admin-only booking persistence prototype with strict tests.
-2. Customer booking request save with `Admin Review Required` short-notice support.
-3. Customer account linking only after auth plan is approved.
+1. Auth and role model boundary implementation.
+2. Secure driver token model boundary implementation.
+3. Admin/customer booking persistence with strict tests after auth/RLS boundaries are explicit.
 
-The next stage should be read-only review, not migration or implementation.
+The next stage should be the first real backend phase only if it explicitly preserves the readiness gate above.

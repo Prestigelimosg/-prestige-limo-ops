@@ -397,8 +397,57 @@ Keep the current checkpoint pattern for future implementation commits:
 
 Do not change package scripts or `test:safe` membership without a separate explicit approval stage.
 
-## 11. Recommended Next Safe Stage
+## 11. Production Data/Auth Readiness Gate
 
-Recommended next stage: Stage 4A-322 - Read-only checkpoint review after exact admin booking persistence API/UI implementation prompt.
+Stage 4A-364 adds the final docs-only readiness gate before any real Supabase, auth, customer, driver, or booking save/load work starts. This gate does not approve migrations, Supabase commands, API routes, production writes, customer auth, driver auth, secure driver tokens, notifications, invoice/payment/PDF behavior, live location, proof/photo upload, parser learning, or runtime app behavior.
 
-Reason: Stage 4A-321 is a docs-only exact implementation prompt. A read-only checkpoint should confirm the future admin-only API/UI file boundaries, approved and forbidden data scope, route protections, short-notice requirements, RLS/database safety criteria, future test requirements, command sequence, and no-runtime-change guardrails before any API route, app save/load behavior, auth, billing, payment, notification, driver workflow, or parser behavior is activated.
+### A. Gate Purpose
+
+The next real backend phase may start only after the owner explicitly approves a bounded implementation stage and the stage names the exact data, auth, API, RLS, rollback, route-leak, mobile, parser, and `test:safe` checks it will use.
+
+This readiness gate exists to keep the transition from protected local/mock UI to real data safe. It is not a shortcut around auth, RLS, route isolation, or privacy review.
+
+### B. Must Be True Before Real Data/Auth Work Starts
+
+- Auth and role model must be designed first: admin/owner, dispatcher, finance, customer, driver, public booking requester, and public driver-token visitor.
+- Admin dashboard `/` and `/customers` must be staff-only before real internal records are exposed.
+- Customer account access must be scoped to the authenticated customer's own safe records before `/my-bookings` reads production data.
+- Driver job access must use a single-job secure-token model before `/driver-job/[token]` reads production data.
+- RLS policies must exist before any customer, driver, finance, or public route can read or write production tables.
+- API routes that write production data must validate input, apply role checks, rely on server-only Supabase credentials, and return only route-safe fields.
+- Real booking save/load must start with operational fields only and must keep parser behavior separate from persistence behavior.
+- Amend/cancel/driver-assignment changes must have audit trail requirements before production writes.
+- Notification boundaries must remain no-send until a later notification stage approves templates, consent/approval flow, delivery logging, retry behavior, and kill switches.
+- Invoice/payment/PDF boundaries must remain disabled until a later finance stage approves invoice numbering, payment links, PDF storage, customer visibility, and accounting rollback.
+
+### C. Still Blocked Until Explicit Approval
+
+- Supabase migrations and all Supabase CLI commands.
+- Production writes, production reads, RLS policy application, and database grants.
+- Real customer auth, driver auth, staff auth, secure customer accounts, and secure driver token behavior.
+- Real notification sending through WhatsApp, email, SMS, Telegram, or any other channel.
+- Invoice, payment, PDF, Stripe, PayNow payout, driver payout automation, payout comparison, finance posting, and accounting export.
+- Live location, route/provider calls, proof/photo upload, file storage, and parser learning.
+- Browser storage persistence for operational/admin/customer/driver state.
+- Any exposure of service-role secrets, server-only secrets, internal admin notes, parser/debug internals, mock QA/dev archive content, customer pricing on public/customer pages, or payout/finance details on customer/driver pages.
+
+### D. Recommended Implementation Order
+
+1. Auth and role model first: define users, roles, claims/session shape, route ownership, server-only secret handling, and staff/customer/driver access boundaries.
+2. Secure driver token model: define single-job scope, token hashing, expiry, revocation, audit fields, and no-leak browser tests before reading real driver jobs.
+3. Booking/customer save/load: implement the smallest operational booking/customer persistence path with approved fields only, no billing, no notifications, and no parser behavior changes.
+4. Amend/cancel audit records: add staff-reviewed request, change, cancellation, and driver-assignment audit records before these actions mutate production bookings.
+5. Notifications later: start as approval-gated outbox/log-only, then add real sending only after consent, template, failure, and kill-switch controls are approved.
+6. Invoice/payment/PDF later: start as finance-only draft/review data, then add invoice numbers, PDFs, payment links, payouts, and accounting export in separately approved stages.
+
+### E. First Backend Stage Entry Criteria
+
+The next real backend stage should be a narrow implementation, not another mock or UI polish pass. It must name the exact files, routes, tables, fields, RLS policies, API validation, rollback plan, no-leak tests, and post-commit checks before work starts.
+
+Recommended next real backend phase: auth and role model implementation planning, followed by secure driver token design. Real booking/customer save/load should wait until those access boundaries are explicit.
+
+## 12. Recommended Next Safe Stage
+
+Recommended next stage: the first explicitly approved real backend phase, starting with auth and role model implementation planning before any production save/load.
+
+Reason: Stage 4A-364 completes the production data/auth readiness gate. The safe foundation is now ready to move toward real backend planning only if the next stage is explicit about auth, roles, RLS, route boundaries, API validation, rollback, and no-leak tests.

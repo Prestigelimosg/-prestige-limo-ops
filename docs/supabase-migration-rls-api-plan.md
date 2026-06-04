@@ -432,3 +432,104 @@ Before any real driver-token reads or writes:
 ### Still Blocked After Stage 4A-368
 
 Real driver auth, real customer auth, real secure token generation/validation, migrations, Supabase CLI commands, production driver job reads, production status writes, notification sending, payment/invoice/PDF behavior, PayNow payout, billing automation, live-location, proof/photo, parser-learning, and driver workflow automation remain blocked until later explicit implementation stages.
+
+## P. Booking / Customer Save-Load Implementation Plan
+
+Stage 4A-369 is planning only. It defines the smallest safe future booking/customer save-load implementation path, but it does not add API routes, migrations, Supabase commands, production reads, production writes, customer auth, driver auth, notification sending, billing/payment/PDF behavior, payout behavior, live location, proof/photo, parser-learning, or runtime behavior.
+
+### Smallest Future Sequence
+
+1. Admin/dispatcher auth boundary first.
+   - Production save/load must require a trusted server-side admin/dispatcher role.
+   - The current local/dev boundary must remain clearly separated from future production writes.
+
+2. Safe booking table/model first.
+   - Start with `bookings`, `booking_route_points`, and `booking_service_items`.
+   - Store approved operational fields only.
+   - Keep parser behavior and parser/debug payloads separate from persistence.
+
+3. Safe customer/account table/model alongside booking records.
+   - Start with `customers` and `customer_contacts`.
+   - Use account display name and approved operational contact details only.
+   - Do not add customer auth, self-service account edits, or customer writes in the first batch.
+
+4. Admin-only create/update first.
+   - Admin/dispatcher creates and updates approved operational booking/customer fields through server-side validation.
+   - Customer read-only access is later and must use trusted account membership and route-safe DTOs.
+
+5. Driver token access later.
+   - Driver token/session access is limited to assigned job-safe DTOs after token validation exists.
+   - Driver token routes must never read or return raw customer/account rows.
+
+### Approved First-Write Field Set
+
+The first future save/load API should allow only fields such as:
+
+- booking reference;
+- source/channel if operationally needed;
+- customer/account display name;
+- approved passenger/contact safe details;
+- pickup date/time;
+- pickup/drop-off and route summary;
+- route points needed for dispatch;
+- service type;
+- service items needed for operations;
+- admin internal status;
+- customer-facing safe status;
+- short-notice review status;
+- request, change, and cancellation review statuses;
+- created/updated timestamps and actor metadata after auth/audit is approved.
+
+### Blocked Fields For First Save-Load
+
+The first save/load stage must reject or omit:
+
+- pricing, customer charges, quote totals, invoice totals, or billing math;
+- driver payout, PayNow payout, payout comparisons, payout defaults, and payout review fields;
+- invoice, payment, PDF, Stripe, PayNow payout workflow, billing automation, statement, finance export, and accounting fields;
+- internal finance notes;
+- internal admin notes until a later redaction/audit stage approves storage and visibility;
+- parser/debug internals, raw parser payloads, parser-learning data, and mock QA/dev archive content;
+- notification delivery records, notification outbox rows, send logs, WhatsApp/email/SMS/Telegram delivery state, or message-channel behavior;
+- live location, proof/photo, storage paths, map/geocoding/flight-provider payloads, or upload metadata.
+
+### Required Audit Planning Before Mutations
+
+Audit rows must be planned before these writes become real:
+
+| Workflow | Required later audit scope |
+| --- | --- |
+| Booking created | Staff actor, source route/API, booking reference, customer/account link, source channel, short-notice review status, created status, and safe created-field summary. |
+| Booking amended | Staff actor or requester, booking, amended field set, previous safe values, new values, review status, source route/API, and redaction marker. |
+| Booking cancelled | Staff actor or requester, booking, cancellation reason/details, prior booking status, new review/status value, source route/API, and redaction marker. |
+| Driver assigned | Staff actor, booking, driver/vehicle assignment, previous assignment if any, assignment status, reason/note redaction, and customer/driver visibility marker. |
+| Driver status updated | Driver token/session or staff actor, booking/assignment, status value, event time, source route/API, customer-safe status mapping, and internal note redaction marker. |
+
+Audit rows are internal by default. Customer and driver routes may receive only separately approved safe status summaries.
+
+### Future RLS And API Requirements
+
+- Admin/dispatcher can write approved operational booking/customer fields only after server-side role checks.
+- Customer can later read only own safe booking/request fields through trusted account membership.
+- Driver token/session can later read only assigned job-safe fields after token hash, expiry, revocation, and job-scope validation.
+- Public booking request intake remains request-only and must preserve short-notice admin review behavior.
+- Service-role keys stay server-only and must never be exposed to browser bundles, page text, browser storage, logs, or route payloads.
+- API handlers must return role-safe DTOs, not raw Supabase table rows.
+- RLS policies must be tested before any customer, driver, public, or finance route touches production tables.
+
+### Future Test Requirements
+
+Before real save/load implementation:
+
+- No customer price leak tests for public/customer/driver routes.
+- No driver payout or PayNow payout leak tests for customer/driver routes.
+- No service-role or server-only secret leak tests for browser-visible bundles, responses, storage, logs, and page text.
+- Public route-leak tests for `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and `/driver-job/[token]`.
+- Parser regression tests proving persistence does not change parser behavior.
+- Mobile/no-horizontal-overflow tests for customer, driver, and admin emergency-use surfaces.
+- Invalid role/session tests proving public, customer, driver, anonymous, and malformed staff access cannot write admin records.
+- Invalid, expired, revoked, and wrong-job driver token tests before production driver reads are enabled.
+
+### Still Blocked After Stage 4A-369
+
+Real save/load, migrations, Supabase CLI commands, API routes, production reads, production writes, customer auth, driver auth, notification sending, billing/payment/PDF behavior, Stripe, PayNow payout, finance automation, live location, proof/photo, parser-learning, payout behavior, and driver workflow automation remain blocked until later explicit implementation stages.

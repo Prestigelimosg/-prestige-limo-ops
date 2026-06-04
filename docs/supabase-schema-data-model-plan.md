@@ -445,14 +445,105 @@ Future implementation must add tests proving:
 - no customer price, billing, invoice/payment, payout, PayNow payout, finance notes, admin notes, parser/debug internals, service-role/server-only secrets, unrelated customer rows, other driver jobs, or mock QA/dev archive content leaks;
 - mobile/no-horizontal-overflow protections continue to pass for `/driver-job/[token]`.
 
-## 16. Future Implementation Sequence
+## 16. Booking / Customer Save-Load Implementation Plan
+
+Stage 4A-369 is planning only. It defines the smallest safe future booking/customer save-load path, but it does not create tables, create migrations, run Supabase commands, add API routes, add production reads, add production writes, add customer auth, add driver auth, persist data, or change runtime behavior.
+
+### Smallest Future Save-Load Sequence
+
+1. Keep the admin/dispatcher auth boundary first.
+   - Production save/load must start from authenticated admin/dispatcher server-side access.
+   - Local/dev behavior may remain available only as an explicitly separated non-production path.
+
+2. Add safe booking records.
+   - Start with `bookings`, `booking_route_points`, and `booking_service_items` only for approved operational fields.
+   - Keep parser output and parser/debug internals separate from persistence fields.
+
+3. Add safe customer/account records.
+   - Start with `customers` and `customer_contacts` for account display name and approved operational contact fields.
+   - Do not add customer account login or self-service writes in the first save/load batch.
+
+4. Admin-only create/update first.
+   - Admin/dispatcher may create or update approved operational booking/customer fields after auth, RLS, API validation, audit, and rollback are approved.
+   - Customer read-only access comes later and must use trusted customer account membership.
+
+5. Driver token access later.
+   - Driver token/session reads may only expose assigned job-safe DTOs after the secure driver token boundary is implemented.
+   - Driver token access must not read raw booking/customer rows directly.
+
+### Safe First-Write Fields
+
+The first future save/load batch should be limited to:
+
+- booking reference;
+- source/channel if needed for operations;
+- customer/account display name;
+- approved passenger/contact safe details;
+- pickup date/time;
+- pickup/drop-off and route summary;
+- service type;
+- route points needed for dispatch;
+- service items needed for operations, such as child seat, extra stop, or waiting-time review label without billing math;
+- admin internal status and customer-facing safe status;
+- short-notice review status;
+- request, change, and cancellation review statuses;
+- created/updated timestamps and later actor references after auth/audit exists.
+
+### Fields Blocked From First Save-Load
+
+Do not include these in the first save/load batch:
+
+- pricing, customer charges, quote totals, invoice totals, or billing math;
+- driver payout, PayNow payout, payout comparisons, payout defaults, or payout review fields;
+- invoice, payment, PDF, Stripe, PayNow payout workflow, statement, finance export, or accounting fields;
+- internal finance notes;
+- internal admin notes unless a later audit/internal-note stage defines redaction and role rules;
+- parser/debug internals, raw parser payloads, parser-learning fields, or mock QA/dev archive content;
+- notification delivery records, message-send logs, WhatsApp/email/SMS/Telegram delivery state, or notification outbox rows;
+- live location, proof/photo, storage paths, maps/geocoding/flight-provider payloads, or upload metadata.
+
+### Required Audit Records Later
+
+Before real mutation workflows are approved, schema planning must support internal audit records for:
+
+- booking created;
+- booking amended;
+- booking cancelled;
+- driver assigned;
+- driver status updated.
+
+Audit records must stay internal by default and must not become customer or driver DTO sources except for separately approved safe status summaries.
+
+### RLS And API Requirements
+
+- Admin/dispatcher can write only approved operational fields through server-side validated API routes.
+- Customer can later read only their own safe booking/request fields through trusted account membership, not browser-submitted customer IDs.
+- Driver token/session can later read only assigned job-safe fields through token/session validation, not raw table access.
+- Service-role keys and server-only secrets must stay server-only and must never reach browser bundles, route payloads, page text, logs, or browser storage.
+- API responses must return role-specific DTOs rather than raw Supabase rows.
+- Unknown fields and blocked finance, payout, notification, parser/debug, proof/photo, live-location, and billing fields must be rejected.
+
+### Save-Load Test Requirements
+
+Before implementation, tests must prove:
+
+- no customer price leak on public/customer/driver routes;
+- no driver payout or PayNow payout leak on customer/driver routes;
+- no service-role or server-only secret leak to browser-visible bundles, responses, storage, logs, or page text;
+- route-leak coverage for `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, and `/driver-job/[token]`;
+- parser regression coverage remains unchanged;
+- mobile/no-horizontal-overflow coverage remains protected;
+- invalid role/session requests are blocked safely;
+- invalid, expired, revoked, or wrong-job driver token requests are blocked safely before driver production reads are enabled.
+
+## 17. Future Implementation Sequence
 
 Recommended future stages after this readiness gate:
 
 1. Admin/dispatcher auth implementation planning.
 2. Secure driver token/session boundary planning.
-3. Smallest approved booking/customer save/load implementation after auth boundaries are explicit.
-4. Amend/cancel/assignment audit implementation.
+3. Smallest approved booking/customer save-load implementation planning after auth and token boundaries are explicit.
+4. Amend/cancel/assignment audit implementation planning before mutation workflows.
 5. Notifications later.
 6. Invoice/payment/PDF later.
 
@@ -464,6 +555,6 @@ First real workflow candidates, ranked by safety:
 
 1. Admin/dispatcher auth boundary implementation.
 2. Secure driver token model boundary planning.
-3. Admin/customer booking persistence with strict tests after auth/RLS planning is accepted.
+3. Booking/customer save-load implementation planning with strict tests after auth/RLS planning is accepted.
 
 The next stage should be the first real backend phase only if it explicitly preserves the readiness gate above.

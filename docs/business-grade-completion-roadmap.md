@@ -591,3 +591,23 @@ Stage 4A-368 adds the secure driver token/session boundary plan for future produ
 Recommended next stage: smallest approved booking/customer save/load implementation planning, using the now-explicit admin/dispatcher and driver-token boundaries as prerequisites, still without migrations, Supabase commands, production writes, notifications, billing/payment/PDF, payouts, live location, proof/photo, customer auth, or driver auth unless that stage explicitly approves and scopes them.
 
 Reason: the staff/admin boundary and driver-token boundary are now documented. The next distinct backend step is to define the minimal safe booking/customer persistence plan around approved operational fields, route-safe DTOs, audit needs, rollback, and no-leak tests before any real data work begins.
+
+## 16. Stage 4A-369 - Booking Customer Save-Load Implementation Plan
+
+Stage 4A-369 adds the smallest safe booking/customer save-load implementation plan. It is planning only and does not add real save/load, customer auth, driver auth, migrations, Supabase commands, API routes, production reads, production writes, notifications, billing, invoices, payments, PDFs, payouts, live location, proof/photo, parser-learning, or runtime behavior.
+
+### A. Save-Load Path Planned
+
+- Production save/load must start behind the admin/dispatcher auth boundary.
+- The first future persistence batch should use safe booking/customer models only: booking reference, customer/account display name, pickup date/time, pickup/drop-off/route summary, service type, approved passenger/contact details, admin/customer-facing safe statuses, and request/change/cancel review statuses.
+- Admin/dispatcher create/update comes first after auth, RLS, API validation, audit, rollback, and tests are approved.
+- Customer read-only access comes later and must be scoped to own safe booking/request fields.
+- Driver token access comes later and must be scoped to assigned job-safe fields only.
+- First save/load must block pricing/customer charges, driver payout, PayNow payout, invoice/payment/PDF, finance notes, parser/debug internals, notification delivery records, live location, proof/photo, payout behavior, and mock QA/dev archive content.
+- Future audit planning must cover booking created, booking amended, booking cancelled, driver assigned, and driver status updated.
+
+### B. Next Backend Step
+
+Recommended next stage: audit record and rollback planning for booking create/amend/cancel, driver assignment, and driver status updates, still without migrations, Supabase commands, API routes, production writes, customer auth, driver auth, notifications, billing/payment/PDF, payouts, live location, proof/photo, or parser-learning.
+
+Reason: the minimal save-load field boundary is now explicit. The next distinct backend prerequisite is defining audit and rollback shape before any real mutation workflow is approved.

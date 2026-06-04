@@ -406,14 +406,16 @@ function findAdminBookingPersistenceLeaks(text) {
 }
 
 function stripCustomerPortalDocumentHistoryBoundary(text, context) {
-  if (!context.includes("/my-bookings")) {
+  if (!context.includes("/my-bookings") && !context.includes("/book")) {
     return text;
   }
 
   return text
     .replaceAll("No PDF/document is generated yet. No invoice/payment link is created.", "")
     .replaceAll("Booking Documents / Request History", "")
-    .replaceAll("Booking request history is read-only for now.", "");
+    .replaceAll("Booking request history is read-only for now.", "")
+    .replaceAll("No price, payment, invoice, PDF, or billing file is created here.", "")
+    .replaceAll("Review before submitting", "");
 }
 
 function assertNoCustomerFacingPriceVisibilityLeaks(text, context) {
@@ -26467,10 +26469,14 @@ async function runChromeTest() {
         const feedback = document.querySelector("[data-customer-booking-feedback]");
         const confirmationStatus = document.querySelector("[data-customer-booking-confirmation-status]");
         const nextSteps = document.querySelector("[data-customer-booking-next-steps]");
+        const preSubmitReview = document.querySelector("[data-customer-booking-pre-submit-review]");
+        const preSubmitReviewText = preSubmitReview?.innerText || "";
+        const lowerTextForForbidden = text.replace(preSubmitReviewText, "").toLowerCase();
         const submitRect = submit?.getBoundingClientRect();
         const feedbackRect = feedback?.getBoundingClientRect();
         const confirmationStatusRect = confirmationStatus?.getBoundingClientRect();
         const nextStepsRect = nextSteps?.getBoundingClientRect();
+        const preSubmitReviewRect = preSubmitReview?.getBoundingClientRect();
 
         const fieldState = Object.fromEntries(
           [
@@ -26829,7 +26835,7 @@ async function runChromeTest() {
             "manual extra charges",
             "extra charges note / reason",
             "manual extra charge reason",
-          ].filter((value) => lowerText.includes(value)),
+          ].filter((value) => lowerTextForForbidden.includes(value)),
           integrationCalls: window.__customerBookingIntegrationCalls || [],
           customerBookingRequestCalls: window.__customerBookingRequestCalls || [],
           sameTimeBlockingText: [
@@ -26858,6 +26864,21 @@ async function runChromeTest() {
             ),
             text: nextSteps?.innerText || "",
             visible: Boolean(nextStepsRect && nextStepsRect.width > 0 && nextStepsRect.height > 0),
+          },
+          preSubmitReview: {
+            height: Math.round(preSubmitReviewRect?.height || 0),
+            items: [
+              ...document.querySelectorAll("[data-customer-booking-pre-submit-review-item]"),
+            ].map((item) => ({
+              key: item.getAttribute("data-customer-booking-pre-submit-review-item") || "",
+              text: item.textContent.trim(),
+            })),
+            text: preSubmitReviewText,
+            title:
+              document.querySelector("[data-customer-booking-pre-submit-review-title]")?.textContent.trim() || "",
+            visible: Boolean(
+              preSubmitReviewRect && preSubmitReviewRect.width > 0 && preSubmitReviewRect.height > 0,
+            ),
           },
           removedInternalControls: [
             "Customer / account",
@@ -27048,6 +27069,43 @@ async function runChromeTest() {
           "Step 3: We reply before the booking is confirmed.",
         ],
         "Expected /book customer next-step guidance",
+      );
+      assert.equal(initialState.preSubmitReview.visible, true, "Expected /book pre-submit review clarity");
+      assert.equal(
+        initialState.preSubmitReview.title,
+        "Review before submitting",
+        "Expected /book pre-submit review heading",
+      );
+      assert.equal(
+        initialState.preSubmitReview.height <= 230,
+        true,
+        `Expected /book pre-submit review to stay compact, got ${initialState.preSubmitReview.height}px`,
+      );
+      assert.deepEqual(
+        initialState.preSubmitReview.items,
+        [
+          {
+            key: "request-only",
+            text: "This is a booking request only, not a confirmed booking yet.",
+          },
+          {
+            key: "team-review",
+            text: "Our team will review and confirm availability before your booking is confirmed.",
+          },
+          {
+            key: "short-notice",
+            text: "Short-notice bookings under 24 hours require team review before confirmation.",
+          },
+          {
+            key: "no-finance-file",
+            text: "No price, payment, invoice, PDF, or billing file is created here.",
+          },
+          {
+            key: "urgent-help",
+            text: "For urgent or same-day help, contact our team directly.",
+          },
+        ],
+        "Expected /book pre-submit request-only and no-finance clarity",
       );
       assert.equal(
         initialState.text.includes(
@@ -27563,6 +27621,24 @@ async function runChromeTest() {
       );
       assert.equal(mobileState.submitVisible, true, "Expected /book submit button to remain touch-friendly on mobile");
       assert.equal(mobileState.nextSteps.visible, true, "Expected /book mobile next-step guidance");
+      assert.equal(mobileState.preSubmitReview.visible, true, "Expected /book mobile pre-submit clarity");
+      assert.equal(
+        mobileState.preSubmitReview.text.includes(
+          "Short-notice bookings under 24 hours require team review before confirmation.",
+        ),
+        true,
+        "Expected /book mobile pre-submit clarity to explain short-notice review",
+      );
+      assert.equal(
+        mobileState.preSubmitReview.text.includes("This is a booking request only, not a confirmed booking yet."),
+        true,
+        "Expected /book mobile pre-submit clarity to stay request-only",
+      );
+      assert.equal(
+        mobileState.preSubmitReview.text.includes("No price, payment, invoice, PDF, or billing file is created here."),
+        true,
+        "Expected /book mobile pre-submit clarity to show no finance-file boundary",
+      );
       assert.equal(
         mobileState.customerIntakeHandoffVisible,
         false,
@@ -33622,6 +33698,7 @@ async function runChromeTest() {
     state.adminBookingPersistenceRouteBoundaries = [];
     state.customerFolderIndexHandoffRouteBoundaries = [];
     state.customerBookingDocumentHistoryRouteBoundaries = [];
+    state.customerBookingPreSubmitReviewRouteBoundaries = [];
     for (const route of [
       { context: "/book", expectedText: "Booking Request", url: customerBookingUrl },
       { context: "/my-bookings", expectedText: "My Bookings", url: customerPortalUrl },
@@ -33650,6 +33727,18 @@ async function runChromeTest() {
         customerFolderIndexHandoffVisible,
         route.context === "/customers",
         `Expected customer folder index handoff visibility boundary for ${route.context}`,
+      );
+      const customerBookingPreSubmitReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-booking-pre-submit-review]"))`,
+      );
+      state.customerBookingPreSubmitReviewRouteBoundaries.push({
+        context: route.context,
+        visible: customerBookingPreSubmitReviewVisible,
+      });
+      assert.equal(
+        customerBookingPreSubmitReviewVisible,
+        route.context === "/book",
+        `Expected customer booking pre-submit review visibility boundary for ${route.context}`,
       );
       const customerBookingDocumentHistoryVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-booking-document-history]"))`,

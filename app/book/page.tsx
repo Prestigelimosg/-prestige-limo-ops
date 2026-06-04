@@ -592,6 +592,39 @@ export default function CustomerBookingPage() {
             ) : null}
 
             <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
+              <section
+                aria-labelledby="pre-submit-review-title"
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700"
+                data-customer-booking-pre-submit-review="true"
+              >
+                <p
+                  className="font-semibold text-slate-950"
+                  data-customer-booking-pre-submit-review-title="true"
+                  id="pre-submit-review-title"
+                >
+                  Review before submitting
+                </p>
+                <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                  <li data-customer-booking-pre-submit-review-item="request-only">
+                    This is a booking request only, not a confirmed booking yet.
+                  </li>
+                  <li data-customer-booking-pre-submit-review-item="team-review">
+                    Our team will review and confirm availability before your booking is confirmed.
+                  </li>
+                  <li data-customer-booking-pre-submit-review-item="short-notice">
+                    Short-notice bookings under 24 hours require team review before confirmation.
+                  </li>
+                  <li data-customer-booking-pre-submit-review-item="no-finance-file">
+                    No price, payment, invoice, PDF, or billing file is created here.
+                  </li>
+                  <li
+                    className="sm:col-span-2"
+                    data-customer-booking-pre-submit-review-item="urgent-help"
+                  >
+                    For urgent or same-day help, contact our team directly.
+                  </li>
+                </ul>
+              </section>
               <p className="text-sm leading-6 text-slate-600">
                 After you submit, Prestige Limo will review the request and reply with the next step.
               </p>

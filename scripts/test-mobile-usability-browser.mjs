@@ -198,14 +198,16 @@ function findMobileAdminBookingPersistenceLeaks(text) {
 }
 
 function stripMobileCustomerPortalDocumentHistoryBoundary(text, context) {
-  if (!context.includes("/my-bookings")) {
+  if (!context.includes("/my-bookings") && !context.includes("/book")) {
     return text;
   }
 
   return text
     .replaceAll("No PDF/document is generated yet. No invoice/payment link is created.", "")
     .replaceAll("Booking Documents / Request History", "")
-    .replaceAll("Booking request history is read-only for now.", "");
+    .replaceAll("Booking request history is read-only for now.", "")
+    .replaceAll("No price, payment, invoice, PDF, or billing file is created here.", "")
+    .replaceAll("Review before submitting", "");
 }
 
 function assertNoMobileCustomerFacingPriceLeaks(text, context) {

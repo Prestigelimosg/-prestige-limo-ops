@@ -25651,6 +25651,9 @@ async function runChromeTest() {
           const text = document.body.innerText;
           const detail = document.querySelector("[data-payment-collection-detail='${customerId}']");
           const jobHistoryClarity = document.querySelector("[data-customer-job-history-clarity='${customerId}']");
+          const serviceHistoryHandoff = document.querySelector(
+            "[data-customer-account-service-history-handoff='${customerId}']",
+          );
           return {
             bookingHistory: document.querySelector("[data-customer-booking-history]")?.innerText || "",
             boundary: detail?.querySelector("[data-payment-collection-boundary]")?.textContent.trim() || "",
@@ -25784,6 +25787,37 @@ async function runChromeTest() {
               id: row.getAttribute("data-payment-collection-row"),
               text: row.innerText,
             })),
+            serviceHistoryHandoff: {
+              boundary:
+                serviceHistoryHandoff
+                  ?.querySelector("[data-customer-account-service-history-boundary]")
+                  ?.textContent.trim() || "",
+              buttonCount: serviceHistoryHandoff?.querySelectorAll("button").length || 0,
+              formCount: serviceHistoryHandoff?.querySelectorAll("form").length || 0,
+              helper:
+                serviceHistoryHandoff
+                  ?.querySelector("[data-customer-account-service-history-helper]")
+                  ?.textContent.trim() || "",
+              inputCount: serviceHistoryHandoff?.querySelectorAll("input, select, textarea").length || 0,
+              summary:
+                serviceHistoryHandoff
+                  ?.querySelector("[data-customer-account-service-history-summary]")
+                  ?.innerText || "",
+              text: serviceHistoryHandoff?.textContent || "",
+              unsafeText: [
+                "driver payout",
+                "paynow payout",
+                "finance notes",
+                "admin notes",
+                "parser/debug",
+                "debug internals",
+                "mock qa",
+                "private driver",
+                "payment link",
+                "send notification",
+              ].filter((value) => (serviceHistoryHandoff?.innerText || "").toLowerCase().includes(value)),
+              visible: Boolean(serviceHistoryHandoff),
+            },
             statementReadiness:
               detail?.querySelector("[data-payment-collection-statement-readiness]")?.innerText || "",
             text,
@@ -25831,6 +25865,47 @@ async function runChromeTest() {
           0,
           `Expected ${customerName} job-history clarity to be read-only with no controls`,
         );
+        assert.equal(
+          state.serviceHistoryHandoff.visible,
+          true,
+          `Expected ${customerName} customer account service-history handoff`,
+        );
+        assert.equal(
+          state.serviceHistoryHandoff.helper,
+          "Read-only staff handoff from this customer folder's visible service history.",
+          `Expected ${customerName} account service-history handoff helper`,
+        );
+        assert.equal(
+          state.serviceHistoryHandoff.boundary,
+          "Read-only handoff. No invoice/payment, document, customer notification, customer record change, or booking change is created here.",
+          `Expected ${customerName} account service-history handoff boundary`,
+        );
+        assert.equal(
+          state.serviceHistoryHandoff.buttonCount +
+            state.serviceHistoryHandoff.inputCount +
+            state.serviceHistoryHandoff.formCount,
+          0,
+          `Expected ${customerName} account service-history handoff to be read-only with no controls`,
+        );
+        assert.deepEqual(
+          state.serviceHistoryHandoff.unsafeText,
+          [],
+          `Expected ${customerName} account service-history handoff to avoid private/internal wording`,
+        );
+        for (const expectedHandoffText of [
+          "Customer Service History / Account Handoff",
+          customerName,
+          "visible service row",
+          "Upcoming / completed",
+          "Latest safe service",
+          "Request/change status",
+          "Next staff action",
+        ]) {
+          assert.ok(
+            state.serviceHistoryHandoff.text.includes(expectedHandoffText),
+            `Expected ${customerName} account service-history handoff text: ${expectedHandoffText}`,
+          );
+        }
         for (const expectedSnapshotText of [
           "Job history snapshot",
           "Customer/account",
@@ -33711,6 +33786,7 @@ async function runChromeTest() {
     state.internalQaMockArchiveRouteBoundaries = [];
     state.adminBookingPersistenceRouteBoundaries = [];
     state.adminCustomerAmendCancelReviewRouteBoundaries = [];
+    state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
     state.customerFolderIndexHandoffRouteBoundaries = [];
     state.customerBookingDocumentHistoryRouteBoundaries = [];
     state.customerBookingPreSubmitReviewRouteBoundaries = [];
@@ -33774,6 +33850,18 @@ async function runChromeTest() {
         customerFolderIndexHandoffVisible,
         route.context === "/customers",
         `Expected customer folder index handoff visibility boundary for ${route.context}`,
+      );
+      const customerAccountServiceHistoryHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-customer-account-service-history-handoff]"))`,
+      );
+      state.customerAccountServiceHistoryHandoffRouteBoundaries.push({
+        context: route.context,
+        visible: customerAccountServiceHistoryHandoffVisible,
+      });
+      assert.equal(
+        customerAccountServiceHistoryHandoffVisible,
+        false,
+        `Expected customer account service-history handoff visibility boundary for ${route.context}`,
       );
       const customerBookingPreSubmitReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-booking-pre-submit-review]"))`,

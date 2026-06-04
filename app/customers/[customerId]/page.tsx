@@ -104,6 +104,21 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
   const statementReadyTotal = formatMockCurrency(
     statementReadyRows.reduce((total, row) => total + parseMockCurrency(row.balanceDue), 0),
   );
+  const latestServiceHistoryBooking = customer.bookingHistory[0];
+  const latestServiceHistorySummary = latestServiceHistoryBooking
+    ? [
+        latestServiceHistoryBooking.date,
+        latestServiceHistoryBooking.route,
+        getCustomerSafeJobStatus(latestServiceHistoryBooking),
+      ].join(" | ")
+    : "No visible service history yet.";
+  const latestServiceHistoryRequestStatus = latestServiceHistoryBooking
+    ? getCustomerSafeRequestStatus(latestServiceHistoryBooking)
+    : "No request/change/cancellation update shown in this folder sample.";
+  const nextServiceHistoryAction =
+    upcomingJobs.length > 0
+      ? "Review upcoming trip details and safe request/change status before dispatch handoff."
+      : "Review completed trip context before the next booking request.";
 
   return (
     <main className="min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
@@ -179,6 +194,72 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
               </div>
             </dl>
           </div>
+        </section>
+
+        <section
+          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+          data-customer-account-service-history-handoff={customer.id}
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">Customer Service History / Account Handoff</h2>
+              <p
+                className="mt-1 text-sm leading-6 text-slate-600"
+                data-customer-account-service-history-helper="true"
+              >
+                Read-only staff handoff from this customer folder&apos;s visible service history.
+              </p>
+            </div>
+            <p
+              className="text-sm font-semibold text-slate-600"
+              data-customer-account-service-history-count="true"
+            >
+              {customer.bookingHistory.length} visible service row
+              {customer.bookingHistory.length === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          <dl
+            className="mt-4 grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3"
+            data-customer-account-service-history-summary="true"
+          >
+            <div className="min-w-0 border-t border-slate-200 pt-3">
+              <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer/account</dt>
+              <dd className="mt-1 font-bold text-slate-950">{customer.companyName}</dd>
+            </div>
+            <div className="min-w-0 border-t border-slate-200 pt-3">
+              <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Upcoming / completed
+              </dt>
+              <dd className="mt-1 font-bold text-slate-950">
+                {upcomingJobs.length} upcoming / {completedJobs.length} completed
+              </dd>
+            </div>
+            <div className="min-w-0 border-t border-slate-200 pt-3">
+              <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Latest safe service
+              </dt>
+              <dd className="mt-1 leading-6 text-slate-700">{latestServiceHistorySummary}</dd>
+            </div>
+            <div className="min-w-0 border-t border-slate-200 pt-3">
+              <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Request/change status
+              </dt>
+              <dd className="mt-1 leading-6 text-slate-700">{latestServiceHistoryRequestStatus}</dd>
+            </div>
+            <div className="min-w-0 border-t border-slate-200 pt-3 sm:col-span-2">
+              <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Next staff action</dt>
+              <dd className="mt-1 leading-6 text-slate-700">{nextServiceHistoryAction}</dd>
+            </div>
+          </dl>
+
+          <p
+            className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"
+            data-customer-account-service-history-boundary="true"
+          >
+            Read-only handoff. No invoice/payment, document, customer notification, customer record change, or booking
+            change is created here.
+          </p>
         </section>
 
         <section

@@ -630,3 +630,24 @@ Stage 4A-370 adds the audit records and rollback implementation plan before real
 Recommended next stage: define the exact first booking/customer persistence API and RLS contract checklist, including route DTOs, validation schemas, safe table fields, audit creation expectations, rollback acceptance rules, role/token rejection cases, and no-leak/mobile/parser checks, still without running Supabase commands or creating migrations until that later implementation stage is explicitly approved.
 
 Reason: auth, driver-token, save-load, audit, and rollback boundaries are now planned. The next distinct backend step should turn those plans into an exact implementation contract for the first approved persistence batch before any database or API work begins.
+
+## 18. Stage 4A-371 - First Persistence API RLS Contract Checklist
+
+Stage 4A-371 adds the first booking/customer persistence API and RLS contract checklist before any real migration or API implementation. It is planning/checklist only and does not add real persistence APIs, save/load behavior, customer auth, driver auth, migrations, Supabase commands, production reads, production writes, notifications, billing, invoices, payments, PDFs, payouts, live location, proof/photo, parser-learning, or runtime behavior.
+
+### A. Contract Checklist Added
+
+- First future admin-only API contracts are limited to create booking/customer operational snapshot, update safe operational booking fields, and read admin operational records.
+- Safe DTO fields are limited to booking reference, customer/account display name, pickup date/time, pickup/drop-off/route summary, service type, passenger/contact safe details, admin/customer-facing safe statuses, and request/change/cancel review statuses.
+- Future validation must require approved fields and safe enum/status values while rejecting pricing, payout, PayNow payout, payment, invoice, PDF, billing, finance, parser/debug, live-location, proof/photo, notification, and mock QA/dev archive fields.
+- RLS requirements keep admin/dispatcher writes behind server-side role verification, customer own-record reads as a later safe contract, driver token reads as a later assigned-job contract, and service-role keys server-only.
+- Future write paths must create audit entries for create/update/amend/cancel, customer request reviews, driver assignment, and driver status update without exposing blocked finance/private fields to customer or driver routes.
+- Rollback acceptance is limited to safe operational fields only, with manual admin review, no automatic notification, and no billing/payment/payout reversal.
+- Rejection cases cover unauthenticated roles, invalid roles, invalid tokens, wrong customer/driver access, unsafe payloads, and browser-submitted server-only/private fields.
+- Required future tests cover no customer price leak, no driver payout leak, no service-role browser leak, no public route admin leak, parser regression, mobile/no-horizontal-overflow, and invalid role/token rejection.
+
+### B. Next Backend Step
+
+Recommended next stage: create the exact migration/RLS implementation draft for the first admin-only booking/customer persistence batch, still as a planning artifact unless explicitly approved to implement. It should name table columns, RLS policy names, server-only API validation contracts, audit linkage, rollback review handling, and the exact tests required before any Supabase command or migration is run.
+
+Reason: the API/RLS contract is now explicit. The next distinct backend step is to turn the contract into an implementation-ready migration/RLS draft before real database work begins.

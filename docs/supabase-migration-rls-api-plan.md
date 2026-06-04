@@ -607,3 +607,109 @@ Before implementation, tests must prove:
 ### Still Blocked After Stage 4A-370
 
 Real audit tables, rollback APIs, migrations, Supabase CLI commands, API routes, production reads, production writes, real save/load, customer auth, driver auth, notification sending, billing/payment/PDF behavior, Stripe, PayNow payout, finance automation, live location, proof/photo, parser-learning, payout behavior, and driver workflow automation remain blocked until later explicit implementation stages.
+
+## R. First Persistence API / RLS Contract Checklist
+
+Stage 4A-371 is planning/checklist only. It defines the exact first booking/customer persistence API and RLS contract checklist before any real migration or API implementation, but it does not create migrations, run Supabase commands, add API routes, add production reads, add production writes, add real save/load, add customer auth, add driver auth, notification sending, billing/payment/PDF behavior, payout behavior, live location, proof/photo, parser-learning, or runtime behavior.
+
+### First Future Admin-Only API Contract
+
+The first persistence API implementation should be limited to internal admin/dispatcher operations:
+
+| Contract | Future behavior | Explicit exclusions |
+| --- | --- | --- |
+| Create booking/customer operational snapshot | Create or link a safe customer/account display record and create a safe operational booking snapshot. | No invoice, payment, PDF, payout, notification, proof/photo, live-location, parser-learning, finance, or billing side effects. |
+| Update safe operational booking fields | Update only approved operational fields after admin/dispatcher role checks and server validation. | No pricing, payout, PayNow payout, billing, invoice/payment, parser/debug, finance, notification, live-location, proof/photo, or mock archive fields. |
+| Read admin operational records | Return internal operational DTOs for admin/dispatcher review. | No raw Supabase rows, service-role details, parser/debug internals, finance fields, payment fields, payout fields, private driver token metadata, or mock QA/dev archive content. |
+
+### Safe DTO Fields
+
+The first API DTO contract may include only:
+
+- booking reference;
+- customer/account display name;
+- pickup date/time;
+- pickup/drop-off and route summary;
+- service type;
+- passenger/contact safe details;
+- admin internal status and customer-facing safe status;
+- request, change, and cancellation review statuses.
+
+Separate later DTOs are required for customer read-only views and driver token views. Customer and driver routes must not receive the admin operational DTO directly.
+
+### Validation Requirements
+
+Before implementation, server validation must define:
+
+- required create fields for booking reference, customer/account display name, pickup date/time, pickup/drop-off or route summary, service type, and safe contact details when operationally required;
+- required update fields for booking reference or stable record identifier plus at least one approved operational field;
+- allowlists for safe enum/status values, including admin internal status, customer-facing status, short-notice status, request review status, change review status, and cancellation review status;
+- rejection of unknown fields;
+- rejection of pricing, customer charge, payout, PayNow payout, invoice/payment, PDF, billing, finance, accounting, and payment-link fields;
+- rejection of parser/debug internals, parser-learning fields, raw parser payloads, internal finance fields, private driver token metadata, mock QA/dev archive content, live-location fields, proof/photo fields, storage paths, and notification delivery fields.
+
+### RLS Rules Required Before Implementation
+
+The first persistence stage must not start until these RLS/API conditions are explicit:
+
+- admin/dispatcher write access is allowed only after trusted server-side role verification;
+- admin/dispatcher read access returns role-safe DTOs and does not expose raw table rows to the browser;
+- customer read-only access to own safe fields is a later contract that must use trusted account membership, not browser-submitted customer IDs;
+- driver token read-only access to assigned job-safe fields is a later contract that must use token hash, expiry, revocation, and job-scope validation;
+- service-role keys remain server-only and never reach browser bundles, page text, route payloads, logs, browser storage, or test output;
+- public routes remain blocked from admin operational records except separately approved public request intake.
+
+### Audit Requirements
+
+Future API handlers must create internal audit entries for approved write paths:
+
+- create booking/customer operational snapshot;
+- update safe operational booking fields;
+- booking amended;
+- booking cancelled;
+- customer amend request reviewed;
+- customer cancellation request reviewed;
+- driver assigned;
+- driver status updated.
+
+Audit entries must be internal-only by default. Customer and driver APIs must not expose blocked finance, pricing, payout, parser/debug, private driver, internal review, invoice/payment/PDF, proof/photo, live-location, notification, or mock archive fields.
+
+### Rollback Acceptance Rules
+
+Rollback can be implemented later only if:
+
+- rollback restores safe operational fields only;
+- rollback requires manual admin/dispatcher review for sensitive changes;
+- rollback creates no automatic customer notification;
+- rollback creates no automatic driver notification;
+- rollback creates no billing, payment, invoice, PDF, payout, PayNow payout, finance, accounting, proof/photo, live-location, parser-learning, or notification side effects;
+- rollback does not reverse billing/payment/payout state;
+- rollback responses return role-safe DTOs only.
+
+### Rejection Cases
+
+The future API/RLS implementation must reject:
+
+- unauthenticated role access;
+- invalid role access;
+- invalid, expired, revoked, malformed, or wrong-job driver token access;
+- wrong customer/account access;
+- wrong driver/job access;
+- unsafe payloads with blocked or unknown fields;
+- browser-submitted service-role secrets, actor metadata, audit snapshots, raw token values, parser/debug payloads, finance fields, payout fields, invoice/payment/PDF fields, proof/photo fields, live-location fields, or notification delivery fields.
+
+### Required Tests Before Real Implementation
+
+Before any real persistence implementation, tests must prove:
+
+- no customer price leak on public/customer/driver routes;
+- no driver payout or PayNow payout leak on customer/driver routes;
+- no service-role or server-only secret leak to browser-visible bundles, responses, storage, logs, or page text;
+- no public route admin/internal leak on `/book`, `/my-bookings`, `/customers`, `/driver-job-demo`, or `/driver-job/[token]`;
+- parser regression tests still pass and persistence does not change parser behavior;
+- mobile/no-horizontal-overflow tests still pass;
+- invalid role, invalid session, invalid token, wrong-customer, wrong-driver, and unsafe-payload rejection tests pass.
+
+### Still Blocked After Stage 4A-371
+
+Real persistence APIs, migrations, Supabase CLI commands, production reads, production writes, real save/load, customer auth, driver auth, notification sending, billing/payment/PDF behavior, Stripe, PayNow payout, finance automation, live location, proof/photo, parser-learning, payout behavior, and driver workflow automation remain blocked until later explicit implementation stages.

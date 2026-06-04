@@ -2943,6 +2943,83 @@ async function runChromeTest() {
         "Expected admin booking unsafe-field response not to echo forbidden contract field names",
       );
 
+      let canonicalAdapterDisabledConfigStatus = "skipped-enabled-config";
+
+      if (process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") {
+        const canonicalAdapterDisabledConfigResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+          body: JSON.stringify({
+            booking: {
+              admin_internal_status: "needs_review",
+              booking_reference: "SAFE-CANONICAL-OPS-001",
+              cancellation_review_status: "pending_review",
+              change_review_status: "pending_review",
+              contact_display_name: "Safe Ops Contact",
+              contact_email: "safe-ops@example.com",
+              contact_phone: "+65 9000 0001",
+              customer_display_name: "Safe Ops Account",
+              customer_facing_status: "pending_review",
+              dropoff_location: "Safe Canonical Dropoff",
+              passenger_name: "Safe Passenger",
+              passenger_phone: "+65 9000 0002",
+              pickup_at: "2026-06-05T10:30:00+08:00",
+              pickup_location: "Safe Canonical Pickup",
+              request_review_status: "pending_review",
+              route_summary: "Safe Canonical Pickup > Safe Canonical Dropoff",
+              service_type: "MNG",
+              short_notice_review_status: "not_required",
+              source_surface: "admin_api",
+            },
+            route_points: [
+              {
+                location: "Safe Canonical Pickup",
+                notes: "Safe pickup note",
+                point_type: "pickup",
+                sequence: 1,
+              },
+              {
+                location: "Safe Canonical Dropoff",
+                notes: "Safe dropoff note",
+                point_type: "dropoff",
+                sequence: 2,
+              },
+            ],
+            service_items: [
+              {
+                item_type: "extra_stop",
+                notes: "Safe service note",
+                quantity: 1,
+              },
+            ],
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            Referer: appUrl,
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "POST",
+        });
+        const canonicalAdapterDisabledConfigBody = await canonicalAdapterDisabledConfigResponse.json();
+        canonicalAdapterDisabledConfigStatus = canonicalAdapterDisabledConfigResponse.status;
+
+        assert.equal(
+          canonicalAdapterDisabledConfigResponse.status,
+          503,
+          "Expected canonical safe admin persistence adapter payload to stop at disabled server config",
+        );
+        assert.equal(
+          /not enabled|configuration/.test(String(canonicalAdapterDisabledConfigBody.error || "")),
+          true,
+          "Expected canonical adapter disabled-config safe message",
+        );
+        assert.equal(
+          /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|adapter|sql|stack|secret|key/i.test(
+            JSON.stringify(canonicalAdapterDisabledConfigBody),
+          ),
+          false,
+          "Expected canonical adapter disabled-config response to hide server-only adapter and secret internals",
+        );
+      }
+
       const unknownResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
           ...validAdminBookingApiPayload,
@@ -3306,6 +3383,7 @@ async function runChromeTest() {
         updateMismatchedTargetApiStatus: updateMismatchedTargetResponse.status,
         updateUnknownApiStatus: updateUnknownResponse.status,
         disabledConfigApiStatus: disabledConfigResponse.status,
+        canonicalAdapterDisabledConfigStatus,
         customerBookingRequestApi: {
           blockedStatus: blockedCustomerRequestResponse.status,
           disabledConfigStatus: customerDisabledConfigApiStatus,

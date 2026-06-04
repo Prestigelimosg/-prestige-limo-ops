@@ -1,10 +1,15 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  createAdminBookingThroughSupabaseAdapter,
+  listAdminBookingsThroughSupabaseAdapter,
+  updateAdminBookingThroughSupabaseAdapter,
+  type AdminBookingPersistenceAdapterActor,
+} from "./admin-booking-supabase-adapter";
 
 export type AdminBookingRecordInput = {
   booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
-  customer_id?: number | null;
+  customer_id?: number | string | null;
   pickup_datetime?: string | null;
   pickup_at?: string | null;
   pickup_location?: string | null;
@@ -85,7 +90,7 @@ export type AdminBookingPersistenceRecord = Required<
     service_items: AdminBookingServiceItemInput[];
   };
 
-type AdminBookingResult<T> =
+export type AdminBookingResult<T> =
   | {
       ok: true;
       data: T;
@@ -96,7 +101,7 @@ type AdminBookingResult<T> =
       status: number;
     };
 
-type AdminBookingAuditInput = {
+export type AdminBookingAuditInput = {
   action: string;
   actor_label: string;
   change_summary: string;
@@ -110,14 +115,9 @@ const shortNoticeWindowMs = 24 * 60 * 60 * 1000;
 const maxTextLength = 1000;
 const maxRoutePoints = 20;
 const maxServiceItems = 12;
-const safeSaveError = "Admin booking persistence save failed safely.";
-const safeLoadError = "Admin booking persistence load failed safely.";
-const safeReloadError = "Saved booking could not be safely reloaded.";
-const safeUpdateError = "Admin booking persistence update failed safely.";
-const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 
 export const adminBookingPersistenceContractVersion =
-  "stage-4a-375-admin-only-safe-operational-v1";
+  "stage-4a-376-admin-only-safe-operational-adapter-v1";
 
 const createPayloadTopLevelFields = new Set(["booking", "route_points", "service_items"]);
 const updatePayloadTopLevelFields = new Set([
@@ -878,146 +878,9 @@ export function parseCustomerBookingRequestPayload(
   return parseAdminBookingOperationalPayload(operationalPayload, createPayloadTopLevelFields);
 }
 
-function getAdminBookingClient(): AdminBookingResult<SupabaseClient> {
-  const enabled = process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true";
-
-  if (!enabled) {
-    return {
-      ok: false,
-      status: 503,
-      error: "Admin booking persistence is not enabled on this server.",
-    };
-  }
-
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return {
-      ok: false,
-      status: 503,
-      error: "Admin booking persistence server configuration is incomplete.",
-    };
-  }
-
-  return {
-    ok: true,
-    data: createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-      },
-    }),
-  };
-}
-
-function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
-  const routePoints = asArray(row.booking_route_points)
-    .map(asRecord)
-    .map((record) => ({
-      point_type: textOrNull(record.point_type) as AdminBookingRoutePointInput["point_type"],
-      sequence_number: integerOrNull(record.sequence_number),
-      location_text: textOrNull(record.location_text),
-      timing_note: textOrNull(record.timing_note),
-    }))
-    .filter((record) => record.point_type && record.location_text)
-    .sort((first, second) => (first.sequence_number ?? 0) - (second.sequence_number ?? 0));
-  const serviceItems = asArray(row.booking_service_items)
-    .map(asRecord)
-    .map((record) => ({
-      service_item_type: textOrNull(record.service_item_type) as AdminBookingServiceItemInput["service_item_type"],
-      quantity: integerOrNull(record.quantity),
-      blocks_count: integerOrNull(record.blocks_count),
-    }))
-    .filter((record) => record.service_item_type);
-
-  return {
-    booking_reference: textOrNull(row.booking_reference) || "",
-    source_channel: textOrNull(row.source_channel),
-    customer_id: integerOrNull(row.customer_id),
-    pickup_datetime: textOrNull(row.pickup_datetime),
-    pickup_location: textOrNull(row.pickup_location),
-    dropoff_location: textOrNull(row.dropoff_location),
-    route_type: textOrNull(row.route_type),
-    customer_display_name: textOrNull(row.customer_display_name),
-    contact_phone: textOrNull(row.contact_phone),
-    contact_email: textOrNull(row.contact_email),
-    pax_count: integerOrNull(row.pax_count),
-    luggage_count: integerOrNull(row.luggage_count),
-    vehicle_type_or_category: textOrNull(row.vehicle_type_or_category),
-    customer_facing_status: textOrNull(row.customer_facing_status),
-    admin_internal_status: textOrNull(row.admin_internal_status),
-    short_notice_review_status: textOrNull(row.short_notice_review_status),
-    parser_source_reference: textOrNull(row.parser_source_reference),
-    created_at: textOrNull(row.created_at),
-    updated_at: textOrNull(row.updated_at),
-    route_points: routePoints,
-    service_items: serviceItems,
-  };
-}
-
-async function fetchAdminBookingById(
-  client: SupabaseClient,
-  bookingId: number,
-): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
-  const { data, error } = await client
-    .from("bookings")
-    .select(
-      "booking_reference, source_channel, customer_id, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)",
-    )
-    .eq("id", bookingId)
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !data) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeReloadError,
-    };
-  }
-
-  return {
-    ok: true,
-    data: toAdminBookingDto(asRecord(data)),
-  };
-}
-
-async function fetchAdminBookingIdByReference(
-  client: SupabaseClient,
-  bookingReference: string,
-): Promise<AdminBookingResult<number>> {
-  const { data, error } = await client
-    .from("bookings")
-    .select("id")
-    .eq("booking_reference", bookingReference)
-    .limit(1)
-    .maybeSingle();
-  const bookingId = integerOrNull(asRecord(data).id);
-
-  if (error) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
-  }
-
-  if (!bookingId) {
-    return {
-      ok: false,
-      status: 404,
-      error: safeUpdateTargetMissingError,
-    };
-  }
-
-  return {
-    ok: true,
-    data: bookingId,
-  };
-}
-
 export async function createAdminBooking(
   input: AdminBookingPersistenceInput,
+  actor: AdminBookingPersistenceAdapterActor,
   auditInput: AdminBookingAuditInput = {
     action: "admin_booking_create",
     source_route: "/",
@@ -1025,76 +888,12 @@ export async function createAdminBooking(
     change_summary: "Operational booking fields saved through admin booking persistence prototype.",
   },
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
-  const clientResult = getAdminBookingClient();
-
-  if (!clientResult.ok) {
-    return clientResult;
-  }
-
-  const client = clientResult.data;
-  const { data: bookingRow, error: bookingError } = await client
-    .from("bookings")
-    .insert(input.booking)
-    .select("id")
-    .single();
-  const bookingId = integerOrNull(asRecord(bookingRow).id);
-
-  if (bookingError || !bookingId) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeSaveError,
-    };
-  }
-
-  if (input.route_points.length > 0) {
-    const { error } = await client.from("booking_route_points").insert(
-      input.route_points.map((routePoint) => ({
-        ...routePoint,
-        booking_id: bookingId,
-      })),
-    );
-
-    if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeSaveError,
-      };
-    }
-  }
-
-  if (input.service_items.length > 0) {
-    const { error } = await client.from("booking_service_items").insert(
-      input.service_items.map((serviceItem) => ({
-        ...serviceItem,
-        booking_id: bookingId,
-      })),
-    );
-
-    if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeSaveError,
-      };
-    }
-  }
-
-  await client.from("audit_logs").insert({
-    entity_type: "booking",
-    entity_id: bookingId,
-    action: auditInput.action,
-    source_route: auditInput.source_route,
-    actor_label: auditInput.actor_label,
-    change_summary: auditInput.change_summary,
-  });
-
-  return fetchAdminBookingById(client, bookingId);
+  return createAdminBookingThroughSupabaseAdapter(input, auditInput, actor);
 }
 
 export async function updateAdminBooking(
   input: AdminBookingPersistenceUpdateInput,
+  actor: AdminBookingPersistenceAdapterActor,
   auditInput: AdminBookingAuditInput = {
     action: "admin_booking_update",
     source_route: "/",
@@ -1102,134 +901,11 @@ export async function updateAdminBooking(
     change_summary: "Operational booking fields updated through admin booking persistence prototype.",
   },
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
-  const clientResult = getAdminBookingClient();
-
-  if (!clientResult.ok) {
-    return clientResult;
-  }
-
-  const client = clientResult.data;
-  const bookingIdResult = await fetchAdminBookingIdByReference(client, input.target_booking_reference);
-
-  if (!bookingIdResult.ok) {
-    return bookingIdResult;
-  }
-
-  const bookingId = bookingIdResult.data;
-  const { error: bookingError } = await client
-    .from("bookings")
-    .update({
-      ...input.booking,
-      booking_reference: input.target_booking_reference,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", bookingId);
-
-  if (bookingError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
-  }
-
-  const { error: routeDeleteError } = await client
-    .from("booking_route_points")
-    .delete()
-    .eq("booking_id", bookingId);
-
-  if (routeDeleteError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
-  }
-
-  if (input.route_points.length > 0) {
-    const { error } = await client.from("booking_route_points").insert(
-      input.route_points.map((routePoint) => ({
-        ...routePoint,
-        booking_id: bookingId,
-      })),
-    );
-
-    if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeUpdateError,
-      };
-    }
-  }
-
-  const { error: serviceDeleteError } = await client
-    .from("booking_service_items")
-    .delete()
-    .eq("booking_id", bookingId);
-
-  if (serviceDeleteError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
-  }
-
-  if (input.service_items.length > 0) {
-    const { error } = await client.from("booking_service_items").insert(
-      input.service_items.map((serviceItem) => ({
-        ...serviceItem,
-        booking_id: bookingId,
-      })),
-    );
-
-    if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeUpdateError,
-      };
-    }
-  }
-
-  await client.from("audit_logs").insert({
-    entity_type: "booking",
-    entity_id: bookingId,
-    action: auditInput.action,
-    source_route: auditInput.source_route,
-    actor_label: auditInput.actor_label,
-    change_summary: auditInput.change_summary,
-  });
-
-  return fetchAdminBookingById(client, bookingId);
+  return updateAdminBookingThroughSupabaseAdapter(input, auditInput, actor);
 }
 
-export async function listAdminBookings(): Promise<AdminBookingResult<AdminBookingPersistenceRecord[]>> {
-  const clientResult = getAdminBookingClient();
-
-  if (!clientResult.ok) {
-    return clientResult;
-  }
-
-  const { data, error } = await clientResult.data
-    .from("bookings")
-    .select(
-      "booking_reference, source_channel, customer_id, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(25);
-
-  if (error) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeLoadError,
-    };
-  }
-
-  return {
-    ok: true,
-    data: asArray(data).map(asRecord).map(toAdminBookingDto),
-  };
+export async function listAdminBookings(
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminBookingResult<AdminBookingPersistenceRecord[]>> {
+  return listAdminBookingsThroughSupabaseAdapter(actor);
 }

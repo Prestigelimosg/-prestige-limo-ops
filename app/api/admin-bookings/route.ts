@@ -5,6 +5,7 @@ import {
   parseAdminBookingUpdatePayload,
   updateAdminBooking,
 } from "../../../lib/admin-booking-persistence";
+import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
@@ -73,7 +74,8 @@ export async function GET(request: Request) {
       return boundary.response;
     }
 
-    const result = await listAdminBookings();
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const result = await listAdminBookings(actor);
 
     if (!result.ok) {
       return Response.json(
@@ -114,7 +116,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await createAdminBooking(parsed.data, {
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const result = await createAdminBooking(parsed.data, actor, {
       action: "admin_booking_create",
       source_route: "/api/admin-bookings",
       actor_label: boundary.context.actorLabel,
@@ -160,7 +163,8 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const result = await updateAdminBooking(parsed.data, {
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const result = await updateAdminBooking(parsed.data, actor, {
       action: "admin_booking_update",
       source_route: "/api/admin-bookings",
       actor_label: boundary.context.actorLabel,

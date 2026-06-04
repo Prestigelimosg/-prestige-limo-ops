@@ -2,6 +2,7 @@ import {
   createAdminBooking,
   parseCustomerBookingRequestPayload,
 } from "../../../lib/admin-booking-persistence";
+import { customerBookingRequestPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await createAdminBooking(parsed.data, {
+    const result = await createAdminBooking(parsed.data, customerBookingRequestPersistenceAdapterActor, {
       action: "customer_booking_request_create",
       source_route: "/book",
       actor_label: "Customer booking request",

@@ -3461,6 +3461,7 @@ async function runChromeTest() {
         "[data-customer-intake-handoff]",
         "[data-intake-confirmation-readiness]",
         "[data-driver-assignment-readiness]",
+        "[data-admin-confirmed-driver-assignment-handoff]",
         "[data-driver-detail-collection-readiness]",
         "[data-driver-details-customer-update-readiness]",
         "[data-customer-update-delivery-review-readiness]",
@@ -3991,6 +3992,135 @@ async function runChromeTest() {
           state.docScrollWidth <= state.docClientWidth + 2,
           true,
           `${viewport.label}: expected driver assignment readiness not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
+    const checkAdminConfirmedDriverAssignmentHandoff = async () => {
+      const handoffViewports = [
+        { height: 812, label: "mobile confirmed driver assignment handoff", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop confirmed driver assignment handoff", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of handoffViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const handoff = document.querySelector("[data-admin-confirmed-driver-assignment-handoff]");
+              if (!handoff) {
+                return false;
+              }
+
+              const rect = handoff.getBoundingClientRect();
+              const items = [...handoff.querySelectorAll("[data-admin-confirmed-driver-assignment-handoff-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-admin-confirmed-driver-assignment-handoff-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = handoff.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: handoff.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-admin-confirmed-driver-assignment-handoff-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "paynow",
+                  "finance notes",
+                  "admin notes",
+                  "parser/debug",
+                  "debug internals",
+                  "private driver",
+                  "proof",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin confirmed driver assignment handoff`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("confirmed booking"),
+          true,
+          `${viewport.label}: expected confirmed booking handoff heading`,
+        );
+        assert.equal(
+          state.text.includes("Driver Assignment Handoff"),
+          true,
+          `${viewport.label}: expected driver assignment handoff title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Review", "Dispatch", "Driver", "Details", "Customer", "Next"],
+          `${viewport.label}: expected confirmed-booking handoff labels`,
+        );
+        for (const expectedText of [
+          "Staff approved",
+          "Ready for assignment review",
+          "Manual assignment here",
+          "Collected later",
+          "Do not send details yet",
+          "Dispatcher confirms driver",
+        ]) {
+          assert.equal(
+            state.items.some((item) => item.text.includes(expectedText)),
+            true,
+            `${viewport.label}: expected confirmed driver handoff item text: ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.boundary,
+          "Guidance only. This section does not assign a driver, save data, notify customers, send driver details, or create billing, payout, or PDF.",
+          `${viewport.label}: expected no-action confirmed driver handoff boundary`,
+        );
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected confirmed driver assignment handoff to stay read-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/finance/debug details in confirmed driver handoff`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 360 : 155),
+          true,
+          `${viewport.label}: expected compact confirmed driver handoff, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected confirmed driver handoff items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected confirmed driver handoff not to create horizontal overflow`,
         );
 
         states.push({
@@ -33683,6 +33813,7 @@ async function runChromeTest() {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
       state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
+      state.adminConfirmedDriverAssignmentHandoff = await checkAdminConfirmedDriverAssignmentHandoff();
       state.adminDriverDetailCollectionReadiness = await checkAdminDriverDetailCollectionReadiness();
       state.adminDriverDetailsCustomerUpdateReadiness = await checkAdminDriverDetailsCustomerUpdateReadiness();
       state.adminCustomerUpdateDeliveryReviewReadiness = await checkAdminCustomerUpdateDeliveryReviewReadiness();
@@ -33786,6 +33917,7 @@ async function runChromeTest() {
     state.internalQaMockArchiveRouteBoundaries = [];
     state.adminBookingPersistenceRouteBoundaries = [];
     state.adminCustomerAmendCancelReviewRouteBoundaries = [];
+    state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
     state.customerFolderIndexHandoffRouteBoundaries = [];
     state.customerBookingDocumentHistoryRouteBoundaries = [];
@@ -33826,6 +33958,18 @@ async function runChromeTest() {
         adminCustomerAmendCancelReviewVisible,
         false,
         `Expected admin customer amend/cancel review handoff boundary for ${route.context}`,
+      );
+      const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
+      );
+      state.adminConfirmedDriverAssignmentHandoffRouteBoundaries.push({
+        context: route.context,
+        visible: adminConfirmedDriverAssignmentHandoffVisible,
+      });
+      assert.equal(
+        adminConfirmedDriverAssignmentHandoffVisible,
+        false,
+        `Expected admin confirmed driver assignment handoff boundary for ${route.context}`,
       );
       const driverUrgentIssueHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-job-urgent-issue-handoff]"))`,
@@ -33888,6 +34032,20 @@ async function runChromeTest() {
         `Expected customer booking document history visibility boundary for ${route.context}`,
       );
     }
+    await navigateWithLoadEvent(client, new URL("/customers/ubs", appUrl).toString());
+    await waitForBodyText(evaluate, "CUSTOMER FOLDER", "/customers/[customerId] confirmed driver handoff boundary");
+    const customerDetailAdminConfirmedDriverAssignmentHandoffVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
+    );
+    state.adminConfirmedDriverAssignmentHandoffRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      visible: customerDetailAdminConfirmedDriverAssignmentHandoffVisible,
+    });
+    assert.equal(
+      customerDetailAdminConfirmedDriverAssignmentHandoffVisible,
+      false,
+      "Expected admin confirmed driver assignment handoff boundary for /customers/[customerId]",
+    );
     await checkTelegramBoundary("final browser state");
     state.telegramBoundaries = telegramBoundarySnapshots;
     state.errors = [...browserErrors, ...(state.errors || [])];

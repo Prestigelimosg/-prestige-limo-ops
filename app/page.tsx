@@ -8555,6 +8555,53 @@ export default function Home() {
         </section>
 
         <section
+          aria-label="Confirmed booking to driver assignment handoff"
+          className="rounded-lg border border-blue-100 bg-white px-3 py-2 shadow-sm"
+          data-admin-confirmed-driver-assignment-handoff="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="shrink-0 lg:w-48">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-blue-700">
+                  Confirmed Booking
+                </span>{" "}
+                <span className="text-slate-600">Driver Assignment Handoff</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+              {[
+                ["Review", "Staff approved"],
+                ["Dispatch", "Ready for assignment review"],
+                ["Driver", "Manual assignment here"],
+                ["Details", "Collected later"],
+                ["Customer", "Do not send details yet"],
+                ["Next", "Dispatcher confirms driver"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-blue-100 bg-blue-50/60 px-2 py-1.5"
+                  data-admin-confirmed-driver-assignment-handoff-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-blue-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-admin-confirmed-driver-assignment-handoff-boundary="true"
+          >
+            Guidance only. This section does not assign a driver, save data, notify customers,
+            send driver details, or create billing, payout, or PDF.
+          </p>
+        </section>
+
+        <section
           aria-label="Driver assignment detail collection readiness"
           className="rounded-lg border border-cyan-100 bg-white px-3 py-2 shadow-sm"
           data-driver-detail-collection-readiness="true"

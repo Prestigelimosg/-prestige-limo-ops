@@ -209,6 +209,15 @@ async function runChromeTest() {
           visible: Boolean(document.querySelector("[data-driver-job-status-boundary]")),
         },
         visibleText: document.body?.innerText || "",
+        urgentIssueHandoff: {
+          boundary: document.querySelector("[data-driver-job-urgent-issue-handoff-boundary]")?.textContent.trim() || "",
+          helper: document.querySelector("[data-driver-job-urgent-issue-handoff-helper]")?.textContent.trim() || "",
+          items: [...document.querySelectorAll("[data-driver-job-urgent-issue-handoff-list] li")].map((item) =>
+            item.textContent.trim(),
+          ),
+          text: document.querySelector("[data-driver-job-urgent-issue-handoff]")?.innerText || "",
+          visible: Boolean(document.querySelector("[data-driver-job-urgent-issue-handoff]")),
+        },
         workflowHandoff: {
           boundary: document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
           helper: document.querySelector("[data-driver-job-workflow-handoff-helper]")?.textContent.trim() || "",
@@ -1074,6 +1083,31 @@ async function runChromeTest() {
       "Private account and internal compensation details are not shown here.",
       "Expected driver handoff to avoid private/internal account detail exposure.",
     );
+    assert.equal(validState.urgentIssueHandoff.visible, true, "Expected driver urgent issue handoff guidance.");
+    assert.equal(
+      validState.urgentIssueHandoff.helper,
+      "Contact dispatcher directly if you cannot proceed safely.",
+      "Expected urgent issue handoff to direct driver to dispatcher.",
+    );
+    assert.deepEqual(
+      validState.urgentIssueHandoff.items,
+      [
+        "Cannot locate passenger or pickup point.",
+        "Route details are unclear or passenger requests a major change.",
+        "Vehicle issue, safety concern, or same-day timing problem.",
+      ],
+      "Expected compact driver-facing urgent issue scenarios.",
+    );
+    assert.equal(
+      validState.urgentIssueHandoff.boundary,
+      "Guidance only. This section does not send a message from this app yet.",
+      "Expected urgent issue handoff to avoid notification/message behavior.",
+    );
+    assert.doesNotMatch(
+      validState.urgentIssueHandoff.text,
+      /\b(?:sent|submitted|notified|dispatched)\b/i,
+      "Urgent issue handoff must not imply a message or notification was sent.",
+    );
     assert.equal(validState.statusBoundary.visible, true, "Expected driver status boundary guidance.");
     assert.equal(validState.statusBoundary.title, "Status Boundary");
     assert.deepEqual(
@@ -1279,6 +1313,17 @@ async function runChromeTest() {
     );
     assert.equal(arrivalState.workflowHandoff.visible, true, "Expected Arrival job to show workflow handoff guidance.");
     assert.equal(arrivalState.statusBoundary.visible, true, "Expected Arrival job to show status boundary guidance.");
+    assert.equal(arrivalState.urgentIssueHandoff.visible, true, "Expected Arrival job to show urgent issue handoff.");
+    assert.equal(
+      arrivalState.urgentIssueHandoff.boundary,
+      "Guidance only. This section does not send a message from this app yet.",
+      "Expected Arrival urgent issue handoff to stay guidance-only.",
+    );
+    assert.equal(
+      arrivalState.urgentIssueHandoff.items.includes("Cannot locate passenger or pickup point."),
+      true,
+      "Expected Arrival urgent handoff to cover passenger/pickup issues.",
+    );
     assert.deepEqual(
       arrivalState.statusBoundary.items,
       [
@@ -1410,6 +1455,11 @@ async function runChromeTest() {
         blockedState.statusBoundary.visible,
         false,
         `${label} token should not show driver status boundary guidance.`,
+      );
+      assert.equal(
+        blockedState.urgentIssueHandoff.visible,
+        false,
+        `${label} token should not show driver urgent issue handoff guidance.`,
       );
       assertNoSensitiveText(blockedState);
     }

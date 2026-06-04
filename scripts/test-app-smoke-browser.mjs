@@ -33714,6 +33714,7 @@ async function runChromeTest() {
     state.customerFolderIndexHandoffRouteBoundaries = [];
     state.customerBookingDocumentHistoryRouteBoundaries = [];
     state.customerBookingPreSubmitReviewRouteBoundaries = [];
+    state.driverUrgentIssueHandoffRouteBoundaries = [];
     for (const route of [
       { context: "/book", expectedText: "Booking Request", url: customerBookingUrl },
       { context: "/my-bookings", expectedText: "My Bookings", url: customerPortalUrl },
@@ -33723,6 +33724,13 @@ async function runChromeTest() {
     ]) {
       await navigateWithLoadEvent(client, route.url);
       await waitForBodyText(evaluate, route.expectedText, `${route.context} archive boundary`);
+      if (route.context === "/driver-job/[token]") {
+        await waitForSelector(
+          evaluate,
+          "[data-driver-job-urgent-issue-handoff]",
+          `${route.context} urgent issue handoff boundary`,
+        );
+      }
       state.internalQaMockArchiveRouteBoundaries.push({
         context: route.context,
         ...(await checkNoInternalQaMockArchiveLeak(route.context)),
@@ -33742,6 +33750,18 @@ async function runChromeTest() {
         adminCustomerAmendCancelReviewVisible,
         false,
         `Expected admin customer amend/cancel review handoff boundary for ${route.context}`,
+      );
+      const driverUrgentIssueHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-driver-job-urgent-issue-handoff]"))`,
+      );
+      state.driverUrgentIssueHandoffRouteBoundaries.push({
+        context: route.context,
+        visible: driverUrgentIssueHandoffVisible,
+      });
+      assert.equal(
+        driverUrgentIssueHandoffVisible,
+        route.context === "/driver-job/[token]",
+        `Expected driver urgent issue handoff visibility boundary for ${route.context}`,
       );
       const customerFolderIndexHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-folder-index-handoff]"))`,

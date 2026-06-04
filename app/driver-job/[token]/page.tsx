@@ -732,6 +732,44 @@ export default function DriverJobPage() {
               </p>
             </section>
 
+            <section
+              className="space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
+              aria-labelledby="driver-urgent-issue-handoff-heading"
+              data-driver-job-urgent-issue-handoff="true"
+            >
+              <div className="space-y-1">
+                <h2 id="driver-urgent-issue-handoff-heading" className="text-base font-semibold text-amber-950">
+                  Urgent issue?
+                </h2>
+                <p
+                  className="text-sm font-semibold leading-6 text-amber-900"
+                  data-driver-job-urgent-issue-handoff-helper="true"
+                >
+                  Contact dispatcher directly if you cannot proceed safely.
+                </p>
+              </div>
+              <ul
+                className="grid gap-2 text-sm font-medium leading-6 text-amber-900"
+                data-driver-job-urgent-issue-handoff-list="true"
+              >
+                <li className="rounded-md bg-white/80 px-3 py-2 ring-1 ring-amber-200">
+                  Cannot locate passenger or pickup point.
+                </li>
+                <li className="rounded-md bg-white/80 px-3 py-2 ring-1 ring-amber-200">
+                  Route details are unclear or passenger requests a major change.
+                </li>
+                <li className="rounded-md bg-white/80 px-3 py-2 ring-1 ring-amber-200">
+                  Vehicle issue, safety concern, or same-day timing problem.
+                </li>
+              </ul>
+              <p
+                className="text-sm font-semibold leading-6 text-amber-900"
+                data-driver-job-urgent-issue-handoff-boundary="true"
+              >
+                Guidance only. This section does not send a message from this app yet.
+              </p>
+            </section>
+
             <section className="space-y-3" aria-labelledby="assigned-driver-heading">
               <h2 id="assigned-driver-heading" className="text-base font-semibold text-slate-900">
                 Assigned Driver

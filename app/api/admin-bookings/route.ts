@@ -20,11 +20,11 @@ async function readJsonBody(request: Request) {
   }
 }
 
-function blockedResponse() {
+function blockedResponse(error: string) {
   return Response.json(
     {
       ok: false,
-      error: "Admin booking persistence is available only from the internal admin dashboard.",
+      error,
     },
     { status: 403 },
   );
@@ -33,7 +33,7 @@ function blockedResponse() {
 function requireAdminDispatcherBoundary(request: Request) {
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
 
-  return boundary.ok ? null : blockedResponse();
+  return boundary.ok ? null : blockedResponse(boundary.error);
 }
 
 function safeFailureResponse() {

@@ -2,7 +2,7 @@ export type AdminDispatcherBoundaryRole = "local-dev-admin" | "admin" | "dispatc
 
 export type AdminDispatcherBoundaryContext = {
   actorLabel: string;
-  mode: "local-dev-admin-surface" | "future-authenticated-admin-surface";
+  mode: "local-dev-admin-surface" | "server-session-role-surface";
   role: AdminDispatcherBoundaryRole;
 };
 
@@ -21,6 +21,8 @@ export const adminBookingPersistencePurpose = "admin-booking-persistence";
 
 const safeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
+const serverSessionAuthMode = "server-session-token";
+const adminDispatcherRoles = new Set<AdminDispatcherBoundaryRole>(["admin", "dispatcher"]);
 
 function hasSameOriginAdminDashboardReferer(request: Request) {
   const requestUrl = new URL(request.url);
@@ -44,6 +46,43 @@ function hasSameOriginAdminDashboardReferer(request: Request) {
   }
 }
 
+function cleanServerValue(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  return trimmed ? trimmed : null;
+}
+
+function readServerSessionRole() {
+  const configuredRole = cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE);
+
+  return configuredRole && adminDispatcherRoles.has(configuredRole as AdminDispatcherBoundaryRole)
+    ? (configuredRole as "admin" | "dispatcher")
+    : null;
+}
+
+function resolveServerSessionRole(request: Request): AdminDispatcherBoundaryResult {
+  const expectedToken = cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN);
+  const requestToken = cleanServerValue(request.headers.get("x-prestige-admin-session-token") || undefined);
+  const role = readServerSessionRole();
+
+  if (!expectedToken || requestToken !== expectedToken || !role) {
+    return {
+      ok: false,
+      status: 403,
+      error: safeBlockedMessage,
+    };
+  }
+
+  return {
+    ok: true,
+    context: {
+      actorLabel: cleanServerValue(process.env.PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL) || "Admin dispatcher session",
+      mode: "server-session-role-surface",
+      role,
+    },
+  };
+}
+
 export function resolveAdminDispatcherBoundary(
   request: Request,
   expectedPurpose = adminBookingPersistencePurpose,
@@ -58,8 +97,12 @@ export function resolveAdminDispatcherBoundary(
     };
   }
 
-  // Future real auth should replace this local dashboard scaffold with a
-  // server-side session/claims check before production writes are enabled.
+  if (process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE === serverSessionAuthMode) {
+    return resolveServerSessionRole(request);
+  }
+
+  // Future Supabase auth should replace the server-session-token source with
+  // a server-side session/claims check before production writes are expanded.
   return {
     ok: true,
     context: {

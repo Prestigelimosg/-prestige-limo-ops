@@ -552,3 +552,22 @@ Stage 4A-366 adds the first safe admin/dispatcher auth boundary scaffold. It doe
 Recommended next stage: implement the real admin/dispatcher session and role check for existing internal routes, still without customer auth, driver auth, migrations, broad persistence, notifications, or billing/payment behavior.
 
 Reason: the local scaffold now gives the future auth stage a clear replacement point. The next distinct backend boundary is a real staff session/role resolver before production internal records, secure driver token reads, or real booking/customer save/load expand further.
+
+## 14. Stage 4A-367 - Admin Dispatcher Session Role Resolver
+
+Stage 4A-367 extends the admin/dispatcher boundary into a server-side session and role resolver foundation. It still does not add customer auth, driver auth, migrations, Supabase commands, new API routes, broad persistence, notifications, billing, invoices, payments, PDFs, payouts, live location, proof/photo, parser-learning, or runtime customer/driver behavior.
+
+### A. Resolver Added
+
+- `/api/admin-bookings` continues to use the shared admin/dispatcher boundary.
+- Local/dev admin dashboard access remains the default so current internal operations and tests still run.
+- A disabled-by-default server-session-token mode can resolve only `admin` or `dispatcher` roles from non-`NEXT_PUBLIC_` server-side values.
+- Customer and driver roles are not accepted by this boundary.
+- Blocked public/non-admin access keeps the stable safe response and does not reveal service-role credentials, server-only secrets, session tokens, claims, cookies, Supabase SQL, parser/debug details, or private IDs.
+- Future real Supabase staff auth should replace the temporary server-session-token resolver with a server-side session/claims verifier.
+
+### B. Next Backend Step
+
+Recommended next stage: secure driver token model boundary planning for production driver-job access, without implementing driver auth, migrations, production reads/writes, notifications, live-location, proof/photo, or payout behavior.
+
+Reason: the staff/admin server boundary now has a small resolver foundation. The next distinct backend boundary is the driver token model plan before any production driver job reads or driver-facing persistence expands.

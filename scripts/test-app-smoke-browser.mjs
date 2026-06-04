@@ -2837,6 +2837,29 @@ async function runChromeTest() {
         "Expected public/customer admin boundary response not to expose auth or server secret internals",
       );
 
+      const spoofedSessionAdminBoundaryResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        headers: {
+          Referer: new URL("/book", appUrl).toString(),
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+          "x-prestige-admin-session-token": "browser-spoofed-session-token",
+        },
+        method: "GET",
+      });
+      const spoofedSessionAdminBoundaryBody = await spoofedSessionAdminBoundaryResponse.json();
+
+      assert.equal(
+        spoofedSessionAdminBoundaryResponse.status,
+        403,
+        "Expected public/customer referer to stay blocked even with a spoofed admin session header",
+      );
+      assert.equal(
+        /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|session|claims|cookie|token|secret|key/i.test(
+          JSON.stringify(spoofedSessionAdminBoundaryBody),
+        ),
+        false,
+        "Expected spoofed-session admin boundary response not to expose auth or server secret internals",
+      );
+
       const forbiddenResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
           booking: {

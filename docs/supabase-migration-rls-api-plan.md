@@ -338,7 +338,7 @@ When real admin/dispatcher auth is explicitly approved, the local scaffold shoul
 
 Recommended future stages after this readiness gate:
 
-1. Real admin/dispatcher session and role check implementation for existing internal routes.
+1. Admin/dispatcher session and role resolver foundation for existing internal routes.
 2. Secure driver token model planning.
 3. Smallest approved booking/customer save/load implementation after auth boundaries are explicit.
 4. Amend/cancel/assignment audit implementation.
@@ -347,8 +347,36 @@ Recommended future stages after this readiness gate:
 
 First real workflow candidates, ranked by safety:
 
-1. Real admin/dispatcher session and role check implementation.
+1. Admin/dispatcher session and role resolver foundation.
 2. Secure driver token model boundary planning.
 3. Admin/customer booking persistence with strict route and no-leak tests after auth/RLS planning is accepted.
 
 The next stage should be the first real backend phase only if it explicitly preserves the readiness gate above.
+
+## N. Admin Dispatcher Session Role Resolver
+
+Stage 4A-367 extends the admin/dispatcher boundary into a small session and role resolver foundation. This remains a bounded internal server-side boundary. It does not add customer auth, driver auth, migrations, Supabase commands, new API routes, broad persistence, notification sending, payment/invoice/PDF behavior, driver workflow automation, or production write expansion.
+
+### Resolver Shape
+
+- `/api/admin-bookings` remains protected by the shared admin/dispatcher boundary.
+- Local/dev dashboard access remains the default so the current internal admin dashboard and tests continue to work.
+- The helper has an opt-in `PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE=server-session-token` path for future internal-server deployment tests.
+- That opt-in path reads only non-`NEXT_PUBLIC_` server values for the expected session token, actor label, and allowed role.
+- Allowed roles are limited to `admin` and `dispatcher`; customer and driver roles are not accepted here.
+- Blocked responses keep the stable safe message and must not expose session tokens, claims, cookies, Supabase SQL, service-role credentials, server-only secrets, or private IDs.
+
+### Future Supabase Auth Plug-In Point
+
+When real Supabase staff auth is explicitly approved, replace the temporary server-session-token resolver with a server-side Supabase session/claims verifier that:
+
+- validates an authenticated staff user;
+- maps the user to `admin` or `dispatcher`;
+- rejects customer, driver, public, anonymous, expired, or malformed sessions;
+- returns only route-safe actor context to API handlers;
+- keeps service-role credentials server-only;
+- writes audit actor metadata only after the audit table and RLS plan are approved.
+
+### Still Blocked After Stage 4A-367
+
+Real customer auth, real driver auth, migrations, Supabase CLI commands, broad booking/customer persistence, notifications, payment/invoice/PDF behavior, PayNow payout, billing automation, live-location, proof/photo, parser-learning, and driver workflow automation remain blocked.

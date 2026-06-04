@@ -3509,6 +3509,7 @@ async function runChromeTest() {
         "[data-intake-confirmation-readiness]",
         "[data-driver-assignment-readiness]",
         "[data-admin-confirmed-driver-assignment-handoff]",
+        "[data-admin-dsp-completion-billing-prep-handoff]",
         "[data-driver-detail-collection-readiness]",
         "[data-driver-details-customer-update-readiness]",
         "[data-customer-update-delivery-review-readiness]",
@@ -4168,6 +4169,137 @@ async function runChromeTest() {
           state.docScrollWidth <= state.docClientWidth + 2,
           true,
           `${viewport.label}: expected confirmed driver handoff not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => item.label),
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
+    const checkAdminDspCompletionBillingPrepHandoff = async () => {
+      const handoffViewports = [
+        { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop DSP completion billing prep handoff", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of handoffViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const handoff = document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]");
+              if (!handoff) {
+                return false;
+              }
+
+              const rect = handoff.getBoundingClientRect();
+              const items = [...handoff.querySelectorAll("[data-admin-dsp-completion-billing-prep-handoff-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  height: Math.round(itemRect.height),
+                  label: item.getAttribute("data-admin-dsp-completion-billing-prep-handoff-item") || "",
+                  text: item.textContent.replace(/\\s+/g, " ").trim(),
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = handoff.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: handoff.querySelectorAll("button, a, input, select, textarea, form").length,
+                boundary:
+                  document.querySelector("[data-admin-dsp-completion-billing-prep-handoff-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "paynow",
+                  "finance notes",
+                  "admin notes",
+                  "parser/debug",
+                  "debug internals",
+                  "private driver",
+                  "payment link",
+                  "invoice number",
+                  "statement number",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin DSP completion billing prep handoff`,
+        );
+
+        assert.equal(
+          state.text.toLowerCase().includes("dsp") && state.text.toLowerCase().includes("job completion"),
+          true,
+          `${viewport.label}: expected DSP completion handoff heading`,
+        );
+        assert.equal(
+          state.text.includes("Billing Prep Handoff"),
+          true,
+          `${viewport.label}: expected billing prep handoff title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          ["Completion", "Hours", "Exceptions", "Billing prep", "Customer", "Driver"],
+          `${viewport.label}: expected DSP completion billing prep handoff labels`,
+        );
+        for (const expectedText of [
+          "Admin review required",
+          "Check DSP/extra time",
+          "Staff check",
+          "Not invoiced / review-only",
+          "No invoice/payment/PDF",
+          "No payout/accounting",
+        ]) {
+          assert.equal(
+            state.items.some((item) => item.text.includes(expectedText)),
+            true,
+            `${viewport.label}: expected DSP completion billing prep handoff item text: ${expectedText}`,
+          );
+        }
+        assert.equal(
+          state.boundary,
+          "Read-only admin handoff. No invoice, statement, PDF, payment, payout, accounting, customer notification, storage, API call, or save behavior is created here.",
+          `${viewport.label}: expected no-creation DSP completion billing prep boundary`,
+        );
+        assert.equal(
+          state.actionCount,
+          0,
+          `${viewport.label}: expected DSP completion billing prep handoff to stay read-only`,
+        );
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/debug/number/link details in DSP completion billing prep handoff`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 360 : 155),
+          true,
+          `${viewport.label}: expected compact DSP completion billing prep handoff, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 32 && item.width >= 56),
+          true,
+          `${viewport.label}: expected DSP completion billing prep handoff items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected DSP completion billing prep handoff not to create horizontal overflow`,
         );
 
         states.push({
@@ -33861,6 +33993,7 @@ async function runChromeTest() {
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
       state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
       state.adminConfirmedDriverAssignmentHandoff = await checkAdminConfirmedDriverAssignmentHandoff();
+      state.adminDspCompletionBillingPrepHandoff = await checkAdminDspCompletionBillingPrepHandoff();
       state.adminDriverDetailCollectionReadiness = await checkAdminDriverDetailCollectionReadiness();
       state.adminDriverDetailsCustomerUpdateReadiness = await checkAdminDriverDetailsCustomerUpdateReadiness();
       state.adminCustomerUpdateDeliveryReviewReadiness = await checkAdminCustomerUpdateDeliveryReviewReadiness();
@@ -33965,6 +34098,7 @@ async function runChromeTest() {
     state.adminBookingPersistenceRouteBoundaries = [];
     state.adminCustomerAmendCancelReviewRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
+    state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
     state.customerFolderIndexHandoffRouteBoundaries = [];
     state.customerBookingDocumentHistoryRouteBoundaries = [];
@@ -34017,6 +34151,30 @@ async function runChromeTest() {
         adminConfirmedDriverAssignmentHandoffVisible,
         false,
         `Expected admin confirmed driver assignment handoff boundary for ${route.context}`,
+      );
+      const adminDspCompletionBillingPrepHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,
+      );
+      const adminDspCompletionBillingPrepHandoffTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["DSP / Job Completion", "Billing Prep Handoff"].filter((text) => bodyText.includes(text));
+        })()`,
+      );
+      state.adminDspCompletionBillingPrepHandoffRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDspCompletionBillingPrepHandoffTextLeaks,
+        visible: adminDspCompletionBillingPrepHandoffVisible,
+      });
+      assert.equal(
+        adminDspCompletionBillingPrepHandoffVisible,
+        false,
+        `Expected admin DSP completion billing prep handoff boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDspCompletionBillingPrepHandoffTextLeaks,
+        [],
+        `Expected no admin DSP completion billing prep wording leak for ${route.context}`,
       );
       const driverUrgentIssueHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-job-urgent-issue-handoff]"))`,
@@ -34092,6 +34250,30 @@ async function runChromeTest() {
       customerDetailAdminConfirmedDriverAssignmentHandoffVisible,
       false,
       "Expected admin confirmed driver assignment handoff boundary for /customers/[customerId]",
+    );
+    const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,
+    );
+    const customerDetailAdminDspCompletionBillingPrepHandoffTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["DSP / Job Completion", "Billing Prep Handoff"].filter((text) => bodyText.includes(text));
+      })()`,
+    );
+    state.adminDspCompletionBillingPrepHandoffRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDspCompletionBillingPrepHandoffTextLeaks,
+      visible: customerDetailAdminDspCompletionBillingPrepHandoffVisible,
+    });
+    assert.equal(
+      customerDetailAdminDspCompletionBillingPrepHandoffVisible,
+      false,
+      "Expected admin DSP completion billing prep handoff boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDspCompletionBillingPrepHandoffTextLeaks,
+      [],
+      "Expected no admin DSP completion billing prep wording leak for /customers/[customerId]",
     );
     await checkTelegramBoundary("final browser state");
     state.telegramBoundaries = telegramBoundarySnapshots;

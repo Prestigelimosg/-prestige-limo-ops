@@ -8602,6 +8602,53 @@ export default function Home() {
         </section>
 
         <section
+          aria-label="DSP job completion billing preparation handoff"
+          className="rounded-lg border border-violet-100 bg-white px-3 py-2 shadow-sm"
+          data-admin-dsp-completion-billing-prep-handoff="true"
+        >
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="shrink-0 lg:w-48">
+              <h2 className="text-sm font-semibold text-slate-950">
+                <span className="uppercase tracking-[0.08em] text-violet-700">
+                  DSP / Job Completion
+                </span>{" "}
+                <span className="text-slate-600">Billing Prep Handoff</span>
+              </h2>
+            </div>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+              {[
+                ["Completion", "Admin review required"],
+                ["Hours", "Check DSP/extra time"],
+                ["Exceptions", "Staff check"],
+                ["Billing prep", "Not invoiced / review-only"],
+                ["Customer", "No invoice/payment/PDF"],
+                ["Driver", "No payout/accounting"],
+              ].map(([label, value]) => (
+                <div
+                  className="flex min-h-9 min-w-0 items-center rounded-md border border-violet-100 bg-violet-50/60 px-2 py-1.5"
+                  data-admin-dsp-completion-billing-prep-handoff-item={label}
+                  key={label}
+                >
+                  <p className="break-words text-xs font-medium leading-snug text-slate-800">
+                    <span className="font-semibold uppercase tracking-[0.06em] text-violet-700">
+                      {label}:{" "}
+                    </span>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p
+            className="mt-1 text-xs leading-4 text-slate-500"
+            data-admin-dsp-completion-billing-prep-handoff-boundary="true"
+          >
+            Read-only admin handoff. No invoice, statement, PDF, payment, payout, accounting, customer notification,
+            storage, API call, or save behavior is created here.
+          </p>
+        </section>
+
+        <section
           aria-label="Driver assignment detail collection readiness"
           className="rounded-lg border border-cyan-100 bg-white px-3 py-2 shadow-sm"
           data-driver-detail-collection-readiness="true"

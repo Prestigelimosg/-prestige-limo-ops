@@ -678,3 +678,28 @@ The consolidated draft is now the single path for the first real persistence pha
 The next task is ready to be the first real migration implementation, step-by-step, only after William explicitly approves migration work.
 
 Recommended exact next stage: "Stage 4A-373 First real admin-only persistence migration step-by-step." It should create the approved migration file only after re-verifying the clean checkpoint, name the exact table DDL for the first safe tables, define RLS policy names in the migration or companion notes as approved, avoid destructive commands, avoid `supabase db reset`, avoid API routes/runtime behavior, and run the full parser/lint/build/browser/`test:safe` checks before committing.
+
+## 20. Stage 4A-373 - First Admin-Only Persistence Migration File
+
+Stage 4A-373 creates the first admin-only booking/customer persistence migration file:
+
+`supabase/migrations/202606040001_first_admin_booking_customer_persistence.sql`
+
+This stage creates the migration file only. The migration has not been applied, no Supabase command has been run, no API route has been added, and no runtime save/load behavior has been added.
+
+### A. Migration File Created
+
+- Tables included: `customers`, `customer_contacts`, `bookings`, `booking_route_points`, `booking_service_items`, and `audit_logs`.
+- Safe first fields cover customer/account display, safe contact details, booking reference, pickup/drop-off route details, service type, passenger/contact safe details, safe review/status fields, source surface, safe route points, safe service items, safe audit actor/action/source/reason fields, and safe before/after audit snapshots.
+- RLS is enabled on all six tables.
+- No public anonymous policies are created.
+- Access remains closed until a later approved server-side API/role stage.
+- The migration file includes comments that service-role credentials must stay server-only and never be exposed to browsers.
+
+### B. Blocked Fields Remain Out
+
+The first migration file does not add customer price/charge, driver payout, PayNow payout, invoice/payment/PDF, billing automation, internal finance notes, parser/debug internals, live-location, proof/photo, notification delivery records, or mock archive / mock QA / dev workbench content.
+
+### C. Next Migration Step
+
+Recommended exact next stage: "Stage 4A-374 Review and apply first admin-only persistence migration." This must happen only after William explicitly approves the exact Supabase command. Before applying, review the existing migration history and target database state, then run the approved migration command without destructive reset/pull/link behavior.

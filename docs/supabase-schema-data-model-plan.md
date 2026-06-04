@@ -804,7 +804,21 @@ Required checks before real migration/API implementation:
 
 The next stage should be the first real migration implementation, step-by-step, only after William explicitly approves migration work. That stage should name the exact migration file, table columns, RLS policies, API validation contracts, audit linkage, rollback review handling, backup/export check, and test commands before any Supabase command is run.
 
-## 20. Future Implementation Sequence
+## 20. Stage 4A-373 First Admin-Only Persistence Migration File
+
+Stage 4A-373 creates the first admin-only booking/customer persistence migration file:
+
+`supabase/migrations/202606040001_first_admin_booking_customer_persistence.sql`
+
+The file is created but not applied. No Supabase command has been run, no database has been pushed or reset, no API route has been added, and no runtime save/load behavior has been added.
+
+The migration file defines safe first versions of `customers`, `customer_contacts`, `bookings`, `booking_route_points`, `booking_service_items`, and `audit_logs`, with UUID primary keys, safe operational status fields, non-destructive foreign key behavior, practical checks, useful lookup indexes, and RLS enabled on every new table.
+
+Blocked first-batch fields remain absent from the migration file: customer price/charge, driver payout, PayNow payout, invoice/payment/PDF, billing automation, internal finance notes, parser/debug internals, live-location, proof/photo, notification delivery records, and mock archive / mock QA / dev workbench content.
+
+Next step: review and apply this migration only after William explicitly approves the exact Supabase command. Before applying, review existing migration history and the target database state so this migration is applied safely.
+
+## 21. Future Implementation Sequence
 
 Recommended future stages after this readiness gate:
 
@@ -814,9 +828,11 @@ Recommended future stages after this readiness gate:
 4. Audit records and rollback boundary planning before mutation workflows.
 5. First persistence API/RLS contract checklist before implementation.
 6. Consolidated first persistence migration/API/RLS implementation draft.
-7. First real migration implementation only after William explicitly approves migration work.
-8. Notifications later.
-9. Invoice/payment/PDF later.
+7. First admin-only persistence migration file created but not applied.
+8. Migration review/apply only after William explicitly approves the exact Supabase command.
+9. First admin-only persistence API implementation after migration and RLS policies are reviewed.
+10. Notifications later.
+11. Invoice/payment/PDF later.
 
 Stage 4A-298 plans future migration, RLS, and API boundaries for this schema. It does not create migrations, run Supabase commands, add API routes, or activate persistence.
 
@@ -824,7 +840,7 @@ Stage 4A-300 plans future test guards for accidental Supabase/API/runtime calls 
 
 First real workflow candidates, ranked by safety:
 
-1. First real migration implementation, step-by-step, only after William explicitly approves migration work.
+1. Migration review/apply only after William explicitly approves the exact Supabase command.
 2. First admin-only persistence API implementation after migration and RLS policies are reviewed.
 3. Customer/driver read contracts later after admin-only persistence is stable.
 

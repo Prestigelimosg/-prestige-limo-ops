@@ -848,3 +848,17 @@ Before real migration/API implementation or activation:
 The next stage may be the first real migration implementation, step-by-step, only after William explicitly approves migration work. The next stage should name the exact migration file, table DDL, RLS policy names, validation contracts, audit linkage, rollback review handling, and required test commands before any Supabase command is run.
 
 Until that explicit approval, migrations, Supabase CLI commands, API routes, production reads, production writes, real save/load, customer auth, driver auth, notifications, billing/payment/PDF behavior, payouts, live location, proof/photo, parser-learning, and runtime behavior remain blocked.
+
+## T. Stage 4A-373 First Admin-Only Persistence Migration File
+
+Stage 4A-373 creates the first admin-only booking/customer persistence migration file:
+
+`supabase/migrations/202606040001_first_admin_booking_customer_persistence.sql`
+
+This migration file is created for review only in Stage 4A-373. It has not been applied, no Supabase command has been run, no API route has been added, and no runtime save/load behavior has been added.
+
+The migration file defines the first safe operational tables for later admin-only persistence: `customers`, `customer_contacts`, `bookings`, `booking_route_points`, `booking_service_items`, and `audit_logs`. It enables RLS on each table and intentionally creates no public anonymous policies. Later access must go through a reviewed server-side API/auth stage, and service-role credentials must remain server-only.
+
+The migration file excludes customer price/charge, driver payout, PayNow payout, invoice/payment/PDF, billing automation, internal finance notes, parser/debug internals, live-location, proof/photo, notification delivery records, and mock archive / mock QA / dev workbench content.
+
+Next step: review and apply this migration only after William explicitly approves the exact Supabase command. Before applying, review the existing migration history and confirm the target database state so this file is applied safely without destructive changes.

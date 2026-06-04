@@ -339,7 +339,7 @@ When real admin/dispatcher auth is explicitly approved, the local scaffold shoul
 Recommended future stages after this readiness gate:
 
 1. Admin/dispatcher session and role resolver foundation for existing internal routes.
-2. Secure driver token model planning.
+2. Secure driver token/session boundary planning.
 3. Smallest approved booking/customer save/load implementation after auth boundaries are explicit.
 4. Amend/cancel/assignment audit implementation.
 5. Notification outbox planning and implementation later.
@@ -348,7 +348,7 @@ Recommended future stages after this readiness gate:
 First real workflow candidates, ranked by safety:
 
 1. Admin/dispatcher session and role resolver foundation.
-2. Secure driver token model boundary planning.
+2. Secure driver token/session boundary planning.
 3. Admin/customer booking persistence with strict route and no-leak tests after auth/RLS planning is accepted.
 
 The next stage should be the first real backend phase only if it explicitly preserves the readiness gate above.
@@ -380,3 +380,55 @@ When real Supabase staff auth is explicitly approved, replace the temporary serv
 ### Still Blocked After Stage 4A-367
 
 Real customer auth, real driver auth, migrations, Supabase CLI commands, broad booking/customer persistence, notifications, payment/invoice/PDF behavior, PayNow payout, billing automation, live-location, proof/photo, parser-learning, and driver workflow automation remain blocked.
+
+## O. Secure Driver Token Session Boundary Plan
+
+Stage 4A-368 is planning only. It defines the future secure driver token/session boundary for production `/driver-job/[token]` access, but it does not implement driver auth, customer auth, migrations, Supabase commands, API routes, production reads, production writes, notification sending, live location, proof/photo, billing, payout, payment, parser-learning, or runtime behavior.
+
+### Driver Token Boundary Shape
+
+- Each future driver token must be scoped to one assigned job or assignment.
+- A token must not grant access to other customer jobs, other drivers' jobs, customer account folders, admin dashboard data, finance data, parser/debug internals, or mock QA/dev archive content.
+- Tokens must expire or be revocable before production use.
+- Tokenized access should only allow assigned job view/status actions after a later approved implementation stage.
+- Current local/demo `/driver-job/[token]` behavior should keep working until the production token route is explicitly implemented.
+
+### Future Driver-Safe Visibility
+
+A valid future driver token may return only a route-safe driver job DTO with fields such as:
+
+- pickup date/time;
+- pickup/drop-off and job-safe route details;
+- service items needed to perform the job;
+- safe passenger/contact instructions if separately approved;
+- assigned vehicle/driver-safe handoff details if already approved for driver view;
+- status controls such as OTW, OTS, POB, and completed after future status-write approval.
+
+The token route must never expose customer price, billing, invoice/payment, driver payout, PayNow payout, payout comparison, internal finance notes, internal admin notes, parser/debug internals, unrelated customer account details, other jobs, other drivers' jobs, service-role/server-only secrets, private IDs that are not route-safe, or mock QA/dev archive content.
+
+### Future Server-Side Validation Requirements
+
+Before production driver-token access is implemented:
+
+- Store only a token hash server-side; never store the raw token in browser-readable data or route payloads.
+- Resolve token access server-side by verifying job/assignment id, token hash, expiry, revocation state, and allowed status/action.
+- Keep raw token values out of logs, page text, browser storage, route responses, and database rows exposed to RLS clients.
+- Reject expired, revoked, malformed, wrong-job, wrong-assignment, already-rotated, or unknown tokens with safe no-secret responses.
+- Audit every approved driver status change with token/session actor, job/assignment, status, event time, source route/API, and safe customer/driver status mapping.
+- Keep audit before/after values, internal notes, actor internals, token hash metadata, and revocation details admin/staff-only.
+
+### Future Test Requirements
+
+Before any real driver-token reads or writes:
+
+- Invalid token requests are blocked safely.
+- Expired token requests are blocked safely.
+- Revoked token requests are blocked safely.
+- Wrong-job or cross-assignment token requests are blocked safely.
+- Driver route payloads do not include customer price, billing, invoice/payment, payout, PayNow payout, finance notes, admin notes, parser/debug internals, service-role/server-only secrets, private token metadata, unrelated customer rows, other driver jobs, or mock QA/dev archive content.
+- Status controls remain mobile/PWA-friendly and do not create notification, live-location, proof/photo, billing, payout, payment, or parser-learning side effects.
+- Public/customer/admin route-leak tests and mobile/no-horizontal-overflow tests continue to pass.
+
+### Still Blocked After Stage 4A-368
+
+Real driver auth, real customer auth, real secure token generation/validation, migrations, Supabase CLI commands, production driver job reads, production status writes, notification sending, payment/invoice/PDF behavior, PayNow payout, billing automation, live-location, proof/photo, parser-learning, and driver workflow automation remain blocked until later explicit implementation stages.

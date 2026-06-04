@@ -393,12 +393,64 @@ Future schema work should support audit entries for:
 - Parser regression tests before and after persistence/auth work.
 - Mobile/no-horizontal-overflow tests before and after customer or driver route changes.
 
-## 15. Future Implementation Sequence
+## 15. Secure Driver Token Session Boundary Plan
+
+Stage 4A-368 is planning only. It defines the schema/data-model expectations for future production `/driver-job/[token]` access, but it does not create tables, create migrations, run Supabase commands, add API routes, add driver auth, add customer auth, persist data, or change runtime behavior.
+
+### Future Token Record Model
+
+Future `driver_job_tokens` records should support:
+
+- one booking/assignment scope per token;
+- token hash storage only, never raw token storage;
+- expiry timestamp;
+- revocation timestamp and safe revoke reason if approved;
+- created-by staff actor once staff auth/audit exists;
+- last-used timestamp and usage metadata if approved;
+- rotation/reissue metadata if needed later.
+
+Token hashes, usage metadata, revocation details, and created-by actor fields are internal. They must not be exposed through browser-readable data, public route payloads, customer routes, driver pages, or direct RLS table reads.
+
+### Driver-Safe DTO Boundary
+
+A valid future token may resolve only to a single assigned job DTO containing safe operational fields:
+
+- pickup date/time;
+- pickup/drop-off and job-safe route details;
+- job-needed service items;
+- safe passenger/contact instructions if separately approved;
+- status controls/status summary such as OTW, OTS, POB, and completed after future status-action approval.
+
+The DTO must exclude customer price, billing, invoice/payment, driver payout, PayNow payout, payout comparisons, internal finance notes, internal admin notes, parser/debug internals, unrelated customer account data, other customers' jobs, other drivers' jobs, token hash metadata, service-role/server-only secrets, and mock QA/dev archive content.
+
+### Validation And Audit Requirements
+
+Before production driver-token reads or writes:
+
+- Server code must verify job/assignment id, token hash, expiry, revocation state, and allowed action before returning job data.
+- Raw tokens must never be stored in browser storage, page text, logs, route responses, or browser-readable tables.
+- Expired, revoked, malformed, wrong-job, wrong-assignment, and unknown tokens must be blocked with safe no-secret responses.
+- Driver status changes must create internal audit records with driver token/session actor, booking/assignment, status, event time, source route/API, and safe customer/driver status mapping.
+- Audit before/after values, internal notes, actor internals, token metadata, and revocation details must remain admin/staff-only.
+
+### Token Test Requirements
+
+Future implementation must add tests proving:
+
+- invalid tokens are blocked;
+- expired tokens are blocked;
+- revoked tokens are blocked;
+- wrong-job and cross-assignment tokens are blocked;
+- valid tokens return only one assigned job's driver-safe DTO;
+- no customer price, billing, invoice/payment, payout, PayNow payout, finance notes, admin notes, parser/debug internals, service-role/server-only secrets, unrelated customer rows, other driver jobs, or mock QA/dev archive content leaks;
+- mobile/no-horizontal-overflow protections continue to pass for `/driver-job/[token]`.
+
+## 16. Future Implementation Sequence
 
 Recommended future stages after this readiness gate:
 
 1. Admin/dispatcher auth implementation planning.
-2. Secure driver token model planning.
+2. Secure driver token/session boundary planning.
 3. Smallest approved booking/customer save/load implementation after auth boundaries are explicit.
 4. Amend/cancel/assignment audit implementation.
 5. Notifications later.

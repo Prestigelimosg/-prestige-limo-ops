@@ -571,3 +571,23 @@ Stage 4A-367 extends the admin/dispatcher boundary into a server-side session an
 Recommended next stage: secure driver token model boundary planning for production driver-job access, without implementing driver auth, migrations, production reads/writes, notifications, live-location, proof/photo, or payout behavior.
 
 Reason: the staff/admin server boundary now has a small resolver foundation. The next distinct backend boundary is the driver token model plan before any production driver job reads or driver-facing persistence expands.
+
+## 15. Stage 4A-368 - Secure Driver Token Session Boundary Plan
+
+Stage 4A-368 adds the secure driver token/session boundary plan for future production `/driver-job/[token]` access. It is planning only and does not add real driver auth, customer auth, migrations, Supabase commands, API routes, production reads, production writes, notifications, billing, invoices, payments, PDFs, payouts, live location, proof/photo, parser-learning, or runtime behavior.
+
+### A. Boundary Planned
+
+- Future driver tokens must be scoped to one assigned job or assignment.
+- Future token records must store token hashes only, never raw token values in browser-readable data.
+- Future production access must verify job/assignment id, token hash, expiry, revocation, and allowed status/action server-side.
+- Valid future tokens may show only driver-safe pickup/date/time, route/job details, approved passenger/contact instructions, and status controls such as OTW, OTS, POB, and completed.
+- Driver tokens must never expose customer price, billing, invoice/payment, driver payout, PayNow payout, payout comparisons, finance notes, internal admin notes, parser/debug internals, unrelated customer rows, other drivers' jobs, private token metadata, service-role/server-only secrets, or mock QA/dev archive content.
+- Future driver status changes must be audited before production status writes are approved.
+- Current local/demo driver page behavior remains unchanged until a later explicit implementation stage.
+
+### B. Next Backend Step
+
+Recommended next stage: smallest approved booking/customer save/load implementation planning, using the now-explicit admin/dispatcher and driver-token boundaries as prerequisites, still without migrations, Supabase commands, production writes, notifications, billing/payment/PDF, payouts, live location, proof/photo, customer auth, or driver auth unless that stage explicitly approves and scopes them.
+
+Reason: the staff/admin boundary and driver-token boundary are now documented. The next distinct backend step is to define the minimal safe booking/customer persistence plan around approved operational fields, route-safe DTOs, audit needs, rollback, and no-leak tests before any real data work begins.

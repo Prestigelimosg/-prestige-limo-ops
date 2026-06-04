@@ -26,6 +26,13 @@ create table if not exists public.customers (
 comment on table public.customers is
   'Admin-only customer/account persistence foundation. RLS is enabled; no public access policies are created.';
 
+alter table public.customers
+  add column if not exists account_code text,
+  add column if not exists customer_type text,
+  add column if not exists status text not null default 'active',
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists public.customer_contacts (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid not null references public.customers(id) on delete restrict,
@@ -46,6 +53,15 @@ create table if not exists public.customer_contacts (
 
 comment on table public.customer_contacts is
   'Admin-only safe customer contact details for operational booking coordination.';
+
+alter table public.customer_contacts
+  add column if not exists display_name text,
+  add column if not exists phone text,
+  add column if not exists email text,
+  add column if not exists role_label text,
+  add column if not exists is_primary boolean not null default false,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
 
 create table if not exists public.bookings (
   id uuid primary key default gen_random_uuid(),
@@ -157,6 +173,29 @@ comment on table public.bookings is
 comment on column public.bookings.short_notice_review_status is
   'Safe review status for short-notice bookings; this migration does not auto-confirm or notify customers.';
 
+alter table public.bookings
+  add column if not exists booking_reference text,
+  add column if not exists customer_display_name text,
+  add column if not exists contact_display_name text,
+  add column if not exists contact_phone text,
+  add column if not exists contact_email text,
+  add column if not exists service_type text,
+  add column if not exists pickup_at timestamptz,
+  add column if not exists pickup_location text,
+  add column if not exists dropoff_location text,
+  add column if not exists route_summary text,
+  add column if not exists passenger_name text,
+  add column if not exists passenger_phone text,
+  add column if not exists admin_internal_status text not null default 'draft',
+  add column if not exists customer_facing_status text not null default 'pending_review',
+  add column if not exists short_notice_review_status text,
+  add column if not exists request_review_status text,
+  add column if not exists change_review_status text,
+  add column if not exists cancellation_review_status text,
+  add column if not exists source_surface text,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists public.booking_route_points (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references public.bookings(id) on delete restrict,
@@ -175,6 +214,13 @@ create table if not exists public.booking_route_points (
 comment on table public.booking_route_points is
   'Safe route point details for admin-only operational booking review.';
 
+alter table public.booking_route_points
+  add column if not exists sequence integer,
+  add column if not exists point_type text,
+  add column if not exists location text,
+  add column if not exists notes text,
+  add column if not exists created_at timestamptz not null default now();
+
 create table if not exists public.booking_service_items (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references public.bookings(id) on delete restrict,
@@ -190,6 +236,12 @@ create table if not exists public.booking_service_items (
 
 comment on table public.booking_service_items is
   'Safe service item details only; financial calculations and billing behavior are intentionally outside this table.';
+
+alter table public.booking_service_items
+  add column if not exists item_type text,
+  add column if not exists quantity integer not null default 1,
+  add column if not exists notes text,
+  add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
@@ -226,6 +278,18 @@ create table if not exists public.audit_logs (
 
 comment on table public.audit_logs is
   'Internal audit foundation with safe operational snapshots only. Raw audit rows are not for customer or driver routes.';
+
+alter table public.audit_logs
+  add column if not exists booking_id bigint references public.bookings(id) on delete set null,
+  add column if not exists customer_id bigint references public.customers(id) on delete set null,
+  add column if not exists actor_role text,
+  add column if not exists action_type text,
+  add column if not exists booking_reference text,
+  add column if not exists source_surface text,
+  add column if not exists reason text,
+  add column if not exists safe_before jsonb,
+  add column if not exists safe_after jsonb,
+  add column if not exists created_at timestamptz not null default now();
 
 create index if not exists customers_display_name_idx
   on public.customers (lower(display_name));

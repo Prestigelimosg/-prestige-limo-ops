@@ -862,3 +862,27 @@ The migration file defines the first safe operational tables for later admin-onl
 The migration file excludes customer price/charge, driver payout, PayNow payout, invoice/payment/PDF, billing automation, internal finance notes, parser/debug internals, live-location, proof/photo, notification delivery records, and mock archive / mock QA / dev workbench content.
 
 Next step: review and apply this migration only after William explicitly approves the exact Supabase command. Before applying, review the existing migration history and confirm the target database state so this file is applied safely without destructive changes.
+
+## U. Stage 4A-374 First Admin-Only Persistence Migration Applied
+
+Stage 4A-374 applies the approved migration file:
+
+`supabase/migrations/202606040001_first_admin_booking_customer_persistence.sql`
+
+The linked Supabase project was confirmed from local project metadata as `kvvsguhklmfgkebhxatm`. The remote migration ledger was checked before applying and showed only `202606040001` pending. The migration was applied with:
+
+`npx --yes supabase db push`
+
+The first apply attempt stopped safely because the remote database already had earlier admin persistence tables from `202606010001`, and the new migration attempted to index a safe column before adding it to those existing tables. The same allowed migration file was repaired in place to add missing safe columns non-destructively before creating indexes, then the migration ledger was rechecked and the same single pending migration was applied successfully.
+
+Post-apply verification:
+
+- remote migration ledger shows `202606040001` applied;
+- read-only table stats show `customers`, `customer_contacts`, `bookings`, `booking_route_points`, `booking_service_items`, and `audit_logs` present;
+- public anon checks against the six tables returned zero visible rows;
+- no production data was inserted;
+- no API route, runtime save/load behavior, customer auth, driver auth, notification behavior, billing/payment/PDF behavior, payout behavior, live-location, proof/photo, or parser-learning behavior was added.
+
+RLS remains enabled by the migration on all six tables, and the migration creates no public anonymous policies. Independent schema dump verification was not available in this environment because the Supabase CLI dump path required Docker and `psql` was not installed, so RLS confirmation is based on the applied migration SQL, successful migration ledger, and public anon no-row-access checks.
+
+Next step: first admin-only persistence API contract implementation planning or scaffold, using the now-applied tables, without adding public/customer/driver reads until role/RLS/API contracts are implemented and tested.

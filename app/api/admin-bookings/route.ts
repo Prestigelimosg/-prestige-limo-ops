@@ -5,37 +5,12 @@ import {
   parseAdminBookingUpdatePayload,
   updateAdminBooking,
 } from "../../../lib/admin-booking-persistence";
+import {
+  adminBookingPersistencePurpose,
+  resolveAdminDispatcherBoundary,
+} from "../../../lib/admin-dispatcher-auth-boundary";
 
 export const dynamic = "force-dynamic";
-
-const adminPurposeHeader = "admin-booking-persistence";
-
-function isAdminDashboardRequest(request: Request) {
-  const requestUrl = new URL(request.url);
-  const origin = request.headers.get("origin");
-  const referer = request.headers.get("referer");
-  const purpose = request.headers.get("x-prestige-admin-purpose");
-
-  if (purpose !== adminPurposeHeader) {
-    return false;
-  }
-
-  if (origin && origin !== requestUrl.origin) {
-    return false;
-  }
-
-  if (!referer) {
-    return false;
-  }
-
-  try {
-    const refererUrl = new URL(referer);
-
-    return refererUrl.origin === requestUrl.origin && refererUrl.pathname === "/";
-  } catch {
-    return false;
-  }
-}
 
 async function readJsonBody(request: Request) {
   try {
@@ -55,6 +30,12 @@ function blockedResponse() {
   );
 }
 
+function requireAdminDispatcherBoundary(request: Request) {
+  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
+
+  return boundary.ok ? null : blockedResponse();
+}
+
 function safeFailureResponse() {
   return Response.json(
     {
@@ -67,8 +48,10 @@ function safeFailureResponse() {
 
 export async function GET(request: Request) {
   try {
-    if (!isAdminDashboardRequest(request)) {
-      return blockedResponse();
+    const boundaryResponse = requireAdminDispatcherBoundary(request);
+
+    if (boundaryResponse) {
+      return boundaryResponse;
     }
 
     const result = await listAdminBookings();
@@ -94,8 +77,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    if (!isAdminDashboardRequest(request)) {
-      return blockedResponse();
+    const boundaryResponse = requireAdminDispatcherBoundary(request);
+
+    if (boundaryResponse) {
+      return boundaryResponse;
     }
 
     const parsed = parseAdminBookingPersistencePayload(await readJsonBody(request));
@@ -133,8 +118,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    if (!isAdminDashboardRequest(request)) {
-      return blockedResponse();
+    const boundaryResponse = requireAdminDispatcherBoundary(request);
+
+    if (boundaryResponse) {
+      return boundaryResponse;
     }
 
     const parsed = parseAdminBookingUpdatePayload(await readJsonBody(request));

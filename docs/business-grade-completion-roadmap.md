@@ -536,8 +536,19 @@ Audit entries must stay internal by default. Customer and driver routes should r
 
 The next different backend step should be admin/dispatcher auth boundary implementation planning or an explicitly approved admin/dispatcher auth implementation stage. Secure driver token planning should follow after the staff auth boundary is explicit. Real booking/customer save/load should still wait until admin/dispatcher auth and driver token boundaries are explicit.
 
-## 13. Recommended Next Safe Stage
+## 13. Stage 4A-366 - Admin Dispatcher Auth Boundary Scaffold
 
-Recommended next stage: admin/dispatcher auth boundary implementation planning, or a tightly scoped admin/dispatcher auth implementation stage if explicitly approved.
+Stage 4A-366 adds the first safe admin/dispatcher auth boundary scaffold. It does not add real auth, customer auth, driver auth, migrations, Supabase commands, new API routes, broad persistence, notifications, billing, invoices, payments, PDFs, payouts, live location, proof/photo, parser-learning, or runtime customer/driver behavior.
 
-Reason: Stage 4A-365 defines the auth and role model implementation plan. The next distinct backend boundary is staff/admin auth for `/` and `/customers`, before any production internal records, secure driver token reads, or real booking/customer save/load.
+### A. Boundary Added
+
+- `/api/admin-bookings` now resolves access through a shared server-side admin/dispatcher boundary helper.
+- Current local/dev admin dashboard behavior remains available.
+- The scaffold separates the current local admin surface from the future authenticated admin/dispatcher surface.
+- Blocked requests keep safe response wording and do not expose service-role credentials, server-only secrets, session internals, claims, cookies, private tokens, Supabase SQL, or parser/debug details.
+
+### B. Next Backend Step
+
+Recommended next stage: implement the real admin/dispatcher session and role check for existing internal routes, still without customer auth, driver auth, migrations, broad persistence, notifications, or billing/payment behavior.
+
+Reason: the local scaffold now gives the future auth stage a clear replacement point. The next distinct backend boundary is a real staff session/role resolver before production internal records, secure driver token reads, or real booking/customer save/load expand further.

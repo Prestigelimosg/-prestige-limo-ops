@@ -2789,6 +2789,54 @@ async function runChromeTest() {
         ],
       };
 
+      const missingAdminBoundaryResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        headers: {
+          Referer: appUrl,
+        },
+        method: "GET",
+      });
+      const missingAdminBoundaryBody = await missingAdminBoundaryResponse.json();
+
+      assert.equal(
+        missingAdminBoundaryResponse.status,
+        403,
+        "Expected admin booking API to require the admin dispatcher boundary purpose",
+      );
+      assert.equal(
+        String(missingAdminBoundaryBody.error || ""),
+        "Admin booking persistence is available only from the internal admin dashboard.",
+        "Expected admin booking API missing-boundary response to stay safe and stable",
+      );
+      assert.equal(
+        /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|session|claims|cookie|token|secret|key/i.test(
+          JSON.stringify(missingAdminBoundaryBody),
+        ),
+        false,
+        "Expected admin booking boundary response not to expose auth or server secret internals",
+      );
+
+      const publicRefererAdminBoundaryResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        headers: {
+          Referer: new URL("/book", appUrl).toString(),
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const publicRefererAdminBoundaryBody = await publicRefererAdminBoundaryResponse.json();
+
+      assert.equal(
+        publicRefererAdminBoundaryResponse.status,
+        403,
+        "Expected admin booking API to reject public/customer referers",
+      );
+      assert.equal(
+        /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|session|claims|cookie|token|secret|key/i.test(
+          JSON.stringify(publicRefererAdminBoundaryBody),
+        ),
+        false,
+        "Expected public/customer admin boundary response not to expose auth or server secret internals",
+      );
+
       const forbiddenResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
           booking: {

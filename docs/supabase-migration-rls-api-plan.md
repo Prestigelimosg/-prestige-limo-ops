@@ -311,11 +311,34 @@ Audit rows are internal by default. Customer and driver routes may show safe sta
 - Mobile/no-horizontal-overflow tests for customer, driver, and admin emergency-use surfaces.
 - `test:safe` before and after commit.
 
-## L. Recommended Future Sequence
+## L. Admin Dispatcher Auth Boundary Scaffold
+
+Stage 4A-366 adds the first implementation scaffold for the admin/dispatcher auth boundary. This is not real auth yet and does not add customer auth, driver auth, migrations, Supabase commands, new API routes, broad persistence, notification sending, payment/invoice/PDF behavior, or production writes.
+
+### Current Boundary Shape
+
+- The existing `/api/admin-bookings` route now resolves access through a shared server-side admin/dispatcher boundary helper.
+- Current local/dev admin dashboard access remains available so the internal dashboard is not locked out during the transition.
+- The boundary still requires the existing same-origin internal dashboard request shape and admin booking purpose header.
+- Blocked requests return a stable safe message and do not expose service-role credentials, session internals, claims, cookies, private tokens, Supabase SQL, or server-only details.
+- The helper records the current mode as a local admin dashboard scaffold so future real auth has one obvious replacement point.
+
+### Future Replacement Point
+
+When real admin/dispatcher auth is explicitly approved, the local scaffold should be replaced by a server-side session/claims check that:
+
+- validates an authenticated staff user;
+- maps the staff user to `admin` or `dispatcher`;
+- rejects customer, driver, public, and anonymous actors;
+- preserves route-safe response DTOs and safe error messages;
+- keeps `SUPABASE_SERVICE_ROLE_KEY` and all server-only secrets out of browser bundles, page text, storage, logs, and route responses;
+- records actor identity for later booking creation, amend request, cancellation request, driver assignment, and driver status update audits.
+
+## M. Recommended Future Sequence
 
 Recommended future stages after this readiness gate:
 
-1. Admin/dispatcher auth implementation planning.
+1. Real admin/dispatcher session and role check implementation for existing internal routes.
 2. Secure driver token model planning.
 3. Smallest approved booking/customer save/load implementation after auth boundaries are explicit.
 4. Amend/cancel/assignment audit implementation.
@@ -324,7 +347,7 @@ Recommended future stages after this readiness gate:
 
 First real workflow candidates, ranked by safety:
 
-1. Admin/dispatcher auth boundary implementation.
+1. Real admin/dispatcher session and role check implementation.
 2. Secure driver token model boundary planning.
 3. Admin/customer booking persistence with strict route and no-leak tests after auth/RLS planning is accepted.
 

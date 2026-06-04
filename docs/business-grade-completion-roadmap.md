@@ -651,3 +651,30 @@ Stage 4A-371 adds the first booking/customer persistence API and RLS contract ch
 Recommended next stage: create the exact migration/RLS implementation draft for the first admin-only booking/customer persistence batch, still as a planning artifact unless explicitly approved to implement. It should name table columns, RLS policy names, server-only API validation contracts, audit linkage, rollback review handling, and the exact tests required before any Supabase command or migration is run.
 
 Reason: the API/RLS contract is now explicit. The next distinct backend step is to turn the contract into an implementation-ready migration/RLS draft before real database work begins.
+
+## 19. Stage 4A-372 - First Persistence Migration API RLS Implementation Draft
+
+Stage 4A-372 consolidates the completed backend planning into one first-persistence migration/API/RLS implementation draft. It is planning/docs only and does not create migration files, run Supabase commands, add API routes, add production reads, add production writes, add real save/load, add customer auth, add driver auth, notifications, billing, invoices, payments, PDFs, payouts, live location, proof/photo, parser-learning, or runtime behavior.
+
+The earlier backend planning stages are complete and should not be repeated as separate new tasks: production data/auth readiness gate, auth role model implementation plan, admin dispatcher auth boundary scaffold, admin dispatcher session role resolver, secure driver token/session boundary plan, booking/customer save-load implementation plan, audit rollback implementation plan, and first persistence API/RLS contract checklist.
+
+### A. Consolidated Draft Added
+
+- First future tables are `customers`, `customer_contacts` if needed, `bookings`, `booking_route_points` if needed, `booking_service_items` if needed, and `audit_logs`.
+- Safe fields are limited to booking reference, customer/account display name, customer contact safe details, pickup date/time, pickup/drop-off/route summary, service type, passenger/contact safe details, admin/customer-facing safe statuses, short-notice review status, request/change/cancel review statuses, safe route points/service items, and audit actor/action/timestamp/source/safe before-after snapshot fields.
+- First persistence explicitly blocks customer pricing, customer charge, driver payout, PayNow payout, invoice/payment/PDF, billing automation, internal finance notes, parser/debug internals, live location, proof/photo, notification delivery records, and mock archive / mock QA / dev workbench content.
+- Intended RLS behavior: admin/dispatcher read/write safe operational fields only after role verification, customer own safe reads later, driver assigned-job token reads later, no public anonymous writes, service-role key server-only, RLS enabled before production use, and policies reviewed before API write activation.
+- Intended API behavior: admin-only create operational booking/customer snapshot, admin-only update safe operational booking fields, admin-only read operational records, no customer auth in first batch, no driver auth in first batch, no public write path, unsafe payloads rejected, and invalid role/token rejected.
+- Audit and rollback boundaries cover booking created/amended/cancelled, customer amend/cancellation request reviewed, driver assignment, driver status update, and admin/dispatcher override. Rollback restores safe operational fields only and does not trigger customer notification, driver notification, or billing/payment/payout reversal.
+- Migration safety checklist blocks `supabase db reset`, destructive table drops, public anonymous writes, broad RLS bypass, service-role browser exposure, unreviewed migrations, unreviewed API-write policies, and production writes without a backup/export plan.
+- Test checklist includes parser, lint, build, booking UI browser, driver job browser, app smoke browser, mobile usability browser, `test:safe`, route leak tests, no customer price leak, no driver payout leak, no service-role browser leak, invalid role/token rejection tests, and mobile/no-horizontal-overflow tests.
+
+### B. Duplicate Planning Clarified
+
+The consolidated draft is now the single path for the first real persistence phase. Older sections remain as supporting history and guardrails, but their previous "next step" recommendations are no longer active instructions.
+
+### C. Next Real Migration Step
+
+The next task is ready to be the first real migration implementation, step-by-step, only after William explicitly approves migration work.
+
+Recommended exact next stage: "Stage 4A-373 First real admin-only persistence migration step-by-step." It should create the approved migration file only after re-verifying the clean checkpoint, name the exact table DDL for the first safe tables, define RLS policy names in the migration or companion notes as approved, avoid destructive commands, avoid `supabase db reset`, avoid API routes/runtime behavior, and run the full parser/lint/build/browser/`test:safe` checks before committing.

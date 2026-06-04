@@ -718,7 +718,93 @@ Before real persistence implementation, tests must prove:
 
 Real persistence APIs, migrations, Supabase CLI commands, production reads, production writes, real save/load, customer auth, driver auth, notification sending, billing/payment/PDF behavior, Stripe, PayNow payout, finance automation, live location, proof/photo, parser-learning, payout behavior, and driver workflow automation remain blocked until later explicit implementation stages.
 
-## 19. Future Implementation Sequence
+## 19. First Persistence Migration / API / RLS Implementation Draft
+
+Stage 4A-372 consolidates the completed backend planning into one schema-focused first-persistence implementation draft. This is planning/docs only. It does not create tables, create migration files, run Supabase commands, add API routes, add production reads, add production writes, add real save/load, add customer auth, add driver auth, persist data, or change runtime behavior.
+
+### Future First Tables And Safe Fields
+
+The first approved migration should start with only these safe operational tables and fields:
+
+| Future table | Safe first fields |
+| --- | --- |
+| `customers` | `id`, customer/account display name, safe account status if needed, created timestamp, updated timestamp, created/updated actor role metadata after auth is approved. |
+| `customer_contacts` | `id`, `customer_id`, safe contact name/label, safe phone/email if operationally needed, primary contact marker, created timestamp, updated timestamp. |
+| `bookings` | `id`, booking reference, `customer_id`, pickup date/time, pickup/drop-off/route summary, service type, passenger/contact safe details, `admin_internal_status`, `customer_facing_status`, `short_notice_review_status`, request/change/cancel review statuses, created timestamp, updated timestamp, created/updated actor role metadata. |
+| `booking_route_points` | `id`, `booking_id`, sequence, safe point type, location text, pickup/drop-off/extra-stop marker, created timestamp, updated timestamp. |
+| `booking_service_items` | `id`, `booking_id`, safe service item type, quantity/value if operational, safe service note, created timestamp, updated timestamp. |
+| `audit_logs` | `id`, `booking_id` or booking reference, actor role, action type, timestamp, source surface, reason/review note, safe before/after operational snapshot, redaction marker. |
+
+`customer_contacts`, `booking_route_points`, and `booking_service_items` may be omitted from the first migration only if the first `customers` and `bookings` tables still preserve the approved safe summary fields without adding blocked data.
+
+### Fields Blocked From First Persistence
+
+The first persistence batch must not include:
+
+- customer pricing, customer charge, quote totals, invoice totals, or billing math;
+- driver payout, PayNow payout, payout comparisons, payout defaults, or payout review fields;
+- invoice, payment, PDF, Stripe, PayNow payout workflow, billing automation, statement, finance export, payment link, or accounting fields;
+- internal finance notes;
+- parser/debug internals, raw parser payloads, parser-learning fields, or mock archive / mock QA / dev workbench content;
+- notification delivery records, notification outbox rows, send logs, WhatsApp/email/SMS/Telegram delivery state, or message-channel behavior;
+- live location, proof/photo content, storage paths, maps/geocoding/flight-provider payloads, or upload metadata.
+
+### RLS Policy Intention
+
+- Admin/dispatcher can read/write safe operational fields only after server-side role verification.
+- Customer read-only access to own safe booking/request fields is later and must be backed by trusted account membership.
+- Driver token read-only access to assigned job-safe fields is later and must be backed by token hash, expiry, revocation, and job-scope validation.
+- No public anonymous write access is included in the first persistence migration/API batch.
+- Service-role keys stay server-only and must never reach browser bundles, page text, route payloads, logs, browser storage, or test output.
+- RLS must be enabled before production use.
+- Policies must be reviewed before API write activation.
+
+### API Contract Intention
+
+The first future API should be admin-only:
+
+- create operational booking/customer snapshot;
+- update safe operational booking fields;
+- read operational records;
+- no customer auth in the first batch;
+- no driver auth in the first batch;
+- no public write path;
+- unsafe payloads rejected;
+- invalid role/token/session rejected safely;
+- responses return role-safe DTOs rather than raw rows.
+
+### Audit And Rollback Requirements
+
+Audit must cover booking created, booking amended, booking cancelled, customer amend request reviewed, customer cancellation request reviewed, driver assigned, driver status updated, and admin/dispatcher override.
+
+Rollback must restore safe operational fields only, must not trigger customer notification, must not trigger driver notification, must not reverse billing/payment/payout state, and must require manual admin review for sensitive rollback.
+
+### Validation, Rejection, And Test Requirements
+
+Future validation must require approved fields and safe enum/status values, reject unknown fields, reject unsafe payloads, reject unauthenticated or invalid roles, reject invalid/wrong driver tokens, reject wrong customer/driver access, and reject any browser-submitted service-role secrets or blocked private data.
+
+Required checks before real migration/API implementation:
+
+- `npm run test:parser`;
+- `npm run lint`;
+- `npm run build`;
+- `npm run test:booking-ui-browser`;
+- `npm run test:driver-job-page-browser`;
+- `npm run test:app-smoke-browser`;
+- `npm run test:mobile-usability-browser`;
+- `npm run test:safe`;
+- route leak tests;
+- no customer price leak;
+- no driver payout leak;
+- no service-role browser leak;
+- invalid role/token rejection tests;
+- mobile/no-horizontal-overflow tests.
+
+### Next Real Migration Step
+
+The next stage should be the first real migration implementation, step-by-step, only after William explicitly approves migration work. That stage should name the exact migration file, table columns, RLS policies, API validation contracts, audit linkage, rollback review handling, backup/export check, and test commands before any Supabase command is run.
+
+## 20. Future Implementation Sequence
 
 Recommended future stages after this readiness gate:
 
@@ -727,8 +813,10 @@ Recommended future stages after this readiness gate:
 3. Smallest approved booking/customer save-load implementation planning after auth and token boundaries are explicit.
 4. Audit records and rollback boundary planning before mutation workflows.
 5. First persistence API/RLS contract checklist before implementation.
-6. Notifications later.
-7. Invoice/payment/PDF later.
+6. Consolidated first persistence migration/API/RLS implementation draft.
+7. First real migration implementation only after William explicitly approves migration work.
+8. Notifications later.
+9. Invoice/payment/PDF later.
 
 Stage 4A-298 plans future migration, RLS, and API boundaries for this schema. It does not create migrations, run Supabase commands, add API routes, or activate persistence.
 
@@ -736,8 +824,8 @@ Stage 4A-300 plans future test guards for accidental Supabase/API/runtime calls 
 
 First real workflow candidates, ranked by safety:
 
-1. Admin/dispatcher auth boundary implementation.
-2. Secure driver token model boundary planning.
-3. Booking/customer save-load implementation planning with strict tests after auth/RLS planning is accepted.
+1. First real migration implementation, step-by-step, only after William explicitly approves migration work.
+2. First admin-only persistence API implementation after migration and RLS policies are reviewed.
+3. Customer/driver read contracts later after admin-only persistence is stable.
 
 The next stage should be the first real backend phase only if it explicitly preserves the readiness gate above.

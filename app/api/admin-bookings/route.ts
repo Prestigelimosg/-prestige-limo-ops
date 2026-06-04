@@ -7,6 +7,7 @@ import {
 } from "../../../lib/admin-booking-persistence";
 import {
   adminBookingPersistencePurpose,
+  type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
 
@@ -30,10 +31,28 @@ function blockedResponse(error: string) {
   );
 }
 
-function requireAdminDispatcherBoundary(request: Request) {
+type AdminDispatcherBoundaryCheck =
+  | {
+      ok: true;
+      context: AdminDispatcherBoundaryContext;
+    }
+  | {
+      ok: false;
+      response: Response;
+    };
+
+function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
 
-  return boundary.ok ? null : blockedResponse(boundary.error);
+  return boundary.ok
+    ? {
+        ok: true,
+        context: boundary.context,
+      }
+    : {
+        ok: false,
+        response: blockedResponse(boundary.error),
+      };
 }
 
 function safeFailureResponse() {
@@ -48,10 +67,10 @@ function safeFailureResponse() {
 
 export async function GET(request: Request) {
   try {
-    const boundaryResponse = requireAdminDispatcherBoundary(request);
+    const boundary = requireAdminDispatcherBoundary(request);
 
-    if (boundaryResponse) {
-      return boundaryResponse;
+    if (!boundary.ok) {
+      return boundary.response;
     }
 
     const result = await listAdminBookings();
@@ -77,10 +96,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const boundaryResponse = requireAdminDispatcherBoundary(request);
+    const boundary = requireAdminDispatcherBoundary(request);
 
-    if (boundaryResponse) {
-      return boundaryResponse;
+    if (!boundary.ok) {
+      return boundary.response;
     }
 
     const parsed = parseAdminBookingPersistencePayload(await readJsonBody(request));
@@ -95,7 +114,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await createAdminBooking(parsed.data);
+    const result = await createAdminBooking(parsed.data, {
+      action: "admin_booking_create",
+      source_route: "/api/admin-bookings",
+      actor_label: boundary.context.actorLabel,
+      change_summary: "Safe operational booking fields saved through the admin-only API contract.",
+    });
 
     if (!result.ok) {
       return Response.json(
@@ -118,10 +142,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const boundaryResponse = requireAdminDispatcherBoundary(request);
+    const boundary = requireAdminDispatcherBoundary(request);
 
-    if (boundaryResponse) {
-      return boundaryResponse;
+    if (!boundary.ok) {
+      return boundary.response;
     }
 
     const parsed = parseAdminBookingUpdatePayload(await readJsonBody(request));
@@ -136,7 +160,12 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const result = await updateAdminBooking(parsed.data);
+    const result = await updateAdminBooking(parsed.data, {
+      action: "admin_booking_update",
+      source_route: "/api/admin-bookings",
+      actor_label: boundary.context.actorLabel,
+      change_summary: "Safe operational booking fields updated through the admin-only API contract.",
+    });
 
     if (!result.ok) {
       return Response.json(

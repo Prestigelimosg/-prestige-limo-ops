@@ -2882,6 +2882,66 @@ async function runChromeTest() {
         true,
         "Expected admin booking API forbidden-field message",
       );
+      assert.equal(
+        /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|session|claims|cookie|token|secret|key/i.test(
+          JSON.stringify(forbiddenBody),
+        ),
+        false,
+        "Expected admin booking forbidden-field response not to echo secret-like field names",
+      );
+
+      const unsafeContractResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
+        body: JSON.stringify({
+          ...validAdminBookingApiPayload,
+          booking: {
+            ...validAdminBookingApiPayload.booking,
+            billing_automation_status: "blocked",
+            customer_charge_amount: 100,
+            driver_payout: 70,
+            invoice_number: "INV-DO-NOT-ACCEPT",
+            live_location_url: "https://example.invalid/live",
+            mock_qa_archive: "blocked",
+            notification_delivery_records: [],
+            payment_pdf_link: "https://example.invalid/invoice.pdf",
+            paynow_payout: "blocked",
+            rate_amount: 100,
+            raw_ai_parser_prompt: "blocked",
+            service_role_secret: "blocked",
+          },
+          service_items: [
+            ...validAdminBookingApiPayload.service_items,
+            {
+              proof_photo_url: "https://example.invalid/proof.jpg",
+              service_item_type: "extra_stop",
+            },
+          ],
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          Referer: appUrl,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const unsafeContractBody = await unsafeContractResponse.json();
+
+      assert.equal(
+        unsafeContractResponse.status,
+        400,
+        "Expected admin booking API to reject unsafe persistence-contract fields",
+      );
+      assert.equal(
+        String(unsafeContractBody.error || ""),
+        "Forbidden admin booking fields rejected.",
+        "Expected admin booking API unsafe-field response to stay generic",
+      );
+      assert.equal(
+        /customer_charge|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_qa|archive|service_role|secret/i.test(
+          JSON.stringify(unsafeContractBody),
+        ),
+        false,
+        "Expected admin booking unsafe-field response not to echo forbidden contract field names",
+      );
 
       const unknownResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({

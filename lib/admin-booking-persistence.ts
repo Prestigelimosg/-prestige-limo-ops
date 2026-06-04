@@ -3,36 +3,51 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 export type AdminBookingRecordInput = {
   booking_reference?: string | null;
   source_channel?: string | null;
+  source_surface?: string | null;
   customer_id?: number | null;
   pickup_datetime?: string | null;
+  pickup_at?: string | null;
   pickup_location?: string | null;
   dropoff_location?: string | null;
   route_type?: string | null;
+  service_type?: string | null;
+  route_summary?: string | null;
   customer_display_name?: string | null;
+  contact_display_name?: string | null;
   contact_phone?: string | null;
   contact_email?: string | null;
+  passenger_name?: string | null;
+  passenger_phone?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
   vehicle_type_or_category?: string | null;
   customer_facing_status?: string | null;
   admin_internal_status?: string | null;
   short_notice_review_status?: string | null;
+  request_review_status?: string | null;
+  change_review_status?: string | null;
+  cancellation_review_status?: string | null;
   parser_source_reference?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
 
 export type AdminBookingRoutePointInput = {
-  point_type?: "pickup" | "dropoff" | "stop" | "waypoint";
+  point_type?: "pickup" | "dropoff" | "stop" | "waypoint" | "extra_stop";
   sequence_number?: number | null;
+  sequence?: number | null;
   location_text?: string | null;
+  location?: string | null;
   timing_note?: string | null;
+  notes?: string | null;
 };
 
 export type AdminBookingServiceItemInput = {
   service_item_type?: "child_seat" | "extra_stop" | "waiting_time" | "midnight_charge";
+  item_type?: "child_seat" | "extra_stop" | "waiting_time" | "midnight" | "luggage" | "vehicle_request" | "other";
   quantity?: number | null;
   blocks_count?: number | null;
+  notes?: string | null;
 };
 
 export type AdminBookingPersistenceInput = {
@@ -101,6 +116,9 @@ const safeReloadError = "Saved booking could not be safely reloaded.";
 const safeUpdateError = "Admin booking persistence update failed safely.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 
+export const adminBookingPersistenceContractVersion =
+  "stage-4a-375-admin-only-safe-operational-v1";
+
 const createPayloadTopLevelFields = new Set(["booking", "route_points", "service_items"]);
 const updatePayloadTopLevelFields = new Set([
   "target_booking_reference",
@@ -128,20 +146,30 @@ const customerBookingRequestFields = new Set([
 const bookingFields = new Set([
   "booking_reference",
   "source_channel",
+  "source_surface",
   "customer_id",
   "pickup_datetime",
+  "pickup_at",
   "pickup_location",
   "dropoff_location",
   "route_type",
+  "service_type",
+  "route_summary",
   "customer_display_name",
+  "contact_display_name",
   "contact_phone",
   "contact_email",
+  "passenger_name",
+  "passenger_phone",
   "pax_count",
   "luggage_count",
   "vehicle_type_or_category",
   "customer_facing_status",
   "admin_internal_status",
   "short_notice_review_status",
+  "request_review_status",
+  "change_review_status",
+  "cancellation_review_status",
   "parser_source_reference",
   "created_at",
   "updated_at",
@@ -150,16 +178,21 @@ const bookingFields = new Set([
 const routePointFields = new Set([
   "point_type",
   "sequence_number",
+  "sequence",
   "location_text",
+  "location",
   "timing_note",
+  "notes",
   "created_at",
   "updated_at",
 ]);
 
 const serviceItemFields = new Set([
   "service_item_type",
+  "item_type",
   "quantity",
   "blocks_count",
+  "notes",
   "created_at",
   "updated_at",
 ]);
@@ -174,27 +207,44 @@ const requiredBookingTextFields: Array<keyof AdminBookingRecordInput> = [
   "contact_phone",
 ];
 
-const allowedRoutePointTypes = new Set(["pickup", "dropoff", "stop", "waypoint"]);
-const allowedServiceItemTypes = new Set(["child_seat", "extra_stop", "waiting_time", "midnight_charge"]);
+const allowedRoutePointTypes = new Set(["pickup", "dropoff", "stop", "waypoint", "extra_stop"]);
+const allowedServiceItemTypes = new Set([
+  "child_seat",
+  "extra_stop",
+  "waiting_time",
+  "midnight_charge",
+  "midnight",
+]);
 
 const forbiddenFieldFragments = [
   "customer_price",
+  "customer_charge",
   "quoted_price",
+  "rate_amount",
+  "fare_amount",
   "amount_due",
   "billing",
+  "billing_automation",
   "invoice",
+  "invoice_number",
   "payment",
   "payment_link",
   "pdf",
+  "pdf_link",
   "stripe",
   "paynow",
   "pay_now",
+  "pay_now_payout",
   "driver_payout",
   "payout",
   "payout_comparison",
   "finance",
   "finance_note",
+  "finance_notes",
+  "internal_finance_note",
+  "internal_finance_notes",
   "notification",
+  "notification_delivery",
   "send_state",
   "send_log",
   "whatsapp_send",
@@ -207,11 +257,21 @@ const forbiddenFieldFragments = [
   "auth_link",
   "customer_auth",
   "driver_auth",
+  "raw_ai_prompt",
+  "raw_parser_prompt",
+  "ai_prompt",
+  "parser_prompt",
   "parser_learning",
   "parser_debug",
   "debug",
+  "mock_archive",
+  "mock_qa",
   "qa_archive",
+  "dev_workbench",
   "mock_workbench",
+  "service_role",
+  "server_only",
+  "server_secret",
   "internal_admin_note",
   "admin_note",
   "internal_note",
@@ -259,6 +319,14 @@ function findUnknownKeys(record: UnknownRecord, allowedFields: Set<string>, path
   return Object.keys(record)
     .filter((key) => !allowedFields.has(key))
     .map((key) => `${path}.${key}`);
+}
+
+function forbiddenFieldResult<T>(scope: string): AdminBookingResult<T> {
+  return {
+    ok: false,
+    status: 400,
+    error: `Forbidden ${scope} fields rejected.`,
+  };
 }
 
 function hasOwn(record: UnknownRecord, key: string) {
@@ -342,23 +410,43 @@ function splitCustomerExtraStops(value: string | null) {
 }
 
 function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
+  const sourceChannel = textOrNull(record.source_channel);
+  const sourceSurface = textOrNull(record.source_surface);
+  const pickupDateTime = textOrNull(record.pickup_datetime) || textOrNull(record.pickup_at);
+  const routeType = textOrNull(record.route_type) || textOrNull(record.service_type);
+  const serviceType = textOrNull(record.service_type) || textOrNull(record.route_type);
+  const pickupLocation = textOrNull(record.pickup_location);
+  const dropoffLocation = textOrNull(record.dropoff_location);
   const sanitized = {
     booking_reference: textOrNull(record.booking_reference),
-    source_channel: textOrNull(record.source_channel),
+    source_channel: sourceChannel || sourceSurface,
+    source_surface: sourceSurface || sourceChannel,
     customer_id: integerOrNull(record.customer_id),
-    pickup_datetime: textOrNull(record.pickup_datetime),
-    pickup_location: textOrNull(record.pickup_location),
-    dropoff_location: textOrNull(record.dropoff_location),
-    route_type: textOrNull(record.route_type),
+    pickup_datetime: pickupDateTime,
+    pickup_at: pickupDateTime,
+    pickup_location: pickupLocation,
+    dropoff_location: dropoffLocation,
+    route_type: routeType,
+    service_type: serviceType,
+    route_summary:
+      textOrNull(record.route_summary) ||
+      [pickupLocation, dropoffLocation].filter(Boolean).join(" > ") ||
+      null,
     customer_display_name: textOrNull(record.customer_display_name),
+    contact_display_name: textOrNull(record.contact_display_name),
     contact_phone: textOrNull(record.contact_phone),
     contact_email: textOrNull(record.contact_email),
+    passenger_name: textOrNull(record.passenger_name),
+    passenger_phone: textOrNull(record.passenger_phone),
     pax_count: integerOrNull(record.pax_count),
     luggage_count: integerOrNull(record.luggage_count),
     vehicle_type_or_category: textOrNull(record.vehicle_type_or_category),
     customer_facing_status: textOrNull(record.customer_facing_status),
     admin_internal_status: textOrNull(record.admin_internal_status),
     short_notice_review_status: textOrNull(record.short_notice_review_status),
+    request_review_status: textOrNull(record.request_review_status),
+    change_review_status: textOrNull(record.change_review_status),
+    cancellation_review_status: textOrNull(record.cancellation_review_status),
     parser_source_reference: textOrNull(record.parser_source_reference),
   } satisfies AdminBookingRecordInput;
 
@@ -384,9 +472,11 @@ function sanitizeRoutePoints(value: unknown[]): AdminBookingResult<AdminBookingR
   for (const [index, item] of value.entries()) {
     const record = asRecord(item);
     const pointType = textOrNull(record.point_type);
-    const locationText = textOrNull(record.location_text);
+    const locationText = textOrNull(record.location_text) || textOrNull(record.location);
     const sequenceNumber = hasOwn(record, "sequence_number")
       ? integerOrNull(record.sequence_number)
+      : hasOwn(record, "sequence")
+        ? integerOrNull(record.sequence)
       : index + 1;
 
     if (!pointType || !allowedRoutePointTypes.has(pointType)) {
@@ -416,8 +506,11 @@ function sanitizeRoutePoints(value: unknown[]): AdminBookingResult<AdminBookingR
     routePoints.push({
       point_type: pointType as AdminBookingRoutePointInput["point_type"],
       sequence_number: sequenceNumber,
+      sequence: sequenceNumber,
       location_text: locationText,
+      location: locationText,
       timing_note: textOrNull(record.timing_note),
+      notes: textOrNull(record.notes) || textOrNull(record.timing_note),
     });
   }
 
@@ -440,7 +533,9 @@ function sanitizeServiceItems(value: unknown[]): AdminBookingResult<AdminBooking
 
   for (const [index, item] of value.entries()) {
     const record = asRecord(item);
-    const itemType = textOrNull(record.service_item_type);
+    const requestedItemType = textOrNull(record.service_item_type) || textOrNull(record.item_type);
+    const itemType = requestedItemType === "midnight" ? "midnight_charge" : requestedItemType;
+    const canonicalItemType = requestedItemType === "midnight_charge" ? "midnight" : requestedItemType;
     const quantityProvided = hasOwn(record, "quantity") && record.quantity !== null && record.quantity !== "";
     const blocksProvided =
       hasOwn(record, "blocks_count") && record.blocks_count !== null && record.blocks_count !== "";
@@ -473,8 +568,10 @@ function sanitizeServiceItems(value: unknown[]): AdminBookingResult<AdminBooking
 
     serviceItems.push({
       service_item_type: itemType as AdminBookingServiceItemInput["service_item_type"],
+      item_type: canonicalItemType as AdminBookingServiceItemInput["item_type"],
       quantity,
       blocks_count: blocksCount,
+      notes: textOrNull(record.notes),
     });
   }
 
@@ -539,11 +636,7 @@ function parseAdminBookingOperationalPayload(
   const forbiddenFields = findForbiddenFieldNames(body);
 
   if (forbiddenFields.length > 0) {
-    return {
-      ok: false,
-      status: 400,
-      error: `Forbidden admin booking fields rejected: ${forbiddenFields.join(", ")}`,
-    };
+    return forbiddenFieldResult("admin booking");
   }
 
   const unknownTopLevelKeys = Object.keys(body).filter((key) => !allowedTopLevelFields.has(key));
@@ -670,11 +763,7 @@ export function parseCustomerBookingRequestPayload(
   const forbiddenFields = findForbiddenFieldNames(body);
 
   if (forbiddenFields.length > 0) {
-    return {
-      ok: false,
-      status: 400,
-      error: `Forbidden customer booking request fields rejected: ${forbiddenFields.join(", ")}`,
-    };
+    return forbiddenFieldResult("customer booking request");
   }
 
   const unknownKeys = Object.keys(body).filter((key) => !customerBookingRequestFields.has(key));
@@ -1006,6 +1095,12 @@ export async function createAdminBooking(
 
 export async function updateAdminBooking(
   input: AdminBookingPersistenceUpdateInput,
+  auditInput: AdminBookingAuditInput = {
+    action: "admin_booking_update",
+    source_route: "/",
+    actor_label: "Admin dashboard",
+    change_summary: "Operational booking fields updated through admin booking persistence prototype.",
+  },
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
   const clientResult = getAdminBookingClient();
 
@@ -1101,10 +1196,10 @@ export async function updateAdminBooking(
   await client.from("audit_logs").insert({
     entity_type: "booking",
     entity_id: bookingId,
-    action: "admin_booking_update",
-    source_route: "/",
-    actor_label: "Admin dashboard",
-    change_summary: "Operational booking fields updated through admin booking persistence prototype.",
+    action: auditInput.action,
+    source_route: auditInput.source_route,
+    actor_label: auditInput.actor_label,
+    change_summary: auditInput.change_summary,
   });
 
   return fetchAdminBookingById(client, bookingId);

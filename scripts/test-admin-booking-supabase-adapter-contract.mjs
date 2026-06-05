@@ -27,6 +27,8 @@ const originalEnv = {
 };
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_SENTINEL_DO_NOT_LEAK";
 const serverOnlySentinel = "SERVER_ONLY_SECRET_SENTINEL_DO_NOT_LEAK";
+const serverSessionToken = "mock-contract-admin-session-token";
+const supabaseUrlSentinel = "https://contract-ready.supabase.co";
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_SENTINEL|SERVER_ONLY_SECRET_SENTINEL|service_role|server-only|server_only|sql|stack|secret|key/i;
 const forbiddenResponseLeakPattern =
@@ -676,7 +678,7 @@ function assertSixTableCreateMapping(mock) {
 
 function assertCreatedClient(mock) {
   assert.equal(mock.createdClients.length, 1);
-  assert.equal(mock.createdClients[0].url, "https://example.supabase.co");
+  assert.equal(mock.createdClients[0].url, supabaseUrlSentinel);
   assert.equal(mock.createdClients[0].serviceRoleKey, serviceRoleSentinel);
   assert.deepEqual(mock.createdClients[0].options, {
     auth: {
@@ -701,8 +703,11 @@ try {
 
   setEnv({
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
+    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
-    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_URL: supabaseUrlSentinel,
   });
 
   const parsedAdmin = persistence.parseAdminBookingPersistencePayload(canonicalAdminPayload());
@@ -804,7 +809,7 @@ try {
     PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: undefined,
     PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: undefined,
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
-    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_URL: supabaseUrlSentinel,
   });
 
   const disabledMock = installMockClient();

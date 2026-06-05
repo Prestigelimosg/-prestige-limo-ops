@@ -888,7 +888,13 @@ export async function createAdminBooking(
     change_summary: "Operational booking fields saved through admin booking persistence prototype.",
   },
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
-  return createAdminBookingThroughSupabaseAdapter(input, auditInput, actor);
+  const parsed = parseAdminBookingPersistencePayload(input);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return createAdminBookingThroughSupabaseAdapter(parsed.data, auditInput, actor);
 }
 
 export async function updateAdminBooking(
@@ -901,7 +907,13 @@ export async function updateAdminBooking(
     change_summary: "Operational booking fields updated through admin booking persistence prototype.",
   },
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
-  return updateAdminBookingThroughSupabaseAdapter(input, auditInput, actor);
+  const parsed = parseAdminBookingUpdatePayload(input);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return updateAdminBookingThroughSupabaseAdapter(parsed.data, auditInput, actor);
 }
 
 export async function listAdminBookings(

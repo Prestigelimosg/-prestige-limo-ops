@@ -113,7 +113,6 @@ const safeReloadError = "Saved booking could not be safely reloaded.";
 const safeUpdateError = "Admin booking persistence update failed safely.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 const disabledPersistenceError = "Admin booking persistence is not enabled on this server.";
-const incompleteConfigurationError = "Admin booking persistence server configuration is incomplete.";
 const safeStagingReadinessError =
   "Admin booking persistence staging configuration is not ready.";
 const safeEnableReadinessError =
@@ -842,14 +841,24 @@ function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor)
     };
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const stagingReadiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!stagingReadiness.ok) {
+    return {
+      ok: false,
+      status: stagingReadiness.status,
+      error: stagingReadiness.error,
+    };
+  }
+
+  const supabaseUrl = configValueOrNull(process.env.SUPABASE_URL);
+  const serviceRoleKey = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   if (!supabaseUrl || !serviceRoleKey) {
     return {
       ok: false,
       status: 503,
-      error: incompleteConfigurationError,
+      error: safeStagingReadinessError,
     };
   }
 

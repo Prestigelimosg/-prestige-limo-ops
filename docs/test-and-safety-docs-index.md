@@ -33,6 +33,7 @@ This index is a docs-only cross-reference for existing Prestige Limo Ops testing
 - [Admin Persistence Production Readiness Gate](admin-persistence-production-readiness-gate.md) owns the Stage 4A-395 production go/no-go summary, proven-safe evidence, production blockers, approval requirements, legacy public-table RLS blocker, and no-production-enable boundary.
 - [Admin Persistence Staging Cleanup Decision](admin-persistence-staging-cleanup-decision.md) owns the Stage 4A-395 staging cleanup decision, no-cleanup-write boundary, required separate cleanup approval, and staging evidence row retention note.
 - [Legacy Public Table Server Route Hardening](legacy-public-table-server-route-hardening.md) owns the Stage 4A-397 server-only admin route hardening for legacy admin public-table access, the browser direct-access retirement evidence, and the no-RLS-migration boundary.
+- [Legacy Public Table RLS Hardening](legacy-public-table-rls-hardening.md) owns the Stage 4A-398 local RLS migration draft, no-apply boundary, no-public-anon-policy boundary, and required separate Supabase command/apply approval.
 - [Supabase Schema And RLS Review Checklist](supabase-schema-rls-review-checklist.md) owns future Supabase schema, RLS, public-page, service-role, storage, and access-boundary review.
 - [Driver Job Link Production Checklist](driver-job-link-production-checklist.md) owns the production driver-link go/no-go checklist, approval locks, required tests, and disabled-by-default production posture.
 

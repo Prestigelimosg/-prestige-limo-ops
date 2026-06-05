@@ -24,6 +24,9 @@ const routeBackedTableReferences = {
   travelers: "adminLegacyTables.travelers",
 };
 
+const approvedStage4a398Migration =
+  "supabase/migrations/202606050001_legacy_public_table_rls_hardening.sql";
+
 function assertIncludes(text, expected, label = expected) {
   assert.ok(text.includes(expected), `Missing required text: ${label}`);
 }
@@ -71,6 +74,11 @@ assertNotIncludes(route, "NEXT_PUBLIC_SUPABASE_URL", "public Supabase URL in rou
 assertNotIncludes(route, "NEXT_PUBLIC_SUPABASE_ANON_KEY", "public anon key in route");
 assertNotMatches(route, /CREATE\s+POLICY|GRANT\s+|USING\s*\(\s*true\s*\)|anon/i, "public anon policy text");
 
-assertNotMatches(gitStatus, /supabase\/migrations\//, "new migration file");
+const unexpectedMigrationStatusLines = gitStatus
+  .split("\n")
+  .filter((line) => line.includes("supabase/migrations/"))
+  .filter((line) => !line.endsWith(approvedStage4a398Migration));
+
+assert.deepEqual(unexpectedMigrationStatusLines, [], "unexpected migration file");
 
 console.log("Legacy admin browser Supabase access retirement audit passed.");

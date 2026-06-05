@@ -18,6 +18,8 @@ export const adminBookingSupabaseAdapterVersion =
   "stage-4a-376-server-only-supabase-adapter-v1";
 export const adminBookingPersistenceStagingReadinessVersion =
   "stage-4a-379-admin-persistence-staging-config-readiness-v1";
+export const adminBookingPersistenceEnableReadinessVersion =
+  "stage-4a-381-controlled-persistence-enable-readiness-v1";
 
 export type AdminBookingPersistenceAdapterActor = {
   actor_label: string;
@@ -67,6 +69,42 @@ export type AdminBookingPersistenceStagingReadinessResult =
       ready: false;
       status: 503;
     });
+type AdminBookingPersistenceEnableRequirement =
+  | "feature_flag"
+  | "staging_config"
+  | "admin_dispatcher_session"
+  | "safe_payload"
+  | "kill_switch";
+type AdminBookingPersistenceEnableRequirementStatus = "ready" | "blocked";
+type AdminBookingPersistenceEnableRequirements = Record<
+  AdminBookingPersistenceEnableRequirement,
+  AdminBookingPersistenceEnableRequirementStatus
+>;
+type AdminBookingPersistenceEnableSideEffects = {
+  databaseClient: "not_created";
+  databaseReads: "not_opened";
+  databaseWrites: "not_opened";
+};
+type AdminBookingPersistenceEnableReadinessBase = {
+  environment: "server";
+  requirements: AdminBookingPersistenceEnableRequirements;
+  sideEffects: AdminBookingPersistenceEnableSideEffects;
+  status: 200 | 503;
+  version: typeof adminBookingPersistenceEnableReadinessVersion;
+};
+export type AdminBookingPersistenceEnableReadinessResult =
+  | (AdminBookingPersistenceEnableReadinessBase & {
+      ok: true;
+      readyToEnable: true;
+      status: 200;
+    })
+  | (AdminBookingPersistenceEnableReadinessBase & {
+      blocked: AdminBookingPersistenceEnableRequirement[];
+      error: "Admin booking persistence enablement readiness gates are not ready.";
+      ok: false;
+      readyToEnable: false;
+      status: 503;
+    });
 
 const maxTextLength = 1000;
 const safeSaveError = "Admin booking persistence save failed safely.";
@@ -78,6 +116,8 @@ const disabledPersistenceError = "Admin booking persistence is not enabled on th
 const incompleteConfigurationError = "Admin booking persistence server configuration is incomplete.";
 const safeStagingReadinessError =
   "Admin booking persistence staging configuration is not ready.";
+const safeEnableReadinessError =
+  "Admin booking persistence enablement readiness gates are not ready.";
 
 const allowedAdapterRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedAdapterSourceSurfaces = new Set(["admin_api", "customer_booking_request", "system"]);
@@ -184,6 +224,20 @@ function readinessSideEffects(): AdminBookingPersistenceStagingSideEffects {
   };
 }
 
+function enableReadinessSideEffects(): AdminBookingPersistenceEnableSideEffects {
+  return {
+    databaseClient: "not_created",
+    databaseReads: "not_opened",
+    databaseWrites: "not_opened",
+  };
+}
+
+function enableRequirementStatus(
+  ready: boolean,
+): AdminBookingPersistenceEnableRequirementStatus {
+  return ready ? "ready" : "blocked";
+}
+
 export function checkAdminBookingPersistenceStagingConfigReadiness(): AdminBookingPersistenceStagingReadinessResult {
   const requirements: AdminBookingPersistenceStagingRequirements = {
     admin_access_check: readinessRequirementStatus(
@@ -237,6 +291,57 @@ export function checkAdminBookingPersistenceStagingConfigReadiness(): AdminBooki
     ...base,
     ok: true,
     ready: true,
+    status: 200,
+  };
+}
+
+export function checkAdminBookingPersistenceEnableReadiness(
+  payloadResult: AdminBookingResult<AdminBookingPersistenceInput> | null | undefined,
+  actor: AdminBookingPersistenceAdapterActor | null | undefined,
+): AdminBookingPersistenceEnableReadinessResult {
+  const featureFlagOpen = process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED === "true";
+  const stagingConfigReady = checkAdminBookingPersistenceStagingConfigReadiness().ok;
+  const actorResult = actor ? validateActor(actor) : null;
+  const adminDispatcherSessionReady =
+    !!actor &&
+    !!actorResult?.ok &&
+    actor.boundary_mode === "server-session-role-surface" &&
+    (actor.actor_role === "admin" || actor.actor_role === "dispatcher") &&
+    actor.source_surface === "admin_api";
+  const safePayloadReady = !!payloadResult?.ok;
+  const killSwitchOpen = featureFlagOpen;
+  const requirements: AdminBookingPersistenceEnableRequirements = {
+    admin_dispatcher_session: enableRequirementStatus(adminDispatcherSessionReady),
+    feature_flag: enableRequirementStatus(featureFlagOpen),
+    kill_switch: enableRequirementStatus(killSwitchOpen),
+    safe_payload: enableRequirementStatus(safePayloadReady),
+    staging_config: enableRequirementStatus(stagingConfigReady),
+  };
+  const blocked = Object.entries(requirements)
+    .filter(([, status]) => status === "blocked")
+    .map(([requirement]) => requirement as AdminBookingPersistenceEnableRequirement);
+  const base = {
+    environment: "server",
+    requirements,
+    sideEffects: enableReadinessSideEffects(),
+    version: adminBookingPersistenceEnableReadinessVersion,
+  } satisfies Omit<AdminBookingPersistenceEnableReadinessBase, "status">;
+
+  if (blocked.length > 0) {
+    return {
+      ...base,
+      blocked,
+      error: safeEnableReadinessError,
+      ok: false,
+      readyToEnable: false,
+      status: 503,
+    };
+  }
+
+  return {
+    ...base,
+    ok: true,
+    readyToEnable: true,
     status: 200,
   };
 }

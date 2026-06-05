@@ -5,11 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
 
-const approvalValue = "stage-4a-390-william-approved";
+const approvalValue = "stage-4a-393-william-approved";
 const envFilePath = path.join(process.cwd(), ".env.stage4a388.local");
 const liveAttemptMarkerPath = path.join(
   os.tmpdir(),
-  "prestige-stage4a390-controlled-live-write-attempted.marker",
+  "prestige-stage4a393-controlled-live-write-attempted.marker",
 );
 const requiredEnvKeys = [
   "SUPABASE_URL",
@@ -26,23 +26,23 @@ const sourceFiles = [
 ];
 const unsafeFieldProbe = {
   booking: {
-    booking_reference: "STAGING-VERIFY-4A390-UNSAFE-PROBE",
+    booking_reference: "STAGING-VERIFY-4A393-UNSAFE-PROBE",
     contact_phone: "+6500000000",
-    customer_display_name: "Stage 4A-390 Unsafe Probe",
-    dropoff_location: "Stage 4A-390 Dropoff Probe",
+    customer_display_name: "Stage 4A-393 Unsafe Probe",
+    dropoff_location: "Stage 4A-393 Dropoff Probe",
     pickup_datetime: "2026-06-15T09:30:00+08:00",
-    pickup_location: "Stage 4A-390 Pickup Probe",
+    pickup_location: "Stage 4A-393 Pickup Probe",
     quoted_price: "1.00",
     route_type: "MNG",
   },
   route_points: [
     {
-      location_text: "Stage 4A-390 Pickup Probe",
+      location_text: "Stage 4A-393 Pickup Probe",
       point_type: "pickup",
       sequence_number: 1,
     },
     {
-      location_text: "Stage 4A-390 Dropoff Probe",
+      location_text: "Stage 4A-393 Dropoff Probe",
       point_type: "dropoff",
       sequence_number: 2,
     },
@@ -197,7 +197,7 @@ async function writeRuntimeModules(tempDir) {
 }
 
 async function loadHarness() {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-stage4a390-live-"));
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-stage4a393-live-"));
 
   await writeRuntimeModules(tempDir);
 
@@ -217,7 +217,7 @@ function createReference() {
   const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const suffix = Math.random().toString(36).replace(/[^a-z0-9]/gi, "").slice(2, 8).toUpperCase();
 
-  return `STAGING-VERIFY-4A390-${timestamp}-${suffix || "SAFE01"}`;
+  return `STAGING-VERIFY-4A393-${timestamp}-${suffix || "SAFE01"}`;
 }
 
 function createSafePayload(reference) {
@@ -227,45 +227,45 @@ function createSafePayload(reference) {
       booking_reference: reference,
       cancellation_review_status: "not_requested",
       change_review_status: "not_requested",
-      contact_display_name: "Stage 4A-390 Dispatcher Contact",
-      contact_email: "stage-4a-390@example.invalid",
-      contact_phone: "+6500004390",
-      customer_display_name: "Stage 4A-390 Controlled Customer",
+      contact_display_name: "Stage 4A-393 Dispatcher Contact",
+      contact_email: "stage-4a-393@example.invalid",
+      contact_phone: "+6500004393",
+      customer_display_name: "Stage 4A-393 Controlled Customer",
       customer_facing_status: "pending_review",
-      dropoff_location: "Stage 4A-390 controlled staging dropoff",
+      dropoff_location: "Stage 4A-393 controlled staging dropoff",
       luggage_count: 1,
-      parser_source_reference: "stage-4a-390-manual-controlled-payload",
-      passenger_name: "Stage 4A-390 Passenger",
+      parser_source_reference: "stage-4a-393-manual-controlled-payload",
+      passenger_name: "Stage 4A-393 Passenger",
       passenger_phone: "+6500004391",
       pax_count: 1,
       pickup_at: "2026-06-15T09:30:00+08:00",
       pickup_datetime: "2026-06-15T09:30:00+08:00",
-      pickup_location: "Stage 4A-390 controlled staging pickup",
+      pickup_location: "Stage 4A-393 controlled staging pickup",
       request_review_status: "pending_review",
       route_summary:
-        "Stage 4A-390 controlled staging pickup > Stage 4A-390 controlled staging dropoff",
+        "Stage 4A-393 controlled staging pickup > Stage 4A-393 controlled staging dropoff",
       route_type: "MNG",
       service_type: "airport_arrival",
       short_notice_review_status: "not_required",
-      source_channel: "stage_4a_390_controlled_check",
+      source_channel: "stage_4a_393_controlled_check",
       source_surface: "admin_api",
       vehicle_type_or_category: "AVF",
     },
     route_points: [
       {
-        location_text: "Stage 4A-390 controlled staging pickup",
+        location_text: "Stage 4A-393 controlled staging pickup",
         point_type: "pickup",
         sequence_number: 1,
       },
       {
-        location_text: "Stage 4A-390 controlled staging dropoff",
+        location_text: "Stage 4A-393 controlled staging dropoff",
         point_type: "dropoff",
         sequence_number: 2,
       },
     ],
     service_items: [
       {
-        notes: "Stage 4A-390 controlled safe service item",
+        notes: "Stage 4A-393 controlled safe service item",
         quantity: 1,
         service_item_type: "child_seat",
       },
@@ -275,7 +275,7 @@ function createSafePayload(reference) {
 
 function createActor() {
   return {
-    actor_label: "Stage 4A-390 William-approved staging verifier",
+    actor_label: "Stage 4A-393 William-approved staging verifier",
     actor_role: process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE === "dispatcher" ? "dispatcher" : "admin",
     boundary_mode: "server-session-role-surface",
     source_surface: "admin_api",
@@ -293,9 +293,9 @@ function safeResultName(result) {
 function safeRecordMatchesReference(record, reference) {
   return (
     record?.booking_reference === reference &&
-    record?.customer_display_name === "Stage 4A-390 Controlled Customer" &&
-    record?.pickup_location === "Stage 4A-390 controlled staging pickup" &&
-    record?.dropoff_location === "Stage 4A-390 controlled staging dropoff" &&
+    record?.customer_display_name === "Stage 4A-393 Controlled Customer" &&
+    record?.pickup_location === "Stage 4A-393 controlled staging pickup" &&
+    record?.dropoff_location === "Stage 4A-393 controlled staging dropoff" &&
     record?.source_surface === "admin_api" &&
     Array.isArray(record?.route_points) &&
     record.route_points.length >= 2 &&
@@ -376,9 +376,9 @@ async function main() {
 
   process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED = "false";
   const killSwitchBefore = await persistence.createAdminBooking(parsed.data, actor, {
-    action: "stage_4a_390_kill_switch_before_probe",
+    action: "stage_4a_393_kill_switch_before_probe",
     actor_label: actor.actor_label,
-    change_summary: "Stage 4A-390 kill-switch before probe; expected disabled response.",
+    change_summary: "Stage 4A-393 kill-switch before probe; expected disabled response.",
     source_route: "scripts/run-admin-booking-staging-save-load-verification.mjs",
   });
 
@@ -393,7 +393,7 @@ async function main() {
   try {
     await writeFile(
       liveAttemptMarkerPath,
-      `Stage 4A-390 controlled live save attempted for ${reference}\n`,
+      `Stage 4A-393 controlled live save attempted for ${reference}\n`,
       {
         flag: constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
         mode: 0o600,
@@ -408,9 +408,9 @@ async function main() {
   }
 
   const saveResult = await persistence.createAdminBooking(parsed.data, actor, {
-    action: "stage_4a_390_controlled_save_load_verification",
+    action: "stage_4a_393_controlled_save_load_verification",
     actor_label: actor.actor_label,
-    change_summary: "Stage 4A-390 one controlled staging admin booking/customer save-load verification.",
+    change_summary: "Stage 4A-393 one controlled staging admin booking/customer save-load verification.",
     source_route: "scripts/run-admin-booking-staging-save-load-verification.mjs",
   });
 
@@ -452,9 +452,9 @@ async function main() {
 
   process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED = "false";
   const killSwitchAfter = await persistence.createAdminBooking(parsed.data, actor, {
-    action: "stage_4a_390_kill_switch_after_probe",
+    action: "stage_4a_393_kill_switch_after_probe",
     actor_label: actor.actor_label,
-    change_summary: "Stage 4A-390 kill-switch after probe; expected disabled response.",
+    change_summary: "Stage 4A-393 kill-switch after probe; expected disabled response.",
     source_route: "scripts/run-admin-booking-staging-save-load-verification.mjs",
   });
 
@@ -487,7 +487,7 @@ async function main() {
       safeFields: "passed",
       save: "passed",
     },
-    stage: "4A-390",
+    stage: "4A-393",
     tablesInApprovedScope: [
       "customers",
       "customer_contacts",

@@ -39,6 +39,7 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 - [Legacy Public Table RLS Production Decision Packet](legacy-public-table-rls-production-decision-packet.md) records the Stage 4A-400 post-apply review and keeps production RLS apply blocked until a separate approval.
 - [Legacy Public Table RLS Production Target Proof Checklist](legacy-public-table-rls-production-target-proof-checklist.md) records the Stage 4A-401A stop reason and the target-proof requirements before any future production apply.
 - [Legacy Public Table RLS Production Evidence](legacy-public-table-rls-production-apply-evidence.md) records the Stage 4A-401C masked production target proof, already-applied migration ledger result, and read-only RLS/policy verification.
+- [Legacy Public Table RLS Hardening Closeout](legacy-public-table-rls-hardening-closeout.md) records the Stage 4A-402 closeout, confirms staging and production RLS evidence is complete, and names the next options.
 
 ## Production Go/No-Go
 
@@ -67,8 +68,18 @@ Production readiness is currently `blocked`.
 - Stage 4A-400 reviewed the staging evidence and keeps production decision `blocked`.
 - Stage 4A-401 stopped before apply because the local Supabase link still matched the masked Stage 4A-399 staging evidence target; Stage 4A-401A keeps production target proof blocked until the approved production project is proven safely.
 - Stage 4A-401C proved the approved production target with masked prefix/suffix evidence and verified the production ledger already contained `202606050001`; read-only production catalog verification showed RLS enabled and zero policies/public anon policies on all six legacy tables.
+- Stage 4A-402 closes out the legacy public-table RLS hardening evidence for staging and production.
 - Do not fix those from the dashboard in this stage.
 - Production persistence enablement remains blocked even though the legacy public-table RLS hardening evidence is now recorded.
+
+## Next Supabase Decision
+
+William can choose one of two next paths:
+
+- Continue Supabase persistence/auth path with a separate production persistence/auth readiness approval stage.
+- Pause Supabase and return to app/business workflow work without touching live data.
+
+Neither option is approved by this gate. Any production persistence, production write, Supabase command, auth/policy creation, notification, billing, payment, PDF, payout, live-location, proof/photo, parser-learning, or dashboard quick fix still requires separate scoped approval.
 
 ## Required Separate Approvals
 
@@ -131,7 +142,7 @@ Before a future production enablement stage can be considered, a separate approv
 - Unsafe fields are rejected before adapter use.
 - Browser/client bundles cannot import server-only persistence.
 - API responses do not expose secrets, env values, stack traces, SQL, Supabase internals, tokens, keys, or server-only details.
-- The legacy public table RLS advisor blocker is resolved or explicitly accepted by a separate approved security stage.
+- The legacy public table RLS hardening evidence is complete for staging and production, while any new production persistence/auth policy work still requires separate approval.
 - Any required Supabase command or migration has explicit William approval.
 - Post-change `npm run test:safe` passes and `git status --short` is clean.
 

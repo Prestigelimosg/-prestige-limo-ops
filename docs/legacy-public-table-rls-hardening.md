@@ -1,4 +1,4 @@
-# Stage 4A-398 / Stage 4A-399 - Legacy Public Table RLS Hardening
+# Stage 4A-398 / Stage 4A-402 - Legacy Public Table RLS Hardening
 
 Stage 4A-398 creates a local migration draft to enable row-level security for the six legacy public tables that were previously flagged as a production-readiness blocker.
 
@@ -44,6 +44,12 @@ Now that browser direct access has been retired, Stage 4A-398 prepared the RLS h
 - Dashboard quick fixes remain not approved.
 - Customer auth, driver auth, customer/driver/public database policies, billing, payment, PDF, payout, live-location, proof/photo, and parser-learning remain out of scope.
 
+## Stage 4A-402 Closeout
+
+Legacy public-table RLS hardening evidence is complete for staging and production. The hardening evidence does not enable production persistence, production writes, customer/driver auth, customer/driver/public database policies, notifications, billing, payment, PDF, payout, live-location, proof/photo, or parser-learning.
+
+[Legacy Public Table RLS Hardening Closeout](legacy-public-table-rls-hardening-closeout.md) records the Stage 4A-402 closeout and the next decision: continue the Supabase persistence/auth path, or pause Supabase and return to app/business workflow work.
+
 ## Required Follow-Up
 
-Before any production use, a separate production approval stage must re-confirm the exact production project, production rollback plan, RLS policy posture, and passing safety checks without exposing secrets or env values. Stage 4A-399 does not approve production apply, production reads, or production writes.
+Before any production persistence use, a separate production approval stage must re-confirm the exact production environment/config, feature flag posture, auth gate, kill-switch behavior, RLS policy posture for any new policies, rollback plan, and passing safety checks without exposing secrets or env values. Stage 4A-402 does not approve production persistence, production writes, live save/load, customer/driver auth, notifications, billing, payment, PDF, payout, live-location, proof/photo, or parser-learning.

@@ -13,7 +13,8 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 - Stage 4A-393 server-only adapter staging save/load succeeded.
 - Stage 4A-394 admin API-route staging save/load succeeded.
 - Stage 4A-397 retired browser-side direct Supabase access for the legacy admin public tables by moving the admin dashboard calls behind a server-only admin route.
-- Stage 4A-398 created a local RLS hardening migration draft for the legacy admin public tables; it has not been applied.
+- Stage 4A-398 created a local RLS hardening migration draft for the legacy admin public tables.
+- Stage 4A-399 applied that RLS hardening migration to the approved staging Supabase project only and verified RLS enabled with no public anon policies.
 - The staging env/key was accepted by read-only checks in Stage 4A-392.
 - Persistence still defaults OFF.
 - The kill-switch blocks writes.
@@ -33,7 +34,8 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 - [Admin Persistence Enable Approval Checklist](admin-persistence-enable-approval-checklist.md) preserves the enablement checklist and mocked gate requirements.
 - [Admin Persistence Staging Cleanup Decision](admin-persistence-staging-cleanup-decision.md) records the Stage 4A-395 cleanup decision boundary.
 - [Legacy Public Table Server Route Hardening](legacy-public-table-server-route-hardening.md) records the Stage 4A-397 browser-direct-access retirement and confirms the RLS migration remains separate.
-- [Legacy Public Table RLS Hardening](legacy-public-table-rls-hardening.md) records the Stage 4A-398 local RLS migration draft and confirms it has not been applied.
+- [Legacy Public Table RLS Hardening](legacy-public-table-rls-hardening.md) records the Stage 4A-398 local RLS migration draft and Stage 4A-399 staging-only apply result.
+- [Legacy Public Table RLS Hardening Apply Evidence](legacy-public-table-rls-hardening-apply-evidence.md) records the masked Stage 4A-399 staging apply and read-only verification evidence.
 
 ## Production Go/No-Go
 
@@ -56,8 +58,9 @@ Production readiness is currently `blocked`.
   - `public.rate_settings`.
   - `public.travelers`.
   - `public.drivers`.
-- Stage 4A-397 moved the admin dashboard runtime access for those tables behind a server-only admin route, but it did not create or apply the RLS hardening migration.
-- Stage 4A-398 created a local RLS hardening migration draft, but it has not been applied. Supabase command/apply still requires separate explicit William approval.
+- Stage 4A-397 moved the admin dashboard runtime access for those tables behind a server-only admin route.
+- Stage 4A-398 created a local RLS hardening migration draft.
+- Stage 4A-399 applied and verified that draft in approved staging only; production still requires separate explicit William approval before any production RLS apply, production read, or production write.
 - Do not fix those from the dashboard in this stage.
 - If those tables still exist and are exposed, production readiness should require a separate approved RLS hardening migration stage.
 
@@ -76,9 +79,9 @@ Production readiness is currently `blocked`.
 - No insert, update, delete, or upsert is approved.
 - No staging row deletion is approved.
 - No raw SQL write is approved.
-- No Supabase CLI command is approved.
-- No migration is approved.
-- Stage 4A-398 approves only a local migration draft; applying or deploying it remains not approved.
+- No production Supabase CLI command is approved.
+- No production migration is approved.
+- Stage 4A-399 approves only the completed staging apply and verification; applying or deploying to production remains not approved.
 - No production write is approved.
 - No dashboard quick fix is approved.
 - `.env.stage4a388.local` must remain ignored and uncommitted.

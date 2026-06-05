@@ -161,8 +161,6 @@ class MockSupabaseQuery {
     this.operation = "insert";
     this.payload = payload;
 
-    this.client.recordOperation("insert", this.table, payload);
-
     return this;
   }
 
@@ -238,8 +236,9 @@ class MockSupabaseQuery {
 }
 
 class MockSupabaseClient {
-  constructor(seed = {}) {
+  constructor(seed = {}, options = {}) {
     this.operations = [];
+    this.schemaMode = options.schemaMode || "cumulative";
     this.tables = {
       audit_logs: [],
       booking_route_points: [],
@@ -283,8 +282,45 @@ class MockSupabaseClient {
     });
   }
 
+  insertRejectedByMockSchema(table, row) {
+    const cumulativeRequiredColumns = {
+      audit_logs: ["action", "entity_type"],
+      booking_route_points: ["location_text", "sequence_number"],
+      booking_service_items: ["service_item_type"],
+      customer_contacts: ["contact_name"],
+    };
+    const currentForbiddenColumns = {
+      audit_logs: ["action", "actor_label", "change_summary", "entity_id", "entity_type", "source_route"],
+      booking_route_points: ["location_text", "sequence_number", "timing_note"],
+      booking_service_items: ["blocks_count", "service_item_type"],
+      customer_contacts: ["contact_name", "contact_type"],
+    };
+
+    if (this.schemaMode === "cumulative") {
+      return (cumulativeRequiredColumns[table] || []).some((column) => !(column in row));
+    }
+
+    if (this.schemaMode === "current") {
+      return (currentForbiddenColumns[table] || []).some((column) => column in row);
+    }
+
+    return false;
+  }
+
   insertRows(table, payload, resultMode, selectedColumns) {
     const rows = Array.isArray(payload) ? payload : [payload];
+
+    if (rows.some((row) => this.insertRejectedByMockSchema(table, row))) {
+      return {
+        data: null,
+        error: {
+          code: "mock_schema_contract_rejection",
+        },
+      };
+    }
+
+    this.recordOperation("insert", table, payload);
+
     const insertedRows = rows.map((row) => {
       const insertedRow = {
         id: this.createId(table),
@@ -405,8 +441,8 @@ class MockSupabaseClient {
   }
 }
 
-function installMockClient(seed) {
-  const client = new MockSupabaseClient(seed);
+function installMockClient(seed, options) {
+  const client = new MockSupabaseClient(seed, options);
 
   globalThis.__prestigeSupabaseAdapterMock = {
     client,
@@ -598,11 +634,8 @@ function assertSixTableCreateMapping(mock) {
     customer_id: 1,
     contact_name: "Safe Ops Contact",
     contact_type: "booking_contact",
-    display_name: "Safe Ops Contact",
     email: "safe-ops@example.com",
-    is_primary: true,
     phone: "+65 9000 0001",
-    role_label: "booking_contact",
   });
   assert.deepEqual(insertedOperation(client, "bookings").payload, {
     admin_internal_status: "needs_review",
@@ -823,6 +856,53 @@ try {
   assert.equal(auditUpdates.at(-1).payload.safe_before.booking_reference, "SAFE-ADM-001");
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
   assertNoUnsafeKeys(updateOperation, "mocked update operation");
+
+  const currentSchemaPayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-CURRENT-001",
+    },
+  });
+  const parsedCurrentSchemaPayload = persistence.parseAdminBookingPersistencePayload(currentSchemaPayload);
+
+  assert.equal(parsedCurrentSchemaPayload.ok, true);
+
+  const currentSchemaMock = installMockClient({}, { schemaMode: "current" });
+  const currentSchemaResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    parsedCurrentSchemaPayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(currentSchemaResult.ok, true);
+  assert.equal(currentSchemaResult.data.booking_reference, "SAFE-CURRENT-001");
+
+  for (const operation of currentSchemaMock.client.operations.filter((item) => item.action === "insert")) {
+    assertNoUnsafeKeys(operation, "current-schema insert operation");
+    const rows = Array.isArray(operation.payload) ? operation.payload : [operation.payload];
+
+    for (const row of rows) {
+      assert.deepEqual(
+        Object.keys(row).filter((key) =>
+          [
+            "actor_label",
+            "change_summary",
+            "contact_name",
+            "contact_type",
+            "blocks_count",
+            "entity_id",
+            "entity_type",
+            "location_text",
+            "sequence_number",
+            "service_item_type",
+            "source_route",
+            "timing_note",
+          ].includes(key),
+        ),
+        [],
+        "Current-schema inserts should not include cumulative legacy DB columns.",
+      );
+    }
+  }
 
   setEnv({
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: undefined,

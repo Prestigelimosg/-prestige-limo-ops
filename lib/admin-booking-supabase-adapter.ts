@@ -685,7 +685,7 @@ function auditActionToDb(value: string) {
   return "admin_dispatcher_override";
 }
 
-function routePointToDbRow(routePoint: AdminBookingRoutePointInput, bookingId: DbIdentifier) {
+function routePointToCurrentDbRow(routePoint: AdminBookingRoutePointInput, bookingId: DbIdentifier) {
   const pointType = routePoint.point_type === "extra_stop" ? "stop" : routePoint.point_type || "waypoint";
   const sequence = positiveIntegerOrFallback(routePoint.sequence_number ?? routePoint.sequence);
   const location = textOrNull(routePoint.location_text) || textOrNull(routePoint.location) || "Location To Confirm";
@@ -694,12 +694,20 @@ function routePointToDbRow(routePoint: AdminBookingRoutePointInput, bookingId: D
   return {
     booking_id: bookingId,
     sequence,
-    sequence_number: sequence,
     point_type: pointType,
     location,
-    location_text: location,
     notes,
-    timing_note: notes,
+  };
+}
+
+function routePointToCumulativeDbRow(routePoint: AdminBookingRoutePointInput, bookingId: DbIdentifier) {
+  const currentRow = routePointToCurrentDbRow(routePoint, bookingId);
+
+  return {
+    ...currentRow,
+    sequence_number: currentRow.sequence,
+    location_text: currentRow.location,
+    timing_note: currentRow.notes,
   };
 }
 
@@ -707,17 +715,25 @@ function legacyServiceItemTypeToDb(value: string) {
   return value === "midnight" ? "midnight_charge" : value;
 }
 
-function serviceItemToDbRow(serviceItem: AdminBookingServiceItemInput, bookingId: DbIdentifier) {
+function serviceItemToCurrentDbRow(serviceItem: AdminBookingServiceItemInput, bookingId: DbIdentifier) {
   const itemType = serviceItemTypeToDb(serviceItem.item_type || serviceItem.service_item_type);
   const quantity = positiveIntegerOrFallback(serviceItem.quantity ?? serviceItem.blocks_count);
 
   return {
     booking_id: bookingId,
     item_type: itemType,
-    service_item_type: legacyServiceItemTypeToDb(itemType),
     quantity,
-    blocks_count: quantity,
     notes: textOrNull(serviceItem.notes),
+  };
+}
+
+function serviceItemToCumulativeDbRow(serviceItem: AdminBookingServiceItemInput, bookingId: DbIdentifier) {
+  const currentRow = serviceItemToCurrentDbRow(serviceItem, bookingId);
+
+  return {
+    ...currentRow,
+    service_item_type: legacyServiceItemTypeToDb(currentRow.item_type),
+    blocks_count: currentRow.quantity,
   };
 }
 
@@ -908,6 +924,36 @@ function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor)
   };
 }
 
+async function insertRowAndSelectIdWithFallback(
+  client: SupabaseClient,
+  table: string,
+  currentPayload: UnknownRecord,
+  cumulativePayload: UnknownRecord,
+) {
+  const currentResult = await client.from(table).insert(currentPayload).select("id").single();
+
+  if (!currentResult.error && dbIdentifierOrNull(asRecord(currentResult.data).id)) {
+    return currentResult;
+  }
+
+  return client.from(table).insert(cumulativePayload).select("id").single();
+}
+
+async function insertRowsWithFallback(
+  client: SupabaseClient,
+  table: string,
+  currentPayload: UnknownRecord | UnknownRecord[],
+  cumulativePayload: UnknownRecord | UnknownRecord[],
+) {
+  const currentResult = await client.from(table).insert(currentPayload);
+
+  if (!currentResult.error) {
+    return currentResult;
+  }
+
+  return client.from(table).insert(cumulativePayload);
+}
+
 async function findOrCreateCustomerId(
   client: SupabaseClient,
   booking: AdminBookingRecordInput,
@@ -936,14 +982,18 @@ async function findOrCreateCustomerId(
     };
   }
 
-  const { data: insertedRow, error: insertError } = await client
-    .from("customers")
-    .insert({
+  const { data: insertedRow, error: insertError } = await insertRowAndSelectIdWithFallback(
+    client,
+    "customers",
+    {
       display_name: displayName,
       status: "active",
-    })
-    .select("id")
-    .single();
+    },
+    {
+      account_status: "active",
+      display_name: displayName,
+    },
+  );
   const insertedId = dbIdentifierOrNull(asRecord(insertedRow).id);
 
   if (insertError || !insertedId) {
@@ -1004,16 +1054,25 @@ async function ensureCustomerContact(
     };
   }
 
-  const { error } = await client.from("customer_contacts").insert({
-    customer_id: customerId,
-    display_name: displayName,
-    contact_name: contactName,
-    phone,
-    email,
-    role_label: "booking_contact",
-    contact_type: "booking_contact",
-    is_primary: true,
-  });
+  const { error } = await insertRowsWithFallback(
+    client,
+    "customer_contacts",
+    {
+      customer_id: customerId,
+      display_name: displayName,
+      phone,
+      email,
+      role_label: "booking_contact",
+      is_primary: true,
+    },
+    {
+      contact_name: contactName,
+      contact_type: "booking_contact",
+      customer_id: customerId,
+      email,
+      phone,
+    },
+  );
 
   if (error) {
     return {
@@ -1105,25 +1164,43 @@ async function createAuditLog(
   safeBefore: AdminBookingPersistenceRecord | null,
   safeAfter: AdminBookingPersistenceRecord | AdminBookingPersistenceInput | null,
 ): Promise<AdminBookingResult<null>> {
-  const { error } = await client.from("audit_logs").insert({
-    booking_id: bookingId,
-    customer_id: customerId,
-    entity_type: "booking",
-    entity_id: bookingId,
-    actor_role: actor.actor_role,
-    action: auditActionToDb(auditInput.action),
-    action_type: auditActionToDb(auditInput.action),
-    booking_reference: bookingReference,
-    source_surface: actor.actor_role === "system" ? "system" : "admin_api",
-    source_route: textOrNull(auditInput.source_route),
-    actor_label: textOrNull(auditInput.actor_label) || actor.actor_label,
-    change_summary: textOrNull(auditInput.change_summary),
-    reason: textOrNull(
-      [auditInput.change_summary, `Source: ${auditInput.source_route}`, `Actor: ${actor.actor_label}`].join(" "),
-    ),
-    safe_before: safeAuditSnapshot(safeBefore),
-    safe_after: safeAuditSnapshot(safeAfter),
-  });
+  const actionType = auditActionToDb(auditInput.action);
+  const reason = textOrNull(
+    [auditInput.change_summary, `Source: ${auditInput.source_route}`, `Actor: ${actor.actor_label}`].join(" "),
+  );
+  const sourceSurface = actor.actor_role === "system" ? "system" : "admin_api";
+  const { error } = await insertRowsWithFallback(
+    client,
+    "audit_logs",
+    {
+      booking_id: bookingId,
+      customer_id: customerId,
+      actor_role: actor.actor_role,
+      action_type: actionType,
+      booking_reference: bookingReference,
+      source_surface: sourceSurface,
+      reason,
+      safe_before: safeAuditSnapshot(safeBefore),
+      safe_after: safeAuditSnapshot(safeAfter),
+    },
+    {
+      action: actionType,
+      action_type: actionType,
+      actor_label: textOrNull(auditInput.actor_label) || actor.actor_label,
+      actor_role: actor.actor_role,
+      booking_id: bookingId,
+      booking_reference: bookingReference,
+      change_summary: textOrNull(auditInput.change_summary),
+      customer_id: customerId,
+      entity_id: bookingId,
+      entity_type: "booking",
+      reason,
+      safe_after: safeAuditSnapshot(safeAfter),
+      safe_before: safeAuditSnapshot(safeBefore),
+      source_route: textOrNull(auditInput.source_route),
+      source_surface: sourceSurface,
+    },
+  );
 
   if (error) {
     return {
@@ -1199,9 +1276,12 @@ export async function createAdminBookingThroughSupabaseAdapter(
   }
 
   if (input.route_points.length > 0) {
-    const { error } = await client
-      .from("booking_route_points")
-      .insert(input.route_points.map((routePoint) => routePointToDbRow(routePoint, bookingId)));
+    const { error } = await insertRowsWithFallback(
+      client,
+      "booking_route_points",
+      input.route_points.map((routePoint) => routePointToCurrentDbRow(routePoint, bookingId)),
+      input.route_points.map((routePoint) => routePointToCumulativeDbRow(routePoint, bookingId)),
+    );
 
     if (error) {
       return {
@@ -1213,9 +1293,12 @@ export async function createAdminBookingThroughSupabaseAdapter(
   }
 
   if (input.service_items.length > 0) {
-    const { error } = await client
-      .from("booking_service_items")
-      .insert(input.service_items.map((serviceItem) => serviceItemToDbRow(serviceItem, bookingId)));
+    const { error } = await insertRowsWithFallback(
+      client,
+      "booking_service_items",
+      input.service_items.map((serviceItem) => serviceItemToCurrentDbRow(serviceItem, bookingId)),
+      input.service_items.map((serviceItem) => serviceItemToCumulativeDbRow(serviceItem, bookingId)),
+    );
 
     if (error) {
       return {
@@ -1314,9 +1397,12 @@ export async function updateAdminBookingThroughSupabaseAdapter(
   }
 
   if (input.route_points.length > 0) {
-    const { error } = await client
-      .from("booking_route_points")
-      .insert(input.route_points.map((routePoint) => routePointToDbRow(routePoint, existing.id)));
+    const { error } = await insertRowsWithFallback(
+      client,
+      "booking_route_points",
+      input.route_points.map((routePoint) => routePointToCurrentDbRow(routePoint, existing.id)),
+      input.route_points.map((routePoint) => routePointToCumulativeDbRow(routePoint, existing.id)),
+    );
 
     if (error) {
       return {
@@ -1341,9 +1427,12 @@ export async function updateAdminBookingThroughSupabaseAdapter(
   }
 
   if (input.service_items.length > 0) {
-    const { error } = await client
-      .from("booking_service_items")
-      .insert(input.service_items.map((serviceItem) => serviceItemToDbRow(serviceItem, existing.id)));
+    const { error } = await insertRowsWithFallback(
+      client,
+      "booking_service_items",
+      input.service_items.map((serviceItem) => serviceItemToCurrentDbRow(serviceItem, existing.id)),
+      input.service_items.map((serviceItem) => serviceItemToCumulativeDbRow(serviceItem, existing.id)),
+    );
 
     if (error) {
       return {

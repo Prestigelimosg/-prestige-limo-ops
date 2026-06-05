@@ -52,7 +52,7 @@ for (const table of [
   "audit_logs",
 ]) {
   assertIncludes(combinedMigrations, `public.${table}`);
-  assertIncludes(adapter, `.from("${table}")`);
+  assertIncludes(adapter, `"${table}"`);
 }
 
 for (const legacyCumulativeColumn of [
@@ -104,12 +104,12 @@ for (const customerContactColumn of [
 for (const routePointColumn of [
   "booking_id: bookingId",
   "sequence,",
-  "sequence_number: sequence",
+  "sequence_number: currentRow.sequence",
   "point_type: pointType",
   "location,",
-  "location_text: location",
+  "location_text: currentRow.location",
   "notes,",
-  "timing_note: notes",
+  "timing_note: currentRow.notes",
 ]) {
   assertIncludes(adapter, routePointColumn);
 }
@@ -131,9 +131,9 @@ assertIncludes(
 for (const serviceItemColumn of [
   "booking_id: bookingId",
   "item_type: itemType",
-  "service_item_type: legacyServiceItemTypeToDb(itemType)",
+  "service_item_type: legacyServiceItemTypeToDb(currentRow.item_type)",
   "quantity,",
-  "blocks_count: quantity",
+  "blocks_count: currentRow.quantity",
   "notes: textOrNull(serviceItem.notes)",
 ]) {
   assertIncludes(adapter, serviceItemColumn);
@@ -181,10 +181,10 @@ for (const auditColumn of [
   'entity_type: "booking"',
   "entity_id: bookingId",
   "actor_role: actor.actor_role",
-  "action: auditActionToDb(auditInput.action)",
-  "action_type: auditActionToDb(auditInput.action)",
+  "action: actionType",
+  "action_type: actionType",
   "booking_reference: bookingReference",
-  'source_surface: actor.actor_role === "system" ? "system" : "admin_api"',
+  "source_surface: sourceSurface",
   "source_route: textOrNull(auditInput.source_route)",
   "actor_label: textOrNull(auditInput.actor_label) || actor.actor_label",
   "change_summary: textOrNull(auditInput.change_summary)",

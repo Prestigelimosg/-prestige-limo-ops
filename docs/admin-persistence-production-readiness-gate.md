@@ -38,6 +38,7 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 - [Legacy Public Table RLS Hardening Apply Evidence](legacy-public-table-rls-hardening-apply-evidence.md) records the masked Stage 4A-399 staging apply and read-only verification evidence.
 - [Legacy Public Table RLS Production Decision Packet](legacy-public-table-rls-production-decision-packet.md) records the Stage 4A-400 post-apply review and keeps production RLS apply blocked until a separate approval.
 - [Legacy Public Table RLS Production Target Proof Checklist](legacy-public-table-rls-production-target-proof-checklist.md) records the Stage 4A-401A stop reason and the target-proof requirements before any future production apply.
+- [Legacy Public Table RLS Production Evidence](legacy-public-table-rls-production-apply-evidence.md) records the Stage 4A-401C masked production target proof, already-applied migration ledger result, and read-only RLS/policy verification.
 
 ## Production Go/No-Go
 
@@ -65,8 +66,9 @@ Production readiness is currently `blocked`.
 - Stage 4A-399 applied and verified that draft in approved staging only; production still requires separate explicit William approval before any production RLS apply, production read, or production write.
 - Stage 4A-400 reviewed the staging evidence and keeps production decision `blocked`.
 - Stage 4A-401 stopped before apply because the local Supabase link still matched the masked Stage 4A-399 staging evidence target; Stage 4A-401A keeps production target proof blocked until the approved production project is proven safely.
+- Stage 4A-401C proved the approved production target with masked prefix/suffix evidence and verified the production ledger already contained `202606050001`; read-only production catalog verification showed RLS enabled and zero policies/public anon policies on all six legacy tables.
 - Do not fix those from the dashboard in this stage.
-- If those tables still exist and are exposed, production readiness should require a separate approved RLS hardening migration stage.
+- Production persistence enablement remains blocked even though the legacy public-table RLS hardening evidence is now recorded.
 
 ## Required Separate Approvals
 

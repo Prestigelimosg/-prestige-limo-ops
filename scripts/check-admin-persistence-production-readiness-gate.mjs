@@ -9,6 +9,7 @@ const files = {
   cleanupTest: "scripts/test-admin-persistence-staging-cleanup-decision.mjs",
   docsIndex: "docs/test-and-safety-docs-index.md",
   productionGate: "docs/admin-persistence-production-readiness-gate.md",
+  productionRlsEvidence: "docs/legacy-public-table-rls-production-apply-evidence.md",
   productionTest: "scripts/test-admin-persistence-production-readiness-gate.mjs",
   readonlyEnvEvidence: "docs/admin-persistence-staging-readonly-env-key-confirmed.md",
   serverAdapter: "lib/admin-booking-supabase-adapter.ts",
@@ -57,7 +58,8 @@ for (const expected of [
   "Staging evidence exists, but production env is not verified.",
   "Production feature flag remains OFF.",
   "Staging verification rows may exist and need a separate cleanup decision.",
-  "If those tables still exist and are exposed, production readiness should require a separate approved RLS hardening migration stage.",
+  "Stage 4A-401C proved the approved production target with masked prefix/suffix evidence",
+  "Production persistence enablement remains blocked even though the legacy public-table RLS hardening evidence is now recorded.",
 ]) {
   assertIncludes(contents.productionGate, expected);
 }
@@ -100,6 +102,8 @@ for (const expected of [
 assertIncludes(contents.serverEvidence, "Stage 4A-393");
 assertIncludes(contents.apiEvidence, "Stage 4A-394");
 assertIncludes(contents.readonlyEnvEvidence, "Stage 4A-392");
+assertIncludes(contents.productionRlsEvidence, "Stage 4A-401C");
+assertIncludes(contents.productionRlsEvidence, "No production persistence enablement was performed.");
 assertIncludes(contents.docsIndex, "admin-persistence-production-readiness-gate.md");
 assertIncludes(contents.docsIndex, "admin-persistence-staging-cleanup-decision.md");
 assertIncludes(contents.adminRoute, "requireAdminDispatcherBoundary");
@@ -138,13 +142,14 @@ console.log(
       blockers: [
         "production_env_not_verified",
         "production_feature_flag_off",
-        "legacy_public_table_rls_advisor_requires_separate_approved_stage",
+        "production_persistence_enablement_requires_separate_approval",
         "staging_cleanup_requires_separate_approval_if_desired",
       ],
       evidence: [
         "stage_4a_392_readonly_env_key_confirmed",
         "stage_4a_393_server_adapter_save_load_passed",
         "stage_4a_394_admin_api_route_save_load_passed",
+        "stage_4a_401c_legacy_public_table_rls_production_evidence_recorded",
       ],
     },
     null,

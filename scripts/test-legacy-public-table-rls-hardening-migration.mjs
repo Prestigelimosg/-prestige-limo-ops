@@ -94,9 +94,11 @@ for (const requiredText of [
   "Stage 4A-399 later applied that same migration to the approved staging Supabase project only",
   "Read-only catalog verification showed RLS enabled on all six target tables",
   "Read-only catalog verification showed zero policies and zero public/anon policy count on all six target tables",
+  "Stage 4A-401C Production Result",
+  "No production migration apply command was run in Stage 4A-401C because the migration was already present remotely.",
   "No public anon policies are added",
   "No data is deleted",
-  "Production enablement remains not approved",
+  "Production persistence enablement remains not approved",
   migrationRelativePath,
 ]) {
   assertIncludes(hardeningDoc, requiredText);
@@ -136,6 +138,7 @@ assertIncludes(productionGate, "production still requires separate explicit Will
 assertIncludes(docsIndex, "legacy-public-table-rls-hardening.md");
 assertIncludes(docsIndex, "legacy-public-table-rls-hardening-apply-evidence.md");
 assertIncludes(docsIndex, "legacy-public-table-rls-production-decision-packet.md");
+assertIncludes(docsIndex, "legacy-public-table-rls-production-apply-evidence.md");
 assertIncludes(productionDecisionPacket, "Stage 4A-400");
 assertIncludes(productionDecisionPacket, "Production decision: `blocked`.");
 assertIncludes(productionDecisionPacket, "Production RLS apply is not approved.");

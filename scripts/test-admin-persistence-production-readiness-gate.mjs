@@ -73,7 +73,8 @@ for (const requiredText of [
   "public.travelers",
   "public.drivers",
   "Do not fix those from the dashboard in this stage.",
-  "separate approved RLS hardening migration stage",
+  "Stage 4A-401C proved the approved production target with masked prefix/suffix evidence",
+  "Production persistence enablement remains blocked even though the legacy public-table RLS hardening evidence is now recorded.",
 ]) {
   assertIncludes(productionGate, requiredText);
 }
@@ -98,7 +99,8 @@ assertIncludes(guard, "mode: \"local-readonly\"");
 assertIncludes(guard, "liveSaveLoadAttempted: false");
 assertIncludes(guard, "productionApproved: false");
 assertIncludes(guard, "stagingCleanupApproved: false");
-assertIncludes(guard, "legacy_public_table_rls_advisor_requires_separate_approved_stage");
+assertIncludes(guard, "production_persistence_enablement_requires_separate_approval");
+assertIncludes(guard, "stage_4a_401c_legacy_public_table_rls_production_evidence_recorded");
 assertNotIncludes(guard, "@supabase/supabase-js");
 assertNotIncludes(guard, "createClient");
 

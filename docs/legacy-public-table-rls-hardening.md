@@ -26,9 +26,19 @@ Now that browser direct access has been retired, Stage 4A-398 prepared the RLS h
 - Read-only catalog verification showed zero policies and zero public/anon policy count on all six target tables.
 - [Legacy Public Table RLS Hardening Apply Evidence](legacy-public-table-rls-hardening-apply-evidence.md) records the masked staging evidence.
 
+## Stage 4A-401C Production Result
+
+- William approved Stage 4A-401C for the proven production Supabase project.
+- Masked production target proof passed without recording the full project reference.
+- Read-only production migration ledger verification showed `202606050001` already present remotely.
+- No production migration apply command was run in Stage 4A-401C because the migration was already present remotely.
+- Read-only production catalog verification showed RLS enabled on all six target tables.
+- Read-only production catalog verification showed zero policies and zero public/anon policy count on all six target tables.
+- [Legacy Public Table RLS Production Evidence](legacy-public-table-rls-production-apply-evidence.md) records the masked production evidence.
+
 ## Approval Boundary
 
-- Production enablement remains not approved.
+- Production persistence enablement remains not approved.
 - Production writes remain not approved.
 - Staging cleanup write/delete remains not approved.
 - Dashboard quick fixes remain not approved.

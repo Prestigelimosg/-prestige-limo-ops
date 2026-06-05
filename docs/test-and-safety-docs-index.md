@@ -20,6 +20,7 @@ This index is a docs-only cross-reference for existing Prestige Limo Ops testing
 ## Production And Environment Safety
 
 - [Production Environment Checklist](production-environment-checklist.md) owns staging/live rollout safety, environment variable handling, secret handling, and production readiness gates.
+- [Admin Persistence Enable Approval Checklist](admin-persistence-enable-approval-checklist.md) owns the read-only persistence enablement approval/audit checklist, mocked backend gate list, kill-switch requirements, forbidden fields, and no-real-write approval boundary.
 - [Supabase Schema And RLS Review Checklist](supabase-schema-rls-review-checklist.md) owns future Supabase schema, RLS, public-page, service-role, storage, and access-boundary review.
 - [Driver Job Link Production Checklist](driver-job-link-production-checklist.md) owns the production driver-link go/no-go checklist, approval locks, required tests, and disabled-by-default production posture.
 

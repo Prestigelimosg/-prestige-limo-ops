@@ -16,6 +16,8 @@ import type { AdminDispatcherBoundaryContext } from "./admin-dispatcher-auth-bou
 
 export const adminBookingSupabaseAdapterVersion =
   "stage-4a-376-server-only-supabase-adapter-v1";
+export const adminBookingPersistenceStagingReadinessVersion =
+  "stage-4a-379-admin-persistence-staging-config-readiness-v1";
 
 export type AdminBookingPersistenceAdapterActor = {
   actor_label: string;
@@ -27,6 +29,44 @@ export type AdminBookingPersistenceAdapterActor = {
 };
 
 type UnknownRecord = Record<string, unknown>;
+type AdminBookingPersistenceStagingRequirement =
+  | "write_gate"
+  | "database_url"
+  | "server_credential"
+  | "admin_mode"
+  | "admin_access_check"
+  | "admin_role";
+type AdminBookingPersistenceStagingRequirementStatus = "ready" | "missing" | "invalid";
+type AdminBookingPersistenceStagingRequirements = Record<
+  AdminBookingPersistenceStagingRequirement,
+  AdminBookingPersistenceStagingRequirementStatus
+>;
+type AdminBookingPersistenceStagingSideEffects = {
+  databaseClient: "not_created";
+  databaseWrites: "not_opened";
+  adminDispatcherGate: "still_required";
+};
+type AdminBookingPersistenceStagingReadinessBase = {
+  environment: "server";
+  requirements: AdminBookingPersistenceStagingRequirements;
+  sideEffects: AdminBookingPersistenceStagingSideEffects;
+  status: 200 | 503;
+  version: typeof adminBookingPersistenceStagingReadinessVersion;
+};
+export type AdminBookingPersistenceStagingReadinessResult =
+  | (AdminBookingPersistenceStagingReadinessBase & {
+      ok: true;
+      ready: true;
+      status: 200;
+    })
+  | (AdminBookingPersistenceStagingReadinessBase & {
+      error: "Admin booking persistence staging configuration is not ready.";
+      invalid: AdminBookingPersistenceStagingRequirement[];
+      missing: AdminBookingPersistenceStagingRequirement[];
+      ok: false;
+      ready: false;
+      status: 503;
+    });
 
 const maxTextLength = 1000;
 const safeSaveError = "Admin booking persistence save failed safely.";
@@ -36,9 +76,14 @@ const safeUpdateError = "Admin booking persistence update failed safely.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 const disabledPersistenceError = "Admin booking persistence is not enabled on this server.";
 const incompleteConfigurationError = "Admin booking persistence server configuration is incomplete.";
+const safeStagingReadinessError =
+  "Admin booking persistence staging configuration is not ready.";
 
 const allowedAdapterRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedAdapterSourceSurfaces = new Set(["admin_api", "customer_booking_request", "system"]);
+const allowedStagingReadinessRoles = new Set(["admin", "dispatcher"]);
+const placeholderConfigPattern =
+  /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
 
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -58,6 +103,142 @@ function textOrNull(value: unknown) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed.slice(0, maxTextLength) : null;
+}
+
+function configValueOrNull(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  return trimmed ? trimmed : null;
+}
+
+function isPlaceholderConfigValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    placeholderConfigPattern.test(normalized) ||
+    normalized.includes("placeholder") ||
+    normalized.includes("change_me") ||
+    normalized.includes("changeme") ||
+    normalized.includes("replace_me") ||
+    normalized.includes("your-") ||
+    normalized.includes("your_") ||
+    normalized.includes("<") ||
+    normalized.includes(">")
+  );
+}
+
+function validServerDatabaseUrl(value: string | null) {
+  if (!value || isPlaceholderConfigValue(value)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+
+    return (
+      url.protocol === "https:" &&
+      hostname.length > 0 &&
+      !hostname.includes("localhost") &&
+      !hostname.includes("example") &&
+      !hostname.includes("placeholder")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function validServerCredential(value: string | null) {
+  if (!value || isPlaceholderConfigValue(value)) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    value.trim().length >= 24 &&
+    normalized !== "anon" &&
+    normalized !== "public" &&
+    !normalized.includes("anon_key") &&
+    !normalized.includes("public_key") &&
+    !normalized.includes("next_public")
+  );
+}
+
+function readinessRequirementStatus(
+  value: string | null,
+  validator: (value: string) => boolean,
+): AdminBookingPersistenceStagingRequirementStatus {
+  if (!value) {
+    return "missing";
+  }
+
+  return validator(value) ? "ready" : "invalid";
+}
+
+function readinessSideEffects(): AdminBookingPersistenceStagingSideEffects {
+  return {
+    adminDispatcherGate: "still_required",
+    databaseClient: "not_created",
+    databaseWrites: "not_opened",
+  };
+}
+
+export function checkAdminBookingPersistenceStagingConfigReadiness(): AdminBookingPersistenceStagingReadinessResult {
+  const requirements: AdminBookingPersistenceStagingRequirements = {
+    admin_access_check: readinessRequirementStatus(
+      configValueOrNull(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN),
+      validServerCredential,
+    ),
+    admin_mode: readinessRequirementStatus(
+      configValueOrNull(process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE),
+      (value) => value === "server-session-token",
+    ),
+    admin_role: readinessRequirementStatus(
+      configValueOrNull(process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE),
+      (value) => allowedStagingReadinessRoles.has(value),
+    ),
+    database_url: readinessRequirementStatus(configValueOrNull(process.env.SUPABASE_URL), validServerDatabaseUrl),
+    server_credential: readinessRequirementStatus(
+      configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      validServerCredential,
+    ),
+    write_gate: readinessRequirementStatus(
+      configValueOrNull(process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED),
+      (value) => value === "true",
+    ),
+  };
+  const missing = Object.entries(requirements)
+    .filter(([, status]) => status === "missing")
+    .map(([requirement]) => requirement as AdminBookingPersistenceStagingRequirement);
+  const invalid = Object.entries(requirements)
+    .filter(([, status]) => status === "invalid")
+    .map(([requirement]) => requirement as AdminBookingPersistenceStagingRequirement);
+  const base = {
+    environment: "server",
+    requirements,
+    sideEffects: readinessSideEffects(),
+    version: adminBookingPersistenceStagingReadinessVersion,
+  } satisfies Omit<AdminBookingPersistenceStagingReadinessBase, "status">;
+
+  if (missing.length > 0 || invalid.length > 0) {
+    return {
+      ...base,
+      error: safeStagingReadinessError,
+      invalid,
+      missing,
+      ok: false,
+      ready: false,
+      status: 503,
+    };
+  }
+
+  return {
+    ...base,
+    ok: true,
+    ready: true,
+    status: 200,
+  };
 }
 
 function integerOrNull(value: unknown) {

@@ -36,6 +36,7 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 - [Legacy Public Table Server Route Hardening](legacy-public-table-server-route-hardening.md) records the Stage 4A-397 browser-direct-access retirement and confirms the RLS migration remains separate.
 - [Legacy Public Table RLS Hardening](legacy-public-table-rls-hardening.md) records the Stage 4A-398 local RLS migration draft and Stage 4A-399 staging-only apply result.
 - [Legacy Public Table RLS Hardening Apply Evidence](legacy-public-table-rls-hardening-apply-evidence.md) records the masked Stage 4A-399 staging apply and read-only verification evidence.
+- [Legacy Public Table RLS Production Decision Packet](legacy-public-table-rls-production-decision-packet.md) records the Stage 4A-400 post-apply review and keeps production RLS apply blocked until a separate approval.
 
 ## Production Go/No-Go
 
@@ -61,6 +62,7 @@ Production readiness is currently `blocked`.
 - Stage 4A-397 moved the admin dashboard runtime access for those tables behind a server-only admin route.
 - Stage 4A-398 created a local RLS hardening migration draft.
 - Stage 4A-399 applied and verified that draft in approved staging only; production still requires separate explicit William approval before any production RLS apply, production read, or production write.
+- Stage 4A-400 reviewed the staging evidence and keeps production decision `blocked`.
 - Do not fix those from the dashboard in this stage.
 - If those tables still exist and are exposed, production readiness should require a separate approved RLS hardening migration stage.
 
@@ -82,6 +84,7 @@ Production readiness is currently `blocked`.
 - No production Supabase CLI command is approved.
 - No production migration is approved.
 - Stage 4A-399 approves only the completed staging apply and verification; applying or deploying to production remains not approved.
+- Stage 4A-400 is a decision packet only; it does not approve production apply, production reads, production writes, dashboard fixes, raw SQL, or live save/load.
 - No production write is approved.
 - No dashboard quick fix is approved.
 - `.env.stage4a388.local` must remain ignored and uncommitted.

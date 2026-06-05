@@ -12,6 +12,10 @@ const hardeningApplyDocPath = path.join(
   process.cwd(),
   "docs/legacy-public-table-rls-hardening-apply-evidence.md",
 );
+const productionDecisionPacketPath = path.join(
+  process.cwd(),
+  "docs/legacy-public-table-rls-production-decision-packet.md",
+);
 const routeHardeningDocPath = path.join(process.cwd(), "docs/legacy-public-table-server-route-hardening.md");
 const productionGatePath = path.join(process.cwd(), "docs/admin-persistence-production-readiness-gate.md");
 const docsIndexPath = path.join(process.cwd(), "docs/test-and-safety-docs-index.md");
@@ -48,6 +52,7 @@ function sorted(values) {
 const migration = await readFile(migrationPath, "utf8");
 const hardeningDoc = await readFile(hardeningDocPath, "utf8");
 const hardeningApplyDoc = await readFile(hardeningApplyDocPath, "utf8");
+const productionDecisionPacket = await readFile(productionDecisionPacketPath, "utf8");
 const routeHardeningDoc = await readFile(routeHardeningDocPath, "utf8");
 const productionGate = await readFile(productionGatePath, "utf8");
 const docsIndex = await readFile(docsIndexPath, "utf8");
@@ -130,6 +135,11 @@ assertIncludes(productionGate, "Stage 4A-399 applied and verified that draft in 
 assertIncludes(productionGate, "production still requires separate explicit William approval");
 assertIncludes(docsIndex, "legacy-public-table-rls-hardening.md");
 assertIncludes(docsIndex, "legacy-public-table-rls-hardening-apply-evidence.md");
+assertIncludes(docsIndex, "legacy-public-table-rls-production-decision-packet.md");
+assertIncludes(productionDecisionPacket, "Stage 4A-400");
+assertIncludes(productionDecisionPacket, "Production decision: `blocked`.");
+assertIncludes(productionDecisionPacket, "Production RLS apply is not approved.");
+assertIncludes(productionDecisionPacket, "No Supabase CLI command was run.");
 
 for (const requiredText of [
   "parseEnvFile",

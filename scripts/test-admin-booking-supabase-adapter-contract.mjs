@@ -272,7 +272,7 @@ class MockSupabaseClient {
   createId(table) {
     const nextId = this.nextIds[table]++;
 
-    return `${table}-${nextId}`;
+    return nextId;
   }
 
   recordOperation(action, table, payload) {
@@ -595,7 +595,9 @@ function assertSixTableCreateMapping(mock) {
     status: "active",
   });
   assert.deepEqual(insertedOperation(client, "customer_contacts").payload, {
-    customer_id: "customers-1",
+    customer_id: 1,
+    contact_name: "Safe Ops Contact",
+    contact_type: "booking_contact",
     display_name: "Safe Ops Contact",
     email: "safe-ops@example.com",
     is_primary: true,
@@ -612,7 +614,7 @@ function assertSixTableCreateMapping(mock) {
     contact_phone: "+65 9000 0001",
     customer_display_name: "Safe Ops Account",
     customer_facing_status: "pending_review",
-    customer_id: "customers-1",
+    customer_id: 1,
     dropoff_location: "Safe Canonical Dropoff",
     passenger_name: "Safe Passenger",
     passenger_phone: "+65 9000 0002",
@@ -626,50 +628,69 @@ function assertSixTableCreateMapping(mock) {
   });
   assert.deepEqual(insertedOperation(client, "booking_route_points").payload, [
     {
-      booking_id: "bookings-1",
+      booking_id: 1,
       location: "Safe Canonical Pickup",
+      location_text: "Safe Canonical Pickup",
       notes: "Safe pickup note",
       point_type: "pickup",
       sequence: 1,
+      sequence_number: 1,
+      timing_note: "Safe pickup note",
     },
     {
-      booking_id: "bookings-1",
+      booking_id: 1,
       location: "Safe Canonical Stop",
+      location_text: "Safe Canonical Stop",
       notes: "Safe stop note",
       point_type: "stop",
       sequence: 2,
+      sequence_number: 2,
+      timing_note: "Safe stop note",
     },
     {
-      booking_id: "bookings-1",
+      booking_id: 1,
       location: "Safe Canonical Dropoff",
+      location_text: "Safe Canonical Dropoff",
       notes: "Safe dropoff note",
       point_type: "dropoff",
       sequence: 3,
+      sequence_number: 3,
+      timing_note: "Safe dropoff note",
     },
   ]);
   assert.deepEqual(insertedOperation(client, "booking_service_items").payload, [
     {
-      booking_id: "bookings-1",
+      blocks_count: 1,
+      booking_id: 1,
       item_type: "extra_stop",
       notes: "Safe extra stop note",
       quantity: 1,
+      service_item_type: "extra_stop",
     },
     {
-      booking_id: "bookings-1",
+      blocks_count: 2,
+      booking_id: 1,
       item_type: "midnight",
       notes: "Safe midnight note",
       quantity: 2,
+      service_item_type: "midnight_charge",
     },
   ]);
 
   const auditRow = insertedOperation(client, "audit_logs").payload;
 
   assert.equal(auditRow.actor_role, "admin");
+  assert.equal(auditRow.action, "booking_created");
   assert.equal(auditRow.action_type, "booking_created");
-  assert.equal(auditRow.booking_id, "bookings-1");
-  assert.equal(auditRow.customer_id, "customers-1");
+  assert.equal(auditRow.actor_label, "Contract Test Admin");
+  assert.equal(auditRow.booking_id, 1);
+  assert.equal(auditRow.change_summary, "Contract test safe operational booking write.");
+  assert.equal(auditRow.customer_id, 1);
+  assert.equal(auditRow.entity_id, 1);
+  assert.equal(auditRow.entity_type, "booking");
   assert.equal(auditRow.booking_reference, "SAFE-ADM-001");
   assert.equal(auditRow.source_surface, "admin_api");
+  assert.equal(auditRow.source_route, "/api/admin-bookings");
   assert.equal(auditRow.safe_before, null);
   assert.equal(auditRow.safe_after.booking_reference, "SAFE-ADM-001");
   assert.equal(auditRow.safe_after.customer_display_name, "Safe Ops Account");

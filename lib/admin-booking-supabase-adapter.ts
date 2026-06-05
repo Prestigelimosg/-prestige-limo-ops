@@ -31,6 +31,7 @@ export type AdminBookingPersistenceAdapterActor = {
 };
 
 type UnknownRecord = Record<string, unknown>;
+type DbIdentifier = string | number;
 type AdminBookingPersistenceStagingRequirement =
   | "write_gate"
   | "database_url"
@@ -142,6 +143,20 @@ function textOrNull(value: unknown) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed.slice(0, maxTextLength) : null;
+}
+
+function dbIdentifierOrNull(value: unknown): DbIdentifier | null {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return value;
+  }
+
+  return textOrNull(value);
+}
+
+function dbIdentifierTextOrNull(value: unknown) {
+  const identifier = dbIdentifierOrNull(value);
+
+  return identifier === null ? null : String(identifier);
 }
 
 function configValueOrNull(value: string | undefined) {
@@ -670,26 +685,47 @@ function auditActionToDb(value: string) {
   return "admin_dispatcher_override";
 }
 
-function routePointToDbRow(routePoint: AdminBookingRoutePointInput, bookingId: string) {
+function routePointToDbRow(routePoint: AdminBookingRoutePointInput, bookingId: DbIdentifier) {
+  const pointType = routePoint.point_type === "extra_stop" ? "stop" : routePoint.point_type || "waypoint";
+  const sequence = positiveIntegerOrFallback(routePoint.sequence_number ?? routePoint.sequence);
+  const location = textOrNull(routePoint.location_text) || textOrNull(routePoint.location) || "Location To Confirm";
+  const notes = textOrNull(routePoint.notes) || textOrNull(routePoint.timing_note);
+
   return {
     booking_id: bookingId,
-    sequence: positiveIntegerOrFallback(routePoint.sequence_number ?? routePoint.sequence),
-    point_type: routePoint.point_type === "extra_stop" ? "extra_stop" : routePoint.point_type || "waypoint",
-    location: textOrNull(routePoint.location_text) || textOrNull(routePoint.location) || "Location To Confirm",
-    notes: textOrNull(routePoint.notes) || textOrNull(routePoint.timing_note),
+    sequence,
+    sequence_number: sequence,
+    point_type: pointType,
+    location,
+    location_text: location,
+    notes,
+    timing_note: notes,
   };
 }
 
-function serviceItemToDbRow(serviceItem: AdminBookingServiceItemInput, bookingId: string) {
+function legacyServiceItemTypeToDb(value: string) {
+  return value === "midnight" ? "midnight_charge" : value;
+}
+
+function serviceItemToDbRow(serviceItem: AdminBookingServiceItemInput, bookingId: DbIdentifier) {
+  const itemType = serviceItemTypeToDb(serviceItem.item_type || serviceItem.service_item_type);
+  const quantity = positiveIntegerOrFallback(serviceItem.quantity ?? serviceItem.blocks_count);
+
   return {
     booking_id: bookingId,
-    item_type: serviceItemTypeToDb(serviceItem.item_type || serviceItem.service_item_type),
-    quantity: positiveIntegerOrFallback(serviceItem.quantity ?? serviceItem.blocks_count),
+    item_type: itemType,
+    service_item_type: legacyServiceItemTypeToDb(itemType),
+    quantity,
+    blocks_count: quantity,
     notes: textOrNull(serviceItem.notes),
   };
 }
 
-function bookingToDbRow(booking: AdminBookingRecordInput, customerId: string | null, actor: AdminBookingPersistenceAdapterActor) {
+function bookingToDbRow(
+  booking: AdminBookingRecordInput,
+  customerId: DbIdentifier | null,
+  actor: AdminBookingPersistenceAdapterActor,
+) {
   const pickupAt = textOrNull(booking.pickup_at) || textOrNull(booking.pickup_datetime) || new Date().toISOString();
   const pickupLocation = textOrNull(booking.pickup_location) || "Pickup To Confirm";
   const dropoffLocation = textOrNull(booking.dropoff_location) || "Drop-off To Confirm";
@@ -752,7 +788,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     booking_reference: textOrNull(row.booking_reference) || "",
     source_channel: sourceSurfaceToUi(row.source_surface),
     source_surface: textOrNull(row.source_surface),
-    customer_id: textOrNull(row.customer_id),
+    customer_id: dbIdentifierTextOrNull(row.customer_id),
     pickup_datetime: textOrNull(row.pickup_at),
     pickup_at: textOrNull(row.pickup_at),
     pickup_location: textOrNull(row.pickup_location),
@@ -875,7 +911,7 @@ function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor)
 async function findOrCreateCustomerId(
   client: SupabaseClient,
   booking: AdminBookingRecordInput,
-): Promise<AdminBookingResult<string>> {
+): Promise<AdminBookingResult<DbIdentifier>> {
   const displayName = textOrNull(booking.customer_display_name) || "Customer To Confirm";
   const { data: existingRows, error: existingError } = await client
     .from("customers")
@@ -891,7 +927,7 @@ async function findOrCreateCustomerId(
     };
   }
 
-  const existingId = textOrNull(asRecord(asArray(existingRows)[0]).id);
+  const existingId = dbIdentifierOrNull(asRecord(asArray(existingRows)[0]).id);
 
   if (existingId) {
     return {
@@ -908,7 +944,7 @@ async function findOrCreateCustomerId(
     })
     .select("id")
     .single();
-  const insertedId = textOrNull(asRecord(insertedRow).id);
+  const insertedId = dbIdentifierOrNull(asRecord(insertedRow).id);
 
   if (insertError || !insertedId) {
     return {
@@ -926,12 +962,13 @@ async function findOrCreateCustomerId(
 
 async function ensureCustomerContact(
   client: SupabaseClient,
-  customerId: string,
+  customerId: DbIdentifier,
   booking: AdminBookingRecordInput,
 ): Promise<AdminBookingResult<null>> {
   const displayName = textOrNull(booking.contact_display_name) || textOrNull(booking.customer_display_name);
   const phone = textOrNull(booking.contact_phone);
   const email = textOrNull(booking.contact_email);
+  const contactName = displayName || phone || email || "Contact To Confirm";
 
   if (!displayName && !phone && !email) {
     return {
@@ -960,7 +997,7 @@ async function ensureCustomerContact(
     };
   }
 
-  if (textOrNull(asRecord(asArray(existingRows)[0]).id)) {
+  if (dbIdentifierOrNull(asRecord(asArray(existingRows)[0]).id)) {
     return {
       ok: true,
       data: null,
@@ -970,9 +1007,11 @@ async function ensureCustomerContact(
   const { error } = await client.from("customer_contacts").insert({
     customer_id: customerId,
     display_name: displayName,
+    contact_name: contactName,
     phone,
     email,
     role_label: "booking_contact",
+    contact_type: "booking_contact",
     is_primary: true,
   });
 
@@ -992,7 +1031,7 @@ async function ensureCustomerContact(
 
 async function fetchAdminBookingById(
   client: SupabaseClient,
-  bookingId: string,
+  bookingId: DbIdentifier,
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
   const { data, error } = await client
     .from("bookings")
@@ -1020,7 +1059,7 @@ async function fetchAdminBookingById(
 async function fetchAdminBookingByReference(
   client: SupabaseClient,
   bookingReference: string,
-): Promise<AdminBookingResult<AdminBookingPersistenceRecord & { id: string }>> {
+): Promise<AdminBookingResult<AdminBookingPersistenceRecord & { id: DbIdentifier }>> {
   const { data, error } = await client
     .from("bookings")
     .select(
@@ -1029,7 +1068,7 @@ async function fetchAdminBookingByReference(
     .eq("booking_reference", bookingReference)
     .limit(1)
     .maybeSingle();
-  const bookingId = textOrNull(asRecord(data).id);
+  const bookingId = dbIdentifierOrNull(asRecord(data).id);
 
   if (error) {
     return {
@@ -1058,8 +1097,8 @@ async function fetchAdminBookingByReference(
 
 async function createAuditLog(
   client: SupabaseClient,
-  bookingId: string,
-  customerId: string | null,
+  bookingId: DbIdentifier,
+  customerId: DbIdentifier | null,
   bookingReference: string,
   auditInput: AdminBookingAuditInput,
   actor: AdminBookingPersistenceAdapterActor,
@@ -1069,10 +1108,16 @@ async function createAuditLog(
   const { error } = await client.from("audit_logs").insert({
     booking_id: bookingId,
     customer_id: customerId,
+    entity_type: "booking",
+    entity_id: bookingId,
     actor_role: actor.actor_role,
+    action: auditActionToDb(auditInput.action),
     action_type: auditActionToDb(auditInput.action),
     booking_reference: bookingReference,
     source_surface: actor.actor_role === "system" ? "system" : "admin_api",
+    source_route: textOrNull(auditInput.source_route),
+    actor_label: textOrNull(auditInput.actor_label) || actor.actor_label,
+    change_summary: textOrNull(auditInput.change_summary),
     reason: textOrNull(
       [auditInput.change_summary, `Source: ${auditInput.source_route}`, `Actor: ${actor.actor_label}`].join(" "),
     ),
@@ -1143,7 +1188,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     .insert(bookingRow)
     .select("id")
     .single();
-  const bookingId = textOrNull(asRecord(insertedBooking).id);
+  const bookingId = dbIdentifierOrNull(asRecord(insertedBooking).id);
 
   if (bookingError || !bookingId) {
     return {

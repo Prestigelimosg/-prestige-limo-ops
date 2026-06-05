@@ -6,6 +6,7 @@ import type {
   AdminBookingAuditInput,
   AdminBookingPersistenceInput,
   AdminBookingPersistenceRecord,
+  AdminBookingPersistenceSafeErrorCategory,
   AdminBookingPersistenceUpdateInput,
   AdminBookingRecordInput,
   AdminBookingResult,
@@ -143,6 +144,74 @@ function textOrNull(value: unknown) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed.slice(0, maxTextLength) : null;
+}
+
+function classifyAdapterDatabaseFailure(
+  error: unknown,
+): AdminBookingPersistenceSafeErrorCategory {
+  const record = asRecord(error);
+  const haystack = Object.values(record)
+    .filter((value) => typeof value === "string" || typeof value === "number")
+    .map((value) => String(value).toLowerCase())
+    .join(" ");
+  const code = textOrNull(record.code)?.toLowerCase() || "";
+  const statusValue = Number(record.status);
+  const status = Number.isFinite(statusValue) ? statusValue : null;
+
+  if (
+    status === 401 ||
+    code === "401" ||
+    haystack.includes("invalid api") ||
+    haystack.includes("invalid jwt") ||
+    haystack.includes("jwt")
+  ) {
+    return "auth_or_key_rejected";
+  }
+
+  if (
+    status === 403 ||
+    code === "42501" ||
+    haystack.includes("permission denied") ||
+    haystack.includes("row level security") ||
+    haystack.includes("row-level security") ||
+    haystack.includes("rls")
+  ) {
+    return "permission_or_rls_denied";
+  }
+
+  if (
+    code === "42p01" ||
+    haystack.includes("could not find the table") ||
+    (haystack.includes("relation") && haystack.includes("does not exist"))
+  ) {
+    return "table_unreachable";
+  }
+
+  if (
+    code === "42703" ||
+    code === "pgrst204" ||
+    (haystack.includes("column") &&
+      (haystack.includes("does not exist") ||
+        haystack.includes("not found") ||
+        haystack.includes("schema cache")))
+  ) {
+    return "column_missing";
+  }
+
+  return "unknown_adapter_failure";
+}
+
+function safeAdapterFailure<T>(
+  error: string,
+  status: number,
+  databaseError: unknown,
+): AdminBookingResult<T> {
+  return {
+    ok: false,
+    status,
+    error,
+    category: classifyAdapterDatabaseFailure(databaseError),
+  };
 }
 
 function dbIdentifierOrNull(value: unknown): DbIdentifier | null {
@@ -914,14 +983,23 @@ function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor)
     };
   }
 
-  return {
-    ok: true,
-    data: createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        persistSession: false,
-      },
-    }),
-  };
+  try {
+    return {
+      ok: true,
+      data: createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          persistSession: false,
+        },
+      }),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 503,
+      error: safeStagingReadinessError,
+      category: "client_init_failed",
+    };
+  }
 }
 
 async function insertRowAndSelectIdWithFallback(
@@ -966,11 +1044,7 @@ async function findOrCreateCustomerId(
     .limit(1);
 
   if (existingError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeSaveError,
-    };
+    return safeAdapterFailure(safeSaveError, 500, existingError);
   }
 
   const existingId = dbIdentifierOrNull(asRecord(asArray(existingRows)[0]).id);
@@ -997,11 +1071,7 @@ async function findOrCreateCustomerId(
   const insertedId = dbIdentifierOrNull(asRecord(insertedRow).id);
 
   if (insertError || !insertedId) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeSaveError,
-    };
+    return safeAdapterFailure(safeSaveError, 500, insertError);
   }
 
   return {
@@ -1040,11 +1110,7 @@ async function ensureCustomerContact(
   const { data: existingRows, error: existingError } = await query;
 
   if (existingError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeSaveError,
-    };
+    return safeAdapterFailure(safeSaveError, 500, existingError);
   }
 
   if (dbIdentifierOrNull(asRecord(asArray(existingRows)[0]).id)) {
@@ -1075,11 +1141,7 @@ async function ensureCustomerContact(
   );
 
   if (error) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeSaveError,
-    };
+    return safeAdapterFailure(safeSaveError, 500, error);
   }
 
   return {
@@ -1102,11 +1164,7 @@ async function fetchAdminBookingById(
     .maybeSingle();
 
   if (error || !data) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeReloadError,
-    };
+    return safeAdapterFailure(safeReloadError, 500, error);
   }
 
   return {
@@ -1130,11 +1188,7 @@ async function fetchAdminBookingByReference(
   const bookingId = dbIdentifierOrNull(asRecord(data).id);
 
   if (error) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
+    return safeAdapterFailure(safeUpdateError, 500, error);
   }
 
   if (!bookingId || !data) {
@@ -1203,11 +1257,7 @@ async function createAuditLog(
   );
 
   if (error) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeSaveError,
-    };
+    return safeAdapterFailure(safeSaveError, 500, error);
   }
 
   return {
@@ -1268,11 +1318,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
   const bookingId = dbIdentifierOrNull(asRecord(insertedBooking).id);
 
   if (bookingError || !bookingId) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeSaveError,
-    };
+    return safeAdapterFailure(safeSaveError, 500, bookingError);
   }
 
   if (input.route_points.length > 0) {
@@ -1284,11 +1330,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeSaveError,
-      };
+      return safeAdapterFailure(safeSaveError, 500, error);
     }
   }
 
@@ -1301,11 +1343,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeSaveError,
-      };
+      return safeAdapterFailure(safeSaveError, 500, error);
     }
   }
 
@@ -1376,11 +1414,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .eq("id", existing.id);
 
   if (bookingError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
+    return safeAdapterFailure(safeUpdateError, 500, bookingError);
   }
 
   const { error: routeDeleteError } = await client
@@ -1389,11 +1423,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .eq("booking_id", existing.id);
 
   if (routeDeleteError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
+    return safeAdapterFailure(safeUpdateError, 500, routeDeleteError);
   }
 
   if (input.route_points.length > 0) {
@@ -1405,11 +1435,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeUpdateError,
-      };
+      return safeAdapterFailure(safeUpdateError, 500, error);
     }
   }
 
@@ -1419,11 +1445,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     .eq("booking_id", existing.id);
 
   if (serviceDeleteError) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeUpdateError,
-    };
+    return safeAdapterFailure(safeUpdateError, 500, serviceDeleteError);
   }
 
   if (input.service_items.length > 0) {
@@ -1435,11 +1457,7 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     );
 
     if (error) {
-      return {
-        ok: false,
-        status: 500,
-        error: safeUpdateError,
-      };
+      return safeAdapterFailure(safeUpdateError, 500, error);
     }
   }
 
@@ -1485,11 +1503,7 @@ export async function listAdminBookingsThroughSupabaseAdapter(
     .limit(25);
 
   if (error) {
-    return {
-      ok: false,
-      status: 500,
-      error: safeLoadError,
-    };
+    return safeAdapterFailure(safeLoadError, 500, error);
   }
 
   return {

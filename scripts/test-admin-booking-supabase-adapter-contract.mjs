@@ -238,6 +238,7 @@ class MockSupabaseQuery {
 class MockSupabaseClient {
   constructor(seed = {}, options = {}) {
     this.operations = [];
+    this.failures = options.failures || {};
     this.schemaMode = options.schemaMode || "cumulative";
     this.tables = {
       audit_logs: [],
@@ -282,6 +283,10 @@ class MockSupabaseClient {
     });
   }
 
+  failureFor(action, table) {
+    return this.failures[`${action}:${table}`] || this.failures[table] || null;
+  }
+
   insertRejectedByMockSchema(table, row) {
     const cumulativeRequiredColumns = {
       audit_logs: ["action", "entity_type"],
@@ -309,6 +314,14 @@ class MockSupabaseClient {
 
   insertRows(table, payload, resultMode, selectedColumns) {
     const rows = Array.isArray(payload) ? payload : [payload];
+    const configuredFailure = this.failureFor("insert", table);
+
+    if (configuredFailure) {
+      return {
+        data: null,
+        error: configuredFailure,
+      };
+    }
 
     if (rows.some((row) => this.insertRejectedByMockSchema(table, row))) {
       return {
@@ -348,6 +361,15 @@ class MockSupabaseClient {
   }
 
   updateRows(table, payload, filters) {
+    const configuredFailure = this.failureFor("update", table);
+
+    if (configuredFailure) {
+      return {
+        data: null,
+        error: configuredFailure,
+      };
+    }
+
     this.recordOperation("update", table, payload);
 
     const rows = this.applyFilters(this.tables[table], filters);
@@ -363,6 +385,15 @@ class MockSupabaseClient {
   }
 
   deleteRows(table, filters) {
+    const configuredFailure = this.failureFor("delete", table);
+
+    if (configuredFailure) {
+      return {
+        data: null,
+        error: configuredFailure,
+      };
+    }
+
     this.recordOperation("delete", table, { filters });
 
     const filteredIds = new Set(this.applyFilters(this.tables[table], filters).map((row) => row.id));
@@ -375,6 +406,15 @@ class MockSupabaseClient {
   }
 
   selectRows(table, filters, limitCount, orderBy, resultMode, selectedColumns) {
+    const configuredFailure = this.failureFor("select", table);
+
+    if (configuredFailure) {
+      return {
+        data: null,
+        error: configuredFailure,
+      };
+    }
+
     let rows = this.applyFilters(this.tables[table], filters);
 
     if (orderBy) {
@@ -903,6 +943,87 @@ try {
       );
     }
   }
+
+  const columnFailureMock = installMockClient(
+    {},
+    {
+      failures: {
+        "select:customers": {
+          code: "42703",
+          message: "Sanitized mock column classification source.",
+        },
+      },
+    },
+  );
+  const columnFailureResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    parsedAdmin.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.deepEqual(columnFailureResult, {
+    category: "column_missing",
+    error: "Admin booking persistence save failed safely.",
+    ok: false,
+    status: 500,
+  });
+  assert.equal(columnFailureMock.createdClients.length, 1);
+  assert.equal(columnFailureMock.client.operations.length, 0);
+  assertNoApiLeak(columnFailureResult, "direct adapter categorized failure should stay sanitized");
+
+  const permissionFailureMock = installMockClient(
+    {},
+    {
+      failures: {
+        "insert:bookings": {
+          code: "42501",
+          message: "Sanitized mock permission classification source.",
+        },
+      },
+    },
+  );
+  const permissionFailureResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    parsedAdmin.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(permissionFailureResult.ok, false);
+  assert.equal(permissionFailureResult.error, "Admin booking persistence save failed safely.");
+  assert.equal(permissionFailureResult.category, "permission_or_rls_denied");
+  assertNoApiLeak(permissionFailureResult, "permission categorized failure should stay sanitized");
+  assert.ok(permissionFailureMock.client.operations.some((operation) => operation.table === "customer_contacts"));
+
+  const categorizedRouteMock = installMockClient(
+    {},
+    {
+      failures: {
+        "select:customers": {
+          code: "42703",
+          message: "Sanitized mock route classification source.",
+        },
+      },
+    },
+  );
+  const categorizedRouteFailure = await readRouteResponse(
+    await adminRoute.POST(
+      jsonRequest("http://localhost/api/admin-bookings", canonicalAdminPayload(), {
+        headers: adminHeaders({
+          "x-prestige-admin-session-token": serverSessionToken,
+        }),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(categorizedRouteFailure.status, 500);
+  assert.deepEqual(categorizedRouteFailure.body, {
+    error: "Admin booking persistence save failed safely.",
+    ok: false,
+  });
+  assert.equal(categorizedRouteMock.createdClients.length, 1);
+  assert.equal(categorizedRouteMock.client.operations.length, 0);
+  assertNoApiLeak(categorizedRouteFailure, "categorized route response should hide internal category");
 
   setEnv({
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: undefined,

@@ -8,6 +8,10 @@ const runnerPath = path.join(
   process.cwd(),
   "scripts/run-admin-booking-staging-save-load-verification.mjs",
 );
+const readonlyDiagnosticPath = path.join(
+  process.cwd(),
+  "scripts/check-admin-booking-staging-readonly-contract.mjs",
+);
 const evidencePath = path.join(
   process.cwd(),
   "docs/admin-persistence-staging-save-load-failure-evidence.md",
@@ -21,6 +25,10 @@ const firstPersistenceMigrationPath = path.join(
   process.cwd(),
   "supabase/migrations/202606040001_first_admin_booking_customer_persistence.sql",
 );
+const forbiddenStage390Approval = [
+  "PRESTIGE_ADMIN_BOOKING_STAGING_WRITE_VERIFICATION_APPROVED",
+  "stage-4a-390-william-approved",
+].join("=");
 
 function assertIncludes(text, expected, message = `Missing required text: ${expected}`) {
   assert.ok(text.includes(expected), message);
@@ -37,6 +45,7 @@ function assertNotMatches(text, pattern, message = `Forbidden pattern present: $
 const adapter = await readFile(adapterPath, "utf8");
 const persistence = await readFile(persistencePath, "utf8");
 const runner = await readFile(runnerPath, "utf8");
+const readonlyDiagnostic = await readFile(readonlyDiagnosticPath, "utf8");
 const evidence = await readFile(evidencePath, "utf8");
 const docsIndex = await readFile(docsIndexPath, "utf8");
 const foundationMigration = await readFile(foundationMigrationPath, "utf8");
@@ -53,6 +62,7 @@ for (const table of [
 ]) {
   assertIncludes(combinedMigrations, `public.${table}`);
   assertIncludes(adapter, `"${table}"`);
+  assertIncludes(readonlyDiagnostic, `"${table}"`);
 }
 
 for (const legacyCumulativeColumn of [
@@ -173,6 +183,7 @@ for (const bookingColumn of [
 ]) {
   assertMatches(adapter, new RegExp(`${bookingColumn}:|${bookingColumn},`));
   assertIncludes(firstPersistenceMigration, bookingColumn);
+  assertIncludes(readonlyDiagnostic, `"${bookingColumn}"`);
 }
 
 for (const auditColumn of [
@@ -192,6 +203,30 @@ for (const auditColumn of [
   "safe_after: safeAuditSnapshot(safeAfter)",
 ]) {
   assertIncludes(adapter, auditColumn);
+}
+
+for (const readonlyDiagnosticColumn of [
+  '"account_status"',
+  '"status"',
+  '"contact_name"',
+  '"contact_type"',
+  '"display_name"',
+  '"role_label"',
+  '"is_primary"',
+  '"sequence"',
+  '"sequence_number"',
+  '"location"',
+  '"location_text"',
+  '"item_type"',
+  '"service_item_type"',
+  '"actor_role"',
+  '"action_type"',
+  '"entity_type"',
+  '"action"',
+  '"safe_before"',
+  '"safe_after"',
+]) {
+  assertIncludes(readonlyDiagnostic, readonlyDiagnosticColumn);
 }
 
 for (const sourceSurface of [
@@ -234,12 +269,22 @@ for (const safeFailureText of [
   "Saved booking could not be safely reloaded.",
   "Admin booking persistence update failed safely.",
   "Admin booking persistence is not enabled on this server.",
+  "safeAdapterFailure",
+  "classifyAdapterDatabaseFailure",
+  "column_missing",
+  "permission_or_rls_denied",
 ]) {
   assertIncludes(adapter, safeFailureText);
 }
 
 assertNotMatches(adapter, /console\.(?:log|error)|error\.message|error\.stack|details|hint/i);
 assertNotMatches(runner, /console\.error|error\.message|error\.stack/);
+assertNotMatches(readonlyDiagnostic, /\.insert\(|\.update\(|\.delete\(|\.upsert\(|\.rpc\(/);
+assert.ok(!readonlyDiagnostic.includes(forbiddenStage390Approval));
+assertIncludes(readonlyDiagnostic, 'mode: "readonly"');
+assertIncludes(readonlyDiagnostic, "partial_row_possible");
+assertIncludes(readonlyDiagnostic, "no_partial_rows_found");
+assertIncludes(readonlyDiagnostic, "unknown_readonly_failure");
 assertIncludes(runner, 'failSafely("controlled_save_failed_safely"');
 assertIncludes(runner, "main().catch(() => {");
 assertIncludes(runner, 'failSafely("unexpected_runner_failure_sanitized");');

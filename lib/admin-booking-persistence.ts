@@ -90,6 +90,14 @@ export type AdminBookingPersistenceRecord = Required<
     service_items: AdminBookingServiceItemInput[];
   };
 
+export type AdminBookingPersistenceSafeErrorCategory =
+  | "auth_or_key_rejected"
+  | "client_init_failed"
+  | "column_missing"
+  | "permission_or_rls_denied"
+  | "table_unreachable"
+  | "unknown_adapter_failure";
+
 export type AdminBookingResult<T> =
   | {
       ok: true;
@@ -97,6 +105,7 @@ export type AdminBookingResult<T> =
     }
   | {
       ok: false;
+      category?: AdminBookingPersistenceSafeErrorCategory;
       error: string;
       status: number;
     };

@@ -37,6 +37,7 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 - [Legacy Public Table RLS Hardening](legacy-public-table-rls-hardening.md) records the Stage 4A-398 local RLS migration draft and Stage 4A-399 staging-only apply result.
 - [Legacy Public Table RLS Hardening Apply Evidence](legacy-public-table-rls-hardening-apply-evidence.md) records the masked Stage 4A-399 staging apply and read-only verification evidence.
 - [Legacy Public Table RLS Production Decision Packet](legacy-public-table-rls-production-decision-packet.md) records the Stage 4A-400 post-apply review and keeps production RLS apply blocked until a separate approval.
+- [Legacy Public Table RLS Production Target Proof Checklist](legacy-public-table-rls-production-target-proof-checklist.md) records the Stage 4A-401A stop reason and the target-proof requirements before any future production apply.
 
 ## Production Go/No-Go
 
@@ -63,6 +64,7 @@ Production readiness is currently `blocked`.
 - Stage 4A-398 created a local RLS hardening migration draft.
 - Stage 4A-399 applied and verified that draft in approved staging only; production still requires separate explicit William approval before any production RLS apply, production read, or production write.
 - Stage 4A-400 reviewed the staging evidence and keeps production decision `blocked`.
+- Stage 4A-401 stopped before apply because the local Supabase link still matched the masked Stage 4A-399 staging evidence target; Stage 4A-401A keeps production target proof blocked until the approved production project is proven safely.
 - Do not fix those from the dashboard in this stage.
 - If those tables still exist and are exposed, production readiness should require a separate approved RLS hardening migration stage.
 

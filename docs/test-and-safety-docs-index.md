@@ -36,6 +36,7 @@ This index is a docs-only cross-reference for existing Prestige Limo Ops testing
 - [Legacy Public Table RLS Hardening](legacy-public-table-rls-hardening.md) owns the Stage 4A-398 local RLS migration draft, Stage 4A-399 staging-only apply result, no-production-apply boundary, and no-public-anon-policy boundary.
 - [Legacy Public Table RLS Hardening Apply Evidence](legacy-public-table-rls-hardening-apply-evidence.md) owns the masked Stage 4A-399 staging apply evidence, read-only RLS/policy verification result, rollback boundary, and no-production-touch boundary.
 - [Legacy Public Table RLS Production Decision Packet](legacy-public-table-rls-production-decision-packet.md) owns the Stage 4A-400 post-apply staging evidence review, production blocked decision, production approval prerequisites, and no-live-DB-touch boundary.
+- [Legacy Public Table RLS Production Target Proof Checklist](legacy-public-table-rls-production-target-proof-checklist.md) owns the Stage 4A-401A stop reason, production target proof requirements, rollback note, and future apply command boundary.
 - [Supabase Schema And RLS Review Checklist](supabase-schema-rls-review-checklist.md) owns future Supabase schema, RLS, public-page, service-role, storage, and access-boundary review.
 - [Driver Job Link Production Checklist](driver-job-link-production-checklist.md) owns the production driver-link go/no-go checklist, approval locks, required tests, and disabled-by-default production posture.
 

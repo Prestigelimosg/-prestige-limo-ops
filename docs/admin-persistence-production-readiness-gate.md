@@ -12,6 +12,7 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 
 - Stage 4A-393 server-only adapter staging save/load succeeded.
 - Stage 4A-394 admin API-route staging save/load succeeded.
+- Stage 4A-397 retired browser-side direct Supabase access for the legacy admin public tables by moving the admin dashboard calls behind a server-only admin route.
 - The staging env/key was accepted by read-only checks in Stage 4A-392.
 - Persistence still defaults OFF.
 - The kill-switch blocks writes.
@@ -30,6 +31,7 @@ Production is still not turned on. The next decision is not "flip the switch"; i
 - [Admin Persistence Real-Write Approval Proposal](admin-persistence-real-write-approval-proposal.md) preserves the earlier real-write approval proposal boundary.
 - [Admin Persistence Enable Approval Checklist](admin-persistence-enable-approval-checklist.md) preserves the enablement checklist and mocked gate requirements.
 - [Admin Persistence Staging Cleanup Decision](admin-persistence-staging-cleanup-decision.md) records the Stage 4A-395 cleanup decision boundary.
+- [Legacy Public Table Server Route Hardening](legacy-public-table-server-route-hardening.md) records the Stage 4A-397 browser-direct-access retirement and confirms the RLS migration remains separate.
 
 ## Production Go/No-Go
 
@@ -52,6 +54,7 @@ Production readiness is currently `blocked`.
   - `public.rate_settings`.
   - `public.travelers`.
   - `public.drivers`.
+- Stage 4A-397 moved the admin dashboard runtime access for those tables behind a server-only admin route, but it did not create or apply the RLS hardening migration.
 - Do not fix those from the dashboard in this stage.
 - If those tables still exist and are exposed, production readiness should require a separate approved RLS hardening migration stage.
 

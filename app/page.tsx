@@ -30,7 +30,293 @@ import {
   type RateSettings,
 } from "../lib/pricing";
 import { mockDriverJobTokens } from "../lib/driver-job-link-mock-tokens";
-import { supabase } from "../lib/supabase";
+
+const adminLegacyDataPurpose = "admin-booking-persistence";
+const adminLegacyTables = {
+  bookers: "bookers",
+  bookings: "bookings",
+  companies: "companies",
+  drivers: "drivers",
+  rateSettings: "rate_settings",
+  savedAddresses: "saved_addresses",
+  travelers: "travelers",
+} as const;
+
+const adminBookingSelectColumns = [
+  "id",
+  "company_id",
+  "booker_id",
+  "traveler_id",
+  "booking_type",
+  "vehicle",
+  "pickup_time",
+  "pickup_address",
+  "dropoff_address",
+  "flight_no",
+  "route",
+  "pax",
+  "job_card",
+  "status",
+  "driver_id",
+  "driver_name",
+  "driver_contact",
+  "driver_plate_number",
+  "customer_rate",
+  "customer_rate_unit",
+  "customer_price_amount",
+  "customer_rate_override",
+  "customer_price_override_reason",
+  "driver_payout_min",
+  "driver_payout_max",
+  "driver_payout_amount",
+  "driver_payout_override",
+  "driver_payout_reason",
+  "driver_payout_unit",
+  "driver_notes",
+  "driver_dispatch_include_payout",
+  "midnight_surcharge",
+  "midnight_payout",
+  "extra_stop_count",
+  "extra_stop_surcharge",
+  "extra_stop_payout",
+  "child_seat_required",
+  "child_seat_count",
+  "child_seat_type",
+  "child_seat_customer_surcharge",
+  "child_seat_driver_payout",
+  "pricing_source",
+  "created_at",
+  "updated_at",
+  "companies(company_name, domain)",
+  "bookers(booker_name, email, phone)",
+  "travelers(traveler_name)",
+].join(", ");
+
+type AdminLegacyDataTable = (typeof adminLegacyTables)[keyof typeof adminLegacyTables];
+type AdminLegacyDataMode = "delete" | "insert" | "select" | "update" | "upsert";
+type AdminLegacyDataFilterOperator = "eq" | "ilike";
+type AdminLegacyDataResult<T = unknown> = {
+  data: T | null;
+  error: { code?: string; message: string } | null;
+};
+
+type AdminLegacyDataFilter = {
+  column: string;
+  operator: AdminLegacyDataFilterOperator;
+  value: string | number | boolean | null;
+};
+
+type AdminLegacyDataOrder = {
+  ascending: boolean;
+  column: string;
+};
+
+function adminLegacyDataError(message: string): AdminLegacyDataResult {
+  return {
+    data: null,
+    error: {
+      message,
+    },
+  };
+}
+
+function normalizeAdminLegacyDataResponse<T>(
+  payload: unknown,
+  singleMode?: "maybe" | "single",
+): AdminLegacyDataResult<T> {
+  const rawPayload = payload as { data?: unknown; error?: unknown; message?: unknown; ok?: unknown };
+  const data = rawPayload && rawPayload.ok === true && "data" in rawPayload ? rawPayload.data : payload;
+  const normalizedData =
+    singleMode && Array.isArray(data)
+      ? (data[0] ?? null)
+      : data;
+
+  return {
+    data: (normalizedData ?? null) as T | null,
+    error: null,
+  };
+}
+
+function readAdminLegacyDataError(payload: unknown, fallback: string) {
+  const responsePayload = payload as { code?: unknown; error?: unknown; message?: unknown };
+  const message =
+    typeof responsePayload?.error === "string"
+      ? responsePayload.error
+      : typeof responsePayload?.message === "string"
+        ? responsePayload.message
+        : fallback;
+
+  return {
+    code: typeof responsePayload?.code === "string" ? responsePayload.code : undefined,
+    message,
+  };
+}
+
+class AdminLegacyDataQuery<T = unknown> implements PromiseLike<AdminLegacyDataResult<T>> {
+  private filters: AdminLegacyDataFilter[] = [];
+  private mode: AdminLegacyDataMode = "select";
+  private orders: AdminLegacyDataOrder[] = [];
+  private payload: unknown = null;
+  private resultLimit: number | null = null;
+  private selectedColumns: string | null = null;
+
+  constructor(private readonly table: AdminLegacyDataTable) {}
+
+  select(columns: string) {
+    this.selectedColumns = columns;
+
+    return this;
+  }
+
+  eq(column: string, value: string | number | boolean | null) {
+    this.filters.push({ column, operator: "eq", value });
+
+    return this;
+  }
+
+  ilike(column: string, value: string | number | boolean | null) {
+    this.filters.push({ column, operator: "ilike", value });
+
+    return this;
+  }
+
+  order(column: string, options?: { ascending?: boolean }) {
+    this.orders.push({ column, ascending: options?.ascending !== false });
+
+    return this;
+  }
+
+  limit(count: number) {
+    this.resultLimit = count;
+
+    return this;
+  }
+
+  insert(payload: unknown) {
+    this.mode = "insert";
+    this.payload = payload;
+
+    return this;
+  }
+
+  update(payload: unknown) {
+    this.mode = "update";
+    this.payload = payload;
+
+    return this;
+  }
+
+  upsert(payload: unknown) {
+    this.mode = "upsert";
+    this.payload = payload;
+
+    return this;
+  }
+
+  delete() {
+    this.mode = "delete";
+
+    return this;
+  }
+
+  single() {
+    return this.execute("single");
+  }
+
+  maybeSingle() {
+    return this.execute("maybe");
+  }
+
+  then<TResult1 = AdminLegacyDataResult<T>, TResult2 = never>(
+    onfulfilled?: ((value: AdminLegacyDataResult<T>) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ) {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+
+  private buildUrl(singleMode?: "maybe" | "single") {
+    const searchParams = new URLSearchParams();
+
+    if (this.selectedColumns) {
+      searchParams.set("select", this.selectedColumns);
+    }
+
+    if (this.resultLimit) {
+      searchParams.set("limit", String(this.resultLimit));
+    }
+
+    if (singleMode) {
+      searchParams.set("single", singleMode);
+    }
+
+    if (this.mode === "upsert") {
+      searchParams.set("upsert", "1");
+    }
+
+    for (const order of this.orders) {
+      searchParams.append("order", `${order.column}.${order.ascending ? "asc" : "desc"}`);
+    }
+
+    for (const filter of this.filters) {
+      searchParams.append(filter.column, `${filter.operator}.${String(filter.value ?? "")}`);
+    }
+
+    const query = searchParams.toString();
+
+    return `/api/admin-legacy-data/rest/v1/${this.table}${query ? `?${query}` : ""}`;
+  }
+
+  private async execute(singleMode?: "maybe" | "single"): Promise<AdminLegacyDataResult<T>> {
+    const methodByMode: Record<AdminLegacyDataMode, string> = {
+      delete: "DELETE",
+      insert: "POST",
+      select: "GET",
+      update: "PATCH",
+      upsert: "POST",
+    };
+    const method = methodByMode[this.mode];
+    const hasBody = ["PATCH", "POST"].includes(method);
+
+    try {
+      const response = await fetch(this.buildUrl(singleMode), {
+        ...(hasBody ? { body: JSON.stringify(this.payload ?? {}) } : {}),
+        headers: {
+          ...(hasBody ? { "Content-Type": "application/json" } : {}),
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method,
+      });
+      const responseBody = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const error = readAdminLegacyDataError(responseBody, "Admin data request failed.");
+
+        return {
+          data: null,
+          error,
+        } as AdminLegacyDataResult<T>;
+      }
+
+      return normalizeAdminLegacyDataResponse<T>(responseBody, singleMode);
+    } catch {
+      return adminLegacyDataError("Admin data request failed.") as AdminLegacyDataResult<T>;
+    }
+  }
+}
+
+function createAdminLegacyDataClient() {
+  if (typeof fetch !== "function") {
+    return null;
+  }
+
+  return {
+    from<T = unknown>(table: AdminLegacyDataTable) {
+      return new AdminLegacyDataQuery<T>(table);
+    },
+  };
+}
+
+const adminLegacyDataClient = createAdminLegacyDataClient();
 
 type BookingForm = {
   company: string;
@@ -81,6 +367,21 @@ type BookerRecord = {
   booker_name: string | null;
   email: string | null;
   phone: string | null;
+};
+
+type CompanyIdLookupRecord = {
+  company_id?: number | null;
+};
+
+type RateSettingsRecord = {
+  child_seat_customer_surcharge?: number | null;
+  child_seat_driver_payout?: number | null;
+  customer_rates?: RateRules | null;
+  driver_payout_rules?: DriverPayoutRules | null;
+  extra_stop_payout?: number | null;
+  extra_stop_surcharge?: number | null;
+  midnight_payout?: number | null;
+  midnight_surcharge?: number | null;
 };
 
 type TravelerRecord = {
@@ -4583,12 +4884,12 @@ export default function Home() {
   }
 
   async function lookupNameMemory(personName: string): Promise<NameMemory | null> {
-    if (!supabase || !personName) {
+    if (!adminLegacyDataClient || !personName) {
       return null;
     }
 
-    const nameResult = await supabase
-      .from("travelers")
+    const nameResult = await adminLegacyDataClient
+      .from(adminLegacyTables.travelers)
       .select("id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_id, booker_name, booker_contact, booker_email, customer_rates, driver_payout_rules")
       .ilike("traveler_name", personName)
       .limit(1)
@@ -4600,14 +4901,14 @@ export default function Home() {
 
     const nameRecord = nameResult.data as TravelerRecord;
     const [companyResult, addressResult] = await Promise.all([
-      supabase
-        .from("companies")
+      adminLegacyDataClient
+        .from(adminLegacyTables.companies)
       .select("id, company_name")
         .eq("id", nameRecord.company_id)
         .limit(1)
         .maybeSingle(),
-      supabase
-        .from("saved_addresses")
+      adminLegacyDataClient
+        .from(adminLegacyTables.savedAddresses)
         .select("id, company_id, traveler_id, label, address, address_role, is_default, use_count")
         .eq("traveler_id", nameRecord.id)
         .order("is_default", { ascending: false })
@@ -4621,10 +4922,11 @@ export default function Home() {
       return null;
     }
 
+    const companyRecord = companyResult.data as CompanyRecord | null;
     const savedAddress = addressResult.data as SavedAddressRecord | null;
 
     return {
-      company: normalizeCompanyAccount(companyResult.data?.company_name, nameRecord.booker_email),
+      company: normalizeCompanyAccount(companyRecord?.company_name, nameRecord.booker_email),
       companyId: nameRecord.company_id,
       travelerId: nameRecord.id,
       savedAddress: clean(savedAddress?.address) || clean(nameRecord.default_address),
@@ -4791,11 +5093,11 @@ export default function Home() {
   }
 
   async function resolveCompany() {
-    if (!supabase) {
-      throw new Error("Supabase is not configured.");
+    if (!adminLegacyDataClient) {
+      throw new Error("Admin data API is not available.");
     }
 
-    const client = supabase;
+    const client = adminLegacyDataClient;
     const detectedCompany = getKnownCompanyForRelationship(
       booking.booker,
       booking.name,
@@ -4813,7 +5115,7 @@ export default function Home() {
       }
 
       const companyResult = await client
-        .from("companies")
+        .from(adminLegacyTables.companies)
         .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
         .eq("id", companyId)
         .limit(1)
@@ -4842,7 +5144,7 @@ export default function Home() {
       }
 
       const existingByName = await client
-        .from("companies")
+        .from(adminLegacyTables.companies)
         .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
         .ilike("company_name", safeCompanyName)
         .limit(1)
@@ -4865,7 +5167,7 @@ export default function Home() {
 
     if (bookerContact) {
       const existingByContact = await client
-        .from("bookers")
+        .from(adminLegacyTables.bookers)
         .select("company_id")
         .eq("phone", bookerContact)
         .limit(1)
@@ -4875,7 +5177,8 @@ export default function Home() {
         throw new Error(existingByContact.error.message);
       }
 
-      const companyByContact = await getCompanyById(existingByContact.data?.company_id ?? null);
+      const contactLookup = existingByContact.data as CompanyIdLookupRecord | null;
+      const companyByContact = await getCompanyById(contactLookup?.company_id ?? null);
 
       if (companyByContact) {
         return companyByContact;
@@ -4884,7 +5187,7 @@ export default function Home() {
 
     if (domain) {
       const existingByDomain = await client
-        .from("companies")
+        .from(adminLegacyTables.companies)
         .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
         .eq("domain", domain)
         .limit(1)
@@ -4901,7 +5204,7 @@ export default function Home() {
 
     if (bookerName) {
       const existingByBooker = await client
-        .from("bookers")
+        .from(adminLegacyTables.bookers)
         .select("company_id")
         .ilike("booker_name", bookerName)
         .limit(1)
@@ -4911,7 +5214,8 @@ export default function Home() {
         throw new Error(existingByBooker.error.message);
       }
 
-      const companyByBooker = await getCompanyById(existingByBooker.data?.company_id ?? null);
+      const bookerLookup = existingByBooker.data as CompanyIdLookupRecord | null;
+      const companyByBooker = await getCompanyById(bookerLookup?.company_id ?? null);
 
       if (companyByBooker) {
         return companyByBooker;
@@ -4920,7 +5224,7 @@ export default function Home() {
 
     if (personName) {
       const existingByName = await client
-        .from("travelers")
+        .from(adminLegacyTables.travelers)
         .select("company_id")
         .ilike("traveler_name", personName)
         .limit(1)
@@ -4930,7 +5234,8 @@ export default function Home() {
         throw new Error(existingByName.error.message);
       }
 
-      const companyByName = await getCompanyById(existingByName.data?.company_id ?? null);
+      const nameLookup = existingByName.data as CompanyIdLookupRecord | null;
+      const companyByName = await getCompanyById(nameLookup?.company_id ?? null);
 
       if (companyByName) {
         return companyByName;
@@ -4944,7 +5249,7 @@ export default function Home() {
     }
 
     const createdCompany = await client
-      .from("companies")
+      .from(adminLegacyTables.companies)
       .insert({
         company_name: companyNameToCreate,
         domain: domain || null,
@@ -4976,11 +5281,11 @@ export default function Home() {
   }
 
   async function resolveBooker(companyId: number) {
-    if (!supabase) {
-      throw new Error("Supabase is not configured.");
+    if (!adminLegacyDataClient) {
+      throw new Error("Admin data API is not available.");
     }
 
-    const client = supabase;
+    const client = adminLegacyDataClient;
     const email = normaliseEmail(booking.bookerEmail);
     const phone = normalizePhone(booking.bookerContact);
     const bookerName = clean(booking.booker) || (!clean(booking.company) ? clean(booking.name) : "");
@@ -4996,7 +5301,7 @@ export default function Home() {
         phone: bookerRecord.phone || phone || null,
       };
 
-      const { error } = await client.from("bookers").update(updatePayload).eq("id", bookerRecord.id);
+      const { error } = await client.from(adminLegacyTables.bookers).update(updatePayload).eq("id", bookerRecord.id);
 
       if (error) {
         throw new Error(error.message);
@@ -5010,7 +5315,7 @@ export default function Home() {
 
     if (phone) {
       const existingByPhone = await client
-        .from("bookers")
+        .from(adminLegacyTables.bookers)
         .select("id, company_id, booker_name, email, phone")
         .eq("company_id", companyId)
         .eq("phone", phone)
@@ -5028,7 +5333,7 @@ export default function Home() {
 
     if (email) {
       const existingByEmail = await client
-        .from("bookers")
+        .from(adminLegacyTables.bookers)
         .select("id, company_id, booker_name, email, phone")
         .eq("company_id", companyId)
         .eq("email", email)
@@ -5045,7 +5350,7 @@ export default function Home() {
     }
 
     const existingByName = await client
-      .from("bookers")
+      .from(adminLegacyTables.bookers)
       .select("id, company_id, booker_name, email, phone")
       .eq("company_id", companyId)
       .ilike("booker_name", bookerName)
@@ -5061,7 +5366,7 @@ export default function Home() {
     }
 
     const createdBooker = await client
-      .from("bookers")
+      .from(adminLegacyTables.bookers)
       .insert({
         company_id: companyId,
         booker_name: bookerName,
@@ -5079,8 +5384,8 @@ export default function Home() {
   }
 
   async function resolveName(companyId: number, booker: BookerRecord | null) {
-    if (!supabase) {
-      throw new Error("Supabase is not configured.");
+    if (!adminLegacyDataClient) {
+      throw new Error("Admin data API is not available.");
     }
 
     const personName = clean(booking.name);
@@ -5089,8 +5394,8 @@ export default function Home() {
       return null;
     }
 
-    const existingName = await supabase
-      .from("travelers")
+    const existingName = await adminLegacyDataClient
+      .from(adminLegacyTables.travelers)
       .select("id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_id, booker_name, booker_contact, booker_email, customer_rates, driver_payout_rules")
       .eq("company_id", companyId)
       .ilike("traveler_name", personName)
@@ -5110,7 +5415,7 @@ export default function Home() {
         booker_email: existingRecord.booker_email || clean(booker?.email),
       };
 
-      const { error } = await supabase.from("travelers").update(updatePayload).eq("id", existingRecord.id);
+      const { error } = await adminLegacyDataClient.from(adminLegacyTables.travelers).update(updatePayload).eq("id", existingRecord.id);
 
       if (error) {
         throw new Error(error.message);
@@ -5122,8 +5427,8 @@ export default function Home() {
       };
     }
 
-    const createdName = await supabase
-      .from("travelers")
+    const createdName = await adminLegacyDataClient
+      .from(adminLegacyTables.travelers)
       .insert({
         company_id: companyId,
         traveler_name: personName,
@@ -5143,7 +5448,7 @@ export default function Home() {
   }
 
   async function rememberNameCrmDetails(companyId: number, travelerId: number | null) {
-    if (!supabase || !travelerId) {
+    if (!adminLegacyDataClient || !travelerId) {
       return;
     }
 
@@ -5168,7 +5473,7 @@ export default function Home() {
     }
 
     if (Object.keys(updatePayload).length > 0) {
-      const { error } = await supabase.from("travelers").update(updatePayload).eq("id", travelerId);
+      const { error } = await adminLegacyDataClient.from(adminLegacyTables.travelers).update(updatePayload).eq("id", travelerId);
 
       if (error) {
         throw new Error(error.message);
@@ -5179,8 +5484,8 @@ export default function Home() {
       return;
     }
 
-    const existingAddress = await supabase
-      .from("saved_addresses")
+    const existingAddress = await adminLegacyDataClient
+      .from(adminLegacyTables.savedAddresses)
       .select("id, company_id, traveler_id, label, address, address_role, is_default, use_count")
       .eq("traveler_id", travelerId)
       .ilike("address", address)
@@ -5193,8 +5498,8 @@ export default function Home() {
 
     if (existingAddress.data) {
       const savedAddress = existingAddress.data as SavedAddressRecord;
-      const { error } = await supabase
-        .from("saved_addresses")
+      const { error } = await adminLegacyDataClient
+        .from(adminLegacyTables.savedAddresses)
         .update({
           company_id: companyId,
           address,
@@ -5211,7 +5516,7 @@ export default function Home() {
       return;
     }
 
-    const { error } = await supabase.from("saved_addresses").insert({
+    const { error } = await adminLegacyDataClient.from(adminLegacyTables.savedAddresses).insert({
       company_id: companyId,
       traveler_id: travelerId,
       label: "Default",
@@ -5228,12 +5533,12 @@ export default function Home() {
   }
 
   async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       if (!options?.preserveAction) {
         setRateMessageTarget("header");
       }
       const errorMessage =
-        "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.";
+        "Admin data API is not available.";
 
       setMessage({
         tone: "error",
@@ -5251,18 +5556,18 @@ export default function Home() {
 
     try {
       const [settingsResult, companiesResult, travelersResult] = await Promise.all([
-        supabase
-          .from("rate_settings")
+        adminLegacyDataClient
+          .from(adminLegacyTables.rateSettings)
           .select("customer_rates, driver_payout_rules, midnight_surcharge, extra_stop_surcharge, midnight_payout, extra_stop_payout, child_seat_customer_surcharge, child_seat_driver_payout")
           .eq("id", "default")
           .limit(1)
           .maybeSingle(),
-        supabase
-          .from("companies")
+        adminLegacyDataClient
+          .from(adminLegacyTables.companies)
           .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
           .order("company_name", { ascending: true }),
-        supabase
-          .from("travelers")
+        adminLegacyDataClient
+          .from(adminLegacyTables.travelers)
           .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
           .order("traveler_name", { ascending: true }),
       ]);
@@ -5273,7 +5578,7 @@ export default function Home() {
         throw new Error(formatSupabaseError(loadError));
       }
 
-      const settings = settingsResult.data;
+      const settings = settingsResult.data as RateSettingsRecord | null;
       const loadedCustomerRates = normalizeCustomerRateRules(settings?.customer_rates as RateRules | null | undefined);
       const loadedDriverPayoutRules = normalizeDriverPayoutRules(
         settings?.driver_payout_rules as DriverPayoutRules | null | undefined,
@@ -5338,11 +5643,11 @@ export default function Home() {
   }
 
   async function saveDefaultRates() {
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setRateMessageTarget("header");
       setMessage({
         tone: "error",
-        text: "Save failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Save failed: Admin data API is not available.",
       });
       return;
     }
@@ -5361,8 +5666,8 @@ export default function Home() {
         ...defaultDriverPayoutRules,
         ...normalizeDriverPayoutRules(rateSettings.driverPayoutRules),
       };
-      const { error } = await supabase
-        .from("rate_settings")
+      const { error } = await adminLegacyDataClient
+        .from(adminLegacyTables.rateSettings)
         .upsert({
           id: "default",
           customer_rates: customerRates,
@@ -5404,10 +5709,10 @@ export default function Home() {
   async function saveRateOverride() {
     setRateMessageTarget("override");
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setMessage({
         tone: "error",
-        text: "Save rate override failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Save rate override failed: Admin data API is not available.",
       });
       return;
     }
@@ -5461,8 +5766,8 @@ export default function Home() {
       ) ?? null;
 
       if (!company) {
-        const existingCompany = await supabase
-          .from("companies")
+        const existingCompany = await adminLegacyDataClient
+          .from(adminLegacyTables.companies)
           .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
           .ilike("company_name", companyName || "Internal Account")
           .limit(1)
@@ -5476,8 +5781,8 @@ export default function Home() {
       }
 
       if (!company) {
-        const createdCompany = await supabase
-          .from("companies")
+        const createdCompany = await adminLegacyDataClient
+          .from(adminLegacyTables.companies)
           .insert({
             company_name: companyName || "Internal Account",
             customer_rates: bossName ? {} : overrideCustomerRates,
@@ -5507,8 +5812,8 @@ export default function Home() {
             ...overrideDriverPayoutRules,
           };
 
-      const companyUpdate = await supabase
-        .from("companies")
+      const companyUpdate = await adminLegacyDataClient
+        .from(adminLegacyTables.companies)
         .update({
           customer_rates: mergedCompanyRates,
           driver_payout_rules: mergedCompanyPayouts,
@@ -5526,8 +5831,8 @@ export default function Home() {
       companyOverrideSaved = true;
 
       if (bossName) {
-        const existingTraveler = await supabase
-          .from("travelers")
+        const existingTraveler = await adminLegacyDataClient
+          .from(adminLegacyTables.travelers)
           .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
           .eq("company_id", company.id)
           .ilike("traveler_name", bossName)
@@ -5540,8 +5845,8 @@ export default function Home() {
 
         if (existingTraveler.data) {
           const traveler = existingTraveler.data as TravelerRecord;
-          const travelerUpdate = await supabase
-            .from("travelers")
+          const travelerUpdate = await adminLegacyDataClient
+            .from(adminLegacyTables.travelers)
             .update({
               customer_rates: {
                 ...normalizeCustomerRateRules(traveler.customer_rates),
@@ -5559,7 +5864,7 @@ export default function Home() {
             throw new Error(travelerUpdate.error.message);
           }
         } else {
-          const travelerInsert = await supabase.from("travelers").insert({
+          const travelerInsert = await adminLegacyDataClient.from(adminLegacyTables.travelers).insert({
             company_id: company.id,
             traveler_name: bossName,
             customer_rates: overrideCustomerRates,
@@ -5615,12 +5920,12 @@ export default function Home() {
       company: { tone: "info", text: `Removing ${companyName} override...`, recordId: companyRecord.id },
     }));
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setRateOverrideListMessages((current) => ({
         ...current,
         company: {
           tone: "error",
-          text: "Remove override failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+          text: "Remove override failed: Admin data API is not available.",
           recordId: companyRecord.id,
         },
       }));
@@ -5631,8 +5936,8 @@ export default function Home() {
     setRateAction("remove-override");
 
     try {
-      const { error } = await supabase
-        .from("companies")
+      const { error } = await adminLegacyDataClient
+        .from(adminLegacyTables.companies)
         .update({
           customer_rates: {},
           driver_payout_rules: {},
@@ -5694,12 +5999,12 @@ export default function Home() {
       boss: { tone: "info", text: `Removing ${bossName} override...`, recordId: travelerRecord.id },
     }));
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setRateOverrideListMessages((current) => ({
         ...current,
         boss: {
           tone: "error",
-          text: "Remove override failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+          text: "Remove override failed: Admin data API is not available.",
           recordId: travelerRecord.id,
         },
       }));
@@ -5710,8 +6015,8 @@ export default function Home() {
     setRateAction("remove-override");
 
     try {
-      const { error } = await supabase
-        .from("travelers")
+      const { error } = await adminLegacyDataClient
+        .from(adminLegacyTables.travelers)
         .update({
           customer_rates: {},
           driver_payout_rules: {},
@@ -5769,10 +6074,10 @@ export default function Home() {
     successText = "Driver database loaded.",
     loadingText = "Loading driver database...",
   ) {
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setMessage({
         tone: "error",
-        text: "Load drivers failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Load drivers failed: Admin data API is not available.",
       });
       return;
     }
@@ -5781,8 +6086,8 @@ export default function Home() {
     setMessage({ tone: "info", text: loadingText });
 
     try {
-      const { data, error } = await supabase
-        .from("drivers")
+      const { data, error } = await adminLegacyDataClient
+        .from(adminLegacyTables.drivers)
         .select("id, driver_name, contact_number, vehicle_type, plate_number, payout_preferences, driver_payout_rules, availability_status, notes, preferred_areas, airport_permit_notes")
         .order("driver_name", { ascending: true });
 
@@ -5801,10 +6106,10 @@ export default function Home() {
   }
 
   async function saveDriverProfile() {
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setMessage({
         tone: "error",
-        text: "Save driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Save driver failed: Admin data API is not available.",
       });
       return;
     }
@@ -5877,8 +6182,8 @@ export default function Home() {
       }
 
       if (!existingDriverId && !existingDriver) {
-        const existingResult = await supabase
-          .from("drivers")
+        const existingResult = await adminLegacyDataClient
+          .from(adminLegacyTables.drivers)
           .select("id, driver_name, contact_number, vehicle_type, plate_number, payout_preferences, driver_payout_rules, availability_status, notes, preferred_areas, airport_permit_notes")
           .ilike("driver_name", driverName)
           .limit(1)
@@ -5907,8 +6212,8 @@ export default function Home() {
         updated_at: new Date().toISOString(),
       };
       const result = existingDriverId
-        ? await supabase.from("drivers").update(payload).eq("id", existingDriverId)
-        : await supabase.from("drivers").insert(payload);
+        ? await adminLegacyDataClient.from(adminLegacyTables.drivers).update(payload).eq("id", existingDriverId)
+        : await adminLegacyDataClient.from(adminLegacyTables.drivers).insert(payload);
 
       if (result.error) {
         throw new Error(result.error.message);
@@ -5925,10 +6230,10 @@ export default function Home() {
   }
 
   async function deactivateDriverProfile() {
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setMessage({
         tone: "error",
-        text: "Deactivate driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Deactivate driver failed: Admin data API is not available.",
       });
       return;
     }
@@ -5948,7 +6253,7 @@ export default function Home() {
         availability_status: "inactive",
         updated_at: new Date().toISOString(),
       };
-      const result = await supabase.from("drivers").update(payload).eq("id", driverId);
+      const result = await adminLegacyDataClient.from(adminLegacyTables.drivers).update(payload).eq("id", driverId);
 
       if (result.error) {
         throw new Error(result.error.message);
@@ -6038,11 +6343,11 @@ export default function Home() {
       return;
     }
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setDriverDeleteMessage({
         driverId,
         tone: "error",
-        text: "Delete driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Delete driver failed: Admin data API is not available.",
       });
       return;
     }
@@ -6069,7 +6374,7 @@ export default function Home() {
     });
 
     try {
-      const result = await supabase.from("drivers").delete().eq("id", driverId);
+      const result = await adminLegacyDataClient.from(adminLegacyTables.drivers).delete().eq("id", driverId);
 
       if (result.error) {
         throw new Error(result.error.message);
@@ -6124,10 +6429,10 @@ export default function Home() {
       return;
     }
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       const saveMessage = {
         tone: "error",
-        text: "Booking save failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Booking save failed: Admin data API is not available.",
       } satisfies Message;
 
       setMessage({
@@ -6236,9 +6541,11 @@ export default function Home() {
         pricing_source: pricingSnapshot.customerPriceSource,
         status: clean(booking.driverName) ? "assigned" : "confirmed",
       };
-      const { data: savedBooking, error } = await supabase.from("bookings").insert(bookingPayload).select("id").single();
+      const { data: savedBooking, error } = await adminLegacyDataClient.from(adminLegacyTables.bookings).insert(bookingPayload).select("id").single();
 
-      if (error || !savedBooking) {
+      const savedBookingId = (savedBooking as { id?: string | number } | null)?.id;
+
+      if (error || !savedBookingId) {
         const saveMessage = {
           tone: "error",
           text: `Booking save failed: ${error ? formatSupabaseError(error) : "No saved booking id returned."}`,
@@ -6256,12 +6563,12 @@ export default function Home() {
           }
         }
 
-        const savedBookingResult = await fetchSavedBookingById(savedBooking.id);
+        const savedBookingResult = await fetchSavedBookingById(savedBookingId);
 
         if (savedBookingResult.error || !savedBookingResult.data) {
           const saveMessage = {
             tone: "success",
-            text: `Booking saved successfully: ${savedBooking.id}`,
+            text: `Booking saved successfully: ${savedBookingId}`,
           } satisfies Message;
 
           setMessage({
@@ -6286,7 +6593,7 @@ export default function Home() {
           tone: crmUpdateFailed ? "error" : "success",
           text: crmUpdateFailed
             ? `Booking saved, but CRM update failed: ${crmErrorMessage || "Unknown CRM error."}`
-            : `Booking saved successfully: ${savedBooking.id}`,
+            : `Booking saved successfully: ${savedBookingId}`,
         } satisfies Message;
 
         setMessage(saveMessage);
@@ -6304,27 +6611,27 @@ export default function Home() {
   }
 
   async function fetchSavedBookingById(bookingId: string | number) {
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       return {
         data: null,
-        error: new Error("Supabase is not configured."),
+        error: new Error("Admin data API is not available."),
       };
     }
 
-    return supabase
-      .from("bookings")
-      .select("*, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)")
+    return adminLegacyDataClient
+      .from(adminLegacyTables.bookings)
+      .select(adminBookingSelectColumns)
       .eq("id", bookingId)
       .limit(1)
       .maybeSingle();
   }
 
   async function loadBookings(successText = "Bookings loaded.", options?: { silent?: boolean }) {
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       if (!options?.silent) {
         setMessage({
           tone: "error",
-          text: "Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+          text: "Admin data API is not available.",
         });
       }
       return;
@@ -6336,9 +6643,9 @@ export default function Home() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)")
+      const { data, error } = await adminLegacyDataClient
+        .from(adminLegacyTables.bookings)
+        .select(adminBookingSelectColumns)
         .order("created_at", { ascending: false })
         .limit(25);
 
@@ -6947,10 +7254,10 @@ export default function Home() {
   ) {
     const bookingId = String(bookingRecord.id);
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       const errorMessage = {
         tone: "error",
-        text: `${errorPrefix}: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.`,
+        text: `${errorPrefix}: Admin data API is not available.`,
       } satisfies Message;
       setBookingCompletionMessage(bookingId, errorMessage);
       return;
@@ -6962,8 +7269,8 @@ export default function Home() {
 
     try {
       const updatedAt = new Date().toISOString();
-      const { error } = await supabase
-        .from("bookings")
+      const { error } = await adminLegacyDataClient
+        .from(adminLegacyTables.bookings)
         .update({
           status: nextStatus,
           updated_at: updatedAt,
@@ -7068,10 +7375,10 @@ export default function Home() {
       return;
     }
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: "Delete completed job failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Delete completed job failed: Admin data API is not available.",
       });
       return;
     }
@@ -7080,7 +7387,7 @@ export default function Home() {
     setBookingCompletionMessage(bookingId, { tone: "info", text: "Deleting completed job..." });
 
     try {
-      const { error } = await supabase.from("bookings").delete().eq("id", bookingRecord.id);
+      const { error } = await adminLegacyDataClient.from(adminLegacyTables.bookings).delete().eq("id", bookingRecord.id);
 
       if (error) {
         throw new Error(error.message);
@@ -7105,10 +7412,10 @@ export default function Home() {
     const bookingId = String(bookingRecord.id);
     const nextStatus = statusAfterClearingAssignedDriver(bookingRecord.status);
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       const errorMessage = {
         tone: "error",
-        text: "Clear assigned driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Clear assigned driver failed: Admin data API is not available.",
       } satisfies Message;
       setMessage(errorMessage);
       setDriverAssignmentMessage(bookingId, errorMessage);
@@ -7121,8 +7428,8 @@ export default function Home() {
     setDriverAssignmentMessage(bookingId, loadingMessage);
 
     try {
-      const { error } = await supabase
-        .from("bookings")
+      const { error } = await adminLegacyDataClient
+        .from(adminLegacyTables.bookings)
         .update({
           driver_id: null,
           driver_name: null,
@@ -7248,10 +7555,10 @@ export default function Home() {
       return;
     }
 
-    if (!supabase) {
+    if (!adminLegacyDataClient) {
       const errorMessage = {
         tone: "error",
-        text: "Assign driver failed: Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        text: "Assign driver failed: Admin data API is not available.",
       } satisfies Message;
       setMessage(errorMessage);
       setDriverAssignmentMessage(bookingId, errorMessage);
@@ -7264,8 +7571,8 @@ export default function Home() {
     setDriverAssignmentMessage(bookingId, loadingMessage);
 
     try {
-      const { error } = await supabase
-        .from("bookings")
+      const { error } = await adminLegacyDataClient
+        .from(adminLegacyTables.bookings)
         .update({
           driver_id: selectedDriverId,
           driver_name: driverName,

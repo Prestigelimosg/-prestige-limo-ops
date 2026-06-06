@@ -1679,6 +1679,146 @@ async function runChromeTest() {
       );
     };
 
+    const checkCloseoutToBillingPreparationReview = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-closeout-to-billing-preparation-review='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [
+          ...(section?.querySelectorAll("[data-admin-closeout-to-billing-preparation-review-item]") || []),
+        ].map((item) => {
+          const itemRect = item.getBoundingClientRect();
+
+          return {
+            height: Math.round(itemRect.height),
+            key: item.getAttribute("data-admin-closeout-to-billing-preparation-review-item") || "",
+            label:
+              item.querySelector("[data-admin-closeout-to-billing-preparation-review-label]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            width: Math.round(itemRect.width),
+          };
+        });
+        const note = section?.querySelector("[data-admin-closeout-to-billing-preparation-review-note='true']");
+        const noteRect = note?.getBoundingClientRect();
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-closeout-to-billing-preparation-review-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-closeout-to-billing-preparation-review-option-state") || "",
+            value: option.getAttribute("data-admin-closeout-to-billing-preparation-review-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-closeout-to-billing-preparation-review-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          options,
+          status:
+            section
+              ?.querySelector("[data-admin-closeout-to-billing-preparation-review-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        true,
+        `${viewport.label}: expected Closeout to Billing Preparation Review section`,
+      );
+      assert.equal(
+        state.text.includes("Closeout to Billing Preparation Review"),
+        true,
+        `${viewport.label}: expected Closeout to Billing Preparation Review title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        [
+          "Review Needed",
+          "Closeout Reviewed",
+          "Account Ready",
+          "Trip Details",
+          "Extra Charges",
+          "Billing Note",
+          "Ready Locally",
+        ],
+        `${viewport.label}: expected Closeout to Billing Preparation Review local controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Closeout reviewed",
+          "Customer/account billing readiness",
+          "Trip/service details reviewed",
+          "Extra charges review needed",
+          "Billing note reviewed",
+          "Next billing preparation action",
+          "Local billing-prep note/status",
+        ],
+        `${viewport.label}: expected Closeout to Billing Preparation Review rows`,
+      );
+      assert.equal(
+        state.status,
+        "Closeout to billing preparation review needed",
+        `${viewport.label}: expected Closeout to Billing Preparation Review to start at review needed`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected blank local billing-prep note`);
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Closeout to Billing Preparation Review controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("billing activation") &&
+          state.boundary.includes("invoice") &&
+          state.boundary.includes("PDF") &&
+          state.boundary.includes("payment") &&
+          state.boundary.includes("payout") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Closeout to Billing Preparation Review local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 1000 : 700),
+        true,
+        `${viewport.label}: expected compact Closeout to Billing Preparation Review, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Closeout to Billing Preparation Review rows to stay readable`,
+      );
+      assert.equal(
+        state.noteHeight >= 40,
+        true,
+        `${viewport.label}: expected Closeout to Billing Preparation Review note to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Closeout to Billing Preparation Review not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -1804,6 +1944,9 @@ async function runChromeTest() {
       );
       const adminCompletedTripCloseoutReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-completed-trip-closeout-review]"))`,
+      );
+      const adminCloseoutToBillingPreparationReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-closeout-to-billing-preparation-review]"))`,
       );
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
@@ -2078,6 +2221,8 @@ async function runChromeTest() {
             "customer closeout update readiness",
             "completed trip closeout review",
             "billing-readiness note reviewed",
+            "closeout to billing preparation review",
+            "customer/account billing readiness",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -2401,6 +2546,11 @@ async function runChromeTest() {
         adminCompletedTripCloseoutReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no admin completed trip closeout review`,
+      );
+      assert.equal(
+        adminCloseoutToBillingPreparationReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no admin closeout to billing preparation review`,
       );
       assert.equal(
         internalQaMockArchiveVisible,
@@ -10588,6 +10738,7 @@ async function runChromeTest() {
           await checkPostRecoveryUpdateReadiness(viewport);
           await checkDayOfTripCompletionHandoff(viewport);
           await checkCompletedTripCloseoutReview(viewport);
+          await checkCloseoutToBillingPreparationReview(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }
@@ -10612,6 +10763,9 @@ async function runChromeTest() {
       );
       const adminCompletedTripCloseoutReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-completed-trip-closeout-review]"))`,
+      );
+      const adminCloseoutToBillingPreparationReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-closeout-to-billing-preparation-review]"))`,
       );
       const driverAssignmentReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-assignment-readiness]"))`,
@@ -10886,6 +11040,8 @@ async function runChromeTest() {
             "customer closeout update readiness",
             "completed trip closeout review",
             "billing-readiness note reviewed",
+            "closeout to billing preparation review",
+            "customer/account billing readiness",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -11223,6 +11379,11 @@ async function runChromeTest() {
         adminCompletedTripCloseoutReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin completed trip closeout review`,
+      );
+      assert.equal(
+        adminCloseoutToBillingPreparationReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin closeout to billing preparation review`,
       );
       assert.equal(
         internalQaMockArchiveVisible,

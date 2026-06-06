@@ -598,6 +598,15 @@ type CompletedTripCloseoutReviewStatus =
   | "billing-note-reviewed"
   | "ready-locally";
 
+type CloseoutToBillingPreparationReviewStatus =
+  | "review-needed"
+  | "closeout-reviewed"
+  | "account-ready"
+  | "details-reviewed"
+  | "extra-charges-reviewed"
+  | "billing-note-reviewed"
+  | "ready-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3959,6 +3968,10 @@ export default function Home() {
   const [completedTripCloseoutReviewStatus, setCompletedTripCloseoutReviewStatus] =
     useState<CompletedTripCloseoutReviewStatus>("review-needed");
   const [completedTripCloseoutReviewNote, setCompletedTripCloseoutReviewNote] = useState("");
+  const [closeoutToBillingPreparationReviewStatus, setCloseoutToBillingPreparationReviewStatus] =
+    useState<CloseoutToBillingPreparationReviewStatus>("review-needed");
+  const [closeoutToBillingPreparationReviewNote, setCloseoutToBillingPreparationReviewNote] =
+    useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9687,6 +9700,132 @@ export default function Home() {
       key: "local-closeout-note-status",
       label: "Local closeout note/status",
       state: completedTripCloseoutReviewReadyLocally ? "ready" : "needs-action",
+    },
+  ];
+  const closeoutToBillingPreparationReviewStatusLabel =
+    closeoutToBillingPreparationReviewStatus === "ready-locally"
+      ? "Billing preparation review ready"
+      : closeoutToBillingPreparationReviewStatus === "billing-note-reviewed"
+        ? "Billing note reviewed"
+        : closeoutToBillingPreparationReviewStatus === "extra-charges-reviewed"
+          ? "Extra charges review checked"
+          : closeoutToBillingPreparationReviewStatus === "details-reviewed"
+            ? "Trip/service details reviewed"
+            : closeoutToBillingPreparationReviewStatus === "account-ready"
+              ? "Customer/account billing readiness reviewed"
+              : closeoutToBillingPreparationReviewStatus === "closeout-reviewed"
+                ? "Closeout reviewed"
+                : "Closeout to billing preparation review needed";
+  const closeoutToBillingPreparationReviewOptions: {
+    label: string;
+    value: CloseoutToBillingPreparationReviewStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Closeout Reviewed", value: "closeout-reviewed" },
+    { label: "Account Ready", value: "account-ready" },
+    { label: "Trip Details", value: "details-reviewed" },
+    { label: "Extra Charges", value: "extra-charges-reviewed" },
+    { label: "Billing Note", value: "billing-note-reviewed" },
+    { label: "Ready Locally", value: "ready-locally" },
+  ];
+  const closeoutToBillingPreparationReviewReached = (
+    status: CloseoutToBillingPreparationReviewStatus,
+  ) => {
+    const order: CloseoutToBillingPreparationReviewStatus[] = [
+      "closeout-reviewed",
+      "account-ready",
+      "details-reviewed",
+      "extra-charges-reviewed",
+      "billing-note-reviewed",
+      "ready-locally",
+    ];
+    const currentIndex = order.indexOf(closeoutToBillingPreparationReviewStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const closeoutToBillingCloseoutReviewed =
+    closeoutToBillingPreparationReviewReached("closeout-reviewed") ||
+    completedTripCloseoutReviewReadyLocally;
+  const closeoutToBillingCustomerAccountReady =
+    closeoutToBillingPreparationReviewReached("account-ready");
+  const closeoutToBillingTripServiceDetailsReviewed =
+    closeoutToBillingPreparationReviewReached("details-reviewed") ||
+    completedTripCloseoutTripCompleted;
+  const closeoutToBillingExtraChargesReviewed =
+    closeoutToBillingPreparationReviewReached("extra-charges-reviewed");
+  const closeoutToBillingNoteReviewed =
+    closeoutToBillingPreparationReviewReached("billing-note-reviewed");
+  const closeoutToBillingPreparationReviewReadyLocally =
+    closeoutToBillingPreparationReviewStatus === "ready-locally";
+  const closeoutToBillingPreparationReviewNextAction =
+    closeoutToBillingPreparationReviewReadyLocally
+      ? "Billing preparation review ready locally; keep billing-prep note current."
+      : !closeoutToBillingCloseoutReviewed
+        ? "Review completed trip closeout locally."
+        : !closeoutToBillingCustomerAccountReady
+          ? "Review customer/account billing readiness locally."
+          : !closeoutToBillingTripServiceDetailsReviewed
+            ? "Review trip/service details locally."
+            : !closeoutToBillingExtraChargesReviewed
+              ? "Review extra charges need locally."
+              : !closeoutToBillingNoteReviewed
+                ? "Review billing note locally."
+                : "Mark billing preparation review ready locally.";
+  const closeoutToBillingPreparationReviewItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: closeoutToBillingCloseoutReviewed
+        ? "Completed trip closeout reviewed locally."
+        : "Completed trip closeout not reviewed locally.",
+      key: "closeout-reviewed",
+      label: "Closeout reviewed",
+      state: closeoutToBillingCloseoutReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: closeoutToBillingCustomerAccountReady
+        ? "Customer/account billing readiness reviewed locally."
+        : "Customer/account billing readiness not reviewed locally.",
+      key: "customer-account-billing-readiness",
+      label: "Customer/account billing readiness",
+      state: closeoutToBillingCustomerAccountReady ? "ready" : "needs-action",
+    },
+    {
+      detail: closeoutToBillingTripServiceDetailsReviewed
+        ? "Trip/service details reviewed locally."
+        : "Trip/service details not reviewed locally.",
+      key: "trip-service-details-reviewed",
+      label: "Trip/service details reviewed",
+      state: closeoutToBillingTripServiceDetailsReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: closeoutToBillingExtraChargesReviewed
+        ? "Extra charges review checked locally."
+        : "Extra charges review still needed locally.",
+      key: "extra-charges-review-needed",
+      label: "Extra charges review needed",
+      state: closeoutToBillingExtraChargesReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: closeoutToBillingNoteReviewed
+        ? "Billing note reviewed locally."
+        : "Billing note not reviewed locally.",
+      key: "billing-note-reviewed",
+      label: "Billing note reviewed",
+      state: closeoutToBillingNoteReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: closeoutToBillingPreparationReviewNextAction,
+      key: "next-billing-preparation-action",
+      label: "Next billing preparation action",
+      state: closeoutToBillingPreparationReviewReadyLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${closeoutToBillingPreparationReviewStatusLabel}. ${
+        clean(closeoutToBillingPreparationReviewNote) || "No local note."
+      }`,
+      key: "local-billing-prep-note-status",
+      label: "Local billing-prep note/status",
+      state: closeoutToBillingPreparationReviewReadyLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -19086,6 +19225,133 @@ export default function Home() {
               >
                 Local UI only. No Supabase write, live database access, invoice, PDF, payment, payout,
                 notification sending, customer message, driver notification, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Closeout to Billing Preparation Review"
+              className="mt-3 min-w-0 rounded-md border border-cyan-200 bg-cyan-50/70 p-0.5 sm:p-2.5"
+              data-admin-closeout-to-billing-preparation-review="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-cyan-950">
+                      Closeout to Billing Preparation Review
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        closeoutToBillingPreparationReviewReadyLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : closeoutToBillingExtraChargesReviewed || closeoutToBillingNoteReviewed
+                            ? "bg-cyan-100 text-cyan-950 ring-cyan-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-closeout-to-billing-preparation-review-status="true"
+                    >
+                      {closeoutToBillingPreparationReviewStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-cyan-900"
+                    data-admin-closeout-to-billing-preparation-review-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-cyan-900">
+                    Local bridge from completed trip closeout to future billing preparation.
+                  </p>
+                </div>
+                <div
+                  aria-label="Closeout to billing preparation review status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-cyan-200 bg-white p-1 sm:w-64 sm:shrink-0 sm:grid-cols-3 lg:w-72 xl:w-96"
+                  data-admin-closeout-to-billing-preparation-review-controls="true"
+                  role="group"
+                >
+                  {closeoutToBillingPreparationReviewOptions.map((option) => {
+                    const isSelected = closeoutToBillingPreparationReviewStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-cyan-800 text-white"
+                            : "bg-white text-cyan-950 hover:bg-cyan-100"
+                        }`}
+                        data-admin-closeout-to-billing-preparation-review-option={option.value}
+                        data-admin-closeout-to-billing-preparation-review-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setCloseoutToBillingPreparationReviewStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-cyan-950 sm:mt-3">
+                <span>Local billing-prep note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-cyan-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  data-admin-closeout-to-billing-preparation-review-note="true"
+                  onChange={(event) => setCloseoutToBillingPreparationReviewNote(event.target.value)}
+                  placeholder="Local staff billing-prep note"
+                  value={closeoutToBillingPreparationReviewNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {closeoutToBillingPreparationReviewItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "extra-charges-review-needed" ||
+                            item.key === "billing-note-reviewed" ||
+                            item.key === "next-billing-preparation-action" ||
+                            item.key === "local-billing-prep-note-status"
+                          ? "border-cyan-200 bg-white text-cyan-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-closeout-to-billing-preparation-review-item={item.key}
+                    data-admin-closeout-to-billing-preparation-review-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-closeout-to-billing-preparation-review-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-closeout-to-billing-preparation-review-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-cyan-200 pt-1.5 text-[11px] leading-4 text-cyan-900 md:text-[10px] md:leading-3"
+                data-admin-closeout-to-billing-preparation-review-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, billing activation, invoice, PDF,
+                payment, payout, notification sending, customer message, driver notification, live location, or
+                parser-learning behavior.
               </p>
             </section>
           </div>

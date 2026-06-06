@@ -2301,6 +2301,115 @@ function assertBookingUiState(state) {
   assert.match(state.completedTripCloseoutReview.boundary, /live location/);
   assert.match(state.completedTripCloseoutReview.boundary, /parser-learning/);
   assert.deepEqual(state.completedTripCloseoutReview.forbiddenPanelText, []);
+  assert.equal(state.closeoutToBillingPreparationReview.visible, true);
+  assert.match(state.closeoutToBillingPreparationReview.text, /Closeout to Billing Preparation Review/);
+  assert.equal(state.closeoutToBillingPreparationReview.context, "Current dispatch draft");
+  assert.equal(
+    state.closeoutToBillingPreparationReview.status,
+    "Closeout to billing preparation review needed",
+  );
+  assert.equal(state.closeoutToBillingPreparationReview.noteValue, "");
+  assert.deepEqual(
+    state.closeoutToBillingPreparationReview.options.map((option) => option.label),
+    [
+      "Review Needed",
+      "Closeout Reviewed",
+      "Account Ready",
+      "Trip Details",
+      "Extra Charges",
+      "Billing Note",
+      "Ready Locally",
+    ],
+  );
+  assert.deepEqual(
+    state.closeoutToBillingPreparationReview.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["review-needed", "selected"],
+      ["closeout-reviewed", "idle"],
+      ["account-ready", "idle"],
+      ["details-reviewed", "idle"],
+      ["extra-charges-reviewed", "idle"],
+      ["billing-note-reviewed", "idle"],
+      ["ready-locally", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.closeoutToBillingPreparationReview.items.map((item) => item.label),
+    [
+      "Closeout reviewed",
+      "Customer/account billing readiness",
+      "Trip/service details reviewed",
+      "Extra charges review needed",
+      "Billing note reviewed",
+      "Next billing preparation action",
+      "Local billing-prep note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.closeoutToBillingPreparationReview.items.map((item) => item.key),
+    [
+      "closeout-reviewed",
+      "customer-account-billing-readiness",
+      "trip-service-details-reviewed",
+      "extra-charges-review-needed",
+      "billing-note-reviewed",
+      "next-billing-preparation-action",
+      "local-billing-prep-note-status",
+    ],
+  );
+  assert.equal(
+    state.closeoutToBillingPreparationReview.items.find((item) => item.key === "closeout-reviewed")?.detail,
+    "Completed trip closeout not reviewed locally.",
+  );
+  assert.equal(
+    state.closeoutToBillingPreparationReview.items.find(
+      (item) => item.key === "customer-account-billing-readiness",
+    )?.detail,
+    "Customer/account billing readiness not reviewed locally.",
+  );
+  assert.equal(
+    state.closeoutToBillingPreparationReview.items.find((item) => item.key === "trip-service-details-reviewed")
+      ?.detail,
+    "Trip/service details not reviewed locally.",
+  );
+  assert.equal(
+    state.closeoutToBillingPreparationReview.items.find((item) => item.key === "extra-charges-review-needed")
+      ?.detail,
+    "Extra charges review still needed locally.",
+  );
+  assert.equal(
+    state.closeoutToBillingPreparationReview.items.find((item) => item.key === "billing-note-reviewed")?.detail,
+    "Billing note not reviewed locally.",
+  );
+  assert.equal(
+    state.closeoutToBillingPreparationReview.items.find(
+      (item) => item.key === "next-billing-preparation-action",
+    )?.detail,
+    "Review completed trip closeout locally.",
+  );
+  assert.equal(
+    state.closeoutToBillingPreparationReview.items.find(
+      (item) => item.key === "local-billing-prep-note-status",
+    )?.detail,
+    "Closeout to billing preparation review needed. No local note.",
+  );
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /Local UI only/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /No Supabase write/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /live database access/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /billing activation/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /invoice/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /PDF/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /payment/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /payout/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /notification sending/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /customer message/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /driver notification/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /live location/);
+  assert.match(state.closeoutToBillingPreparationReview.boundary, /parser-learning/);
+  assert.deepEqual(state.closeoutToBillingPreparationReview.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -3736,9 +3845,73 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const closeoutToBillingPreparationReview = () => {
+        const section = document.querySelector("[data-admin-closeout-to-billing-preparation-review='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-closeout-to-billing-preparation-review-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section
+              ?.querySelector("[data-admin-closeout-to-billing-preparation-review-context='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "driver payout",
+            "paynow",
+            "payout comparison",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [
+            ...(section?.querySelectorAll("[data-admin-closeout-to-billing-preparation-review-item]") || []),
+          ].map((item) => ({
+            detail:
+              item
+                .querySelector("[data-admin-closeout-to-billing-preparation-review-detail]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-closeout-to-billing-preparation-review-item") || "",
+            label:
+              item
+                .querySelector("[data-admin-closeout-to-billing-preparation-review-label]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-closeout-to-billing-preparation-review-item-state") || "",
+          })),
+          noteValue:
+            section?.querySelector("[data-admin-closeout-to-billing-preparation-review-note='true']")?.value ??
+            null,
+          options: [
+            ...(section?.querySelectorAll("[data-admin-closeout-to-billing-preparation-review-option]") || []),
+          ].map((option) => ({
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-closeout-to-billing-preparation-review-option-state") || "",
+            value: option.getAttribute("data-admin-closeout-to-billing-preparation-review-option") || "",
+          })),
+          status:
+            section
+              ?.querySelector("[data-admin-closeout-to-billing-preparation-review-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
+        closeoutToBillingPreparationReview: closeoutToBillingPreparationReview(),
         completedTripCloseoutReview: completedTripCloseoutReview(),
         consoleErrors: window.__prestigeConsoleErrors || [],
         customerCopy: preTextByHeading("Customer Copy"),

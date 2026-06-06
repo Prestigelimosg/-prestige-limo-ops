@@ -854,6 +854,37 @@ function bookingToDbRow(
   };
 }
 
+function bookingToFoundationDbRow(
+  booking: AdminBookingRecordInput,
+  customerId: DbIdentifier | null,
+  actor: AdminBookingPersistenceAdapterActor,
+) {
+  const currentRow = bookingToDbRow(booking, customerId, actor);
+
+  return {
+    booking_reference: currentRow.booking_reference,
+    customer_id: customerId,
+    source_channel:
+      textOrNull(booking.source_channel) ||
+      sourceSurfaceToUi(currentRow.source_surface) ||
+      actor.source_surface,
+    pickup_datetime: currentRow.pickup_at,
+    pickup_location: currentRow.pickup_location,
+    dropoff_location: currentRow.dropoff_location,
+    route_type: currentRow.service_type,
+    customer_display_name: currentRow.customer_display_name,
+    contact_phone: currentRow.contact_phone,
+    contact_email: currentRow.contact_email,
+    pax_count: integerOrNull(booking.pax_count),
+    luggage_count: integerOrNull(booking.luggage_count),
+    vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
+    customer_facing_status: currentRow.customer_facing_status,
+    admin_internal_status: currentRow.admin_internal_status,
+    short_notice_review_status: currentRow.short_notice_review_status,
+    parser_source_reference: textOrNull(booking.parser_source_reference),
+  };
+}
+
 type AdminBookingSelectResult<T> = {
   data: T | null;
   error: unknown;
@@ -1346,11 +1377,12 @@ export async function createAdminBookingThroughSupabaseAdapter(
   }
 
   const bookingRow = bookingToDbRow(input.booking, customerId, actor);
-  const { data: insertedBooking, error: bookingError } = await client
-    .from("bookings")
-    .insert(bookingRow)
-    .select("id")
-    .single();
+  const { data: insertedBooking, error: bookingError } = await insertRowAndSelectIdWithFallback(
+    client,
+    "bookings",
+    bookingRow,
+    bookingToFoundationDbRow(input.booking, customerId, actor),
+  );
   const bookingId = dbIdentifierOrNull(asRecord(insertedBooking).id);
 
   if (bookingError || !bookingId) {

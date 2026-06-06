@@ -323,6 +323,27 @@ class MockSupabaseClient {
       booking_service_items: ["blocks_count", "service_item_type"],
       customer_contacts: ["contact_name", "contact_type"],
     };
+    const foundationRequiredColumns = {
+      audit_logs: ["action", "entity_type"],
+      booking_route_points: ["location_text", "sequence_number"],
+      booking_service_items: ["service_item_type"],
+      bookings: ["pickup_datetime", "route_type", "source_channel"],
+      customer_contacts: ["contact_name"],
+    };
+    const foundationForbiddenColumns = {
+      bookings: [
+        "cancellation_review_status",
+        "change_review_status",
+        "contact_display_name",
+        "passenger_name",
+        "passenger_phone",
+        "pickup_at",
+        "request_review_status",
+        "route_summary",
+        "service_type",
+        "source_surface",
+      ],
+    };
 
     if (this.schemaMode === "cumulative") {
       return (cumulativeRequiredColumns[table] || []).some((column) => !(column in row));
@@ -330,6 +351,13 @@ class MockSupabaseClient {
 
     if (this.schemaMode === "current") {
       return (currentForbiddenColumns[table] || []).some((column) => column in row);
+    }
+
+    if (this.schemaMode === "foundation") {
+      return (
+        (foundationRequiredColumns[table] || []).some((column) => !(column in row)) ||
+        (foundationForbiddenColumns[table] || []).some((column) => column in row)
+      );
     }
 
     return false;
@@ -972,6 +1000,53 @@ try {
       );
     }
   }
+
+  const foundationSchemaPayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-FOUNDATION-CREATE-001",
+    },
+  });
+  const parsedFoundationSchemaPayload =
+    persistence.parseAdminBookingPersistencePayload(foundationSchemaPayload);
+
+  assert.equal(parsedFoundationSchemaPayload.ok, true);
+
+  const foundationSchemaMock = installMockClient({}, { schemaMode: "foundation" });
+  const foundationSchemaResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    parsedFoundationSchemaPayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+  const foundationBookingInsert = insertedOperation(foundationSchemaMock.client, "bookings");
+
+  assert.equal(foundationSchemaResult.ok, true);
+  assert.equal(foundationSchemaResult.data.booking_reference, "SAFE-FOUNDATION-CREATE-001");
+  assert.equal(foundationSchemaResult.data.pickup_at, "2026-06-08T10:30:00+08:00");
+  assert.equal(foundationSchemaResult.data.service_type, "MNG");
+  assert.deepEqual(foundationBookingInsert.payload, {
+    admin_internal_status: "needs_review",
+    booking_reference: "SAFE-FOUNDATION-CREATE-001",
+    contact_email: "safe-ops@example.com",
+    contact_phone: "+65 9000 0001",
+    customer_display_name: "Safe Ops Account",
+    customer_facing_status: "pending_review",
+    customer_id: 1,
+    dropoff_location: "Safe Canonical Dropoff",
+    luggage_count: null,
+    parser_source_reference: null,
+    pax_count: null,
+    pickup_datetime: "2026-06-08T10:30:00+08:00",
+    pickup_location: "Safe Canonical Pickup",
+    route_type: "MNG",
+    short_notice_review_status: "not_required",
+    source_channel: "admin-dashboard",
+    vehicle_type_or_category: null,
+  });
+  assert.doesNotMatch(
+    JSON.stringify(foundationBookingInsert.payload),
+    /pickup_at|service_type|source_surface|route_summary|contact_display_name|passenger_name|request_review_status/,
+  );
+  assertNoUnsafeKeys(foundationSchemaResult, "foundation-schema create result");
 
   const foundationReadMock = installMockClient(
     {

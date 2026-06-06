@@ -3,6 +3,10 @@ export function sleep(timeoutMs) {
 }
 
 export function waitForChildExit(childProcess, timeoutMs = 5000) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return Promise.resolve();
+  }
+
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       resolve(undefined);
@@ -13,6 +17,52 @@ export function waitForChildExit(childProcess, timeoutMs = 5000) {
       resolve(undefined);
     });
   });
+}
+
+export async function terminateChildProcess(childProcess, timeoutMs = 2000) {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return;
+  }
+
+  childProcess.kill("SIGTERM");
+  await waitForChildExit(childProcess, timeoutMs);
+
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    return;
+  }
+
+  childProcess.kill("SIGKILL");
+  await waitForChildExit(childProcess, timeoutMs);
+}
+
+export function createBrowserTestReporter(testName) {
+  const startedAt = Date.now();
+  const progress = [];
+  const verbose = /^(1|true|yes)$/i.test(process.env.PRESTIGE_BROWSER_TEST_VERBOSE || "");
+
+  const seconds = (durationMs) => Number((durationMs / 1000).toFixed(1));
+  const elapsedSeconds = () => seconds(Date.now() - startedAt);
+
+  function step(label) {
+    const elapsed = elapsedSeconds();
+    progress.push({ elapsedSeconds: elapsed, label });
+    console.log(`[${testName}] ${elapsed.toFixed(1)}s ${label}`);
+  }
+
+  function summary(details = {}) {
+    return {
+      ...details,
+      durationSeconds: elapsedSeconds(),
+      progress,
+      test: testName,
+    };
+  }
+
+  return {
+    step,
+    summary,
+    verbose,
+  };
 }
 
 export function normalizeErrorMessage(error) {

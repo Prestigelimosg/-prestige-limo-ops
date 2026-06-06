@@ -3,6 +3,10 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  createBrowserTestReporter,
+  terminateChildProcess,
+} from "./browser-test-helpers.mjs";
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
@@ -1245,19 +1249,6 @@ const forbiddenRuntimeText = [
 
 function sleep(timeoutMs) {
   return new Promise((resolve) => setTimeout(resolve, timeoutMs));
-}
-
-function waitForChildExit(childProcess, timeoutMs = 5000) {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      resolve(undefined);
-    }, timeoutMs);
-
-    childProcess.once("exit", () => {
-      clearTimeout(timeout);
-      resolve(undefined);
-    });
-  });
 }
 
 function normalizeErrorMessage(error) {
@@ -3013,6 +3004,7 @@ function assertBookingUiState(state) {
 }
 
 async function runChromeTest() {
+  const reporter = createBrowserTestReporter("booking-ui-browser");
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "prestige-limo-booking-ui-chrome-"));
   const blockedSupabaseRequests = [];
   const blockedSupabaseMutationRequests = [];
@@ -3045,11 +3037,13 @@ async function runChromeTest() {
   });
 
   try {
+    reporter.step("launching Chrome");
     await waitForChromeDebugPort();
 
     const target = await waitForChromePageTarget();
     client = createChromeClient(target.webSocketDebuggerUrl);
     await client.ready;
+    reporter.step("Chrome DevTools ready");
 
     client.on("Runtime.exceptionThrown", ({ exceptionDetails }) => {
       const description =
@@ -3071,6 +3065,7 @@ async function runChromeTest() {
     const loadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: appUrl });
     await loadEvent;
+    reporter.step("admin app loaded");
 
     const evaluate = async (expression) => {
       const result = await client.send("Runtime.evaluate", {
@@ -3182,6 +3177,7 @@ async function runChromeTest() {
         originalError.apply(console, args);
       };`);
 
+    reporter.step("checking dispatch, parser, and save guards");
     const initialAiAssistSafetyState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -6293,6 +6289,7 @@ async function runChromeTest() {
       "Bookings search cleared",
     );
 
+    reporter.step("checking dashboard booking actions");
     await clickTab("Dashboard", "Operations Dashboard");
     await waitForCondition(
       () =>
@@ -8682,6 +8679,7 @@ async function runChromeTest() {
       "Expected Undo completed feedback without driver not to duplicate in the global status panel",
     );
 
+    reporter.step("checking driver database workflows");
     await clickTab("Drivers", "Driver Database");
 
 	    await evaluate(`(() => {
@@ -9518,6 +9516,7 @@ async function runChromeTest() {
       "Dashboard plate-search driver fixtures loaded",
     );
 
+    reporter.step("checking loaded booking workflow status API calls");
     await clickTab("Dashboard", "Operations Dashboard");
     await evaluate(`(() => {
       window.__prestigeProfilePayoutPreviousFetch = window.fetch;
@@ -11373,6 +11372,7 @@ async function runChromeTest() {
     assert.equal(dispatchDraftAfterDashboardAssignment.fields.driverName, "TEST DRIVER CRM 20260516");
 
     await clickTab("Dashboard", "Operations Dashboard");
+    reporter.step("workflow status API: dashboard load and save");
 
     await evaluate(`(() => {
       const previousFetch = window.fetch.bind(window);
@@ -11695,6 +11695,7 @@ async function runChromeTest() {
     })()`);
 
     await clickTab("Bookings", "Recent Bookings");
+    reporter.step("workflow status API: Recent Bookings load");
 
     const clickedRecentLoadThisBooking = await evaluate(`(() => {
       const loadThisBookingButton = [...document.querySelectorAll("button")].find(
@@ -11855,6 +11856,7 @@ async function runChromeTest() {
     );
 
     await clickTab("Completed", "Completed Bookings");
+    reporter.step("workflow status API: Completed Bookings load");
 
     const completedTabState = await waitForCondition(
       () =>
@@ -14689,6 +14691,7 @@ async function runChromeTest() {
     const liveLocationAppLoadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: appUrl });
     await liveLocationAppLoadEvent;
+    reporter.step("checking customer live-location eligibility copy");
 
     await waitForCondition(
       () =>
@@ -14840,6 +14843,7 @@ async function runChromeTest() {
       );
     }
 
+    reporter.step("checking public driver demo workflow");
     const driverDemoLoadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: driverDemoUrl });
     await driverDemoLoadEvent;
@@ -15371,7 +15375,16 @@ async function runChromeTest() {
       assert.match(driverStatusState.jobSummaryText, /SQ333/);
     }
 
-    console.log(JSON.stringify(state, null, 2));
+    const summary = reporter.summary({
+      blockedSupabaseMutationRequests: blockedSupabaseMutationRequests.length,
+      blockedSupabaseRequests: blockedSupabaseRequests.length,
+      buttonLabelCount: state.buttonLabels.length,
+      consoleErrorCount: state.consoleErrors.length,
+      errorCount: state.errors.length,
+      ok: true,
+      verboseHint: "Set PRESTIGE_BROWSER_TEST_VERBOSE=1 to print the full booking-ui state JSON.",
+    });
+    console.log(JSON.stringify(reporter.verbose ? state : summary, null, 2));
   } catch (error) {
     let pageSnapshot = "";
 
@@ -15401,8 +15414,7 @@ async function runChromeTest() {
       await client.close();
     }
 
-    chrome.kill("SIGTERM");
-    await waitForChildExit(chrome);
+    await terminateChildProcess(chrome);
     await rm(userDataDir, { force: true, recursive: true }).catch(() => {});
   }
 }

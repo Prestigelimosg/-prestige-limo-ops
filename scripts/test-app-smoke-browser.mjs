@@ -5,6 +5,7 @@ import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import {
+  createBrowserTestReporter,
   createChromeClient,
   navigateAndWaitForBodyText,
   navigateWithLoadEvent,
@@ -543,6 +544,7 @@ async function terminateChromeProcess(chrome) {
 }
 
 async function runChromeTest() {
+  const reporter = createBrowserTestReporter("app-smoke-browser");
   const chromeDebugPort = configuredChromeDebugPort ?? (await getAvailableTcpPort());
 
   if (!Number.isInteger(chromeDebugPort) || chromeDebugPort <= 0) {
@@ -581,11 +583,13 @@ async function runChromeTest() {
   });
 
   try {
+    reporter.step("launching Chrome");
     await waitForChromeDebugPort(chromeDebugPort);
 
     const target = await waitForChromePageTarget(chromeDebugPort);
     client = createChromeClient(target.webSocketDebuggerUrl);
     await client.ready;
+    reporter.step("Chrome DevTools ready");
 
     client.on("Runtime.exceptionThrown", ({ exceptionDetails }) => {
       const description =
@@ -611,6 +615,7 @@ async function runChromeTest() {
     await client.send("Network.enable");
 
     await navigateWithLoadEvent(client, appUrl);
+    reporter.step("admin app loaded");
 
     const evaluate = async (expression) => {
       const result = await client.send("Runtime.evaluate", {
@@ -37868,10 +37873,12 @@ async function runChromeTest() {
       };`);
 
     await waitForTabs();
+    reporter.step("initial admin tabs ready");
 
     const visibleSnapshots = [];
     const buttonLabels = [];
     for (const label of tabLabels) {
+      reporter.step(`initial tab sweep: ${label}`);
       await clickTab(label);
       visibleSnapshots.push(await evaluate("document.body?.innerText || ''"));
       buttonLabels.push(
@@ -37893,6 +37900,7 @@ async function runChromeTest() {
       internalQaMockArchiveDefault,
       visibleText: visibleSnapshots.join("\n\n"),
     };
+    reporter.step("checking dispatch workflow sections");
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
     state.adminDispatchReleaseChecklist = await checkAdminDispatchReleaseChecklist();
     state.adminDispatchReleaseHandoffPacket = await checkAdminDispatchReleaseHandoffPacket();
@@ -37917,7 +37925,9 @@ async function runChromeTest() {
       await checkAdminMonthlyBillingQueueExceptionReview();
     state.adminMonthlyBillingMonthGroupingReview =
       await checkAdminMonthlyBillingMonthGroupingReview();
+    reporter.step("checking internal QA mock archive sections");
     await withInternalQaMockArchiveOpen(async () => {
+      reporter.step("internal QA archive: intake and driver handoff");
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
       state.adminDriverAssignmentReadiness = await checkAdminDriverAssignmentReadiness();
@@ -37934,6 +37944,7 @@ async function runChromeTest() {
         await checkAdminFutureNotificationQueueCustomerUpdateAuditReadiness();
       state.adminMockDriverDetailCustomerUpdatePreview =
         await checkAdminMockDriverDetailCustomerUpdatePreview();
+      reporter.step("internal QA archive: accounting and finance close cycle");
       state.adminMockDspUsageAccountingPreview = await checkAdminMockDspUsageAccountingPreview();
       state.adminMockDspMonthlyRollupReview = await checkAdminMockDspMonthlyRollupReview();
       state.adminMockDspReconciliationExceptionsReview =
@@ -37957,6 +37968,7 @@ async function runChromeTest() {
         await checkAdminMockCloseCycleEvidenceResponseRetentionReview();
       state.adminMockCloseCycleExceptionResolutionAuditHandoffReview =
         await checkAdminMockCloseCycleExceptionResolutionAuditHandoffReview();
+      reporter.step("internal QA archive: extra charges reviews");
       state.adminMockExtraChargesControlCenter = await checkAdminMockExtraChargesControlCenter();
       if (
         await evaluate(
@@ -37974,6 +37986,7 @@ async function runChromeTest() {
         state.adminMockExtraChargesApprovalDecisionSeparationReview =
           await checkAdminMockExtraChargesApprovalDecisionSeparationReview();
       }
+      reporter.step("internal QA archive: operations workbenches");
       state.adminMockCompletedJobCloseoutCenter = await checkAdminMockCompletedJobCloseoutCenter();
       state.adminMockMonthEndCloseoutWorkbench = await checkAdminMockMonthEndCloseoutWorkbench();
       state.adminMockFinanceExceptionResolutionWorkbench =
@@ -38003,24 +38016,30 @@ async function runChromeTest() {
         await checkAdminMockOperationsRiskSlaWatchlistWorkbench();
       state.adminMockQuotePricingReviewReadinessWorkbench =
         await checkAdminMockQuotePricingReviewReadinessWorkbench();
+      reporter.step("internal QA archive: placement guards");
       state.mockWorkflowReviewBottomPlacement = await checkMockWorkflowReviewBottomPlacement();
     });
+    reporter.step("checking admin persistence and replacement sections");
     state.adminBookingPersistence = await checkAdminBookingPersistencePrototype();
     state.adminReplacement = await checkAdminReplacementPlaceholder();
     state.responsiveTabs = [];
     for (const viewport of responsiveTabViewports) {
+      reporter.step(`responsive admin tabs: ${viewport.label}`);
       const responsiveStates = await checkResponsiveTabs(viewport);
       state.responsiveTabs.push(...responsiveStates);
     }
+    reporter.step("checking customer/payment public routes");
     state.customerPayments = await checkCustomerPaymentsRoute();
     state.customerBooking = await checkCustomerBookingRoute();
     state.customerPortal = await checkCustomerPortalRoute();
     state.driverJobLink = [];
     for (const viewport of driverJobViewports) {
+      reporter.step(`driver job route: ${viewport.label}`);
       state.driverJobLink.push(await checkDriverJobRoute(viewport));
     }
     state.driverJobDemo = [];
     for (const viewport of driverDemoViewports) {
+      reporter.step(`driver demo route: ${viewport.label}`);
       state.driverJobDemo.push(await checkDriverDemoRoute(viewport));
     }
     state.internalQaMockArchiveRouteBoundaries = [];
@@ -38056,6 +38075,7 @@ async function runChromeTest() {
       { context: "/driver-job-demo", expectedText: "Prestige Limo Driver Job", url: driverDemoUrl },
       { context: "/driver-job/[token]", expectedText: "Prestige Limo Driver Job", url: driverJobWorkflowUrl },
     ]) {
+      reporter.step(`route leak guards: ${route.context}`);
       await navigateWithLoadEvent(client, route.url);
       await waitForBodyText(evaluate, route.expectedText, `${route.context} archive boundary`);
       if (route.context === "/driver-job/[token]") {
@@ -38598,6 +38618,7 @@ async function runChromeTest() {
         `Expected customer booking document history visibility boundary for ${route.context}`,
       );
     }
+    reporter.step("route leak guards: /customers/[customerId]");
     await navigateWithLoadEvent(client, new URL("/customers/ubs", appUrl).toString());
     await waitForBodyText(evaluate, "CUSTOMER FOLDER", "/customers/[customerId] confirmed driver handoff boundary");
     const customerDetailAdminConfirmedDriverAssignmentHandoffVisible = await evaluate(
@@ -39058,7 +39079,20 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertAppSmokeState(state);
-    console.log(JSON.stringify(state, null, 2));
+    const summary = reporter.summary({
+      adminRouteBoundaryContexts: state.internalQaMockArchiveRouteBoundaries.map(
+        (boundary) => boundary.context,
+      ),
+      buttonLabelCount: state.buttonLabels.length,
+      consoleErrorCount: state.consoleErrors.length,
+      driverDemoViewports: state.driverJobDemo.length,
+      driverJobViewports: state.driverJobLink.length,
+      errorCount: state.errors.length,
+      ok: true,
+      responsiveTabViewports: state.responsiveTabs.length,
+      verboseHint: "Set PRESTIGE_BROWSER_TEST_VERBOSE=1 to print the full app-smoke state JSON.",
+    });
+    console.log(JSON.stringify(reporter.verbose ? state : summary, null, 2));
   } catch (error) {
     let pageSnapshot = "";
 

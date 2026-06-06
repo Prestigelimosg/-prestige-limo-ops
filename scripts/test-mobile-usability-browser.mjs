@@ -4,11 +4,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  createBrowserTestReporter,
   createChromeClient,
   navigateAndWaitForBodyText,
   normalizeConsoleMessages,
   normalizeErrorMessage,
-  waitForChildExit,
+  terminateChildProcess,
   waitForChromeDebugPort,
   waitForChromePageTarget,
   waitForBodyText,
@@ -280,6 +281,7 @@ function assertButtonTouchTargets(buttons, labels, context) {
 }
 
 async function runChromeTest() {
+  const reporter = createBrowserTestReporter("mobile-usability-browser");
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "prestige-limo-mobile-usability-chrome-"));
   const chrome = spawn(
     chromeBinary,
@@ -310,11 +312,13 @@ async function runChromeTest() {
   });
 
   try {
+    reporter.step("launching Chrome");
     await waitForChromeDebugPort(chromeDebugPort);
 
     const target = await waitForChromePageTarget(chromeDebugPort);
     client = createChromeClient(target.webSocketDebuggerUrl);
     await client.ready;
+    reporter.step("Chrome DevTools ready");
 
     client.on("Runtime.exceptionThrown", ({ exceptionDetails }) => {
       const description =
@@ -13147,6 +13151,7 @@ async function runChromeTest() {
     };
 
     for (const viewport of viewports) {
+      reporter.step(`checking viewport matrix: ${viewport.label}`);
       await checkMainAppViewport(viewport);
       for (const route of responsiveRoutes) {
         await checkResponsiveRouteViewport(viewport, route);
@@ -13188,7 +13193,14 @@ async function runChromeTest() {
 
     assert.deepEqual(errors, [], `Expected no runtime errors:\n${errors.join("\n")}`);
     assert.deepEqual(consoleErrors, [], `Expected no browser console errors:\n${consoleErrors.join("\n")}`);
-    console.log("Mobile usability browser tests passed.");
+    console.log(JSON.stringify(reporter.summary({
+      consoleErrorCount: consoleErrors.length,
+      errorCount: errors.length,
+      ok: true,
+      publicRoutesPerViewport: responsiveRoutes.length + 2,
+      verboseHint: "Set PRESTIGE_BROWSER_TEST_VERBOSE=1 for verbose browser diagnostics.",
+      viewports: viewports.map((viewport) => viewport.label),
+    }), null, 2));
   } catch (error) {
     let pageSnapshot = "";
 
@@ -13220,8 +13232,7 @@ async function runChromeTest() {
       await client.close();
     }
 
-    chrome.kill("SIGTERM");
-    await waitForChildExit(chrome);
+    await terminateChildProcess(chrome);
     await rm(userDataDir, { force: true, recursive: true }).catch(() => {});
   }
 }

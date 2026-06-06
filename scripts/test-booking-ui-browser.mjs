@@ -1921,6 +1921,101 @@ function assertBookingUiState(state) {
   assert.match(state.dayOfTripExceptionEscalation.boundary, /live location/);
   assert.match(state.dayOfTripExceptionEscalation.boundary, /parser-learning/);
   assert.deepEqual(state.dayOfTripExceptionEscalation.forbiddenPanelText, []);
+  assert.equal(state.dispatchRecoveryReplacementReadiness.visible, true);
+  assert.match(
+    state.dispatchRecoveryReplacementReadiness.text,
+    /Dispatch Recovery \/ Replacement Readiness/,
+  );
+  assert.equal(state.dispatchRecoveryReplacementReadiness.context, "Current dispatch draft");
+  assert.equal(state.dispatchRecoveryReplacementReadiness.status, "Recovery review needed");
+  assert.equal(state.dispatchRecoveryReplacementReadiness.noteValue, "");
+  assert.deepEqual(
+    state.dispatchRecoveryReplacementReadiness.options.map((option) => option.label),
+    ["Review Needed", "Driver Reviewed", "Vehicle Reviewed", "Copy Ready", "Job Link Ready", "Ready Locally"],
+  );
+  assert.deepEqual(
+    state.dispatchRecoveryReplacementReadiness.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["review-needed", "selected"],
+      ["driver-reviewed", "idle"],
+      ["vehicle-reviewed", "idle"],
+      ["copy-ready", "idle"],
+      ["job-link-ready", "idle"],
+      ["ready-locally", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.dispatchRecoveryReplacementReadiness.items.map((item) => item.label),
+    [
+      "Replacement driver review",
+      "Replacement vehicle review",
+      "Customer update readiness",
+      "Dispatch copy update readiness",
+      "New driver job link readiness",
+      "Next recovery action",
+      "Local recovery note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.dispatchRecoveryReplacementReadiness.items.map((item) => item.key),
+    [
+      "replacement-driver-review",
+      "replacement-vehicle-review",
+      "customer-update-readiness",
+      "dispatch-copy-update-readiness",
+      "new-driver-job-link-readiness",
+      "next-recovery-action",
+      "local-recovery-note-status",
+    ],
+  );
+  assert.equal(
+    state.dispatchRecoveryReplacementReadiness.items.find((item) => item.key === "replacement-driver-review")?.detail,
+    "Replacement driver not reviewed locally.",
+  );
+  assert.equal(
+    state.dispatchRecoveryReplacementReadiness.items.find((item) => item.key === "replacement-vehicle-review")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.dispatchRecoveryReplacementReadiness.items.find((item) => item.key === "customer-update-readiness")?.detail,
+    "No customer update flag.",
+  );
+  assert.equal(
+    state.dispatchRecoveryReplacementReadiness.items.find(
+      (item) => item.key === "dispatch-copy-update-readiness",
+    )?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.dispatchRecoveryReplacementReadiness.items.find(
+      (item) => item.key === "new-driver-job-link-readiness",
+    )?.detail,
+    "New driver job link not prepared locally.",
+  );
+  assert.equal(
+    state.dispatchRecoveryReplacementReadiness.items.find((item) => item.key === "next-recovery-action")?.detail,
+    "Review replacement driver details locally.",
+  );
+  assert.equal(
+    state.dispatchRecoveryReplacementReadiness.items.find((item) => item.key === "local-recovery-note-status")?.detail,
+    "Recovery review needed. No local note.",
+  );
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /Local UI only/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /No Supabase write/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /live database access/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /notification sending/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /customer message/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /driver notification/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /billing/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /payment/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /PDF/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /payout/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /live location/);
+  assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /parser-learning/);
+  assert.deepEqual(state.dispatchRecoveryReplacementReadiness.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -3107,6 +3202,69 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const dispatchRecoveryReplacementReadiness = () => {
+        const section = document.querySelector(
+          "[data-admin-dispatch-recovery-replacement-readiness='true']",
+        );
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-dispatch-recovery-replacement-readiness-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section
+              ?.querySelector("[data-admin-dispatch-recovery-replacement-readiness-context='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [
+            ...(section?.querySelectorAll("[data-admin-dispatch-recovery-replacement-readiness-item]") || []),
+          ].map((item) => ({
+            detail:
+              item
+                .querySelector("[data-admin-dispatch-recovery-replacement-readiness-detail]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-dispatch-recovery-replacement-readiness-item") || "",
+            label:
+              item
+                .querySelector("[data-admin-dispatch-recovery-replacement-readiness-label]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-dispatch-recovery-replacement-readiness-item-state") || "",
+          })),
+          noteValue:
+            section?.querySelector("[data-admin-dispatch-recovery-replacement-readiness-note='true']")?.value ??
+            null,
+          options: [
+            ...(section?.querySelectorAll("[data-admin-dispatch-recovery-replacement-readiness-option]") || []),
+          ].map((option) => ({
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-dispatch-recovery-replacement-readiness-option-state") || "",
+            value: option.getAttribute("data-admin-dispatch-recovery-replacement-readiness-option") || "",
+          })),
+          status:
+            section
+              ?.querySelector("[data-admin-dispatch-recovery-replacement-readiness-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -3114,6 +3272,7 @@ async function runChromeTest() {
         customerCopy: preTextByHeading("Customer Copy"),
         dayOfTripExceptionEscalation: dayOfTripExceptionEscalation(),
         dayOfTripDispatchMonitor: dayOfTripDispatchMonitor(),
+        dispatchRecoveryReplacementReadiness: dispatchRecoveryReplacementReadiness(),
         dispatchReleaseChecklist: dispatchReleaseChecklist(),
         dispatchReleaseHandoffPacket: dispatchReleaseHandoffPacket(),
         driverAcknowledgementFollowUp: driverAcknowledgementFollowUp(),

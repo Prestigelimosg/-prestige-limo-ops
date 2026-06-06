@@ -564,6 +564,14 @@ type DayOfTripExceptionEscalationStatus =
   | "customer-update"
   | "closed-locally";
 
+type DispatchRecoveryReplacementStatus =
+  | "review-needed"
+  | "driver-reviewed"
+  | "vehicle-reviewed"
+  | "copy-ready"
+  | "job-link-ready"
+  | "ready-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3913,6 +3921,9 @@ export default function Home() {
   const [dayOfTripExceptionEscalationStatus, setDayOfTripExceptionEscalationStatus] =
     useState<DayOfTripExceptionEscalationStatus>("late-reminder-due");
   const [dayOfTripExceptionEscalationNote, setDayOfTripExceptionEscalationNote] = useState("");
+  const [dispatchRecoveryReplacementStatus, setDispatchRecoveryReplacementStatus] =
+    useState<DispatchRecoveryReplacementStatus>("review-needed");
+  const [dispatchRecoveryReplacementNote, setDispatchRecoveryReplacementNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9165,6 +9176,128 @@ export default function Home() {
       key: "local-escalation-note-status",
       label: "Local escalation note/status",
       state: dayOfTripExceptionEscalationClosed ? "ready" : "needs-action",
+    },
+  ];
+  const dispatchRecoveryReplacementStatusLabel =
+    dispatchRecoveryReplacementStatus === "ready-locally"
+      ? "Ready locally"
+      : dispatchRecoveryReplacementStatus === "job-link-ready"
+        ? "New driver job link ready"
+        : dispatchRecoveryReplacementStatus === "copy-ready"
+          ? "Recovery copy ready"
+          : dispatchRecoveryReplacementStatus === "vehicle-reviewed"
+            ? "Replacement vehicle reviewed"
+            : dispatchRecoveryReplacementStatus === "driver-reviewed"
+              ? "Replacement driver reviewed"
+              : "Recovery review needed";
+  const dispatchRecoveryReplacementOptions: {
+    label: string;
+    value: DispatchRecoveryReplacementStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Driver Reviewed", value: "driver-reviewed" },
+    { label: "Vehicle Reviewed", value: "vehicle-reviewed" },
+    { label: "Copy Ready", value: "copy-ready" },
+    { label: "Job Link Ready", value: "job-link-ready" },
+    { label: "Ready Locally", value: "ready-locally" },
+  ];
+  const dispatchRecoveryReplacementReached = (status: DispatchRecoveryReplacementStatus) => {
+    const order: DispatchRecoveryReplacementStatus[] = [
+      "driver-reviewed",
+      "vehicle-reviewed",
+      "copy-ready",
+      "job-link-ready",
+      "ready-locally",
+    ];
+    const currentIndex = order.indexOf(dispatchRecoveryReplacementStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const dispatchRecoveryReplacementDriverReviewed =
+    dispatchRecoveryReplacementReached("driver-reviewed") ||
+    (Boolean(clean(replacementDriverDraft.driverName)) &&
+      Boolean(clean(replacementDriverDraft.driverContact)));
+  const dispatchRecoveryReplacementVehicleReviewed =
+    dispatchRecoveryReplacementReached("vehicle-reviewed") ||
+    Boolean(clean(replacementDriverDraft.carPlate) || clean(replacementDriverDraft.vehicleModel));
+  const dispatchRecoveryReplacementCustomerUpdateReady =
+    dispatchRecoveryReplacementReached("copy-ready") || !dayOfTripExceptionCustomerUpdateMayBeNeeded;
+  const dispatchRecoveryReplacementDispatchCopyReady =
+    dispatchRecoveryReplacementReached("copy-ready") &&
+    dispatchRecoveryReplacementDriverReviewed &&
+    dispatchRecoveryReplacementVehicleReviewed;
+  const dispatchRecoveryReplacementJobLinkReady =
+    dispatchRecoveryReplacementReached("job-link-ready");
+  const dispatchRecoveryReplacementReadyLocally =
+    dispatchRecoveryReplacementStatus === "ready-locally";
+  const dispatchRecoveryReplacementNextAction = dispatchRecoveryReplacementReadyLocally
+    ? "Recovery handoff ready locally; keep dispatcher note current."
+    : !dispatchRecoveryReplacementDriverReviewed
+      ? "Review replacement driver details locally."
+      : !dispatchRecoveryReplacementVehicleReviewed
+        ? "Review replacement vehicle details locally."
+        : !dispatchRecoveryReplacementDispatchCopyReady
+          ? "Update customer and driver dispatch copy locally."
+          : !dispatchRecoveryReplacementJobLinkReady
+            ? "Prepare the new driver job link locally."
+            : "Mark recovery ready locally after dispatcher review.";
+  const dispatchRecoveryReplacementItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: dispatchRecoveryReplacementDriverReviewed
+        ? "Replacement driver reviewed locally."
+        : "Replacement driver not reviewed locally.",
+      key: "replacement-driver-review",
+      label: "Replacement driver review",
+      state: dispatchRecoveryReplacementDriverReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchRecoveryReplacementVehicleReviewed
+        ? "Replacement vehicle reviewed locally."
+        : "Replacement vehicle not reviewed locally.",
+      key: "replacement-vehicle-review",
+      label: "Replacement vehicle review",
+      state: dispatchRecoveryReplacementVehicleReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripExceptionCustomerUpdateMayBeNeeded
+        ? dispatchRecoveryReplacementCustomerUpdateReady
+          ? "Customer update copy ready locally."
+          : "Customer update still needs local copy review."
+        : "No customer update flag.",
+      key: "customer-update-readiness",
+      label: "Customer update readiness",
+      state: dispatchRecoveryReplacementCustomerUpdateReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchRecoveryReplacementDispatchCopyReady
+        ? "Driver dispatch copy update ready locally."
+        : "Update driver dispatch copy after replacement review.",
+      key: "dispatch-copy-update-readiness",
+      label: "Dispatch copy update readiness",
+      state: dispatchRecoveryReplacementDispatchCopyReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchRecoveryReplacementJobLinkReady
+        ? "New driver job link prepared locally."
+        : "New driver job link not prepared locally.",
+      key: "new-driver-job-link-readiness",
+      label: "New driver job link readiness",
+      state: dispatchRecoveryReplacementJobLinkReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchRecoveryReplacementNextAction,
+      key: "next-recovery-action",
+      label: "Next recovery action",
+      state: dispatchRecoveryReplacementReadyLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${dispatchRecoveryReplacementStatusLabel}. ${
+        clean(dispatchRecoveryReplacementNote) || "No local note."
+      }`,
+      key: "local-recovery-note-status",
+      label: "Local recovery note/status",
+      state: dispatchRecoveryReplacementReadyLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -18058,6 +18191,132 @@ export default function Home() {
               <p
                 className="mt-1.5 border-t border-rose-200 pt-1.5 text-[11px] leading-4 text-rose-900 md:text-[10px] md:leading-3"
                 data-admin-day-of-trip-exception-escalation-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Dispatch Recovery / Replacement Readiness"
+              className="mt-3 rounded-md border border-sky-200 bg-sky-50/70 p-0.5 sm:p-2.5"
+              data-admin-dispatch-recovery-replacement-readiness="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-sky-950">
+                      Dispatch Recovery / Replacement Readiness
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        dispatchRecoveryReplacementReadyLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : dispatchRecoveryReplacementJobLinkReady ||
+                              dispatchRecoveryReplacementDispatchCopyReady
+                            ? "bg-sky-100 text-sky-900 ring-sky-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-dispatch-recovery-replacement-readiness-status="true"
+                    >
+                      {dispatchRecoveryReplacementStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-sky-900"
+                    data-admin-dispatch-recovery-replacement-readiness-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-sky-900">
+                    Local recovery bridge for replacement driver and vehicle review.
+                  </p>
+                </div>
+                <div
+                  aria-label="Dispatch recovery replacement readiness status"
+                  className="grid w-full grid-cols-2 gap-1 rounded-md border border-sky-200 bg-white p-1 min-[300px]:grid-cols-3 sm:w-64 sm:shrink-0 lg:w-72 xl:w-96"
+                  data-admin-dispatch-recovery-replacement-readiness-controls="true"
+                  role="group"
+                >
+                  {dispatchRecoveryReplacementOptions.map((option) => {
+                    const isSelected = dispatchRecoveryReplacementStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 rounded px-1.5 py-1 text-[10px] font-semibold transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-sky-700 text-white"
+                            : "bg-white text-sky-950 hover:bg-sky-100"
+                        }`}
+                        data-admin-dispatch-recovery-replacement-readiness-option={option.value}
+                        data-admin-dispatch-recovery-replacement-readiness-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setDispatchRecoveryReplacementStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-sky-950 sm:mt-3">
+                <span>Local recovery note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  data-admin-dispatch-recovery-replacement-readiness-note="true"
+                  onChange={(event) => setDispatchRecoveryReplacementNote(event.target.value)}
+                  placeholder="Local staff recovery note"
+                  value={dispatchRecoveryReplacementNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {dispatchRecoveryReplacementItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "new-driver-job-link-readiness" ||
+                            item.key === "next-recovery-action" ||
+                            item.key === "local-recovery-note-status"
+                          ? "border-sky-200 bg-white text-sky-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-dispatch-recovery-replacement-readiness-item={item.key}
+                    data-admin-dispatch-recovery-replacement-readiness-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="font-semibold leading-4"
+                        data-admin-dispatch-recovery-replacement-readiness-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-dispatch-recovery-replacement-readiness-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-sky-200 pt-1.5 text-[11px] leading-4 text-sky-900 md:text-[10px] md:leading-3"
+                data-admin-dispatch-recovery-replacement-readiness-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.

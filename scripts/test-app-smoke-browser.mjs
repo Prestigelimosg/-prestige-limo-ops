@@ -5494,6 +5494,236 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDispatchRecoveryReplacementReadiness = async () => {
+      const recoveryViewports = [
+        { height: 812, label: "mobile dispatch recovery replacement", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop dispatch recovery replacement", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of recoveryViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-dispatch-recovery-replacement-readiness]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-dispatch-recovery-replacement-readiness-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-dispatch-recovery-replacement-readiness-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-dispatch-recovery-replacement-readiness-item") || "",
+                  label:
+                    item.querySelector("[data-admin-dispatch-recovery-replacement-readiness-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-dispatch-recovery-replacement-readiness-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = section.querySelector("[data-admin-dispatch-recovery-replacement-readiness-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const options = [...section.querySelectorAll("[data-admin-dispatch-recovery-replacement-readiness-option]")].map(
+                (option) => ({
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-dispatch-recovery-replacement-readiness-option-state") || "",
+                  value: option.getAttribute("data-admin-dispatch-recovery-replacement-readiness-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-dispatch-recovery-replacement-readiness-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "driver payout",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                options,
+                status:
+                  section.querySelector("[data-admin-dispatch-recovery-replacement-readiness-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin dispatch recovery replacement readiness`,
+        );
+
+        assert.equal(
+          state.text.includes("Dispatch Recovery / Replacement Readiness"),
+          true,
+          `${viewport.label}: expected dispatch recovery replacement title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          ["Review Needed", "Driver Reviewed", "Vehicle Reviewed", "Copy Ready", "Job Link Ready", "Ready Locally"],
+          `${viewport.label}: expected recovery replacement local controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state]),
+          [
+            ["review-needed", "selected"],
+            ["driver-reviewed", "idle"],
+            ["vehicle-reviewed", "idle"],
+            ["copy-ready", "idle"],
+            ["job-link-ready", "idle"],
+            ["ready-locally", "idle"],
+          ],
+          `${viewport.label}: expected recovery replacement to start at review needed`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Replacement driver review",
+            "Replacement vehicle review",
+            "Customer update readiness",
+            "Dispatch copy update readiness",
+            "New driver job link readiness",
+            "Next recovery action",
+            "Local recovery note/status",
+          ],
+          `${viewport.label}: expected recovery replacement labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "replacement-driver-review",
+            "replacement-vehicle-review",
+            "customer-update-readiness",
+            "dispatch-copy-update-readiness",
+            "new-driver-job-link-readiness",
+            "next-recovery-action",
+            "local-recovery-note-status",
+          ],
+          `${viewport.label}: expected recovery replacement keys`,
+        );
+        assert.equal(
+          state.status,
+          "Recovery review needed",
+          `${viewport.label}: expected recovery replacement to start review needed`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected blank local recovery note`);
+        assert.equal(
+          state.items.find((item) => item.key === "replacement-driver-review")?.detail,
+          "Replacement driver not reviewed locally.",
+          `${viewport.label}: expected replacement driver to need local review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "replacement-vehicle-review")?.state,
+          "needs-action",
+          `${viewport.label}: expected replacement vehicle review to need action`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "customer-update-readiness")?.detail,
+          "No customer update flag.",
+          `${viewport.label}: expected no default customer update flag`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "new-driver-job-link-readiness")?.detail,
+          "New driver job link not prepared locally.",
+          `${viewport.label}: expected no default new driver job link`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "next-recovery-action")?.detail,
+          "Review replacement driver details locally.",
+          `${viewport.label}: expected replacement driver review as next action`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected recovery replacement boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in recovery replacement`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 880 : 580),
+          true,
+          `${viewport.label}: expected compact recovery replacement, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected recovery replacement items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected recovery replacement controls to stay readable`,
+        );
+        assert.equal(
+          state.noteHeight >= 40,
+          true,
+          `${viewport.label}: expected recovery replacement note to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected recovery replacement not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -35306,6 +35536,8 @@ async function runChromeTest() {
     state.adminDriverAcknowledgementFollowUp = await checkAdminDriverAcknowledgementFollowUp();
     state.adminDayOfTripDispatchMonitor = await checkAdminDayOfTripDispatchMonitor();
     state.adminDayOfTripExceptionEscalation = await checkAdminDayOfTripExceptionEscalation();
+    state.adminDispatchRecoveryReplacementReadiness =
+      await checkAdminDispatchRecoveryReplacementReadiness();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -35421,6 +35653,7 @@ async function runChromeTest() {
     state.adminDriverAcknowledgementFollowUpRouteBoundaries = [];
     state.adminDayOfTripDispatchMonitorRouteBoundaries = [];
     state.adminDayOfTripExceptionEscalationRouteBoundaries = [];
+    state.adminDispatchRecoveryReplacementReadinessRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -35613,6 +35846,32 @@ async function runChromeTest() {
         adminDayOfTripExceptionEscalationTextLeaks,
         [],
         `Expected no admin day-of-trip exception escalation wording leak for ${route.context}`,
+      );
+      const adminDispatchRecoveryReplacementReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-dispatch-recovery-replacement-readiness]"))`,
+      );
+      const adminDispatchRecoveryReplacementReadinessTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Dispatch Recovery / Replacement Readiness", "New driver job link readiness"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminDispatchRecoveryReplacementReadinessRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDispatchRecoveryReplacementReadinessTextLeaks,
+        visible: adminDispatchRecoveryReplacementReadinessVisible,
+      });
+      assert.equal(
+        adminDispatchRecoveryReplacementReadinessVisible,
+        false,
+        `Expected admin dispatch recovery replacement boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDispatchRecoveryReplacementReadinessTextLeaks,
+        [],
+        `Expected no admin dispatch recovery replacement wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -35874,6 +36133,32 @@ async function runChromeTest() {
       customerDetailAdminDayOfTripExceptionEscalationTextLeaks,
       [],
       "Expected no admin day-of-trip exception escalation wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDispatchRecoveryReplacementReadinessVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-dispatch-recovery-replacement-readiness]"))`,
+    );
+    const customerDetailAdminDispatchRecoveryReplacementReadinessTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Dispatch Recovery / Replacement Readiness", "New driver job link readiness"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminDispatchRecoveryReplacementReadinessRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDispatchRecoveryReplacementReadinessTextLeaks,
+      visible: customerDetailAdminDispatchRecoveryReplacementReadinessVisible,
+    });
+    assert.equal(
+      customerDetailAdminDispatchRecoveryReplacementReadinessVisible,
+      false,
+      "Expected admin dispatch recovery replacement boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDispatchRecoveryReplacementReadinessTextLeaks,
+      [],
+      "Expected no admin dispatch recovery replacement wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

@@ -1158,6 +1158,130 @@ async function runChromeTest() {
       );
     };
 
+    const checkDispatchRecoveryReplacementReadiness = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-dispatch-recovery-replacement-readiness='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [...(section?.querySelectorAll("[data-admin-dispatch-recovery-replacement-readiness-item]") || [])].map(
+          (item) => {
+            const itemRect = item.getBoundingClientRect();
+
+            return {
+              height: Math.round(itemRect.height),
+              key: item.getAttribute("data-admin-dispatch-recovery-replacement-readiness-item") || "",
+              label:
+                item.querySelector("[data-admin-dispatch-recovery-replacement-readiness-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              width: Math.round(itemRect.width),
+            };
+          },
+        );
+        const note = section?.querySelector("[data-admin-dispatch-recovery-replacement-readiness-note='true']");
+        const noteRect = note?.getBoundingClientRect();
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-dispatch-recovery-replacement-readiness-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-dispatch-recovery-replacement-readiness-option-state") || "",
+            value: option.getAttribute("data-admin-dispatch-recovery-replacement-readiness-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-dispatch-recovery-replacement-readiness-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          options,
+          status:
+            section
+              ?.querySelector("[data-admin-dispatch-recovery-replacement-readiness-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(state.visible, true, `${viewport.label}: expected Dispatch Recovery Replacement section`);
+      assert.equal(
+        state.text.includes("Dispatch Recovery / Replacement Readiness"),
+        true,
+        `${viewport.label}: expected Dispatch Recovery Replacement title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        ["Review Needed", "Driver Reviewed", "Vehicle Reviewed", "Copy Ready", "Job Link Ready", "Ready Locally"],
+        `${viewport.label}: expected Dispatch Recovery Replacement local controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Replacement driver review",
+          "Replacement vehicle review",
+          "Customer update readiness",
+          "Dispatch copy update readiness",
+          "New driver job link readiness",
+          "Next recovery action",
+          "Local recovery note/status",
+        ],
+        `${viewport.label}: expected Dispatch Recovery Replacement rows`,
+      );
+      assert.equal(
+        state.status,
+        "Recovery review needed",
+        `${viewport.label}: expected Dispatch Recovery Replacement to start at review needed`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected blank local recovery note`);
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Dispatch Recovery Replacement controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("live location") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Dispatch Recovery Replacement local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 880 : 580),
+        true,
+        `${viewport.label}: expected compact Dispatch Recovery Replacement, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Dispatch Recovery Replacement rows to stay readable`,
+      );
+      assert.equal(
+        state.noteHeight >= 40,
+        true,
+        `${viewport.label}: expected Dispatch Recovery Replacement note to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Dispatch Recovery Replacement not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -1272,6 +1396,9 @@ async function runChromeTest() {
       const state = await layoutState();
       const adminPersistenceNetworkCalls = await evaluate(`window.__mobileUsabilityFetchCalls || []`);
       const adminHubVisible = await evaluate(`Boolean(document.querySelector("[data-admin-access-hub]"))`);
+      const adminDispatchRecoveryReplacementReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-dispatch-recovery-replacement-readiness]"))`,
+      );
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
       );
@@ -1537,6 +1664,8 @@ async function runChromeTest() {
             "ots/pob/completed persistence",
             "replacement vehicle dispatch",
             "replacement vehicle & service recovery workbench",
+            "dispatch recovery / replacement readiness",
+            "new driver job link readiness",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -1841,6 +1970,11 @@ async function runChromeTest() {
         `${viewport.label} ${route.label}`,
       );
       assert.equal(adminHubVisible, false, `${viewport.label} ${route.label}: expected no admin access hub`);
+      assert.equal(
+        adminDispatchRecoveryReplacementReadinessVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no admin dispatch recovery replacement readiness`,
+      );
       assert.equal(
         internalQaMockArchiveVisible,
         false,
@@ -10023,6 +10157,7 @@ async function runChromeTest() {
           await checkDriverAcknowledgementFollowUp(viewport);
           await checkDayOfTripDispatchMonitor(viewport);
           await checkDayOfTripExceptionEscalation(viewport);
+          await checkDispatchRecoveryReplacementReadiness(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }
@@ -10036,6 +10171,9 @@ async function runChromeTest() {
       const buttons = await buttonState();
       const adminPersistenceNetworkCalls = await evaluate(`window.__mobileUsabilityFetchCalls || []`);
       const adminHubVisible = await evaluate(`Boolean(document.querySelector("[data-admin-access-hub]"))`);
+      const adminDispatchRecoveryReplacementReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-dispatch-recovery-replacement-readiness]"))`,
+      );
       const driverAssignmentReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-assignment-readiness]"))`,
       );
@@ -10301,6 +10439,8 @@ async function runChromeTest() {
             "ots/pob/completed persistence",
             "replacement vehicle dispatch",
             "replacement vehicle & service recovery workbench",
+            "dispatch recovery / replacement readiness",
+            "new driver job link readiness",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -10619,6 +10759,11 @@ async function runChromeTest() {
       );
       assertButtonTouchTargets(buttons, labels, `${viewport.label} ${context}`);
       assert.equal(adminHubVisible, false, `${viewport.label} ${context}: expected no admin access hub`);
+      assert.equal(
+        adminDispatchRecoveryReplacementReadinessVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin dispatch recovery replacement readiness`,
+      );
       assert.equal(
         internalQaMockArchiveVisible,
         false,

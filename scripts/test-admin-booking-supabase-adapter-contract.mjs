@@ -239,6 +239,11 @@ class MockSupabaseClient {
   constructor(seed = {}, options = {}) {
     this.operations = [];
     this.failures = options.failures || {};
+    this.selectFailures = (options.selectFailures || []).map((failure) => ({
+      ...failure,
+      calls: 0,
+    }));
+    this.selectHistory = [];
     this.schemaMode = options.schemaMode || "cumulative";
     this.tables = {
       audit_logs: [],
@@ -285,6 +290,24 @@ class MockSupabaseClient {
 
   failureFor(action, table) {
     return this.failures[`${action}:${table}`] || this.failures[table] || null;
+  }
+
+  selectFailureFor(table, selectedColumns) {
+    const columns = String(selectedColumns || "");
+    const failure = this.selectFailures.find(
+      (item) =>
+        item.table === table &&
+        (!item.column || columns.includes(item.column)) &&
+        (!item.once || item.calls === 0),
+    );
+
+    if (!failure) {
+      return null;
+    }
+
+    failure.calls += 1;
+
+    return failure.error;
   }
 
   insertRejectedByMockSchema(table, row) {
@@ -406,7 +429,13 @@ class MockSupabaseClient {
   }
 
   selectRows(table, filters, limitCount, orderBy, resultMode, selectedColumns) {
-    const configuredFailure = this.failureFor("select", table);
+    this.selectHistory.push({
+      selectedColumns,
+      table,
+    });
+
+    const configuredFailure =
+      this.selectFailureFor(table, selectedColumns) || this.failureFor("select", table);
 
     if (configuredFailure) {
       return {
@@ -943,6 +972,111 @@ try {
       );
     }
   }
+
+  const foundationReadMock = installMockClient(
+    {
+      booking_route_points: [
+        {
+          booking_id: 101,
+          location_text: "Foundation Safe Pickup",
+          point_type: "pickup",
+          sequence_number: 1,
+          timing_note: "Foundation safe pickup timing",
+        },
+        {
+          booking_id: 101,
+          location_text: "Foundation Safe Dropoff",
+          point_type: "dropoff",
+          sequence_number: 2,
+          timing_note: "Foundation safe dropoff timing",
+        },
+      ],
+      booking_service_items: [
+        {
+          blocks_count: 2,
+          booking_id: 101,
+          quantity: null,
+          service_item_type: "midnight_charge",
+        },
+      ],
+      bookings: [
+        {
+          admin_internal_status: "needs_review",
+          booking_reference: "SAFE-FOUNDATION-GET-001",
+          contact_email: "foundation-safe@example.com",
+          contact_phone: "+65 9000 0101",
+          created_at: "2026-06-04T00:00:00.000Z",
+          customer_display_name: "Foundation Safe Customer",
+          customer_facing_status: "pending_review",
+          customer_id: 25,
+          dropoff_location: "Foundation Safe Dropoff",
+          id: 101,
+          luggage_count: 1,
+          parser_source_reference: "SAFE-PARSER-REFERENCE",
+          pax_count: 2,
+          pickup_datetime: "2026-06-09T10:30:00+08:00",
+          pickup_location: "Foundation Safe Pickup",
+          route_type: "transfer",
+          short_notice_review_status: "not_required",
+          source_channel: "admin-dashboard",
+          updated_at: "2026-06-04T00:00:00.000Z",
+          vehicle_type_or_category: "Alphard",
+        },
+      ],
+    },
+    {
+      selectFailures: [
+        {
+          column: "pickup_at",
+          error: {
+            code: "PGRST204",
+            message: "Sanitized mock schema cache column source.",
+          },
+          once: true,
+          table: "bookings",
+        },
+      ],
+    },
+  );
+  const foundationFallbackRoute = await readRouteResponse(
+    await adminRoute.GET(
+      new Request("http://localhost/api/admin-bookings", {
+        headers: adminHeaders({
+          "x-prestige-admin-session-token": serverSessionToken,
+        }),
+      }),
+    ),
+  );
+
+  assert.equal(foundationFallbackRoute.status, 200);
+  assert.equal(foundationFallbackRoute.body.ok, true);
+  assert.equal(foundationFallbackRoute.body.bookings.length, 1);
+  assert.equal(foundationFallbackRoute.body.bookings[0].booking_reference, "SAFE-FOUNDATION-GET-001");
+  assert.equal(foundationFallbackRoute.body.bookings[0].pickup_at, "2026-06-09T10:30:00+08:00");
+  assert.equal(foundationFallbackRoute.body.bookings[0].service_type, "transfer");
+  assert.equal(foundationFallbackRoute.body.bookings[0].pax_count, 2);
+  assert.equal(foundationFallbackRoute.body.bookings[0].luggage_count, 1);
+  assert.deepEqual(
+    foundationFallbackRoute.body.bookings[0].route_points.map((routePoint) => routePoint.location_text),
+    ["Foundation Safe Pickup", "Foundation Safe Dropoff"],
+  );
+  assert.deepEqual(foundationFallbackRoute.body.bookings[0].service_items, [
+    {
+      blocks_count: 2,
+      item_type: null,
+      notes: null,
+      quantity: 2,
+      service_item_type: "midnight_charge",
+    },
+  ]);
+  assert.equal(foundationReadMock.createdClients.length, 1);
+  assert.equal(foundationReadMock.client.operations.length, 0);
+  assert.equal(foundationReadMock.client.selectFailures[0].calls, 1);
+  assert.equal(foundationReadMock.client.selectHistory.length, 2);
+  assert.match(foundationReadMock.client.selectHistory[0].selectedColumns, /pickup_at/);
+  assert.match(foundationReadMock.client.selectHistory[1].selectedColumns, /pickup_datetime/);
+  assert.doesNotMatch(foundationReadMock.client.selectHistory[1].selectedColumns, /internal_note/);
+  assertNoUnsafeKeys(foundationFallbackRoute, "foundation fallback GET response");
 
   const columnFailureMock = installMockClient(
     {},

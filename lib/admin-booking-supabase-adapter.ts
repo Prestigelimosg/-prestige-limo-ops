@@ -119,6 +119,10 @@ const safeStagingReadinessError =
   "Admin booking persistence staging configuration is not ready.";
 const safeEnableReadinessError =
   "Admin booking persistence enablement readiness gates are not ready.";
+const adminBookingCurrentLoadSelect =
+  "id, booking_reference, customer_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+const adminBookingFoundationLoadSelect =
+  "id, booking_reference, customer_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 
 const allowedAdapterRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedAdapterSourceSurfaces = new Set(["admin_api", "customer_booking_request", "system"]);
@@ -190,6 +194,8 @@ function classifyAdapterDatabaseFailure(
   if (
     code === "42703" ||
     code === "pgrst204" ||
+    code === "pgrst200" ||
+    (haystack.includes("relationship") && haystack.includes("schema cache")) ||
     (haystack.includes("column") &&
       (haystack.includes("does not exist") ||
         haystack.includes("not found") ||
@@ -212,6 +218,10 @@ function safeAdapterFailure<T>(
     error,
     category: classifyAdapterDatabaseFailure(databaseError),
   };
+}
+
+function isColumnMissingFailure(error: unknown) {
+  return classifyAdapterDatabaseFailure(error) === "column_missing";
 }
 
 function dbIdentifierOrNull(value: unknown): DbIdentifier | null {
@@ -844,59 +854,85 @@ function bookingToDbRow(
   };
 }
 
+type AdminBookingSelectResult<T> = {
+  data: T | null;
+  error: unknown;
+};
+
+async function loadAdminBookingsWithFoundationFallback<T>(
+  buildQuery: (selectedColumns: string) => PromiseLike<AdminBookingSelectResult<T>>,
+): Promise<AdminBookingSelectResult<T>> {
+  const currentResult = await buildQuery(adminBookingCurrentLoadSelect);
+
+  if (!currentResult.error || !isColumnMissingFailure(currentResult.error)) {
+    return currentResult;
+  }
+
+  return buildQuery(adminBookingFoundationLoadSelect);
+}
+
 function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
+  const pickupAt = textOrNull(row.pickup_at) || textOrNull(row.pickup_datetime);
+  const serviceType = textOrNull(row.service_type) || textOrNull(row.route_type);
+  const sourceSurface = textOrNull(row.source_surface) || textOrNull(row.source_channel);
+  const routeSummary =
+    textOrNull(row.route_summary) ||
+    [textOrNull(row.pickup_location), textOrNull(row.dropoff_location)]
+      .filter(Boolean)
+      .join(" > ") ||
+    null;
   const routePoints = asArray(row.booking_route_points)
     .map(asRecord)
     .map((record) => ({
       point_type: textOrNull(record.point_type) as AdminBookingRoutePointInput["point_type"],
-      sequence_number: integerOrNull(record.sequence),
-      sequence: integerOrNull(record.sequence),
-      location_text: textOrNull(record.location),
-      location: textOrNull(record.location),
-      timing_note: textOrNull(record.notes),
-      notes: textOrNull(record.notes),
+      sequence_number: integerOrNull(record.sequence) ?? integerOrNull(record.sequence_number),
+      sequence: integerOrNull(record.sequence) ?? integerOrNull(record.sequence_number),
+      location_text: textOrNull(record.location) || textOrNull(record.location_text),
+      location: textOrNull(record.location) || textOrNull(record.location_text),
+      timing_note: textOrNull(record.notes) || textOrNull(record.timing_note),
+      notes: textOrNull(record.notes) || textOrNull(record.timing_note),
     }))
     .filter((record) => record.point_type && record.location_text)
     .sort((first, second) => (first.sequence_number ?? 0) - (second.sequence_number ?? 0));
   const serviceItems = asArray(row.booking_service_items)
     .map(asRecord)
     .map((record) => ({
-      service_item_type: serviceItemTypeToUi(record.item_type),
+      service_item_type: serviceItemTypeToUi(record.item_type || record.service_item_type),
       item_type: textOrNull(record.item_type) as AdminBookingServiceItemInput["item_type"],
-      quantity: integerOrNull(record.quantity),
-      blocks_count: null,
+      quantity: integerOrNull(record.quantity) ?? integerOrNull(record.blocks_count),
+      blocks_count: integerOrNull(record.blocks_count),
       notes: textOrNull(record.notes),
     }))
     .filter((record) => record.service_item_type);
 
   return {
     booking_reference: textOrNull(row.booking_reference) || "",
-    source_channel: sourceSurfaceToUi(row.source_surface),
-    source_surface: textOrNull(row.source_surface),
+    source_channel: sourceSurfaceToUi(sourceSurface),
+    source_surface: sourceSurface,
     customer_id: dbIdentifierTextOrNull(row.customer_id),
-    pickup_datetime: textOrNull(row.pickup_at),
-    pickup_at: textOrNull(row.pickup_at),
+    pickup_datetime: pickupAt,
+    pickup_at: pickupAt,
     pickup_location: textOrNull(row.pickup_location),
     dropoff_location: textOrNull(row.dropoff_location),
-    route_type: textOrNull(row.service_type),
-    service_type: textOrNull(row.service_type),
-    route_summary: textOrNull(row.route_summary),
+    route_type: serviceType,
+    service_type: serviceType,
+    route_summary: routeSummary,
     customer_display_name: textOrNull(row.customer_display_name),
     contact_display_name: textOrNull(row.contact_display_name),
     contact_phone: textOrNull(row.contact_phone),
     contact_email: textOrNull(row.contact_email),
     passenger_name: textOrNull(row.passenger_name),
     passenger_phone: textOrNull(row.passenger_phone),
-    pax_count: null,
-    luggage_count: null,
-    vehicle_type_or_category: null,
+    pax_count: integerOrNull(row.pax_count),
+    luggage_count: integerOrNull(row.luggage_count),
+    vehicle_type_or_category: textOrNull(row.vehicle_type_or_category),
     customer_facing_status: customerStatusToUi(row.customer_facing_status),
     admin_internal_status: adminStatusToUi(row.admin_internal_status),
     short_notice_review_status: reviewStatusToUi(row.short_notice_review_status),
     request_review_status: reviewStatusToUi(row.request_review_status),
     change_review_status: reviewStatusToUi(row.change_review_status),
     cancellation_review_status: reviewStatusToUi(row.cancellation_review_status),
-    parser_source_reference: null,
+    parser_source_reference: textOrNull(row.parser_source_reference),
     created_at: textOrNull(row.created_at),
     updated_at: textOrNull(row.updated_at),
     route_points: routePoints,
@@ -1154,14 +1190,14 @@ async function fetchAdminBookingById(
   client: SupabaseClient,
   bookingId: DbIdentifier,
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
-  const { data, error } = await client
-    .from("bookings")
-    .select(
-      "id, booking_reference, customer_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)",
-    )
-    .eq("id", bookingId)
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await loadAdminBookingsWithFoundationFallback((selectedColumns) =>
+    client
+      .from("bookings")
+      .select(selectedColumns)
+      .eq("id", bookingId)
+      .limit(1)
+      .maybeSingle(),
+  );
 
   if (error || !data) {
     return safeAdapterFailure(safeReloadError, 500, error);
@@ -1177,14 +1213,14 @@ async function fetchAdminBookingByReference(
   client: SupabaseClient,
   bookingReference: string,
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord & { id: DbIdentifier }>> {
-  const { data, error } = await client
-    .from("bookings")
-    .select(
-      "id, booking_reference, customer_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)",
-    )
-    .eq("booking_reference", bookingReference)
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await loadAdminBookingsWithFoundationFallback((selectedColumns) =>
+    client
+      .from("bookings")
+      .select(selectedColumns)
+      .eq("booking_reference", bookingReference)
+      .limit(1)
+      .maybeSingle(),
+  );
   const bookingId = dbIdentifierOrNull(asRecord(data).id);
 
   if (error) {
@@ -1494,13 +1530,13 @@ export async function listAdminBookingsThroughSupabaseAdapter(
     return clientResult;
   }
 
-  const { data, error } = await clientResult.data
-    .from("bookings")
-    .select(
-      "id, booking_reference, customer_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(25);
+  const { data, error } = await loadAdminBookingsWithFoundationFallback((selectedColumns) =>
+    clientResult.data
+      .from("bookings")
+      .select(selectedColumns)
+      .order("created_at", { ascending: false })
+      .limit(25),
+  );
 
   if (error) {
     return safeAdapterFailure(safeLoadError, 500, error);

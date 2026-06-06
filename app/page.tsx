@@ -34,6 +34,7 @@ import { mockDriverJobTokens } from "../lib/driver-job-link-mock-tokens";
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
+const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
 const adminLegacyTables = {
   bookers: "bookers",
   bookings: "bookings",
@@ -562,7 +563,9 @@ type AdminBookingWorkflowStatusRecord = {
 
 type AdminBookingWorkflowStatusAction =
   | "load-dispatch-release"
-  | "save-dispatch-release";
+  | "load-driver-acknowledgement"
+  | "save-dispatch-release"
+  | "save-driver-acknowledgement";
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
@@ -3658,23 +3661,23 @@ function adminBookingPersistenceFailureMessage(
   return `${prefix} safely.`;
 }
 
-function adminBookingWorkflowStatusFailureMessage(rawError: unknown) {
+function adminBookingWorkflowStatusFailureMessage(rawError: unknown, workflowLabel = "Dispatch release") {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
 
   if (/not enabled|configuration/.test(normalizedError)) {
-    return "Dispatch release workflow status persistence is not enabled or configured on this server.";
+    return `${workflowLabel} workflow status persistence is not enabled or configured on this server.`;
   }
 
   if (/forbidden/.test(normalizedError)) {
-    return "Dispatch release workflow status request is outside the approved admin workflow scope.";
+    return `${workflowLabel} workflow status request is outside the approved admin workflow scope.`;
   }
 
   if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
-    return "Dispatch release workflow status details need review.";
+    return `${workflowLabel} workflow status details need review.`;
   }
 
-  return "Dispatch release workflow status request failed safely.";
+  return `${workflowLabel} workflow status request failed safely.`;
 }
 
 function adminBookingWorkflowStatusDisplayLabel(
@@ -3689,6 +3692,40 @@ function adminBookingWorkflowStatusDisplayLabel(
   const statusValue = clean(status?.status_value);
 
   return statusValue ? statusValue.replace(/_/g, " ") : "No saved status";
+}
+
+async function loadAdminBookingWorkflowStatusRecord(
+  bookingReference: string,
+  workflowArea: string,
+) {
+  const params = new URLSearchParams({
+    booking_reference: bookingReference,
+    workflow_area: workflowArea,
+  });
+
+  const response = await fetch(`${adminWorkflowStatusApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Workflow status load failed.");
+  }
+
+  const statuses = Array.isArray(result.statuses)
+    ? (result.statuses as AdminBookingWorkflowStatusRecord[])
+    : [];
+
+  return (
+    statuses.find(
+      (status) =>
+        clean(status.booking_reference) === bookingReference &&
+        clean(status.workflow_area) === workflowArea,
+    ) || null
+  );
 }
 
 function adminSnapshotPickupDateTimeParts(value: string | null | undefined) {
@@ -4046,6 +4083,8 @@ export default function Home() {
   const [dispatchReleaseMessage, setDispatchReleaseMessage] = useState<Message | null>(null);
   const [dispatchReleaseWorkflowStatus, setDispatchReleaseWorkflowStatus] =
     useState<AdminBookingWorkflowStatusRecord | null>(null);
+  const [driverAcknowledgementWorkflowStatus, setDriverAcknowledgementWorkflowStatus] =
+    useState<AdminBookingWorkflowStatusRecord | null>(null);
   const [adminBookingWorkflowStatusAction, setAdminBookingWorkflowStatusAction] =
     useState<AdminBookingWorkflowStatusAction | null>(null);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
@@ -4122,6 +4161,54 @@ export default function Home() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
     let cancelled = false;
 
+    async function loadWorkflowAreaStatus({
+      action,
+      missingStatusText,
+      setMessage,
+      setStatus,
+      successStatusText,
+      workflowArea,
+      workflowLabel,
+    }: {
+      action: AdminBookingWorkflowStatusAction;
+      missingStatusText: string;
+      setMessage: (message: Message) => void;
+      setStatus: (status: AdminBookingWorkflowStatusRecord | null) => void;
+      successStatusText: (status: AdminBookingWorkflowStatusRecord) => string;
+      workflowArea: string;
+      workflowLabel: string;
+    }) {
+      if (cancelled) {
+        return;
+      }
+
+      setAdminBookingWorkflowStatusAction(action);
+
+      try {
+        const loadedStatus = await loadAdminBookingWorkflowStatusRecord(bookingReference, workflowArea);
+
+        if (cancelled) {
+          return;
+        }
+
+        setStatus(loadedStatus);
+        setMessage({
+          tone: loadedStatus ? "success" : "info",
+          text: loadedStatus ? successStatusText(loadedStatus) : missingStatusText,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setStatus(null);
+        setMessage({
+          tone: "error",
+          text: adminBookingWorkflowStatusFailureMessage(error, workflowLabel),
+        });
+      }
+    }
+
     void (async () => {
       await Promise.resolve();
 
@@ -4131,68 +4218,41 @@ export default function Home() {
 
       if (!bookingReference) {
         setDispatchReleaseWorkflowStatus(null);
+        setDriverAcknowledgementWorkflowStatus(null);
         setAdminBookingWorkflowStatusAction(null);
         setDispatchReleaseMessage(null);
+        setDriverAcknowledgementMessage(null);
         return;
       }
 
-      const params = new URLSearchParams({
-        booking_reference: bookingReference,
-        workflow_area: adminDispatchReleaseWorkflowArea,
+      await loadWorkflowAreaStatus({
+        action: "load-dispatch-release",
+        missingStatusText: `No saved dispatch release workflow status for ${bookingReference}.`,
+        setMessage: setDispatchReleaseMessage,
+        setStatus: setDispatchReleaseWorkflowStatus,
+        successStatusText: (loadedStatus) =>
+          `Loaded dispatch release workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+            loadedStatus,
+          )}.`,
+        workflowArea: adminDispatchReleaseWorkflowArea,
+        workflowLabel: "Dispatch release",
       });
 
-      setAdminBookingWorkflowStatusAction("load-dispatch-release");
+      await loadWorkflowAreaStatus({
+        action: "load-driver-acknowledgement",
+        missingStatusText: `No saved driver acknowledgement workflow status for ${bookingReference}.`,
+        setMessage: setDriverAcknowledgementMessage,
+        setStatus: setDriverAcknowledgementWorkflowStatus,
+        successStatusText: (loadedStatus) =>
+          `Loaded driver acknowledgement workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+            loadedStatus,
+          )}.`,
+        workflowArea: adminDriverAcknowledgementWorkflowArea,
+        workflowLabel: "Driver acknowledgement",
+      });
 
-      try {
-        const response = await fetch(`${adminWorkflowStatusApiPath}?${params.toString()}`, {
-          headers: {
-            "x-prestige-admin-purpose": adminLegacyDataPurpose,
-          },
-          method: "GET",
-        });
-        const result = await response.json().catch(() => null);
-
-        if (!response.ok || !result?.ok) {
-          throw new Error(result?.error || "Workflow status load failed.");
-        }
-
-        const statuses = Array.isArray(result.statuses)
-          ? (result.statuses as AdminBookingWorkflowStatusRecord[])
-          : [];
-        const loadedStatus =
-          statuses.find(
-            (status) =>
-              clean(status.booking_reference) === bookingReference &&
-              clean(status.workflow_area) === adminDispatchReleaseWorkflowArea,
-          ) || null;
-
-        if (cancelled) {
-          return;
-        }
-
-        setDispatchReleaseWorkflowStatus(loadedStatus);
-        setDispatchReleaseMessage({
-          tone: loadedStatus ? "success" : "info",
-          text: loadedStatus
-            ? `Loaded dispatch release workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
-                loadedStatus,
-              )}.`
-            : `No saved dispatch release workflow status for ${bookingReference}.`,
-        });
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        setDispatchReleaseWorkflowStatus(null);
-        setDispatchReleaseMessage({
-          tone: "error",
-          text: adminBookingWorkflowStatusFailureMessage(error),
-        });
-      } finally {
-        if (!cancelled) {
-          setAdminBookingWorkflowStatusAction(null);
-        }
+      if (!cancelled) {
+        setAdminBookingWorkflowStatusAction(null);
       }
     })();
 
@@ -7241,6 +7301,7 @@ export default function Home() {
   function clearAppliedAdminBookingOperationalSnapshot() {
     setAppliedAdminBookingSnapshotReference("");
     setDispatchReleaseWorkflowStatus(null);
+    setDriverAcknowledgementWorkflowStatus(null);
     setAdminBookingPersistenceMessage({
       tone: "success",
       text: "Applied operational snapshot cleared. Current dispatch form values were kept.",
@@ -7310,6 +7371,73 @@ export default function Home() {
       setDispatchReleaseMessage({
         tone: "error",
         text: adminBookingWorkflowStatusFailureMessage(error),
+      });
+    } finally {
+      setAdminBookingWorkflowStatusAction(null);
+    }
+  }
+
+  async function saveDriverAcknowledgementWorkflowStatus() {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+
+    if (!driverAcknowledgementCoreReady) {
+      setDriverAcknowledgementMessage({
+        tone: "info",
+        text: "Complete driver acknowledgement readiness checks before saving workflow status.",
+      });
+      return;
+    }
+
+    if (!bookingReference) {
+      setDriverAcknowledgementMessage({
+        tone: "error",
+        text: "Load a saved booking or apply an operational snapshot before saving driver acknowledgement workflow status.",
+      });
+      return;
+    }
+
+    setAdminBookingWorkflowStatusAction("save-driver-acknowledgement");
+    setDriverAcknowledgementMessage({
+      tone: "info",
+      text: `Saving driver acknowledgement workflow status for ${bookingReference}...`,
+    });
+
+    try {
+      const response = await fetch(adminWorkflowStatusApiPath, {
+        body: JSON.stringify({
+          booking_reference: bookingReference,
+          safe_status_context: {
+            next_action: "Contact driver manually and monitor acknowledgement outcome.",
+            safe_note: "Dispatcher marked driver acknowledgement ready from the existing admin workflow control.",
+          },
+          status_label: "Driver acknowledgement ready",
+          status_value: "ready",
+          workflow_area: adminDriverAcknowledgementWorkflowArea,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Workflow status save failed.");
+      }
+
+      const savedStatus = result.status as AdminBookingWorkflowStatusRecord;
+      setDriverAcknowledgementWorkflowStatus(savedStatus);
+      setDriverAcknowledgementMessage({
+        tone: "success",
+        text: `Driver acknowledgement workflow status saved for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+          savedStatus,
+        )}.`,
+      });
+    } catch (error) {
+      setDriverAcknowledgementMessage({
+        tone: "error",
+        text: adminBookingWorkflowStatusFailureMessage(error, "Driver acknowledgement"),
       });
     } finally {
       setAdminBookingWorkflowStatusAction(null);
@@ -9183,12 +9311,23 @@ export default function Home() {
     Boolean(dispatchReleaseDriverContact) &&
     dispatchReleaseDriverDispatchReady &&
     dispatchReleaseDriverJobLinkReady;
+  const driverAcknowledgementSavedReady =
+    clean(driverAcknowledgementWorkflowStatus?.workflow_area) === adminDriverAcknowledgementWorkflowArea &&
+    clean(driverAcknowledgementWorkflowStatus?.status_value) === "ready";
   const driverAcknowledgementLocalStatus =
-    driverAcknowledgementMessage && driverAcknowledgementCoreReady
-      ? "Ready locally"
-      : driverAcknowledgementCoreReady
-        ? "Ready to mark locally"
-        : "Acknowledgement pending";
+    adminBookingWorkflowStatusAction === "save-driver-acknowledgement"
+      ? "Saving workflow status"
+      : adminBookingWorkflowStatusAction === "load-driver-acknowledgement"
+        ? "Loading saved workflow status"
+        : driverAcknowledgementSavedReady && driverAcknowledgementCoreReady
+          ? "Saved ready status"
+          : driverAcknowledgementSavedReady
+            ? "Saved status needs current details"
+            : driverAcknowledgementMessage && driverAcknowledgementCoreReady
+              ? "Ready locally"
+              : driverAcknowledgementCoreReady
+                ? "Ready to mark locally"
+                : "Acknowledgement pending";
   const driverAcknowledgementNextAction = !dispatchReleaseDriverName
     ? "Assign driver before acknowledgement."
     : !dispatchReleaseDriverContact
@@ -9197,7 +9336,7 @@ export default function Home() {
         ? "Prepare driver dispatch copy."
         : !dispatchReleaseDriverJobLinkReady
           ? "Prepare driver job link."
-          : driverAcknowledgementMessage
+          : driverAcknowledgementSavedReady || driverAcknowledgementMessage
             ? "Monitor manual driver acknowledgement."
             : "Mark ready locally, then contact driver manually.";
   const driverAcknowledgementItems: DispatchReleaseChecklistItem[] = [
@@ -19382,16 +19521,13 @@ export default function Home() {
                 <button
                   className="min-h-9 rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-left text-sm font-semibold text-indigo-950 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   data-admin-driver-acknowledgement-mark-ready="true"
-                  disabled={!driverAcknowledgementCoreReady}
-                  onClick={() => {
-                    setDriverAcknowledgementMessage({
-                      tone: "success",
-                      text: "Driver acknowledgement readiness marked locally. No message, notification, or database write was sent.",
-                    });
-                  }}
+                  disabled={!driverAcknowledgementCoreReady || adminBookingWorkflowStatusAction !== null}
+                  onClick={saveDriverAcknowledgementWorkflowStatus}
                   type="button"
                 >
-                  Mark Ack Ready Locally
+                  {adminBookingWorkflowStatusAction === "save-driver-acknowledgement"
+                    ? "Saving Status..."
+                    : "Mark Ack Ready Locally"}
                 </button>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
@@ -19440,11 +19576,12 @@ export default function Home() {
                 </p>
               ) : null}
               <p
-                className="mt-2 border-t border-indigo-200 pt-2 text-[11px] leading-4 text-indigo-900"
+                className="mt-1 border-t border-indigo-200 pt-1 text-[11px] leading-3 text-indigo-900"
                 data-admin-driver-acknowledgement-boundary="true"
               >
-                Local UI only. No Supabase write, live database access, notification sending, customer message,
-                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+                UI/local-state readiness calculation; workflow-status API stores saved acknowledgement status only.
+                No Supabase write outside that API, live database access beyond that path, notification sending,
+                customer message, driver notification, billing, payment, PDF, payout, live location, or parser-learning.
               </p>
             </section>
 

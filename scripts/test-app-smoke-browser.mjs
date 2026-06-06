@@ -820,6 +820,16 @@ async function runChromeTest() {
             status_value: "ready",
             workflow_area: "dispatch_release",
           },
+          "LOADED-OPS-001:driver_acknowledgement": {
+            booking_reference: "LOADED-OPS-001",
+            safe_status_context: {
+              next_action: "Contact driver manually and monitor acknowledgement outcome.",
+              safe_note: "Loaded safe driver acknowledgement status from smoke mock.",
+            },
+            status_label: "Driver acknowledgement ready",
+            status_value: "ready",
+            workflow_area: "driver_acknowledgement",
+          },
         };
         window.__adminBookingPersistenceOriginalFetch =
           window.__adminBookingPersistenceOriginalFetch || window.fetch.bind(window);
@@ -2020,18 +2030,24 @@ async function runChromeTest() {
               .querySelector("[data-admin-dispatch-release-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const driverAcknowledgementFeedback = document
+              .querySelector("[data-admin-driver-acknowledgement-feedback]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
             const baitPattern =
               /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i;
 
             return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
               fields.pickup === "Loaded Ops Pickup" &&
-              dispatchReleaseFeedback.includes("Loaded dispatch release workflow status for LOADED-OPS-001")
+              dispatchReleaseFeedback.includes("Loaded dispatch release workflow status for LOADED-OPS-001") &&
+              driverAcknowledgementFeedback.includes("Loaded driver acknowledgement workflow status for LOADED-OPS-001")
               ? {
                   bodyBaitLeaked: baitPattern.test(bodyText),
                   clearAppliedVisible: Boolean(
                     document.querySelector("[data-admin-booking-persistence-clear-applied]"),
                   ),
                   dispatchReleaseFeedback,
+                  driverAcknowledgementFeedback,
                   duplicateGuidance,
                   feedback,
                   fields,
@@ -2103,6 +2119,11 @@ async function runChromeTest() {
         /Loaded dispatch release workflow status for LOADED-OPS-001: Ready for dispatch release\./,
         "Expected applied snapshot load to show saved dispatch release workflow status in existing UI feedback",
       );
+      assert.match(
+        appliedSnapshotState.driverAcknowledgementFeedback,
+        /Loaded driver acknowledgement workflow status for LOADED-OPS-001: Driver acknowledgement ready\./,
+        "Expected applied snapshot load to show saved driver acknowledgement workflow status in existing UI feedback",
+      );
       assert.deepEqual(
         appliedSnapshotState.workflowStatusCalls.map((call) => ({
           bookingReference: call.bookingReference,
@@ -2115,8 +2136,13 @@ async function runChromeTest() {
             method: "GET",
             workflowArea: "dispatch_release",
           },
+          {
+            bookingReference: "LOADED-OPS-001",
+            method: "GET",
+            workflowArea: "driver_acknowledgement",
+          },
         ],
-        "Expected applied snapshot load to GET dispatch_release workflow status through the guarded API path",
+        "Expected applied snapshot load to GET dispatch_release and driver_acknowledgement workflow statuses through the guarded API path",
       );
       assert.equal(
         appliedSnapshotState.fieldBaitLeaked ||
@@ -4930,10 +4956,11 @@ async function runChromeTest() {
         assert.equal(
           state.actionCount,
           1,
-          `${viewport.label}: expected one local-only acknowledgement readiness action`,
+          `${viewport.label}: expected one acknowledgement readiness action`,
         );
         for (const expectedBoundaryText of [
-          "Local UI only.",
+          "UI/local-state",
+          "workflow-status API",
           "No Supabase write",
           "live database access",
           "notification sending",

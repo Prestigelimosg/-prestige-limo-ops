@@ -1659,7 +1659,8 @@ function assertBookingUiState(state) {
     "Add driver contact before acknowledgement.",
   );
   assert.equal(state.driverAcknowledgementReadiness.markReadyDisabled, true);
-  assert.match(state.driverAcknowledgementReadiness.boundary, /Local UI only/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /UI\/local-state/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /workflow-status API/);
   assert.match(state.driverAcknowledgementReadiness.boundary, /No Supabase write/);
   assert.match(state.driverAcknowledgementReadiness.boundary, /live database access/);
   assert.match(state.driverAcknowledgementReadiness.boundary, /notification sending/);
@@ -11538,7 +11539,19 @@ async function runChromeTest() {
         })()`);
 
         return candidateState?.fields?.company === "LOADED SAVED COMPANY" &&
-          candidateState?.fields?.flight === "SQ999"
+          candidateState?.fields?.flight === "SQ999" &&
+          candidateState?.workflowStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.workflow_area === "dispatch_release",
+          ) &&
+          candidateState?.workflowStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.workflow_area === "driver_acknowledgement",
+          )
           ? candidateState
           : false;
       },
@@ -11553,8 +11566,9 @@ async function runChromeTest() {
       loadedBookingState.fetchCalls,
       [
         "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
+        "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       ],
-      `Expected Load this booking to make only the workflow status GET, got ${loadedBookingState.fetchCalls.join(", ")}`,
+      `Expected Load this booking to make only the workflow status GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
     );
     assert.deepEqual(
       loadedBookingState.workflowStatusRequests.map((request) => ({
@@ -11570,8 +11584,14 @@ async function runChromeTest() {
           purpose: "admin-booking-persistence",
           workflow_area: "dispatch_release",
         },
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          workflow_area: "driver_acknowledgement",
+        },
       ],
-      "Expected saved booking load to GET dispatch_release workflow status through the guarded API path",
+      "Expected saved booking load to GET dispatch_release and driver_acknowledgement workflow statuses through the guarded API path",
     );
     assert.equal(loadedBookingState.fields.bookingType, "DEP");
     assert.equal(loadedBookingState.fields.vehicle, "VAN");
@@ -11662,6 +11682,14 @@ async function runChromeTest() {
         },
         {
           booking_reference: "ui-cleanup-load-fixture",
+          body: null,
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          workflow_area: "driver_acknowledgement",
+        },
+        {
+          booking_reference: "ui-cleanup-load-fixture",
           body: {
             booking_reference: "ui-cleanup-load-fixture",
             safe_status_context: {
@@ -11679,7 +11707,7 @@ async function runChromeTest() {
           workflow_area: "dispatch_release",
         },
       ],
-      "Expected dispatch release workflow status GET and POST to use the safe guarded API shape",
+      "Expected dispatch release and driver acknowledgement workflow status GETs plus dispatch release POST to use the safe guarded API shape",
     );
     assert.equal(
       /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token/i.test(
@@ -11687,6 +11715,118 @@ async function runChromeTest() {
       ),
       false,
       "Expected workflow status request bodies to avoid private finance, notification, parser, and secret fields",
+    );
+
+    const clickedDriverAcknowledgementWorkflowSave = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-driver-acknowledgement-mark-ready='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedDriverAcknowledgementWorkflowSave,
+      true,
+      "Expected driver acknowledgement ready control to be clickable for workflow status save",
+    );
+
+    const driverAcknowledgementSavedWorkflowState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-driver-acknowledgement-readiness='true']");
+          const feedback =
+            section?.querySelector("[data-admin-driver-acknowledgement-feedback='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+
+          return feedback.includes("Driver acknowledgement workflow status saved for ui-cleanup-load-fixture")
+            ? {
+                feedback,
+                workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
+              }
+            : false;
+        })()`);
+
+        return candidateState;
+      },
+      10000,
+      "driver acknowledgement workflow status save feedback",
+    );
+
+    assert.deepEqual(
+      driverAcknowledgementSavedWorkflowState.workflowStatusRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        body: request.body,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        workflow_area: request.workflow_area,
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: null,
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          workflow_area: "dispatch_release",
+        },
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: null,
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          workflow_area: "driver_acknowledgement",
+        },
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: {
+            booking_reference: "ui-cleanup-load-fixture",
+            safe_status_context: {
+              next_action: "Continue manual dispatch release handoff after status review.",
+              safe_note:
+                "Dispatcher marked dispatch release ready from the existing admin workflow control.",
+            },
+            status_label: "Ready for dispatch release",
+            status_value: "ready",
+            workflow_area: "dispatch_release",
+          },
+          hasSessionTokenHeader: false,
+          method: "POST",
+          purpose: "admin-booking-persistence",
+          workflow_area: "dispatch_release",
+        },
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: {
+            booking_reference: "ui-cleanup-load-fixture",
+            safe_status_context: {
+              next_action: "Contact driver manually and monitor acknowledgement outcome.",
+              safe_note:
+                "Dispatcher marked driver acknowledgement ready from the existing admin workflow control.",
+            },
+            status_label: "Driver acknowledgement ready",
+            status_value: "ready",
+            workflow_area: "driver_acknowledgement",
+          },
+          hasSessionTokenHeader: false,
+          method: "POST",
+          purpose: "admin-booking-persistence",
+          workflow_area: "driver_acknowledgement",
+        },
+      ],
+      "Expected driver acknowledgement workflow status POST to use the safe guarded API shape",
+    );
+    assert.equal(
+      /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token/i.test(
+        JSON.stringify(driverAcknowledgementSavedWorkflowState.workflowStatusRequests.map((request) => request.body)),
+      ),
+      false,
+      "Expected driver acknowledgement workflow status request bodies to avoid private finance, notification, parser, and secret fields",
     );
 
     await evaluate(`(() => {
@@ -11742,7 +11882,19 @@ async function runChromeTest() {
         })()`);
 
         return candidateState?.fields?.company === "LOADED SAVED COMPANY" &&
-          candidateState?.fields?.flight === "SQ999"
+          candidateState?.fields?.flight === "SQ999" &&
+          candidateState?.workflowStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.workflow_area === "dispatch_release",
+          ) &&
+          candidateState?.workflowStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.workflow_area === "driver_acknowledgement",
+          )
           ? candidateState
           : false;
       },
@@ -11756,8 +11908,9 @@ async function runChromeTest() {
       recentLoadedBookingState.workflowStatusRequests.map((request) => `${request.method} ${request.url}`),
       [
         "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
+        "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       ],
-      `Expected Recent Load this booking to make only the workflow status GET, got ${recentLoadedBookingState.workflowStatusRequests
+      `Expected Recent Load this booking to make only the workflow status GETs, got ${recentLoadedBookingState.workflowStatusRequests
         .map((request) => `${request.method} ${request.url}`)
         .join(", ")}`,
     );
@@ -12070,7 +12223,19 @@ async function runChromeTest() {
         })()`);
 
         return candidateState?.fields?.company === "COMPLETED TEST COMPANY" &&
-          candidateState?.fields?.flight === "SQ888"
+          candidateState?.fields?.flight === "SQ888" &&
+          candidateState?.workflowStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-completed-load-fixture" &&
+              request.workflow_area === "dispatch_release",
+          ) &&
+          candidateState?.workflowStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-completed-load-fixture" &&
+              request.workflow_area === "driver_acknowledgement",
+          )
           ? candidateState
           : false;
       },
@@ -12086,8 +12251,9 @@ async function runChromeTest() {
       completedLoadedBookingState.workflowStatusRequests.map((request) => `${request.method} ${request.url}`),
       [
         "GET /api/admin-booking-workflow-statuses?booking_reference=ui-completed-load-fixture&workflow_area=dispatch_release",
+        "GET /api/admin-booking-workflow-statuses?booking_reference=ui-completed-load-fixture&workflow_area=driver_acknowledgement",
       ],
-      `Expected Completed Load this booking to make only the workflow status GET, got ${completedLoadedBookingState.workflowStatusRequests
+      `Expected Completed Load this booking to make only the workflow status GETs, got ${completedLoadedBookingState.workflowStatusRequests
         .map((request) => `${request.method} ${request.url}`)
         .join(", ")}`,
     );

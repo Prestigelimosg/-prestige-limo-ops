@@ -4892,6 +4892,206 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDriverAcknowledgementFollowUp = async () => {
+      const followUpViewports = [
+        { height: 812, label: "mobile driver acknowledgement follow-up", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop driver acknowledgement follow-up", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of followUpViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-driver-acknowledgement-follow-up]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const note = section.querySelector("[data-admin-driver-acknowledgement-follow-up-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-driver-acknowledgement-follow-up-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-driver-acknowledgement-follow-up-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-driver-acknowledgement-follow-up-item") || "",
+                  label:
+                    item.querySelector("[data-admin-driver-acknowledgement-follow-up-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-driver-acknowledgement-follow-up-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const options = [...section.querySelectorAll("[data-admin-driver-acknowledgement-follow-up-option]")].map(
+                (option) => ({
+                  disabled: option.disabled,
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-driver-acknowledgement-follow-up-option-state") || "",
+                  value: option.getAttribute("data-admin-driver-acknowledgement-follow-up-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-driver-acknowledgement-follow-up-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                optionCount: options.length,
+                options,
+                status:
+                  section.querySelector("[data-admin-driver-acknowledgement-follow-up-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+                items,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin driver acknowledgement follow-up`,
+        );
+
+        assert.equal(
+          state.text.includes("Driver Acknowledgement Follow-up"),
+          true,
+          `${viewport.label}: expected Driver Acknowledgement Follow-up title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          ["Pending", "Acknowledged", "Needs Call"],
+          `${viewport.label}: expected acknowledgement follow-up local status controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state, option.disabled]),
+          [
+            ["pending", "selected", false],
+            ["acknowledged", "idle", true],
+            ["needs-call", "idle", true],
+          ],
+          `${viewport.label}: expected follow-up controls to start pending and block outcomes before readiness`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Acknowledgement pending",
+            "Acknowledged locally",
+            "No response / needs call",
+            "Next dispatcher action",
+            "Local follow-up note/status",
+          ],
+          `${viewport.label}: expected driver acknowledgement follow-up labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "acknowledgement-pending",
+            "acknowledged-locally",
+            "no-response-needs-call",
+            "next-dispatcher-action",
+            "local-follow-up-note",
+          ],
+          `${viewport.label}: expected driver acknowledgement follow-up keys`,
+        );
+        assert.equal(
+          state.status,
+          "Acknowledgement pending",
+          `${viewport.label}: expected follow-up tracker to start pending`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected follow-up local note to start empty`);
+        assert.equal(
+          state.noteHeight >= 48,
+          true,
+          `${viewport.label}: expected follow-up local note field to be touch-friendly`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected acknowledgement follow-up boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in acknowledgement follow-up`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 760 : 500),
+          true,
+          `${viewport.label}: expected compact acknowledgement follow-up, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected acknowledgement follow-up items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected acknowledgement follow-up controls to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected acknowledgement follow-up not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            disabled: option.disabled,
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -34701,6 +34901,7 @@ async function runChromeTest() {
     state.adminDispatchReleaseChecklist = await checkAdminDispatchReleaseChecklist();
     state.adminDispatchReleaseHandoffPacket = await checkAdminDispatchReleaseHandoffPacket();
     state.adminDriverAcknowledgementReadiness = await checkAdminDriverAcknowledgementReadiness();
+    state.adminDriverAcknowledgementFollowUp = await checkAdminDriverAcknowledgementFollowUp();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -34813,6 +35014,7 @@ async function runChromeTest() {
     state.adminDispatchReleaseChecklistRouteBoundaries = [];
     state.adminDispatchReleaseHandoffPacketRouteBoundaries = [];
     state.adminDriverAcknowledgementReadinessRouteBoundaries = [];
+    state.adminDriverAcknowledgementFollowUpRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -34929,6 +35131,32 @@ async function runChromeTest() {
         adminDriverAcknowledgementReadinessTextLeaks,
         [],
         `Expected no admin driver acknowledgement readiness wording leak for ${route.context}`,
+      );
+      const adminDriverAcknowledgementFollowUpVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-driver-acknowledgement-follow-up]"))`,
+      );
+      const adminDriverAcknowledgementFollowUpTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Driver Acknowledgement Follow-up", "Local follow-up note", "Needs Call"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminDriverAcknowledgementFollowUpRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDriverAcknowledgementFollowUpTextLeaks,
+        visible: adminDriverAcknowledgementFollowUpVisible,
+      });
+      assert.equal(
+        adminDriverAcknowledgementFollowUpVisible,
+        false,
+        `Expected admin driver acknowledgement follow-up boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDriverAcknowledgementFollowUpTextLeaks,
+        [],
+        `Expected no admin driver acknowledgement follow-up wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -35114,6 +35342,32 @@ async function runChromeTest() {
       customerDetailAdminDriverAcknowledgementReadinessTextLeaks,
       [],
       "Expected no admin driver acknowledgement readiness wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDriverAcknowledgementFollowUpVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-driver-acknowledgement-follow-up]"))`,
+    );
+    const customerDetailAdminDriverAcknowledgementFollowUpTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Driver Acknowledgement Follow-up", "Local follow-up note", "Needs Call"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminDriverAcknowledgementFollowUpRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDriverAcknowledgementFollowUpTextLeaks,
+      visible: customerDetailAdminDriverAcknowledgementFollowUpVisible,
+    });
+    assert.equal(
+      customerDetailAdminDriverAcknowledgementFollowUpVisible,
+      false,
+      "Expected admin driver acknowledgement follow-up boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDriverAcknowledgementFollowUpTextLeaks,
+      [],
+      "Expected no admin driver acknowledgement follow-up wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

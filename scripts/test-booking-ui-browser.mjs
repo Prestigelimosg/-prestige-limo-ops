@@ -1681,6 +1681,80 @@ function assertBookingUiState(state) {
   assert.match(state.driverAcknowledgementReadiness.boundary, /live location/);
   assert.match(state.driverAcknowledgementReadiness.boundary, /parser-learning/);
   assert.deepEqual(state.driverAcknowledgementReadiness.forbiddenPanelText, []);
+  assert.equal(state.driverAcknowledgementFollowUp.visible, true);
+  assert.match(state.driverAcknowledgementFollowUp.text, /Driver Acknowledgement Follow-up/);
+  assert.equal(state.driverAcknowledgementFollowUp.context, "Current dispatch draft");
+  assert.equal(state.driverAcknowledgementFollowUp.status, "Acknowledgement pending");
+  assert.deepEqual(
+    state.driverAcknowledgementFollowUp.options.map((option) => option.label),
+    ["Pending", "Acknowledged", "Needs Call"],
+  );
+  assert.deepEqual(
+    state.driverAcknowledgementFollowUp.options.map((option) => [
+      option.value,
+      option.state,
+      option.disabled,
+    ]),
+    [
+      ["pending", "selected", false],
+      ["acknowledged", "idle", true],
+      ["needs-call", "idle", true],
+    ],
+  );
+  assert.equal(state.driverAcknowledgementFollowUp.noteValue, "");
+  assert.deepEqual(
+    state.driverAcknowledgementFollowUp.items.map((item) => item.label),
+    [
+      "Acknowledgement pending",
+      "Acknowledged locally",
+      "No response / needs call",
+      "Next dispatcher action",
+      "Local follow-up note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.driverAcknowledgementFollowUp.items.map((item) => item.key),
+    [
+      "acknowledgement-pending",
+      "acknowledged-locally",
+      "no-response-needs-call",
+      "next-dispatcher-action",
+      "local-follow-up-note",
+    ],
+  );
+  assert.equal(
+    state.driverAcknowledgementFollowUp.items.find((item) => item.key === "acknowledgement-pending")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.driverAcknowledgementFollowUp.items.find((item) => item.key === "acknowledged-locally")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.driverAcknowledgementFollowUp.items.find((item) => item.key === "no-response-needs-call")?.state,
+    "ready",
+  );
+  assert.equal(
+    state.driverAcknowledgementFollowUp.items.find((item) => item.key === "next-dispatcher-action")?.detail,
+    "Complete readiness first.",
+  );
+  assert.equal(
+    state.driverAcknowledgementFollowUp.items.find((item) => item.key === "local-follow-up-note")?.detail,
+    "Acknowledgement pending. No local note.",
+  );
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /Local UI only/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /No Supabase write/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /live database access/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /notification sending/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /customer message/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /driver notification/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /billing/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /payment/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /PDF/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /payout/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /live location/);
+  assert.match(state.driverAcknowledgementFollowUp.boundary, /parser-learning/);
+  assert.deepEqual(state.driverAcknowledgementFollowUp.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -2702,6 +2776,62 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const driverAcknowledgementFollowUp = () => {
+        const section = document.querySelector("[data-admin-driver-acknowledgement-follow-up='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-driver-acknowledgement-follow-up-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section?.querySelector("[data-admin-driver-acknowledgement-follow-up-context='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [...(section?.querySelectorAll("[data-admin-driver-acknowledgement-follow-up-item]") || [])].map(
+            (item) => ({
+              detail:
+                item.querySelector("[data-admin-driver-acknowledgement-follow-up-detail]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              key: item.getAttribute("data-admin-driver-acknowledgement-follow-up-item") || "",
+              label:
+                item.querySelector("[data-admin-driver-acknowledgement-follow-up-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              state: item.getAttribute("data-admin-driver-acknowledgement-follow-up-item-state") || "",
+            }),
+          ),
+          noteValue:
+            section?.querySelector("[data-admin-driver-acknowledgement-follow-up-note='true']")?.value ?? null,
+          options: [...(section?.querySelectorAll("[data-admin-driver-acknowledgement-follow-up-option]") || [])].map(
+            (option) => ({
+              disabled: option.disabled,
+              label: option.textContent.replace(/\\s+/g, " ").trim(),
+              state: option.getAttribute("data-admin-driver-acknowledgement-follow-up-option-state") || "",
+              value: option.getAttribute("data-admin-driver-acknowledgement-follow-up-option") || "",
+            }),
+          ),
+          status:
+            section?.querySelector("[data-admin-driver-acknowledgement-follow-up-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -2709,6 +2839,7 @@ async function runChromeTest() {
         customerCopy: preTextByHeading("Customer Copy"),
         dispatchReleaseChecklist: dispatchReleaseChecklist(),
         dispatchReleaseHandoffPacket: dispatchReleaseHandoffPacket(),
+        driverAcknowledgementFollowUp: driverAcknowledgementFollowUp(),
         driverAcknowledgementReadiness: driverAcknowledgementReadiness(),
         driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
         errors: window.__prestigeErrors || [],

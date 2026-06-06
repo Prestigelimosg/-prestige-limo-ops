@@ -802,6 +802,126 @@ async function runChromeTest() {
       );
     };
 
+    const checkDriverAcknowledgementFollowUp = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-driver-acknowledgement-follow-up='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const note = section?.querySelector("[data-admin-driver-acknowledgement-follow-up-note='true']");
+        const noteRect = note?.getBoundingClientRect();
+        const items = [...(section?.querySelectorAll("[data-admin-driver-acknowledgement-follow-up-item]") || [])].map(
+          (item) => {
+            const itemRect = item.getBoundingClientRect();
+
+            return {
+              height: Math.round(itemRect.height),
+              key: item.getAttribute("data-admin-driver-acknowledgement-follow-up-item") || "",
+              label:
+                item.querySelector("[data-admin-driver-acknowledgement-follow-up-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              width: Math.round(itemRect.width),
+            };
+          },
+        );
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-driver-acknowledgement-follow-up-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            disabled: option.disabled,
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-driver-acknowledgement-follow-up-option-state") || "",
+            value: option.getAttribute("data-admin-driver-acknowledgement-follow-up-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-driver-acknowledgement-follow-up-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          options,
+          status:
+            section?.querySelector("[data-admin-driver-acknowledgement-follow-up-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(state.visible, true, `${viewport.label}: expected Driver Acknowledgement Follow-up section`);
+      assert.equal(
+        state.text.includes("Driver Acknowledgement Follow-up"),
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Follow-up title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        ["Pending", "Acknowledged", "Needs Call"],
+        `${viewport.label}: expected Driver Acknowledgement Follow-up local status controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Acknowledgement pending",
+          "Acknowledged locally",
+          "No response / needs call",
+          "Next dispatcher action",
+          "Local follow-up note/status",
+        ],
+        `${viewport.label}: expected Driver Acknowledgement Follow-up rows`,
+      );
+      assert.equal(
+        state.status,
+        "Acknowledgement pending",
+        `${viewport.label}: expected Driver Acknowledgement Follow-up to start pending`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected Driver Acknowledgement Follow-up note to start empty`);
+      assert.equal(
+        state.noteHeight >= 48,
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Follow-up note to be touch-friendly`,
+      );
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Follow-up controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Follow-up local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 760 : 500),
+        true,
+        `${viewport.label}: expected compact Driver Acknowledgement Follow-up, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Follow-up rows to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Follow-up not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -9664,6 +9784,7 @@ async function runChromeTest() {
           await checkDispatcherIntakeControls(viewport);
           await checkDispatchReleaseHandoffPacket(viewport);
           await checkDriverAcknowledgementReadiness(viewport);
+          await checkDriverAcknowledgementFollowUp(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }

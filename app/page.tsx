@@ -546,6 +546,8 @@ type DispatchReleaseChecklistItem = {
   state: DispatchReleaseReadinessState;
 };
 
+type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3887,6 +3889,9 @@ export default function Home() {
   const [dispatchReleaseMessage, setDispatchReleaseMessage] = useState<Message | null>(null);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
+  const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
+    useState<DriverAcknowledgementFollowUpStatus>("pending");
+  const [driverAcknowledgementFollowUpNote, setDriverAcknowledgementFollowUpNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -8861,6 +8866,73 @@ export default function Home() {
       key: "next-dispatcher-action",
       label: "Next dispatcher action",
       state: driverAcknowledgementCoreReady ? "ready" : "needs-action",
+    },
+  ];
+  const driverAcknowledgementFollowUpStatusLabel =
+    driverAcknowledgementFollowUpStatus === "acknowledged"
+      ? "Acknowledged locally"
+      : driverAcknowledgementFollowUpStatus === "needs-call"
+        ? "No response / needs call"
+        : "Acknowledgement pending";
+  const driverAcknowledgementFollowUpNextAction = !driverAcknowledgementCoreReady
+    ? "Complete readiness first."
+    : driverAcknowledgementFollowUpStatus === "acknowledged"
+      ? "Monitor trip after local acknowledgement."
+      : driverAcknowledgementFollowUpStatus === "needs-call"
+        ? "Call driver; escalate if no response."
+        : "Request acknowledgement, then update outcome.";
+  const driverAcknowledgementFollowUpOptions: {
+    label: string;
+    value: DriverAcknowledgementFollowUpStatus;
+  }[] = [
+    { label: "Pending", value: "pending" },
+    { label: "Acknowledged", value: "acknowledged" },
+    { label: "Needs Call", value: "needs-call" },
+  ];
+  const driverAcknowledgementFollowUpItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail:
+        driverAcknowledgementFollowUpStatus === "pending"
+          ? "Waiting for acknowledgement."
+          : "No longer current.",
+      key: "acknowledgement-pending",
+      label: "Acknowledgement pending",
+      state: driverAcknowledgementFollowUpStatus === "pending" ? "needs-action" : "ready",
+    },
+    {
+      detail:
+        driverAcknowledgementFollowUpStatus === "acknowledged"
+          ? "Acknowledged locally."
+          : "Not acknowledged yet.",
+      key: "acknowledged-locally",
+      label: "Acknowledged locally",
+      state: driverAcknowledgementFollowUpStatus === "acknowledged" ? "ready" : "needs-action",
+    },
+    {
+      detail:
+        driverAcknowledgementFollowUpStatus === "needs-call"
+          ? "Call needed."
+          : "No call flag.",
+      key: "no-response-needs-call",
+      label: "No response / needs call",
+      state: driverAcknowledgementFollowUpStatus === "needs-call" ? "needs-action" : "ready",
+    },
+    {
+      detail: driverAcknowledgementFollowUpNextAction,
+      key: "next-dispatcher-action",
+      label: "Next dispatcher action",
+      state:
+        driverAcknowledgementCoreReady && driverAcknowledgementFollowUpStatus === "acknowledged"
+          ? "ready"
+          : "needs-action",
+    },
+    {
+      detail: `${driverAcknowledgementFollowUpStatusLabel}. ${
+        clean(driverAcknowledgementFollowUpNote) || "No local note."
+      }`,
+      key: "local-follow-up-note",
+      label: "Local follow-up note/status",
+      state: driverAcknowledgementFollowUpStatus === "acknowledged" ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -17382,6 +17454,132 @@ export default function Home() {
               <p
                 className="mt-2 border-t border-indigo-200 pt-2 text-[11px] leading-4 text-indigo-900"
                 data-admin-driver-acknowledgement-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Driver Acknowledgement Follow-up"
+              className="mt-3 rounded-md border border-cyan-200 bg-cyan-50/70 p-2.5"
+              data-admin-driver-acknowledgement-follow-up="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-cyan-950">
+                      Driver Acknowledgement Follow-up
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        driverAcknowledgementFollowUpStatus === "acknowledged"
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : driverAcknowledgementFollowUpStatus === "needs-call"
+                            ? "bg-rose-100 text-rose-900 ring-rose-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-driver-acknowledgement-follow-up-status="true"
+                    >
+                      {driverAcknowledgementFollowUpStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-cyan-900"
+                    data-admin-driver-acknowledgement-follow-up-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-cyan-900">
+                    Local tracker after manual driver follow-up.
+                  </p>
+                </div>
+                <div
+                  aria-label="Driver acknowledgement follow-up status"
+                  className="grid w-full grid-cols-1 gap-1 rounded-md border border-cyan-200 bg-white p-1 min-[360px]:grid-cols-3 sm:w-72 sm:shrink-0"
+                  data-admin-driver-acknowledgement-follow-up-controls="true"
+                  role="group"
+                >
+                  {driverAcknowledgementFollowUpOptions.map((option) => {
+                    const isSelected = driverAcknowledgementFollowUpStatus === option.value;
+                    const isDisabled = option.value !== "pending" && !driverAcknowledgementCoreReady;
+
+                    return (
+                      <button
+                        className={`min-h-9 rounded px-2 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+                          isSelected
+                            ? "bg-cyan-700 text-white"
+                            : "bg-white text-cyan-950 hover:bg-cyan-100"
+                        }`}
+                        data-admin-driver-acknowledgement-follow-up-option={option.value}
+                        data-admin-driver-acknowledgement-follow-up-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        disabled={isDisabled}
+                        key={option.value}
+                        onClick={() => setDriverAcknowledgementFollowUpStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-3 block min-w-0 text-xs font-semibold text-cyan-950">
+                <span>Local follow-up note</span>
+                <textarea
+                  className="mt-1 min-h-12 w-full min-w-0 resize-y rounded-md border border-cyan-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  data-admin-driver-acknowledgement-follow-up-note="true"
+                  onChange={(event) => setDriverAcknowledgementFollowUpNote(event.target.value)}
+                  placeholder="Local staff note"
+                  value={driverAcknowledgementFollowUpNote}
+                />
+              </label>
+              <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+                {driverAcknowledgementFollowUpItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-2 py-1.5 text-[11px] ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "no-response-needs-call" &&
+                            driverAcknowledgementFollowUpStatus === "needs-call"
+                          ? "border-rose-200 bg-white text-rose-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-driver-acknowledgement-follow-up-item={item.key}
+                    data-admin-driver-acknowledgement-follow-up-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="font-semibold leading-4"
+                        data-admin-driver-acknowledgement-follow-up-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-driver-acknowledgement-follow-up-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-2 border-t border-cyan-200 pt-2 text-[11px] leading-4 text-cyan-900"
+                data-admin-driver-acknowledgement-follow-up-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.

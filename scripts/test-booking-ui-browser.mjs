@@ -3932,6 +3932,10 @@ async function runChromeTest() {
           ].filter((value) => lowerText.includes(value)),
           markReadyDisabled:
             checklist?.querySelector("[data-admin-dispatch-release-mark-ready='true']")?.disabled ?? null,
+          feedback:
+            checklist?.querySelector("[data-admin-dispatch-release-feedback='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
           state:
             checklist?.querySelector("[data-admin-dispatch-release-state='true']")?.textContent
               .replace(/\\s+/g, " ")
@@ -5850,13 +5854,84 @@ async function runChromeTest() {
       window.__prestigeCompletedDeleteRequests = [];
       window.__prestigeLoadedBookings = loadedBookings;
       window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeWorkflowStatusRequests = [];
+      window.__prestigeWorkflowStatuses = {};
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
         const target = args[0]?.url || args[0];
         const method = args[1]?.method || args[0]?.method || "GET";
         const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+        const headers = (() => {
+          try {
+            return Object.fromEntries(new Headers(args[1]?.headers || args[0]?.headers || {}).entries());
+          } catch {
+            return {};
+          }
+        })();
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+        if (String(target).includes("/api/admin-booking-workflow-statuses")) {
+          const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeWorkflowStatusRequests.push({
+            body: parsedBody,
+            booking_reference: url.searchParams.get("booking_reference") || parsedBody?.booking_reference || "",
+            headers,
+            method,
+            url: String(target),
+            workflow_area: url.searchParams.get("workflow_area") || parsedBody?.workflow_area || "",
+          });
+
+          if (method === "GET") {
+            const bookingReference = url.searchParams.get("booking_reference") || "";
+            const workflowArea = url.searchParams.get("workflow_area") || "";
+            const key = \`\${bookingReference}:\${workflowArea}\`;
+            const status = window.__prestigeWorkflowStatuses[key] || null;
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                statuses: status ? [status] : [],
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "POST") {
+            const status = {
+              ...parsedBody,
+              actor_label: "Browser workflow status mock",
+              actor_role: "admin",
+              created_at: "2026-06-06T00:00:00.000Z",
+              id: "browser-workflow-status-row",
+              source_surface: "admin_api",
+              updated_at: "2026-06-06T00:00:00.000Z",
+            };
+            const key = \`\${status.booking_reference}:\${status.workflow_area}\`;
+            window.__prestigeWorkflowStatuses[key] = status;
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                status,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(JSON.stringify({ ok: false, error: "Workflow status method not mocked." }), {
+            status: 405,
+            headers: { "content-type": "application/json" },
+          });
+        }
 
         if (
           method === "GET" &&
@@ -11299,7 +11374,83 @@ async function runChromeTest() {
 
     await clickTab("Dashboard", "Operations Dashboard");
 
-    await evaluate(`window.__prestigeFetchCalls = []`);
+    await evaluate(`(() => {
+      const previousFetch = window.fetch.bind(window);
+
+      window.__prestigeFetchCalls = [];
+      window.__prestigeWorkflowStatusRequests = [];
+      window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+        const headers = (() => {
+          try {
+            return Object.fromEntries(new Headers(args[1]?.headers || args[0]?.headers || {}).entries());
+          } catch {
+            return {};
+          }
+        })();
+
+        if (String(target).includes("/api/admin-booking-workflow-statuses")) {
+          const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeWorkflowStatusRequests.push({
+            body: parsedBody,
+            booking_reference: url.searchParams.get("booking_reference") || parsedBody?.booking_reference || "",
+            headers,
+            method,
+            url: String(target),
+            workflow_area: url.searchParams.get("workflow_area") || parsedBody?.workflow_area || "",
+          });
+
+          if (method === "GET") {
+            const bookingReference = url.searchParams.get("booking_reference") || "";
+            const workflowArea = url.searchParams.get("workflow_area") || "";
+            const status = window.__prestigeWorkflowStatuses[\`\${bookingReference}:\${workflowArea}\`] || null;
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                statuses: status ? [status] : [],
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "POST") {
+            const status = {
+              ...parsedBody,
+              actor_label: "Focused browser workflow status mock",
+              actor_role: "admin",
+              created_at: "2026-06-06T00:00:00.000Z",
+              id: "focused-browser-workflow-status-row",
+              source_surface: "admin_api",
+              updated_at: "2026-06-06T00:00:00.000Z",
+            };
+            window.__prestigeWorkflowStatuses[\`\${status.booking_reference}:\${status.workflow_area}\`] = status;
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                status,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
+        return previousFetch(...args);
+      };
+    })()`);
 
     const clickedDashboardLoadThisBooking = await evaluate(`(() => {
       const dashboardArticle = document.querySelector(
@@ -11370,6 +11521,7 @@ async function runChromeTest() {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             fetchCalls: window.__prestigeFetchCalls || [],
+            workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
             driverDispatch: preTextByHeading("Driver Dispatch"),
             pastedMessage: document.querySelector("textarea")?.value || "",
@@ -11399,8 +11551,27 @@ async function runChromeTest() {
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
     assert.deepEqual(
       loadedBookingState.fetchCalls,
-      [],
-      `Expected Load this booking to make no save/load network call, got ${loadedBookingState.fetchCalls.join(", ")}`,
+      [
+        "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
+      ],
+      `Expected Load this booking to make only the workflow status GET, got ${loadedBookingState.fetchCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      loadedBookingState.workflowStatusRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        workflow_area: request.workflow_area,
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          workflow_area: "dispatch_release",
+        },
+      ],
+      "Expected saved booking load to GET dispatch_release workflow status through the guarded API path",
     );
     assert.equal(loadedBookingState.fields.bookingType, "DEP");
     assert.equal(loadedBookingState.fields.vehicle, "VAN");
@@ -11413,7 +11584,115 @@ async function runChromeTest() {
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED TRAVELER/);
     assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
 
-    await evaluate(`window.__prestigeFetchCalls = []`);
+    await setFieldValueByLabel("Pickup date", "2030-05-28", "future loaded booking pickup date");
+
+    const dispatchReleaseReadyForWorkflowSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.dispatchReleaseChecklist?.markReadyDisabled === false &&
+          candidateState?.dispatchReleaseChecklist?.checks?.every((check) => check.state === "ready")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "dispatch release checklist ready before workflow status save",
+    );
+    assert.equal(
+      dispatchReleaseReadyForWorkflowSaveState.dispatchReleaseChecklist.context,
+      "Loaded booking: ui-cleanup-load-fixture",
+    );
+    const clickedDispatchReleaseWorkflowSave = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-dispatch-release-mark-ready='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedDispatchReleaseWorkflowSave,
+      true,
+      "Expected dispatch release ready control to be clickable for workflow status save",
+    );
+
+    const dispatchReleaseSavedWorkflowState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const checklist = document.querySelector("[data-admin-dispatch-release-checklist='true']");
+          const feedback =
+            checklist?.querySelector("[data-admin-dispatch-release-feedback='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+
+          return feedback.includes("Dispatch release workflow status saved for ui-cleanup-load-fixture")
+            ? {
+                feedback,
+                fetchCalls: window.__prestigeFetchCalls || [],
+                workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
+              }
+            : false;
+        })()`);
+
+        return candidateState;
+      },
+      10000,
+      "dispatch release workflow status save feedback",
+    );
+
+    assert.deepEqual(
+      dispatchReleaseSavedWorkflowState.workflowStatusRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        body: request.body,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        workflow_area: request.workflow_area,
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: null,
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          workflow_area: "dispatch_release",
+        },
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: {
+            booking_reference: "ui-cleanup-load-fixture",
+            safe_status_context: {
+              next_action: "Continue manual dispatch release handoff after status review.",
+              safe_note:
+                "Dispatcher marked dispatch release ready from the existing admin workflow control.",
+            },
+            status_label: "Ready for dispatch release",
+            status_value: "ready",
+            workflow_area: "dispatch_release",
+          },
+          hasSessionTokenHeader: false,
+          method: "POST",
+          purpose: "admin-booking-persistence",
+          workflow_area: "dispatch_release",
+        },
+      ],
+      "Expected dispatch release workflow status GET and POST to use the safe guarded API shape",
+    );
+    assert.equal(
+      /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token/i.test(
+        JSON.stringify(dispatchReleaseSavedWorkflowState.workflowStatusRequests.map((request) => request.body)),
+      ),
+      false,
+      "Expected workflow status request bodies to avoid private finance, notification, parser, and secret fields",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeWorkflowStatusRequests = [];
+    })()`);
 
     await clickTab("Bookings", "Recent Bookings");
 
@@ -11453,6 +11732,7 @@ async function runChromeTest() {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             fetchCalls: window.__prestigeFetchCalls || [],
+            workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             fields: {
               company: fieldValue("Company / Account"),
               flight: fieldValue("Flight number"),
@@ -11472,9 +11752,13 @@ async function runChromeTest() {
     assert.equal(recentLoadedBookingState.aiDraftExists, false);
     assert.equal(recentLoadedBookingState.aiFeedbackExists, false);
     assert.deepEqual(
-      recentLoadedBookingState.fetchCalls,
-      [],
-      `Expected Recent Load this booking to make no save/load network call, got ${recentLoadedBookingState.fetchCalls.join(", ")}`,
+      recentLoadedBookingState.workflowStatusRequests.map((request) => `${request.method} ${request.url}`),
+      [
+        "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
+      ],
+      `Expected Recent Load this booking to make only the workflow status GET, got ${recentLoadedBookingState.workflowStatusRequests
+        .map((request) => `${request.method} ${request.url}`)
+        .join(", ")}`,
     );
 
     await clickTab("Bookings", "Recent Bookings");
@@ -11708,7 +11992,10 @@ async function runChromeTest() {
       "Completed search cleared",
     );
 
-    await evaluate(`window.__prestigeFetchCalls = []`);
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeWorkflowStatusRequests = [];
+    })()`);
 
     const clickedCompletedLoadThisBooking = await evaluate(`(() => {
       const loadThisBookingButton = document.querySelector("[data-completed-load-booking='true']");
@@ -11763,6 +12050,7 @@ async function runChromeTest() {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             fetchCalls: window.__prestigeFetchCalls || [],
+            workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
             driverDispatch: preTextByHeading("Driver Dispatch"),
             pastedMessage: document.querySelector("textarea")?.value || "",
@@ -11793,9 +12081,13 @@ async function runChromeTest() {
     assert.equal(completedLoadedBookingState.aiFeedbackExists, false);
     assert.equal(completedLoadedBookingState.pastedMessage, "");
     assert.deepEqual(
-      completedLoadedBookingState.fetchCalls,
-      [],
-      `Expected Completed Load this booking to make no save/load network call, got ${completedLoadedBookingState.fetchCalls.join(", ")}`,
+      completedLoadedBookingState.workflowStatusRequests.map((request) => `${request.method} ${request.url}`),
+      [
+        "GET /api/admin-booking-workflow-statuses?booking_reference=ui-completed-load-fixture&workflow_area=dispatch_release",
+      ],
+      `Expected Completed Load this booking to make only the workflow status GET, got ${completedLoadedBookingState.workflowStatusRequests
+        .map((request) => `${request.method} ${request.url}`)
+        .join(", ")}`,
     );
     assert.equal(completedLoadedBookingState.fields.bookingType, "DEP");
     assert.equal(completedLoadedBookingState.fields.vehicle, "AVF");

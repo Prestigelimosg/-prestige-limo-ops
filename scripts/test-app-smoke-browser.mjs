@@ -803,12 +803,73 @@ async function runChromeTest() {
       await evaluate(`(() => {
         window.__adminBookingPersistenceCalls = [];
         window.__adminBookingPersistenceMockMode = "success";
+        window.__adminWorkflowStatusCalls = [];
+        window.__adminWorkflowStatusMockRows = {
+          "LOADED-OPS-001:dispatch_release": {
+            booking_reference: "LOADED-OPS-001",
+            safe_status_context: {
+              next_action: "Continue manual dispatch release handoff after status review.",
+              safe_note: "Loaded safe dispatch release status from smoke mock.",
+            },
+            status_label: "Ready for dispatch release",
+            status_value: "ready",
+            workflow_area: "dispatch_release",
+          },
+        };
         window.__adminBookingPersistenceOriginalFetch =
           window.__adminBookingPersistenceOriginalFetch || window.fetch.bind(window);
         window.fetch = async (...args) => {
           const [target, options = {}] = args;
           const url = typeof target === "string" ? target : target?.url || "";
           const method = options?.method || target?.method || "GET";
+
+          if (String(url).includes("/api/admin-booking-workflow-statuses")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const body = options?.body ? JSON.parse(String(options.body)) : null;
+            const bookingReference = parsedUrl.searchParams.get("booking_reference") || body?.booking_reference || "";
+            const workflowArea = parsedUrl.searchParams.get("workflow_area") || body?.workflow_area || "";
+
+            window.__adminWorkflowStatusCalls.push({
+              body,
+              bookingReference,
+              method,
+              url: String(url),
+              workflowArea,
+            });
+
+            if (method === "GET") {
+              const row = window.__adminWorkflowStatusMockRows[\`\${bookingReference}:\${workflowArea}\`] || null;
+
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  statuses: row ? [row] : [],
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
+            if (method === "POST") {
+              const row = {
+                ...body,
+                actor_label: "Smoke workflow status mock",
+                actor_role: "admin",
+                created_at: "2026-06-06T00:00:00.000Z",
+                id: "smoke-workflow-status-row",
+                source_surface: "admin_api",
+                updated_at: "2026-06-06T00:00:00.000Z",
+              };
+              window.__adminWorkflowStatusMockRows[\`\${bookingReference}:\${workflowArea}\`] = row;
+
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  status: row,
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
 
           if (String(url).includes("/api/admin-bookings")) {
             const body = options?.body ? JSON.parse(String(options.body)) : null;
@@ -1950,16 +2011,22 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-duplicate-guidance]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const dispatchReleaseFeedback = document
+              .querySelector("[data-admin-dispatch-release-feedback]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
             const baitPattern =
               /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i;
 
             return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
-              fields.pickup === "Loaded Ops Pickup"
+              fields.pickup === "Loaded Ops Pickup" &&
+              dispatchReleaseFeedback.includes("Loaded dispatch release workflow status for LOADED-OPS-001")
               ? {
                   bodyBaitLeaked: baitPattern.test(bodyText),
                   clearAppliedVisible: Boolean(
                     document.querySelector("[data-admin-booking-persistence-clear-applied]"),
                   ),
+                  dispatchReleaseFeedback,
                   duplicateGuidance,
                   feedback,
                   fields,
@@ -1967,6 +2034,7 @@ async function runChromeTest() {
                   fieldBaitLeaked: baitPattern.test(fieldText),
                   identityBaitLeaked: baitPattern.test(identityText),
                   identityText,
+                  workflowStatusCalls: window.__adminWorkflowStatusCalls || [],
                 }
               : false;
           })()`),
@@ -2024,6 +2092,26 @@ async function runChromeTest() {
         appliedSnapshotState.feedback.includes("Admin Review Required"),
         true,
         "Expected short-notice loaded snapshot status to remain Admin Review Required",
+      );
+      assert.match(
+        appliedSnapshotState.dispatchReleaseFeedback,
+        /Loaded dispatch release workflow status for LOADED-OPS-001: Ready for dispatch release\./,
+        "Expected applied snapshot load to show saved dispatch release workflow status in existing UI feedback",
+      );
+      assert.deepEqual(
+        appliedSnapshotState.workflowStatusCalls.map((call) => ({
+          bookingReference: call.bookingReference,
+          method: call.method,
+          workflowArea: call.workflowArea,
+        })),
+        [
+          {
+            bookingReference: "LOADED-OPS-001",
+            method: "GET",
+            workflowArea: "dispatch_release",
+          },
+        ],
+        "Expected applied snapshot load to GET dispatch_release workflow status through the guarded API path",
       );
       assert.equal(
         appliedSnapshotState.fieldBaitLeaked ||
@@ -4502,7 +4590,8 @@ async function runChromeTest() {
           `${viewport.label}: expected one local-only Dispatch Release action`,
         );
         for (const expectedBoundaryText of [
-          "UI/local-state only.",
+          "UI/local-state only for checklist calculation.",
+          "workflow-status API",
           "No Supabase write",
           "live database access",
           "customer message",

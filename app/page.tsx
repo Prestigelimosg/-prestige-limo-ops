@@ -32,6 +32,8 @@ import {
 import { mockDriverJobTokens } from "../lib/driver-job-link-mock-tokens";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
+const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
+const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminLegacyTables = {
   bookers: "bookers",
   bookings: "bookings",
@@ -545,6 +547,22 @@ type DispatchReleaseChecklistItem = {
   label: string;
   state: DispatchReleaseReadinessState;
 };
+
+type AdminBookingWorkflowStatusRecord = {
+  booking_reference?: string | null;
+  safe_status_context?: {
+    next_action?: string | null;
+    safe_note?: string | null;
+  } | null;
+  status_label?: string | null;
+  status_value?: string | null;
+  updated_at?: string | null;
+  workflow_area?: string | null;
+};
+
+type AdminBookingWorkflowStatusAction =
+  | "load-dispatch-release"
+  | "save-dispatch-release";
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
@@ -3640,6 +3658,39 @@ function adminBookingPersistenceFailureMessage(
   return `${prefix} safely.`;
 }
 
+function adminBookingWorkflowStatusFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Dispatch release workflow status persistence is not enabled or configured on this server.";
+  }
+
+  if (/forbidden/.test(normalizedError)) {
+    return "Dispatch release workflow status request is outside the approved admin workflow scope.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Dispatch release workflow status details need review.";
+  }
+
+  return "Dispatch release workflow status request failed safely.";
+}
+
+function adminBookingWorkflowStatusDisplayLabel(
+  status: AdminBookingWorkflowStatusRecord | null | undefined,
+) {
+  const statusLabel = clean(status?.status_label);
+
+  if (statusLabel) {
+    return statusLabel;
+  }
+
+  const statusValue = clean(status?.status_value);
+
+  return statusValue ? statusValue.replace(/_/g, " ") : "No saved status";
+}
+
 function adminSnapshotPickupDateTimeParts(value: string | null | undefined) {
   const rawValue = clean(value);
   const directMatch = rawValue.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
@@ -3993,6 +4044,10 @@ export default function Home() {
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [driverJobLinkCopyMessage, setDriverJobLinkCopyMessage] = useState<Message | null>(null);
   const [dispatchReleaseMessage, setDispatchReleaseMessage] = useState<Message | null>(null);
+  const [dispatchReleaseWorkflowStatus, setDispatchReleaseWorkflowStatus] =
+    useState<AdminBookingWorkflowStatusRecord | null>(null);
+  const [adminBookingWorkflowStatusAction, setAdminBookingWorkflowStatusAction] =
+    useState<AdminBookingWorkflowStatusAction | null>(null);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
@@ -4038,6 +4093,8 @@ export default function Home() {
     useState<MonthlyBillingMonthGroupingReviewStatus>("review-needed");
   const [monthlyBillingMonthGroupingReviewNote, setMonthlyBillingMonthGroupingReviewNote] =
     useState("");
+  const [dispatchReleaseWorkflowLoadRevision, setDispatchReleaseWorkflowLoadRevision] =
+    useState(0);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -4057,6 +4114,92 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  const dispatchReleaseWorkflowBookingReference =
+    clean(appliedAdminBookingSnapshotReference) || clean(loadedBookingId);
+
+  useEffect(() => {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    let cancelled = false;
+
+    void (async () => {
+      await Promise.resolve();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!bookingReference) {
+        setDispatchReleaseWorkflowStatus(null);
+        setAdminBookingWorkflowStatusAction(null);
+        setDispatchReleaseMessage(null);
+        return;
+      }
+
+      const params = new URLSearchParams({
+        booking_reference: bookingReference,
+        workflow_area: adminDispatchReleaseWorkflowArea,
+      });
+
+      setAdminBookingWorkflowStatusAction("load-dispatch-release");
+
+      try {
+        const response = await fetch(`${adminWorkflowStatusApiPath}?${params.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || "Workflow status load failed.");
+        }
+
+        const statuses = Array.isArray(result.statuses)
+          ? (result.statuses as AdminBookingWorkflowStatusRecord[])
+          : [];
+        const loadedStatus =
+          statuses.find(
+            (status) =>
+              clean(status.booking_reference) === bookingReference &&
+              clean(status.workflow_area) === adminDispatchReleaseWorkflowArea,
+          ) || null;
+
+        if (cancelled) {
+          return;
+        }
+
+        setDispatchReleaseWorkflowStatus(loadedStatus);
+        setDispatchReleaseMessage({
+          tone: loadedStatus ? "success" : "info",
+          text: loadedStatus
+            ? `Loaded dispatch release workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+                loadedStatus,
+              )}.`
+            : `No saved dispatch release workflow status for ${bookingReference}.`,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setDispatchReleaseWorkflowStatus(null);
+        setDispatchReleaseMessage({
+          tone: "error",
+          text: adminBookingWorkflowStatusFailureMessage(error),
+        });
+      } finally {
+        if (!cancelled) {
+          setAdminBookingWorkflowStatusAction(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatchReleaseWorkflowBookingReference, dispatchReleaseWorkflowLoadRevision]);
 
   const adminBookingPersistenceStatusOptions = useMemo(
     () => getAdminBookingPersistenceStatusOptions(adminBookingPersistenceRecords),
@@ -6895,6 +7038,7 @@ export default function Home() {
   function loadSelectedBooking(bookingRecord: BookingRecord) {
     setBooking(() => bookingRecordToForm(bookingRecord));
     setLoadedBookingId(String(bookingRecord.id));
+    setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
     setActiveTab("dispatch");
     clearBookingMessageInput();
     setMessage({
@@ -7039,6 +7183,7 @@ export default function Home() {
     setBooking(() => appliedSnapshot.booking);
     setLoadedBookingId("");
     setAppliedAdminBookingSnapshotReference(bookingReference);
+    setDispatchReleaseWorkflowLoadRevision((currentRevision) => currentRevision + 1);
     setActiveTab("dispatch");
     clearBookingMessageInput();
     setAdminBookingPersistenceMessage({
@@ -7095,10 +7240,80 @@ export default function Home() {
 
   function clearAppliedAdminBookingOperationalSnapshot() {
     setAppliedAdminBookingSnapshotReference("");
+    setDispatchReleaseWorkflowStatus(null);
     setAdminBookingPersistenceMessage({
       tone: "success",
       text: "Applied operational snapshot cleared. Current dispatch form values were kept.",
     });
+  }
+
+  async function saveDispatchReleaseWorkflowStatus() {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+
+    if (!dispatchReleaseReady) {
+      setDispatchReleaseMessage({
+        tone: "info",
+        text: "Complete the dispatch release checklist before saving workflow status.",
+      });
+      return;
+    }
+
+    if (!bookingReference) {
+      setDispatchReleaseMessage({
+        tone: "error",
+        text: "Load a saved booking or apply an operational snapshot before saving workflow status.",
+      });
+      return;
+    }
+
+    setAdminBookingWorkflowStatusAction("save-dispatch-release");
+    setDispatchReleaseMessage({
+      tone: "info",
+      text: `Saving dispatch release workflow status for ${bookingReference}...`,
+    });
+
+    try {
+      const response = await fetch(adminWorkflowStatusApiPath, {
+        body: JSON.stringify({
+          booking_reference: bookingReference,
+          safe_status_context: {
+            next_action: "Continue manual dispatch release handoff after status review.",
+            safe_note:
+              clean(dispatchReleaseLocalNote) ||
+              "Dispatcher marked dispatch release ready from the existing admin workflow control.",
+          },
+          status_label: "Ready for dispatch release",
+          status_value: "ready",
+          workflow_area: adminDispatchReleaseWorkflowArea,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Workflow status save failed.");
+      }
+
+      const savedStatus = result.status as AdminBookingWorkflowStatusRecord;
+      setDispatchReleaseWorkflowStatus(savedStatus);
+      setDispatchReleaseMessage({
+        tone: "success",
+        text: `Dispatch release workflow status saved for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+          savedStatus,
+        )}.`,
+      });
+    } catch (error) {
+      setDispatchReleaseMessage({
+        tone: "error",
+        text: adminBookingWorkflowStatusFailureMessage(error),
+      });
+    } finally {
+      setAdminBookingWorkflowStatusAction(null);
+    }
   }
 
   async function updateAppliedAdminBookingOperationalSnapshot() {
@@ -8907,11 +9122,20 @@ export default function Home() {
       ? `Loaded booking: ${loadedBookingId}`
       : "Current dispatch draft";
   const dispatchReleasePendingCount = dispatchReleaseChecklist.filter((item) => item.state !== "ready").length;
-  const dispatchReleaseLocalStatus = dispatchReleaseMessage && dispatchReleaseReady
-    ? "Marked ready locally"
-    : dispatchReleaseReady
-      ? "Ready to mark locally"
-      : "Not ready for local release";
+  const dispatchReleaseSavedReady =
+    clean(dispatchReleaseWorkflowStatus?.workflow_area) === adminDispatchReleaseWorkflowArea &&
+    clean(dispatchReleaseWorkflowStatus?.status_value) === "ready";
+  const dispatchReleaseLocalStatus = adminBookingWorkflowStatusAction === "save-dispatch-release"
+    ? "Saving workflow status"
+    : adminBookingWorkflowStatusAction === "load-dispatch-release"
+      ? "Loading saved workflow status"
+      : dispatchReleaseSavedReady
+        ? "Saved ready status"
+        : dispatchReleaseMessage && dispatchReleaseReady
+          ? "Marked ready locally"
+          : dispatchReleaseReady
+            ? "Ready to mark locally"
+            : "Not ready for local release";
   const dispatchReleaseHandoffItems: DispatchReleaseChecklistItem[] = [
     {
       detail: dispatchReleaseReady
@@ -18977,19 +19201,16 @@ export default function Home() {
                 <button
                   className="min-h-9 rounded-md border border-sky-300 bg-white px-3 py-1.5 text-left text-sm font-semibold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   data-admin-dispatch-release-mark-ready="true"
-                  disabled={!dispatchReleaseReady}
-                  onClick={() => {
-                    setDispatchReleaseMessage({
-                      tone: "success",
-                      text: "Dispatch release marked ready locally. No database write, notification, or driver action was sent.",
-                    });
-                  }}
+                  disabled={!dispatchReleaseReady || adminBookingWorkflowStatusAction !== null}
+                  onClick={saveDispatchReleaseWorkflowStatus}
                   type="button"
                 >
-                  Mark Ready Locally
+                  {adminBookingWorkflowStatusAction === "save-dispatch-release"
+                    ? "Saving Status..."
+                    : "Mark Ready Locally"}
                 </button>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+              <div className="mt-2 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
                 {dispatchReleaseChecklist.map((item) => (
                   <div
                     className={`min-h-12 min-w-0 rounded-md border px-2 py-1.5 text-[11px] ${
@@ -19023,7 +19244,7 @@ export default function Home() {
               </div>
               {dispatchReleaseMessage ? (
                 <p
-                  className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
+                  className={`mt-2 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
                     dispatchReleaseMessage.tone,
                   )}`}
                   data-admin-dispatch-release-feedback="true"
@@ -19032,11 +19253,13 @@ export default function Home() {
                 </p>
               ) : null}
               <p
-                className="mt-2 border-t border-sky-200 pt-2 text-[11px] leading-4 text-sky-900"
+                className="mt-1 border-t border-sky-200 pt-1 text-[11px] leading-4 text-sky-900"
                 data-admin-dispatch-release-boundary="true"
               >
-                UI/local-state only. No Supabase write, live database access, customer message, driver notification,
-                billing, payment, PDF, payout, live location, or parser-learning behavior is created here.
+                UI/local-state only for checklist calculation. workflow-status API handles loaded booking/applied
+                snapshot status only. No Supabase write outside that API, live database access beyond that path,
+                customer message, driver notification, billing, payment, PDF, payout, live location, or
+                parser-learning.
               </p>
             </section>
 

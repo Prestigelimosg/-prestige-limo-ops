@@ -2115,6 +2115,95 @@ function assertBookingUiState(state) {
   assert.match(state.postRecoveryUpdateReadiness.boundary, /live location/);
   assert.match(state.postRecoveryUpdateReadiness.boundary, /parser-learning/);
   assert.deepEqual(state.postRecoveryUpdateReadiness.forbiddenPanelText, []);
+  assert.equal(state.dayOfTripCompletionHandoff.visible, true);
+  assert.match(state.dayOfTripCompletionHandoff.text, /Day-of-Trip Completion Handoff/);
+  assert.equal(state.dayOfTripCompletionHandoff.context, "Current dispatch draft");
+  assert.equal(state.dayOfTripCompletionHandoff.status, "Completion handoff review needed");
+  assert.equal(state.dayOfTripCompletionHandoff.noteValue, "");
+  assert.deepEqual(
+    state.dayOfTripCompletionHandoff.options.map((option) => option.label),
+    [
+      "Review Needed",
+      "Trip Complete",
+      "Driver Complete",
+      "Customer Closeout",
+      "Exception Reviewed",
+      "Ready Locally",
+    ],
+  );
+  assert.deepEqual(
+    state.dayOfTripCompletionHandoff.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["review-needed", "selected"],
+      ["trip-completed", "idle"],
+      ["driver-completed", "idle"],
+      ["customer-closeout-ready", "idle"],
+      ["exception-reviewed", "idle"],
+      ["ready-locally", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.dayOfTripCompletionHandoff.items.map((item) => item.label),
+    [
+      "Final trip status",
+      "Driver completion status",
+      "Customer closeout update readiness",
+      "Exception/resolution note reviewed",
+      "Next admin closeout action",
+      "Local completion note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.dayOfTripCompletionHandoff.items.map((item) => item.key),
+    [
+      "final-trip-status",
+      "driver-completion-status",
+      "customer-closeout-update-readiness",
+      "exception-resolution-note-reviewed",
+      "next-admin-closeout-action",
+      "local-completion-note-status",
+    ],
+  );
+  assert.equal(
+    state.dayOfTripCompletionHandoff.items.find((item) => item.key === "final-trip-status")?.detail,
+    "Final trip status not reviewed locally.",
+  );
+  assert.equal(
+    state.dayOfTripCompletionHandoff.items.find((item) => item.key === "driver-completion-status")?.detail,
+    "Driver completion status not reviewed locally.",
+  );
+  assert.equal(
+    state.dayOfTripCompletionHandoff.items.find((item) => item.key === "customer-closeout-update-readiness")?.detail,
+    "Customer closeout update not reviewed locally.",
+  );
+  assert.equal(
+    state.dayOfTripCompletionHandoff.items.find((item) => item.key === "exception-resolution-note-reviewed")?.detail,
+    "Exception/resolution note not reviewed locally.",
+  );
+  assert.equal(
+    state.dayOfTripCompletionHandoff.items.find((item) => item.key === "next-admin-closeout-action")?.detail,
+    "Confirm final trip status locally.",
+  );
+  assert.equal(
+    state.dayOfTripCompletionHandoff.items.find((item) => item.key === "local-completion-note-status")?.detail,
+    "Completion handoff review needed. No local note.",
+  );
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /Local UI only/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /No Supabase write/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /live database access/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /notification sending/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /customer message/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /driver notification/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /billing/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /payment/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /PDF/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /payout/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /live location/);
+  assert.match(state.dayOfTripCompletionHandoff.boundary, /parser-learning/);
+  assert.deepEqual(state.dayOfTripCompletionHandoff.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -3425,6 +3514,68 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const dayOfTripCompletionHandoff = () => {
+        const section = document.querySelector("[data-admin-day-of-trip-completion-handoff='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-day-of-trip-completion-handoff-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section
+              ?.querySelector("[data-admin-day-of-trip-completion-handoff-context='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "driver payout",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [
+            ...(section?.querySelectorAll("[data-admin-day-of-trip-completion-handoff-item]") || []),
+          ].map((item) => ({
+            detail:
+              item
+                .querySelector("[data-admin-day-of-trip-completion-handoff-detail]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-day-of-trip-completion-handoff-item") || "",
+            label:
+              item
+                .querySelector("[data-admin-day-of-trip-completion-handoff-label]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-day-of-trip-completion-handoff-item-state") || "",
+          })),
+          noteValue:
+            section?.querySelector("[data-admin-day-of-trip-completion-handoff-note='true']")?.value ??
+            null,
+          options: [
+            ...(section?.querySelectorAll("[data-admin-day-of-trip-completion-handoff-option]") || []),
+          ].map((option) => ({
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-day-of-trip-completion-handoff-option-state") || "",
+            value: option.getAttribute("data-admin-day-of-trip-completion-handoff-option") || "",
+          })),
+          status:
+            section
+              ?.querySelector("[data-admin-day-of-trip-completion-handoff-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -3435,6 +3586,7 @@ async function runChromeTest() {
         dispatchRecoveryReplacementReadiness: dispatchRecoveryReplacementReadiness(),
         dispatchReleaseChecklist: dispatchReleaseChecklist(),
         dispatchReleaseHandoffPacket: dispatchReleaseHandoffPacket(),
+        dayOfTripCompletionHandoff: dayOfTripCompletionHandoff(),
         driverAcknowledgementFollowUp: driverAcknowledgementFollowUp(),
         driverAcknowledgementReadiness: driverAcknowledgementReadiness(),
         driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",

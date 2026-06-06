@@ -5963,6 +5963,241 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDayOfTripCompletionHandoff = async () => {
+      const handoffViewports = [
+        { height: 812, label: "mobile day-of-trip completion handoff", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop day-of-trip completion handoff", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of handoffViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-day-of-trip-completion-handoff]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-day-of-trip-completion-handoff-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-day-of-trip-completion-handoff-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-day-of-trip-completion-handoff-item") || "",
+                  label:
+                    item.querySelector("[data-admin-day-of-trip-completion-handoff-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-day-of-trip-completion-handoff-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = section.querySelector("[data-admin-day-of-trip-completion-handoff-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const options = [...section.querySelectorAll("[data-admin-day-of-trip-completion-handoff-option]")].map(
+                (option) => ({
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-day-of-trip-completion-handoff-option-state") || "",
+                  value: option.getAttribute("data-admin-day-of-trip-completion-handoff-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-day-of-trip-completion-handoff-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "driver payout",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                options,
+                status:
+                  section.querySelector("[data-admin-day-of-trip-completion-handoff-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin day-of-trip completion handoff`,
+        );
+
+        assert.equal(
+          state.text.includes("Day-of-Trip Completion Handoff"),
+          true,
+          `${viewport.label}: expected day-of-trip completion handoff title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          [
+            "Review Needed",
+            "Trip Complete",
+            "Driver Complete",
+            "Customer Closeout",
+            "Exception Reviewed",
+            "Ready Locally",
+          ],
+          `${viewport.label}: expected day-of-trip completion local controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state]),
+          [
+            ["review-needed", "selected"],
+            ["trip-completed", "idle"],
+            ["driver-completed", "idle"],
+            ["customer-closeout-ready", "idle"],
+            ["exception-reviewed", "idle"],
+            ["ready-locally", "idle"],
+          ],
+          `${viewport.label}: expected completion handoff to start at review needed`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Final trip status",
+            "Driver completion status",
+            "Customer closeout update readiness",
+            "Exception/resolution note reviewed",
+            "Next admin closeout action",
+            "Local completion note/status",
+          ],
+          `${viewport.label}: expected completion handoff labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "final-trip-status",
+            "driver-completion-status",
+            "customer-closeout-update-readiness",
+            "exception-resolution-note-reviewed",
+            "next-admin-closeout-action",
+            "local-completion-note-status",
+          ],
+          `${viewport.label}: expected completion handoff keys`,
+        );
+        assert.equal(
+          state.status,
+          "Completion handoff review needed",
+          `${viewport.label}: expected completion handoff to start review needed`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected blank local completion note`);
+        assert.equal(
+          state.items.find((item) => item.key === "final-trip-status")?.detail,
+          "Final trip status not reviewed locally.",
+          `${viewport.label}: expected final trip status to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "driver-completion-status")?.detail,
+          "Driver completion status not reviewed locally.",
+          `${viewport.label}: expected driver completion status to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "customer-closeout-update-readiness")?.detail,
+          "Customer closeout update not reviewed locally.",
+          `${viewport.label}: expected customer closeout update to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "exception-resolution-note-reviewed")?.detail,
+          "Exception/resolution note not reviewed locally.",
+          `${viewport.label}: expected exception/resolution note to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "next-admin-closeout-action")?.detail,
+          "Confirm final trip status locally.",
+          `${viewport.label}: expected final trip status as next admin closeout action`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected completion handoff boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in completion handoff`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 900 : 620),
+          true,
+          `${viewport.label}: expected compact completion handoff, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected completion handoff items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected completion handoff controls to stay readable`,
+        );
+        assert.equal(
+          state.noteHeight >= 40,
+          true,
+          `${viewport.label}: expected completion handoff note to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected completion handoff not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -35778,6 +36013,7 @@ async function runChromeTest() {
     state.adminDispatchRecoveryReplacementReadiness =
       await checkAdminDispatchRecoveryReplacementReadiness();
     state.adminPostRecoveryUpdateReadiness = await checkAdminPostRecoveryUpdateReadiness();
+    state.adminDayOfTripCompletionHandoff = await checkAdminDayOfTripCompletionHandoff();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -35895,6 +36131,7 @@ async function runChromeTest() {
     state.adminDayOfTripExceptionEscalationRouteBoundaries = [];
     state.adminDispatchRecoveryReplacementReadinessRouteBoundaries = [];
     state.adminPostRecoveryUpdateReadinessRouteBoundaries = [];
+    state.adminDayOfTripCompletionHandoffRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -36139,6 +36376,32 @@ async function runChromeTest() {
         adminPostRecoveryUpdateReadinessTextLeaks,
         [],
         `Expected no admin post-recovery update wording leak for ${route.context}`,
+      );
+      const adminDayOfTripCompletionHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-day-of-trip-completion-handoff]"))`,
+      );
+      const adminDayOfTripCompletionHandoffTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Day-of-Trip Completion Handoff", "Customer closeout update readiness"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminDayOfTripCompletionHandoffRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDayOfTripCompletionHandoffTextLeaks,
+        visible: adminDayOfTripCompletionHandoffVisible,
+      });
+      assert.equal(
+        adminDayOfTripCompletionHandoffVisible,
+        false,
+        `Expected admin day-of-trip completion handoff boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDayOfTripCompletionHandoffTextLeaks,
+        [],
+        `Expected no admin day-of-trip completion handoff wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -36452,6 +36715,32 @@ async function runChromeTest() {
       customerDetailAdminPostRecoveryUpdateReadinessTextLeaks,
       [],
       "Expected no admin post-recovery update wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDayOfTripCompletionHandoffVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-day-of-trip-completion-handoff]"))`,
+    );
+    const customerDetailAdminDayOfTripCompletionHandoffTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Day-of-Trip Completion Handoff", "Customer closeout update readiness"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminDayOfTripCompletionHandoffRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDayOfTripCompletionHandoffTextLeaks,
+      visible: customerDetailAdminDayOfTripCompletionHandoffVisible,
+    });
+    assert.equal(
+      customerDetailAdminDayOfTripCompletionHandoffVisible,
+      false,
+      "Expected admin day-of-trip completion handoff boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDayOfTripCompletionHandoffTextLeaks,
+      [],
+      "Expected no admin day-of-trip completion handoff wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

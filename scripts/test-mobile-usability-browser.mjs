@@ -1414,6 +1414,136 @@ async function runChromeTest() {
       );
     };
 
+    const checkDayOfTripCompletionHandoff = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-day-of-trip-completion-handoff='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [...(section?.querySelectorAll("[data-admin-day-of-trip-completion-handoff-item]") || [])].map(
+          (item) => {
+            const itemRect = item.getBoundingClientRect();
+
+            return {
+              height: Math.round(itemRect.height),
+              key: item.getAttribute("data-admin-day-of-trip-completion-handoff-item") || "",
+              label:
+                item.querySelector("[data-admin-day-of-trip-completion-handoff-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              width: Math.round(itemRect.width),
+            };
+          },
+        );
+        const note = section?.querySelector("[data-admin-day-of-trip-completion-handoff-note='true']");
+        const noteRect = note?.getBoundingClientRect();
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-day-of-trip-completion-handoff-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-day-of-trip-completion-handoff-option-state") || "",
+            value: option.getAttribute("data-admin-day-of-trip-completion-handoff-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-day-of-trip-completion-handoff-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          options,
+          status:
+            section
+              ?.querySelector("[data-admin-day-of-trip-completion-handoff-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(state.visible, true, `${viewport.label}: expected Day-of-Trip Completion Handoff section`);
+      assert.equal(
+        state.text.includes("Day-of-Trip Completion Handoff"),
+        true,
+        `${viewport.label}: expected Day-of-Trip Completion Handoff title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        [
+          "Review Needed",
+          "Trip Complete",
+          "Driver Complete",
+          "Customer Closeout",
+          "Exception Reviewed",
+          "Ready Locally",
+        ],
+        `${viewport.label}: expected Day-of-Trip Completion Handoff local controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Final trip status",
+          "Driver completion status",
+          "Customer closeout update readiness",
+          "Exception/resolution note reviewed",
+          "Next admin closeout action",
+          "Local completion note/status",
+        ],
+        `${viewport.label}: expected Day-of-Trip Completion Handoff rows`,
+      );
+      assert.equal(
+        state.status,
+        "Completion handoff review needed",
+        `${viewport.label}: expected Day-of-Trip Completion Handoff to start at review needed`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected blank local completion note`);
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Day-of-Trip Completion Handoff controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("live location") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Day-of-Trip Completion Handoff local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 900 : 620),
+        true,
+        `${viewport.label}: expected compact Day-of-Trip Completion Handoff, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Day-of-Trip Completion Handoff rows to stay readable`,
+      );
+      assert.equal(
+        state.noteHeight >= 40,
+        true,
+        `${viewport.label}: expected Day-of-Trip Completion Handoff note to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Day-of-Trip Completion Handoff not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -1533,6 +1663,9 @@ async function runChromeTest() {
       );
       const adminPostRecoveryUpdateReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-post-recovery-update-readiness]"))`,
+      );
+      const adminDayOfTripCompletionHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-day-of-trip-completion-handoff]"))`,
       );
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
@@ -1803,6 +1936,8 @@ async function runChromeTest() {
             "new driver job link readiness",
             "post-recovery update readiness",
             "customer eta/update status",
+            "day-of-trip completion handoff",
+            "customer closeout update readiness",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -2116,6 +2251,11 @@ async function runChromeTest() {
         adminPostRecoveryUpdateReadinessVisible,
         false,
         `${viewport.label} ${route.label}: expected no admin post-recovery update readiness`,
+      );
+      assert.equal(
+        adminDayOfTripCompletionHandoffVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no admin day-of-trip completion handoff`,
       );
       assert.equal(
         internalQaMockArchiveVisible,
@@ -10301,6 +10441,7 @@ async function runChromeTest() {
           await checkDayOfTripExceptionEscalation(viewport);
           await checkDispatchRecoveryReplacementReadiness(viewport);
           await checkPostRecoveryUpdateReadiness(viewport);
+          await checkDayOfTripCompletionHandoff(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }
@@ -10319,6 +10460,9 @@ async function runChromeTest() {
       );
       const adminPostRecoveryUpdateReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-post-recovery-update-readiness]"))`,
+      );
+      const adminDayOfTripCompletionHandoffVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-day-of-trip-completion-handoff]"))`,
       );
       const driverAssignmentReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-assignment-readiness]"))`,
@@ -10589,6 +10733,8 @@ async function runChromeTest() {
             "new driver job link readiness",
             "post-recovery update readiness",
             "customer eta/update status",
+            "day-of-trip completion handoff",
+            "customer closeout update readiness",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -10916,6 +11062,11 @@ async function runChromeTest() {
         adminPostRecoveryUpdateReadinessVisible,
         false,
         `${viewport.label} ${context}: expected no admin post-recovery update readiness`,
+      );
+      assert.equal(
+        adminDayOfTripCompletionHandoffVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin day-of-trip completion handoff`,
       );
       assert.equal(
         internalQaMockArchiveVisible,

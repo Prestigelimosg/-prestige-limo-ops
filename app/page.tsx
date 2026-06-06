@@ -581,6 +581,14 @@ type PostRecoveryUpdateStatus =
   | "eta-ready"
   | "ready-locally";
 
+type DayOfTripCompletionHandoffStatus =
+  | "review-needed"
+  | "trip-completed"
+  | "driver-completed"
+  | "customer-closeout-ready"
+  | "exception-reviewed"
+  | "ready-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3936,6 +3944,9 @@ export default function Home() {
   const [postRecoveryUpdateStatus, setPostRecoveryUpdateStatus] =
     useState<PostRecoveryUpdateStatus>("review-needed");
   const [postRecoveryUpdateNote, setPostRecoveryUpdateNote] = useState("");
+  const [dayOfTripCompletionHandoffStatus, setDayOfTripCompletionHandoffStatus] =
+    useState<DayOfTripCompletionHandoffStatus>("review-needed");
+  const [dayOfTripCompletionHandoffNote, setDayOfTripCompletionHandoffNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9430,6 +9441,115 @@ export default function Home() {
       key: "local-update-note-status",
       label: "Local update note/status",
       state: postRecoveryUpdateReadyLocally ? "ready" : "needs-action",
+    },
+  ];
+  const dayOfTripCompletionHandoffStatusLabel =
+    dayOfTripCompletionHandoffStatus === "ready-locally"
+      ? "Completion handoff ready"
+      : dayOfTripCompletionHandoffStatus === "exception-reviewed"
+        ? "Exception/resolution reviewed"
+        : dayOfTripCompletionHandoffStatus === "customer-closeout-ready"
+          ? "Customer closeout update ready"
+          : dayOfTripCompletionHandoffStatus === "driver-completed"
+            ? "Driver completion reviewed"
+            : dayOfTripCompletionHandoffStatus === "trip-completed"
+              ? "Final trip status reviewed"
+              : "Completion handoff review needed";
+  const dayOfTripCompletionHandoffOptions: {
+    label: string;
+    value: DayOfTripCompletionHandoffStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Trip Complete", value: "trip-completed" },
+    { label: "Driver Complete", value: "driver-completed" },
+    { label: "Customer Closeout", value: "customer-closeout-ready" },
+    { label: "Exception Reviewed", value: "exception-reviewed" },
+    { label: "Ready Locally", value: "ready-locally" },
+  ];
+  const dayOfTripCompletionHandoffReached = (status: DayOfTripCompletionHandoffStatus) => {
+    const order: DayOfTripCompletionHandoffStatus[] = [
+      "trip-completed",
+      "driver-completed",
+      "customer-closeout-ready",
+      "exception-reviewed",
+      "ready-locally",
+    ];
+    const currentIndex = order.indexOf(dayOfTripCompletionHandoffStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const dayOfTripCompletionFinalTripStatusReady =
+    dayOfTripCompletionHandoffReached("trip-completed") ||
+    dayOfTripDispatchMonitorStatus === "completed";
+  const dayOfTripCompletionDriverStatusReady =
+    dayOfTripCompletionHandoffReached("driver-completed") ||
+    dayOfTripDispatchMonitorStatus === "completed";
+  const dayOfTripCompletionCustomerCloseoutReady =
+    dayOfTripCompletionHandoffReached("customer-closeout-ready") ||
+    postRecoveryUpdateReadyLocally;
+  const dayOfTripCompletionExceptionResolutionReviewed =
+    dayOfTripCompletionHandoffReached("exception-reviewed") ||
+    dayOfTripExceptionEscalationClosed;
+  const dayOfTripCompletionHandoffReadyLocally =
+    dayOfTripCompletionHandoffStatus === "ready-locally";
+  const dayOfTripCompletionHandoffNextAction = dayOfTripCompletionHandoffReadyLocally
+    ? "Completion handoff ready locally; keep closeout note current."
+    : !dayOfTripCompletionFinalTripStatusReady
+      ? "Confirm final trip status locally."
+      : !dayOfTripCompletionDriverStatusReady
+        ? "Review driver completion status locally."
+        : !dayOfTripCompletionCustomerCloseoutReady
+          ? "Review customer closeout update readiness locally."
+          : !dayOfTripCompletionExceptionResolutionReviewed
+            ? "Review exception/resolution note locally."
+            : "Mark completion handoff ready locally.";
+  const dayOfTripCompletionHandoffItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: dayOfTripCompletionFinalTripStatusReady
+        ? "Final trip status reviewed locally."
+        : "Final trip status not reviewed locally.",
+      key: "final-trip-status",
+      label: "Final trip status",
+      state: dayOfTripCompletionFinalTripStatusReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripCompletionDriverStatusReady
+        ? "Driver completion status reviewed locally."
+        : "Driver completion status not reviewed locally.",
+      key: "driver-completion-status",
+      label: "Driver completion status",
+      state: dayOfTripCompletionDriverStatusReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripCompletionCustomerCloseoutReady
+        ? "Customer closeout update ready locally."
+        : "Customer closeout update not reviewed locally.",
+      key: "customer-closeout-update-readiness",
+      label: "Customer closeout update readiness",
+      state: dayOfTripCompletionCustomerCloseoutReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripCompletionExceptionResolutionReviewed
+        ? "Exception/resolution note reviewed locally."
+        : "Exception/resolution note not reviewed locally.",
+      key: "exception-resolution-note-reviewed",
+      label: "Exception/resolution note reviewed",
+      state: dayOfTripCompletionExceptionResolutionReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripCompletionHandoffNextAction,
+      key: "next-admin-closeout-action",
+      label: "Next admin closeout action",
+      state: dayOfTripCompletionHandoffReadyLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${dayOfTripCompletionHandoffStatusLabel}. ${
+        clean(dayOfTripCompletionHandoffNote) || "No local note."
+      }`,
+      key: "local-completion-note-status",
+      label: "Local completion note/status",
+      state: dayOfTripCompletionHandoffReadyLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -18575,6 +18695,131 @@ export default function Home() {
               <p
                 className="mt-1.5 border-t border-teal-200 pt-1.5 text-[11px] leading-4 text-teal-900 md:text-[10px] md:leading-3"
                 data-admin-post-recovery-update-readiness-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Day-of-Trip Completion Handoff"
+              className="mt-3 min-w-0 rounded-md border border-stone-200 bg-stone-50/80 p-0.5 sm:p-2.5"
+              data-admin-day-of-trip-completion-handoff="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-stone-950">
+                      Day-of-Trip Completion Handoff
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        dayOfTripCompletionHandoffReadyLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : dayOfTripCompletionCustomerCloseoutReady ||
+                              dayOfTripCompletionExceptionResolutionReviewed
+                            ? "bg-stone-200 text-stone-950 ring-stone-300"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-day-of-trip-completion-handoff-status="true"
+                    >
+                      {dayOfTripCompletionHandoffStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-stone-800"
+                    data-admin-day-of-trip-completion-handoff-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-stone-700">
+                    Local closeout bridge after day-of-trip dispatch and recovery review.
+                  </p>
+                </div>
+                <div
+                  aria-label="Day-of-trip completion handoff status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-stone-200 bg-white p-1 sm:w-64 sm:shrink-0 sm:grid-cols-3 lg:w-72 xl:w-96"
+                  data-admin-day-of-trip-completion-handoff-controls="true"
+                  role="group"
+                >
+                  {dayOfTripCompletionHandoffOptions.map((option) => {
+                    const isSelected = dayOfTripCompletionHandoffStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-stone-800 text-white"
+                            : "bg-white text-stone-950 hover:bg-stone-100"
+                        }`}
+                        data-admin-day-of-trip-completion-handoff-option={option.value}
+                        data-admin-day-of-trip-completion-handoff-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setDayOfTripCompletionHandoffStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-stone-950 sm:mt-3">
+                <span>Local completion note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-stone-500 focus:ring-2 focus:ring-stone-100"
+                  data-admin-day-of-trip-completion-handoff-note="true"
+                  onChange={(event) => setDayOfTripCompletionHandoffNote(event.target.value)}
+                  placeholder="Local staff completion note"
+                  value={dayOfTripCompletionHandoffNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {dayOfTripCompletionHandoffItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "next-admin-closeout-action" ||
+                            item.key === "local-completion-note-status"
+                          ? "border-stone-200 bg-white text-stone-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-day-of-trip-completion-handoff-item={item.key}
+                    data-admin-day-of-trip-completion-handoff-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-day-of-trip-completion-handoff-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-day-of-trip-completion-handoff-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-stone-200 pt-1.5 text-[11px] leading-4 text-stone-700 md:text-[10px] md:leading-3"
+                data-admin-day-of-trip-completion-handoff-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.

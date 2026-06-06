@@ -5724,6 +5724,245 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminPostRecoveryUpdateReadiness = async () => {
+      const updateViewports = [
+        { height: 812, label: "mobile post-recovery update", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop post-recovery update", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of updateViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-post-recovery-update-readiness]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-post-recovery-update-readiness-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-post-recovery-update-readiness-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-post-recovery-update-readiness-item") || "",
+                  label:
+                    item.querySelector("[data-admin-post-recovery-update-readiness-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-post-recovery-update-readiness-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = section.querySelector("[data-admin-post-recovery-update-readiness-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const options = [...section.querySelectorAll("[data-admin-post-recovery-update-readiness-option]")].map(
+                (option) => ({
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-post-recovery-update-readiness-option-state") || "",
+                  value: option.getAttribute("data-admin-post-recovery-update-readiness-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-post-recovery-update-readiness-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "driver payout",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                options,
+                status:
+                  section.querySelector("[data-admin-post-recovery-update-readiness-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin post-recovery update readiness`,
+        );
+
+        assert.equal(
+          state.text.includes("Post-Recovery Update Readiness"),
+          true,
+          `${viewport.label}: expected post-recovery update title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          [
+            "Review Needed",
+            "Customer Copy",
+            "Driver Copy",
+            "Original Driver",
+            "Job Link Ready",
+            "ETA Ready",
+            "Ready Locally",
+          ],
+          `${viewport.label}: expected post-recovery update local controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state]),
+          [
+            ["review-needed", "selected"],
+            ["customer-copy-reviewed", "idle"],
+            ["driver-copy-reviewed", "idle"],
+            ["original-driver-reviewed", "idle"],
+            ["job-link-ready", "idle"],
+            ["eta-ready", "idle"],
+            ["ready-locally", "idle"],
+          ],
+          `${viewport.label}: expected post-recovery update to start at review needed`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Customer update copy reviewed",
+            "Replacement driver dispatch copy reviewed",
+            "Original driver follow-up reviewed",
+            "New driver job link readiness",
+            "Customer ETA/update status",
+            "Next dispatcher action",
+            "Local update note/status",
+          ],
+          `${viewport.label}: expected post-recovery update labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "customer-update-copy-reviewed",
+            "replacement-driver-dispatch-copy-reviewed",
+            "original-driver-follow-up-reviewed",
+            "new-driver-job-link-readiness",
+            "customer-eta-update-status",
+            "next-dispatcher-action",
+            "local-update-note-status",
+          ],
+          `${viewport.label}: expected post-recovery update keys`,
+        );
+        assert.equal(
+          state.status,
+          "Post-recovery update review needed",
+          `${viewport.label}: expected post-recovery update to start review needed`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected blank local update note`);
+        assert.equal(
+          state.items.find((item) => item.key === "customer-update-copy-reviewed")?.detail,
+          "Customer update copy not reviewed locally.",
+          `${viewport.label}: expected customer update copy to need local review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "replacement-driver-dispatch-copy-reviewed")?.detail,
+          "Replacement driver dispatch copy not reviewed locally.",
+          `${viewport.label}: expected replacement driver dispatch copy to need local review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "new-driver-job-link-readiness")?.detail,
+          "New driver job link not ready locally.",
+          `${viewport.label}: expected no default new driver job link readiness`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "customer-eta-update-status")?.detail,
+          "Customer ETA/update status not reviewed locally.",
+          `${viewport.label}: expected customer ETA/update status to need local review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "next-dispatcher-action")?.detail,
+          "Review customer update copy locally.",
+          `${viewport.label}: expected customer update copy review as next action`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected post-recovery update boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in post-recovery update`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1020 : viewport.width < 1200 ? 700 : 600),
+          true,
+          `${viewport.label}: expected compact post-recovery update, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected post-recovery update items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected post-recovery update controls to stay readable`,
+        );
+        assert.equal(
+          state.noteHeight >= 40,
+          true,
+          `${viewport.label}: expected post-recovery update note to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected post-recovery update not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -35538,6 +35777,7 @@ async function runChromeTest() {
     state.adminDayOfTripExceptionEscalation = await checkAdminDayOfTripExceptionEscalation();
     state.adminDispatchRecoveryReplacementReadiness =
       await checkAdminDispatchRecoveryReplacementReadiness();
+    state.adminPostRecoveryUpdateReadiness = await checkAdminPostRecoveryUpdateReadiness();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -35654,6 +35894,7 @@ async function runChromeTest() {
     state.adminDayOfTripDispatchMonitorRouteBoundaries = [];
     state.adminDayOfTripExceptionEscalationRouteBoundaries = [];
     state.adminDispatchRecoveryReplacementReadinessRouteBoundaries = [];
+    state.adminPostRecoveryUpdateReadinessRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -35872,6 +36113,32 @@ async function runChromeTest() {
         adminDispatchRecoveryReplacementReadinessTextLeaks,
         [],
         `Expected no admin dispatch recovery replacement wording leak for ${route.context}`,
+      );
+      const adminPostRecoveryUpdateReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-post-recovery-update-readiness]"))`,
+      );
+      const adminPostRecoveryUpdateReadinessTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Post-Recovery Update Readiness", "Customer ETA/update status"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminPostRecoveryUpdateReadinessRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminPostRecoveryUpdateReadinessTextLeaks,
+        visible: adminPostRecoveryUpdateReadinessVisible,
+      });
+      assert.equal(
+        adminPostRecoveryUpdateReadinessVisible,
+        false,
+        `Expected admin post-recovery update boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminPostRecoveryUpdateReadinessTextLeaks,
+        [],
+        `Expected no admin post-recovery update wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -36159,6 +36426,32 @@ async function runChromeTest() {
       customerDetailAdminDispatchRecoveryReplacementReadinessTextLeaks,
       [],
       "Expected no admin dispatch recovery replacement wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminPostRecoveryUpdateReadinessVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-post-recovery-update-readiness]"))`,
+    );
+    const customerDetailAdminPostRecoveryUpdateReadinessTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Post-Recovery Update Readiness", "Customer ETA/update status"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminPostRecoveryUpdateReadinessRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminPostRecoveryUpdateReadinessTextLeaks,
+      visible: customerDetailAdminPostRecoveryUpdateReadinessVisible,
+    });
+    assert.equal(
+      customerDetailAdminPostRecoveryUpdateReadinessVisible,
+      false,
+      "Expected admin post-recovery update boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminPostRecoveryUpdateReadinessTextLeaks,
+      [],
+      "Expected no admin post-recovery update wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

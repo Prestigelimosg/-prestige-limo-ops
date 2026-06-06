@@ -572,6 +572,15 @@ type DispatchRecoveryReplacementStatus =
   | "job-link-ready"
   | "ready-locally";
 
+type PostRecoveryUpdateStatus =
+  | "review-needed"
+  | "customer-copy-reviewed"
+  | "driver-copy-reviewed"
+  | "original-driver-reviewed"
+  | "job-link-ready"
+  | "eta-ready"
+  | "ready-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3924,6 +3933,9 @@ export default function Home() {
   const [dispatchRecoveryReplacementStatus, setDispatchRecoveryReplacementStatus] =
     useState<DispatchRecoveryReplacementStatus>("review-needed");
   const [dispatchRecoveryReplacementNote, setDispatchRecoveryReplacementNote] = useState("");
+  const [postRecoveryUpdateStatus, setPostRecoveryUpdateStatus] =
+    useState<PostRecoveryUpdateStatus>("review-needed");
+  const [postRecoveryUpdateNote, setPostRecoveryUpdateNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9298,6 +9310,126 @@ export default function Home() {
       key: "local-recovery-note-status",
       label: "Local recovery note/status",
       state: dispatchRecoveryReplacementReadyLocally ? "ready" : "needs-action",
+    },
+  ];
+  const postRecoveryUpdateStatusLabel =
+    postRecoveryUpdateStatus === "ready-locally"
+      ? "Post-recovery updates ready"
+      : postRecoveryUpdateStatus === "eta-ready"
+        ? "Customer ETA/update ready"
+        : postRecoveryUpdateStatus === "job-link-ready"
+          ? "New driver job link ready"
+          : postRecoveryUpdateStatus === "original-driver-reviewed"
+            ? "Original driver follow-up reviewed"
+            : postRecoveryUpdateStatus === "driver-copy-reviewed"
+              ? "Replacement driver copy reviewed"
+              : postRecoveryUpdateStatus === "customer-copy-reviewed"
+                ? "Customer update copy reviewed"
+                : "Post-recovery update review needed";
+  const postRecoveryUpdateOptions: {
+    label: string;
+    value: PostRecoveryUpdateStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Customer Copy", value: "customer-copy-reviewed" },
+    { label: "Driver Copy", value: "driver-copy-reviewed" },
+    { label: "Original Driver", value: "original-driver-reviewed" },
+    { label: "Job Link Ready", value: "job-link-ready" },
+    { label: "ETA Ready", value: "eta-ready" },
+    { label: "Ready Locally", value: "ready-locally" },
+  ];
+  const postRecoveryUpdateReached = (status: PostRecoveryUpdateStatus) => {
+    const order: PostRecoveryUpdateStatus[] = [
+      "customer-copy-reviewed",
+      "driver-copy-reviewed",
+      "original-driver-reviewed",
+      "job-link-ready",
+      "eta-ready",
+      "ready-locally",
+    ];
+    const currentIndex = order.indexOf(postRecoveryUpdateStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const postRecoveryCustomerUpdateCopyReviewed =
+    postRecoveryUpdateReached("customer-copy-reviewed");
+  const postRecoveryReplacementDriverDispatchCopyReviewed =
+    postRecoveryUpdateReached("driver-copy-reviewed") ||
+    (dispatchRecoveryReplacementReadyLocally && dispatchRecoveryReplacementDispatchCopyReady);
+  const postRecoveryOriginalDriverFollowUpReviewed =
+    postRecoveryUpdateReached("original-driver-reviewed") || dayOfTripExceptionEscalationClosed;
+  const postRecoveryNewDriverJobLinkReady =
+    postRecoveryUpdateReached("job-link-ready") || dispatchRecoveryReplacementJobLinkReady;
+  const postRecoveryCustomerEtaUpdateReady = postRecoveryUpdateReached("eta-ready");
+  const postRecoveryUpdateReadyLocally = postRecoveryUpdateStatus === "ready-locally";
+  const postRecoveryUpdateNextAction = postRecoveryUpdateReadyLocally
+    ? "Post-recovery update handoff ready locally; keep dispatcher note current."
+    : !postRecoveryCustomerUpdateCopyReviewed
+      ? "Review customer update copy locally."
+      : !postRecoveryReplacementDriverDispatchCopyReviewed
+        ? "Review replacement driver dispatch copy locally."
+        : !postRecoveryOriginalDriverFollowUpReviewed
+          ? "Review original driver follow-up locally."
+          : !postRecoveryNewDriverJobLinkReady
+            ? "Prepare new driver job link readiness locally."
+            : !postRecoveryCustomerEtaUpdateReady
+              ? "Review customer ETA/update status locally."
+              : "Mark post-recovery updates ready locally.";
+  const postRecoveryUpdateItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: postRecoveryCustomerUpdateCopyReviewed
+        ? "Customer update copy reviewed locally."
+        : "Customer update copy not reviewed locally.",
+      key: "customer-update-copy-reviewed",
+      label: "Customer update copy reviewed",
+      state: postRecoveryCustomerUpdateCopyReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: postRecoveryReplacementDriverDispatchCopyReviewed
+        ? "Replacement driver dispatch copy reviewed locally."
+        : "Replacement driver dispatch copy not reviewed locally.",
+      key: "replacement-driver-dispatch-copy-reviewed",
+      label: "Replacement driver dispatch copy reviewed",
+      state: postRecoveryReplacementDriverDispatchCopyReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: postRecoveryOriginalDriverFollowUpReviewed
+        ? "Original driver follow-up reviewed locally."
+        : "Original driver follow-up not reviewed locally.",
+      key: "original-driver-follow-up-reviewed",
+      label: "Original driver follow-up reviewed",
+      state: postRecoveryOriginalDriverFollowUpReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: postRecoveryNewDriverJobLinkReady
+        ? "New driver job link ready locally."
+        : "New driver job link not ready locally.",
+      key: "new-driver-job-link-readiness",
+      label: "New driver job link readiness",
+      state: postRecoveryNewDriverJobLinkReady ? "ready" : "needs-action",
+    },
+    {
+      detail: postRecoveryCustomerEtaUpdateReady
+        ? "Customer ETA/update status reviewed locally."
+        : "Customer ETA/update status not reviewed locally.",
+      key: "customer-eta-update-status",
+      label: "Customer ETA/update status",
+      state: postRecoveryCustomerEtaUpdateReady ? "ready" : "needs-action",
+    },
+    {
+      detail: postRecoveryUpdateNextAction,
+      key: "next-dispatcher-action",
+      label: "Next dispatcher action",
+      state: postRecoveryUpdateReadyLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${postRecoveryUpdateStatusLabel}. ${
+        clean(postRecoveryUpdateNote) || "No local note."
+      }`,
+      key: "local-update-note-status",
+      label: "Local update note/status",
+      state: postRecoveryUpdateReadyLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -18317,6 +18449,132 @@ export default function Home() {
               <p
                 className="mt-1.5 border-t border-sky-200 pt-1.5 text-[11px] leading-4 text-sky-900 md:text-[10px] md:leading-3"
                 data-admin-dispatch-recovery-replacement-readiness-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Post-Recovery Update Readiness"
+              className="mt-3 rounded-md border border-teal-200 bg-teal-50/70 p-0.5 sm:p-2.5"
+              data-admin-post-recovery-update-readiness="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-teal-950">
+                      Post-Recovery Update Readiness
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        postRecoveryUpdateReadyLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : postRecoveryNewDriverJobLinkReady || postRecoveryCustomerEtaUpdateReady
+                            ? "bg-teal-100 text-teal-900 ring-teal-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-post-recovery-update-readiness-status="true"
+                    >
+                      {postRecoveryUpdateStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-teal-900"
+                    data-admin-post-recovery-update-readiness-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-teal-900">
+                    Local customer and driver update bridge after recovery review.
+                  </p>
+                </div>
+                <div
+                  aria-label="Post-recovery update readiness status"
+                  className="grid w-full grid-cols-2 gap-1 rounded-md border border-teal-200 bg-white p-1 min-[300px]:grid-cols-3 sm:w-64 sm:shrink-0 lg:w-72 xl:w-96"
+                  data-admin-post-recovery-update-readiness-controls="true"
+                  role="group"
+                >
+                  {postRecoveryUpdateOptions.map((option) => {
+                    const isSelected = postRecoveryUpdateStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 rounded px-1.5 py-1 text-[10px] font-semibold transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-teal-700 text-white"
+                            : "bg-white text-teal-950 hover:bg-teal-100"
+                        }`}
+                        data-admin-post-recovery-update-readiness-option={option.value}
+                        data-admin-post-recovery-update-readiness-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setPostRecoveryUpdateStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-teal-950 sm:mt-3">
+                <span>Local update note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-teal-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  data-admin-post-recovery-update-readiness-note="true"
+                  onChange={(event) => setPostRecoveryUpdateNote(event.target.value)}
+                  placeholder="Local staff update note"
+                  value={postRecoveryUpdateNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {postRecoveryUpdateItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "new-driver-job-link-readiness" ||
+                            item.key === "customer-eta-update-status" ||
+                            item.key === "next-dispatcher-action" ||
+                            item.key === "local-update-note-status"
+                          ? "border-teal-200 bg-white text-teal-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-post-recovery-update-readiness-item={item.key}
+                    data-admin-post-recovery-update-readiness-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="font-semibold leading-4"
+                        data-admin-post-recovery-update-readiness-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-post-recovery-update-readiness-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-teal-200 pt-1.5 text-[11px] leading-4 text-teal-900 md:text-[10px] md:leading-3"
+                data-admin-post-recovery-update-readiness-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.

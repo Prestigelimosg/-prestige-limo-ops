@@ -2016,6 +2016,105 @@ function assertBookingUiState(state) {
   assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /live location/);
   assert.match(state.dispatchRecoveryReplacementReadiness.boundary, /parser-learning/);
   assert.deepEqual(state.dispatchRecoveryReplacementReadiness.forbiddenPanelText, []);
+  assert.equal(state.postRecoveryUpdateReadiness.visible, true);
+  assert.match(state.postRecoveryUpdateReadiness.text, /Post-Recovery Update Readiness/);
+  assert.equal(state.postRecoveryUpdateReadiness.context, "Current dispatch draft");
+  assert.equal(state.postRecoveryUpdateReadiness.status, "Post-recovery update review needed");
+  assert.equal(state.postRecoveryUpdateReadiness.noteValue, "");
+  assert.deepEqual(
+    state.postRecoveryUpdateReadiness.options.map((option) => option.label),
+    [
+      "Review Needed",
+      "Customer Copy",
+      "Driver Copy",
+      "Original Driver",
+      "Job Link Ready",
+      "ETA Ready",
+      "Ready Locally",
+    ],
+  );
+  assert.deepEqual(
+    state.postRecoveryUpdateReadiness.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["review-needed", "selected"],
+      ["customer-copy-reviewed", "idle"],
+      ["driver-copy-reviewed", "idle"],
+      ["original-driver-reviewed", "idle"],
+      ["job-link-ready", "idle"],
+      ["eta-ready", "idle"],
+      ["ready-locally", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.postRecoveryUpdateReadiness.items.map((item) => item.label),
+    [
+      "Customer update copy reviewed",
+      "Replacement driver dispatch copy reviewed",
+      "Original driver follow-up reviewed",
+      "New driver job link readiness",
+      "Customer ETA/update status",
+      "Next dispatcher action",
+      "Local update note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.postRecoveryUpdateReadiness.items.map((item) => item.key),
+    [
+      "customer-update-copy-reviewed",
+      "replacement-driver-dispatch-copy-reviewed",
+      "original-driver-follow-up-reviewed",
+      "new-driver-job-link-readiness",
+      "customer-eta-update-status",
+      "next-dispatcher-action",
+      "local-update-note-status",
+    ],
+  );
+  assert.equal(
+    state.postRecoveryUpdateReadiness.items.find((item) => item.key === "customer-update-copy-reviewed")?.detail,
+    "Customer update copy not reviewed locally.",
+  );
+  assert.equal(
+    state.postRecoveryUpdateReadiness.items.find(
+      (item) => item.key === "replacement-driver-dispatch-copy-reviewed",
+    )?.detail,
+    "Replacement driver dispatch copy not reviewed locally.",
+  );
+  assert.equal(
+    state.postRecoveryUpdateReadiness.items.find((item) => item.key === "original-driver-follow-up-reviewed")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.postRecoveryUpdateReadiness.items.find((item) => item.key === "new-driver-job-link-readiness")?.detail,
+    "New driver job link not ready locally.",
+  );
+  assert.equal(
+    state.postRecoveryUpdateReadiness.items.find((item) => item.key === "customer-eta-update-status")?.detail,
+    "Customer ETA/update status not reviewed locally.",
+  );
+  assert.equal(
+    state.postRecoveryUpdateReadiness.items.find((item) => item.key === "next-dispatcher-action")?.detail,
+    "Review customer update copy locally.",
+  );
+  assert.equal(
+    state.postRecoveryUpdateReadiness.items.find((item) => item.key === "local-update-note-status")?.detail,
+    "Post-recovery update review needed. No local note.",
+  );
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /Local UI only/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /No Supabase write/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /live database access/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /notification sending/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /customer message/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /driver notification/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /billing/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /payment/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /PDF/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /payout/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /live location/);
+  assert.match(state.postRecoveryUpdateReadiness.boundary, /parser-learning/);
+  assert.deepEqual(state.postRecoveryUpdateReadiness.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -3265,6 +3364,67 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const postRecoveryUpdateReadiness = () => {
+        const section = document.querySelector("[data-admin-post-recovery-update-readiness='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-post-recovery-update-readiness-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section
+              ?.querySelector("[data-admin-post-recovery-update-readiness-context='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [
+            ...(section?.querySelectorAll("[data-admin-post-recovery-update-readiness-item]") || []),
+          ].map((item) => ({
+            detail:
+              item
+                .querySelector("[data-admin-post-recovery-update-readiness-detail]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-post-recovery-update-readiness-item") || "",
+            label:
+              item
+                .querySelector("[data-admin-post-recovery-update-readiness-label]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-post-recovery-update-readiness-item-state") || "",
+          })),
+          noteValue:
+            section?.querySelector("[data-admin-post-recovery-update-readiness-note='true']")?.value ??
+            null,
+          options: [
+            ...(section?.querySelectorAll("[data-admin-post-recovery-update-readiness-option]") || []),
+          ].map((option) => ({
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-post-recovery-update-readiness-option-state") || "",
+            value: option.getAttribute("data-admin-post-recovery-update-readiness-option") || "",
+          })),
+          status:
+            section
+              ?.querySelector("[data-admin-post-recovery-update-readiness-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -3283,6 +3443,7 @@ async function runChromeTest() {
         fieldText: [...Object.values(fields), ...overrideReasons].join("\\n"),
         jobCardPreview: preTextByHeading("Job Card Preview"),
         manualExtraChargesReviewPreview: manualExtraChargesReviewPreview(),
+        postRecoveryUpdateReadiness: postRecoveryUpdateReadiness(),
         pricingPanel: sectionTextByHeading("Pricing"),
         visibleText: document.body.innerText,
       };

@@ -634,6 +634,17 @@ type MonthlyBillingQueueReadinessReviewStatus =
   | "exceptions-reviewed"
   | "queued-locally";
 
+type MonthlyBillingQueueExceptionReviewStatus =
+  | "review-needed"
+  | "account-month-reviewed"
+  | "reason-reviewed"
+  | "account-exception-reviewed"
+  | "details-exception-reviewed"
+  | "extra-charges-reviewed"
+  | "billing-prep-reviewed"
+  | "decision-reviewed"
+  | "cleared-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -4009,6 +4020,10 @@ export default function Home() {
   const [monthlyBillingQueueReadinessReviewStatus, setMonthlyBillingQueueReadinessReviewStatus] =
     useState<MonthlyBillingQueueReadinessReviewStatus>("review-needed");
   const [monthlyBillingQueueReadinessReviewNote, setMonthlyBillingQueueReadinessReviewNote] =
+    useState("");
+  const [monthlyBillingQueueExceptionReviewStatus, setMonthlyBillingQueueExceptionReviewStatus] =
+    useState<MonthlyBillingQueueExceptionReviewStatus>("review-needed");
+  const [monthlyBillingQueueExceptionReviewNote, setMonthlyBillingQueueExceptionReviewNote] =
     useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
@@ -10320,6 +10335,201 @@ export default function Home() {
       key: "local-queue-note-status",
       label: "Local queue note/status",
       state: monthlyBillingQueueReadyLocally ? "ready" : "needs-action",
+    },
+  ];
+  const monthlyBillingQueueExceptionReviewStatusLabel =
+    monthlyBillingQueueExceptionReviewStatus === "cleared-locally"
+      ? "Queue exception review cleared locally"
+      : monthlyBillingQueueExceptionReviewStatus === "decision-reviewed"
+        ? "Queue exception decision reviewed"
+        : monthlyBillingQueueExceptionReviewStatus === "billing-prep-reviewed"
+          ? "Billing-prep exception reviewed"
+          : monthlyBillingQueueExceptionReviewStatus === "extra-charges-reviewed"
+            ? "Extra charges exception reviewed"
+            : monthlyBillingQueueExceptionReviewStatus === "details-exception-reviewed"
+              ? "Trip/service exception reviewed"
+              : monthlyBillingQueueExceptionReviewStatus === "account-exception-reviewed"
+                ? "Billing account exception reviewed"
+                : monthlyBillingQueueExceptionReviewStatus === "reason-reviewed"
+                  ? "Blocked trip reason reviewed"
+                  : monthlyBillingQueueExceptionReviewStatus === "account-month-reviewed"
+                    ? "Customer/account and month reviewed"
+                    : "Monthly billing queue exception review needed";
+  const monthlyBillingQueueExceptionReviewOptions: {
+    label: string;
+    value: MonthlyBillingQueueExceptionReviewStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Account/Month", value: "account-month-reviewed" },
+    { label: "Reason Reviewed", value: "reason-reviewed" },
+    { label: "Account Exception", value: "account-exception-reviewed" },
+    { label: "Details Exception", value: "details-exception-reviewed" },
+    { label: "Charges Exception", value: "extra-charges-reviewed" },
+    { label: "Prep Exception", value: "billing-prep-reviewed" },
+    { label: "Decision Reviewed", value: "decision-reviewed" },
+    { label: "Cleared Locally", value: "cleared-locally" },
+  ];
+  const monthlyBillingQueueExceptionReviewReached = (
+    status: MonthlyBillingQueueExceptionReviewStatus,
+  ) => {
+    const order: MonthlyBillingQueueExceptionReviewStatus[] = [
+      "account-month-reviewed",
+      "reason-reviewed",
+      "account-exception-reviewed",
+      "details-exception-reviewed",
+      "extra-charges-reviewed",
+      "billing-prep-reviewed",
+      "decision-reviewed",
+      "cleared-locally",
+    ];
+    const currentIndex = order.indexOf(monthlyBillingQueueExceptionReviewStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const monthlyBillingQueueExceptionAccountMonthReviewed =
+    monthlyBillingQueueExceptionReviewReached("account-month-reviewed") &&
+    monthlyBillingQueueCustomerAccountLabel !== "Customer/account not selected" &&
+    monthlyBillingQueueBillingMonthLabel !== "Billing month not selected" &&
+    monthlyBillingQueueBillingMonthLabel !== "Billing month needs review";
+  const monthlyBillingQueueExceptionReasonReviewed =
+    monthlyBillingQueueExceptionReviewReached("reason-reviewed") &&
+    monthlyBillingQueueBlockedTripsCount > 0;
+  const monthlyBillingQueueExceptionMissingAccountReviewed =
+    monthlyBillingQueueExceptionReviewReached("account-exception-reviewed");
+  const monthlyBillingQueueExceptionTripServiceReviewed =
+    monthlyBillingQueueExceptionReviewReached("details-exception-reviewed");
+  const monthlyBillingQueueExceptionExtraChargesReviewed =
+    monthlyBillingQueueExceptionReviewReached("extra-charges-reviewed");
+  const monthlyBillingQueueExceptionBillingPrepReviewed =
+    monthlyBillingQueueExceptionReviewReached("billing-prep-reviewed");
+  const monthlyBillingQueueExceptionDecisionReviewed =
+    monthlyBillingQueueExceptionReviewReached("decision-reviewed");
+  const monthlyBillingQueueExceptionClearedLocally =
+    monthlyBillingQueueExceptionReviewStatus === "cleared-locally" &&
+    monthlyBillingQueueExceptionAccountMonthReviewed &&
+    monthlyBillingQueueExceptionReasonReviewed &&
+    monthlyBillingQueueExceptionMissingAccountReviewed &&
+    monthlyBillingQueueExceptionTripServiceReviewed &&
+    monthlyBillingQueueExceptionExtraChargesReviewed &&
+    monthlyBillingQueueExceptionBillingPrepReviewed &&
+    monthlyBillingQueueExceptionDecisionReviewed;
+  const monthlyBillingQueueExceptionNextAction = monthlyBillingQueueExceptionClearedLocally
+    ? "Queue exception review cleared locally; keep exception note current."
+    : !monthlyBillingQueueExceptionAccountMonthReviewed
+      ? "Confirm customer/account and billing month before queue exception review."
+      : !monthlyBillingQueueExceptionReasonReviewed
+        ? "Review blocked trip reason locally."
+        : !monthlyBillingQueueExceptionMissingAccountReviewed
+          ? "Review missing billing account status locally."
+          : !monthlyBillingQueueExceptionTripServiceReviewed
+            ? "Review trip/service detail exception locally."
+            : !monthlyBillingQueueExceptionExtraChargesReviewed
+              ? "Review extra charges exception locally."
+              : !monthlyBillingQueueExceptionBillingPrepReviewed
+                ? "Review billing-prep exception locally."
+                : !monthlyBillingQueueExceptionDecisionReviewed
+                  ? "Record queue exception decision locally."
+                  : "Mark queue exception review cleared locally.";
+  const monthlyBillingQueueExceptionReviewItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: monthlyBillingQueueExceptionAccountMonthReviewed
+        ? `${monthlyBillingQueueCustomerAccountLabel} reviewed for queue exception.`
+        : `${monthlyBillingQueueCustomerAccountLabel} requires exception review.`,
+      key: "customer-account",
+      label: "Customer/account",
+      state: monthlyBillingQueueExceptionAccountMonthReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionAccountMonthReviewed
+        ? `${monthlyBillingQueueBillingMonthLabel} reviewed for queue exception.`
+        : `${monthlyBillingQueueBillingMonthLabel} requires exception review.`,
+      key: "billing-month",
+      label: "Billing month",
+      state: monthlyBillingQueueExceptionAccountMonthReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail:
+        monthlyBillingQueueBlockedTripsCount > 0
+          ? monthlyBillingQueueExceptionReasonReviewed
+            ? "Blocked trip reason reviewed: monthly billing queue readiness is not ready locally."
+            : "Blocked because monthly billing queue readiness is not ready locally."
+          : "No blocked trips in local queue review.",
+      key: "blocked-trip-reason",
+      label: "Blocked trip reason",
+      state: monthlyBillingQueueExceptionReasonReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionMissingAccountReviewed
+        ? billingPreparationMissingBillingAccount
+          ? "Missing billing account reviewed as still blocking locally."
+          : "No missing billing account exception blocking queue locally."
+        : billingPreparationMissingBillingAccount
+          ? "Missing billing account not cleared locally."
+          : "Missing billing account not flagged locally.",
+      key: "missing-billing-account-status",
+      label: "Missing billing account status",
+      state: monthlyBillingQueueExceptionMissingAccountReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionTripServiceReviewed
+        ? billingPreparationIncompleteTripServiceDetails
+          ? "Trip/service detail exception reviewed as still blocking locally."
+          : "No trip/service detail exception blocking queue locally."
+        : billingPreparationIncompleteTripServiceDetails
+          ? "Trip/service detail exception not cleared locally."
+          : "Trip/service detail exception not flagged locally.",
+      key: "trip-service-detail-exception",
+      label: "Trip/service detail exception",
+      state: monthlyBillingQueueExceptionTripServiceReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionExtraChargesReviewed
+        ? billingPreparationExtraChargesPending
+          ? "Extra charges exception reviewed as still blocking locally."
+          : "No extra charges exception blocking queue locally."
+        : billingPreparationExtraChargesPending
+          ? "Extra charges exception not cleared locally."
+          : "Extra charges exception not flagged locally.",
+      key: "extra-charges-exception",
+      label: "Extra charges exception",
+      state: monthlyBillingQueueExceptionExtraChargesReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionBillingPrepReviewed
+        ? billingPreparationExceptionReviewClearedLocally
+          ? "Billing-prep exception cleared locally."
+          : "Billing-prep exception reviewed as still blocking locally."
+        : billingPreparationExceptionReviewClearedLocally
+          ? "Billing-prep exception already cleared locally."
+          : "Billing-prep exception not cleared locally.",
+      key: "billing-prep-exception",
+      label: "Billing-prep exception",
+      state: monthlyBillingQueueExceptionBillingPrepReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionDecisionReviewed
+        ? monthlyBillingQueueBlockedTripsCount > 0
+          ? "Queue exception decision recorded locally: keep blocked from monthly billing queue."
+          : "Queue exception decision recorded locally: no blocked trips."
+        : "No queue exception decision recorded locally.",
+      key: "queue-exception-decision",
+      label: "Queue exception decision",
+      state: monthlyBillingQueueExceptionDecisionReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionNextAction,
+      key: "next-action",
+      label: "Next action",
+      state: monthlyBillingQueueExceptionClearedLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingQueueExceptionReviewStatusLabel}. ${
+        clean(monthlyBillingQueueExceptionReviewNote) || "No local exception note."
+      }`,
+      key: "local-exception-note-status",
+      label: "Local exception note/status",
+      state: monthlyBillingQueueExceptionClearedLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -20226,6 +20436,134 @@ export default function Home() {
               <p
                 className="mt-1.5 border-t border-cyan-200 pt-1.5 text-[11px] leading-4 text-cyan-900 md:text-[10px] md:leading-3"
                 data-admin-monthly-billing-queue-readiness-review-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, invoice creation, PDF, payment,
+                payout, notification sending, auth change, parser change, billing activation, customer message,
+                or driver notification behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Monthly Billing Queue Exception Review"
+              className="mt-3 min-w-0 rounded-md border border-rose-200 bg-rose-50/70 p-0.5 sm:p-2.5"
+              data-admin-monthly-billing-queue-exception-review="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-rose-950">
+                      Monthly Billing Queue Exception Review
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        monthlyBillingQueueExceptionClearedLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : monthlyBillingQueueExceptionDecisionReviewed ||
+                              monthlyBillingQueueExceptionBillingPrepReviewed
+                            ? "bg-rose-100 text-rose-950 ring-rose-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-monthly-billing-queue-exception-review-status="true"
+                    >
+                      {monthlyBillingQueueExceptionReviewStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-rose-900"
+                    data-admin-monthly-billing-queue-exception-review-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-rose-900">
+                    Local exception review for blocked trips before any future monthly billing work.
+                  </p>
+                </div>
+                <div
+                  aria-label="Monthly billing queue exception review status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-rose-200 bg-white p-1 sm:w-72 sm:shrink-0 sm:grid-cols-3 xl:w-96"
+                  data-admin-monthly-billing-queue-exception-review-controls="true"
+                  role="group"
+                >
+                  {monthlyBillingQueueExceptionReviewOptions.map((option) => {
+                    const isSelected = monthlyBillingQueueExceptionReviewStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-rose-800 text-white"
+                            : "bg-white text-rose-950 hover:bg-rose-100"
+                        }`}
+                        data-admin-monthly-billing-queue-exception-review-option={option.value}
+                        data-admin-monthly-billing-queue-exception-review-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setMonthlyBillingQueueExceptionReviewStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-rose-950 sm:mt-3">
+                <span>Local queue exception note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                  data-admin-monthly-billing-queue-exception-review-note="true"
+                  onChange={(event) => setMonthlyBillingQueueExceptionReviewNote(event.target.value)}
+                  placeholder="Local staff monthly billing queue exception note"
+                  value={monthlyBillingQueueExceptionReviewNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 xl:grid-cols-4">
+                {monthlyBillingQueueExceptionReviewItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "blocked-trip-reason" ||
+                            item.key === "queue-exception-decision" ||
+                            item.key === "next-action" ||
+                            item.key === "local-exception-note-status"
+                          ? "border-rose-200 bg-white text-rose-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-monthly-billing-queue-exception-review-item={item.key}
+                    data-admin-monthly-billing-queue-exception-review-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-monthly-billing-queue-exception-review-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-monthly-billing-queue-exception-review-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-rose-200 pt-1.5 text-[11px] leading-4 text-rose-900 md:text-[10px] md:leading-3"
+                data-admin-monthly-billing-queue-exception-review-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, invoice creation, PDF, payment,
                 payout, notification sending, auth change, parser change, billing activation, customer message,

@@ -4391,6 +4391,168 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDispatchReleaseChecklist = async () => {
+      const checklistViewports = [
+        { height: 812, label: "mobile dispatch release checklist", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop dispatch release checklist", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of checklistViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const checklist = document.querySelector("[data-admin-dispatch-release-checklist]");
+              if (!checklist) {
+                return false;
+              }
+
+              const rect = checklist.getBoundingClientRect();
+              const checks = [...checklist.querySelectorAll("[data-admin-dispatch-release-check]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-dispatch-release-check-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-dispatch-release-check") || "",
+                  label:
+                    item.querySelector("[data-admin-dispatch-release-check-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-dispatch-release-check-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = checklist.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: checklist.querySelectorAll("button").length,
+                boundary:
+                  checklist.querySelector("[data-admin-dispatch-release-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                markReadyDisabled:
+                  checklist.querySelector("[data-admin-dispatch-release-mark-ready]")?.disabled ?? null,
+                state:
+                  checklist.querySelector("[data-admin-dispatch-release-state]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+                checks,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin dispatch release checklist`,
+        );
+
+        assert.equal(
+          state.text.includes("Dispatch Release"),
+          true,
+          `${viewport.label}: expected Dispatch Release checklist title`,
+        );
+        assert.deepEqual(
+          state.checks.map((item) => item.label),
+          [
+            "Trip completeness",
+            "Review clearance",
+            "Assigned driver details",
+            "Customer copy readiness",
+            "Driver dispatch copy readiness",
+            "Driver job link readiness",
+          ],
+          `${viewport.label}: expected Dispatch Release checklist labels`,
+        );
+        assert.deepEqual(
+          state.checks.map((item) => item.key),
+          [
+            "trip-completeness",
+            "review-clearance",
+            "assigned-driver",
+            "customer-copy",
+            "driver-dispatch-copy",
+            "driver-job-link",
+          ],
+          `${viewport.label}: expected Dispatch Release checklist keys`,
+        );
+        assert.equal(
+          state.markReadyDisabled,
+          true,
+          `${viewport.label}: expected blank dispatch release checklist to block local ready mark`,
+        );
+        assert.equal(
+          state.actionCount,
+          1,
+          `${viewport.label}: expected one local-only Dispatch Release action`,
+        );
+        for (const expectedBoundaryText of [
+          "UI/local-state only.",
+          "No Supabase write",
+          "live database access",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected Dispatch Release boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in Dispatch Release checklist`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 620 : 360),
+          true,
+          `${viewport.label}: expected compact Dispatch Release checklist, got ${state.height}px`,
+        );
+        assert.equal(
+          state.checks.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected Dispatch Release checklist items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected Dispatch Release checklist not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          checks: state.checks.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          height: state.height,
+          markReadyDisabled: state.markReadyDisabled,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -34197,6 +34359,7 @@ async function runChromeTest() {
       visibleText: visibleSnapshots.join("\n\n"),
     };
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
+    state.adminDispatchReleaseChecklist = await checkAdminDispatchReleaseChecklist();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -34306,6 +34469,7 @@ async function runChromeTest() {
     state.internalQaMockArchiveRouteBoundaries = [];
     state.adminBookingPersistenceRouteBoundaries = [];
     state.adminCustomerAmendCancelReviewRouteBoundaries = [];
+    state.adminDispatchReleaseChecklistRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -34348,6 +34512,30 @@ async function runChromeTest() {
         adminCustomerAmendCancelReviewVisible,
         false,
         `Expected admin customer amend/cancel review handoff boundary for ${route.context}`,
+      );
+      const adminDispatchReleaseChecklistVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-dispatch-release-checklist]"))`,
+      );
+      const adminDispatchReleaseChecklistTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Dispatch Release", "Mark Ready Locally"].filter((text) => bodyText.includes(text));
+        })()`,
+      );
+      state.adminDispatchReleaseChecklistRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDispatchReleaseChecklistTextLeaks,
+        visible: adminDispatchReleaseChecklistVisible,
+      });
+      assert.equal(
+        adminDispatchReleaseChecklistVisible,
+        false,
+        `Expected admin Dispatch Release checklist boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDispatchReleaseChecklistTextLeaks,
+        [],
+        `Expected no admin Dispatch Release wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -34459,6 +34647,30 @@ async function runChromeTest() {
       customerDetailAdminConfirmedDriverAssignmentHandoffVisible,
       false,
       "Expected admin confirmed driver assignment handoff boundary for /customers/[customerId]",
+    );
+    const customerDetailAdminDispatchReleaseChecklistVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-dispatch-release-checklist]"))`,
+    );
+    const customerDetailAdminDispatchReleaseChecklistTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Dispatch Release", "Mark Ready Locally"].filter((text) => bodyText.includes(text));
+      })()`,
+    );
+    state.adminDispatchReleaseChecklistRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDispatchReleaseChecklistTextLeaks,
+      visible: customerDetailAdminDispatchReleaseChecklistVisible,
+    });
+    assert.equal(
+      customerDetailAdminDispatchReleaseChecklistVisible,
+      false,
+      "Expected admin Dispatch Release checklist boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDispatchReleaseChecklistTextLeaks,
+      [],
+      "Expected no admin Dispatch Release wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

@@ -1545,6 +1545,41 @@ function assertBookingUiState(state) {
   assert.match(state.visibleText, /Driver Dispatch/);
   assert.match(state.driverDispatch, /DRIVER DISPATCH/);
   assert.match(state.visibleText, /Pricing/);
+  assert.equal(state.dispatchReleaseChecklist.visible, true);
+  assert.match(state.dispatchReleaseChecklist.text, /Dispatch Release/);
+  assert.equal(state.dispatchReleaseChecklist.context, "Current dispatch draft");
+  assert.deepEqual(
+    state.dispatchReleaseChecklist.checks.map((check) => check.label),
+    [
+      "Trip completeness",
+      "Review clearance",
+      "Assigned driver details",
+      "Customer copy readiness",
+      "Driver dispatch copy readiness",
+      "Driver job link readiness",
+    ],
+  );
+  assert.equal(
+    state.dispatchReleaseChecklist.checks.find((check) => check.key === "trip-completeness")?.state,
+    "ready",
+  );
+  assert.equal(
+    state.dispatchReleaseChecklist.checks.find((check) => check.key === "review-clearance")?.state,
+    "needs-action",
+  );
+  assert.equal(state.dispatchReleaseChecklist.markReadyDisabled, true);
+  assert.match(state.dispatchReleaseChecklist.boundary, /UI\/local-state only/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /No Supabase write/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /live database access/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /customer message/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /driver notification/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /billing/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /payment/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /PDF/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /payout/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /live location/);
+  assert.match(state.dispatchReleaseChecklist.boundary, /parser-learning/);
+  assert.deepEqual(state.dispatchReleaseChecklist.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -2429,11 +2464,58 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const dispatchReleaseChecklist = () => {
+        const checklist = document.querySelector("[data-admin-dispatch-release-checklist='true']");
+        const rect = checklist?.getBoundingClientRect();
+        const text = checklist?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            checklist?.querySelector("[data-admin-dispatch-release-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          checks: [...(checklist?.querySelectorAll("[data-admin-dispatch-release-check]") || [])].map((item) => ({
+            detail:
+              item.querySelector("[data-admin-dispatch-release-check-detail]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-dispatch-release-check") || "",
+            label:
+              item.querySelector("[data-admin-dispatch-release-check-label]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-dispatch-release-check-state") || "",
+          })),
+          context:
+            checklist?.querySelector("[data-admin-dispatch-release-context='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          markReadyDisabled:
+            checklist?.querySelector("[data-admin-dispatch-release-mark-ready='true']")?.disabled ?? null,
+          state:
+            checklist?.querySelector("[data-admin-dispatch-release-state='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
         consoleErrors: window.__prestigeConsoleErrors || [],
         customerCopy: preTextByHeading("Customer Copy"),
+        dispatchReleaseChecklist: dispatchReleaseChecklist(),
         driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
         errors: window.__prestigeErrors || [],
         fields,

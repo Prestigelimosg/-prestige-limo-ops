@@ -537,6 +537,15 @@ type CopyEditState = {
 
 type BookingCopyTarget = "driverDispatch" | "jobCard";
 
+type DispatchReleaseReadinessState = "needs-action" | "ready";
+
+type DispatchReleaseChecklistItem = {
+  detail: string;
+  key: string;
+  label: string;
+  state: DispatchReleaseReadinessState;
+};
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -1455,6 +1464,61 @@ function getNeedsReviewWarnings(booking: BookingForm) {
     (!Number.isFinite(customerPriceOverrideValue) || customerPriceOverrideValue < 0)
   ) {
     warnings.push("Quoted price override is not a valid number");
+  }
+
+  return warnings;
+}
+
+function getDispatchReleaseTripWarnings(booking: BookingForm) {
+  const warnings: string[] = [];
+  const bookingType = normalizeBookingType(booking.bookingType);
+  const paxValue = Number(clean(booking.pax));
+
+  if (!clean(booking.date)) {
+    warnings.push("Pickup date missing");
+  }
+
+  if (!clean(booking.time)) {
+    warnings.push("Pickup time missing");
+  }
+
+  if (!clean(booking.pickup)) {
+    warnings.push("Pickup missing");
+  }
+
+  if (!clean(booking.dropoff)) {
+    warnings.push("Drop-off missing");
+  }
+
+  if (!clean(booking.bookingType)) {
+    warnings.push("Service type missing");
+  }
+
+  if (!clean(booking.vehicle)) {
+    warnings.push("Vehicle missing");
+  }
+
+  if (!clean(booking.pax) || !Number.isFinite(paxValue) || paxValue < 1) {
+    warnings.push("Passenger count missing");
+  }
+
+  if (!clean(booking.name)) {
+    warnings.push("Passenger name missing");
+  }
+
+  if (bookingType === "MNG" && !clean(booking.flight)) {
+    warnings.push("Arrival flight missing");
+  }
+
+  if (normalizeExtraStopCount(booking.extraStopCount) > 0 && !clean(booking.extraStopLocation)) {
+    warnings.push("Extra stop location missing");
+  }
+
+  if (
+    clean(booking.childSeatRequired) === "yes" &&
+    normalizeChildSeatCount(booking.childSeatRequired, booking.childSeatCount) < 1
+  ) {
+    warnings.push("Child seat count missing");
   }
 
   return warnings;
@@ -3820,6 +3884,7 @@ export default function Home() {
     useState<Record<DispatchCopyTarget, CopyEditState>>(createInitialCopyEditStates);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [driverJobLinkCopyMessage, setDriverJobLinkCopyMessage] = useState<Message | null>(null);
+  const [dispatchReleaseMessage, setDispatchReleaseMessage] = useState<Message | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -8574,6 +8639,120 @@ export default function Home() {
   const customerCopyText = getDispatchCopyText("customerCopy");
   const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
   const showDriverJobLinkCopy = Boolean(clean(loadedBookingId));
+  const dispatchReleaseTripWarnings = getDispatchReleaseTripWarnings(booking);
+  const dispatchReleaseTripComplete = dispatchReleaseTripWarnings.length === 0;
+  const dispatchReleaseAppliedStatus = appliedAdminBookingSnapshot
+    ? adminBookingPersistencePrimaryStatus(appliedAdminBookingSnapshot)
+    : "";
+  const dispatchReleaseShortNoticeRequiresReview =
+    isAdminShortNoticeReviewRequired(booking, currentTimeMs) ||
+    clean(appliedAdminBookingSnapshot?.short_notice_review_status) === "Admin Review Required";
+  const dispatchReleaseAppliedIsCustomerRequest = Boolean(
+    appliedAdminBookingSnapshot &&
+    adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot),
+  );
+  const dispatchReleaseReviewStatus = clean(dispatchReleaseAppliedStatus);
+  const dispatchReleaseReviewStatusLower = dispatchReleaseReviewStatus.toLowerCase();
+  const dispatchReleaseReviewCleared =
+    dispatchReleaseTripComplete &&
+    !dispatchReleaseShortNoticeRequiresReview &&
+    (!dispatchReleaseAppliedIsCustomerRequest ||
+      dispatchReleaseReviewStatusLower === "ready for confirmation" ||
+      dispatchReleaseReviewStatusLower.includes("approved"));
+  const dispatchReleaseDriverName = clean(booking.driverName) || clean(assignedDriverRecord?.driver_name);
+  const dispatchReleaseDriverContact = clean(booking.driverContact) || clean(assignedDriverRecord?.contact_number);
+  const dispatchReleaseDriverPlate = assignedDriverPlate;
+  const dispatchReleaseDriverMissing = [
+    dispatchReleaseDriverName ? "" : "driver name",
+    dispatchReleaseDriverContact ? "" : "driver contact",
+    dispatchReleaseDriverPlate ? "" : "car plate",
+  ].filter(Boolean);
+  const dispatchReleaseDriverReady = dispatchReleaseDriverMissing.length === 0;
+  const dispatchReleaseCustomerCopyHasPlaceholder =
+    /\bTBC\b|Pickup > Drop-off|Date TBC|Time TBC/i.test(customerCopyText);
+  const dispatchReleaseCustomerCopyReady =
+    dispatchReleaseTripComplete &&
+    dispatchReleaseDriverReady &&
+    clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS") &&
+    !dispatchReleaseCustomerCopyHasPlaceholder;
+  const dispatchReleaseDriverDispatchHasPlaceholder =
+    /\bTBC\b|Pickup > Drop-off|Date TBC|Time TBC/i.test(driverDispatchCopyText);
+  const dispatchReleaseDriverDispatchHasFinanceLine = /payout\s*:/i.test(driverDispatchCopyText);
+  const dispatchReleaseDriverDispatchReady =
+    dispatchReleaseTripComplete &&
+    dispatchReleaseDriverReady &&
+    clean(driverDispatchCopyText).startsWith("DRIVER DISPATCH") &&
+    !dispatchReleaseDriverDispatchHasPlaceholder &&
+    !dispatchReleaseDriverDispatchHasFinanceLine;
+  const dispatchReleaseDriverJobLinkReady =
+    dispatchReleaseTripComplete &&
+    dispatchReleaseDriverReady &&
+    showDriverJobLinkCopy &&
+    Boolean(clean(driverJobLinkUrl));
+  const dispatchReleaseChecklist: DispatchReleaseChecklistItem[] = [
+    {
+      detail: dispatchReleaseTripComplete
+        ? "Complete."
+        : `Needs: ${dispatchReleaseTripWarnings.slice(0, 3).join(", ")}${
+            dispatchReleaseTripWarnings.length > 3 ? "..." : ""
+          }`,
+      key: "trip-completeness",
+      label: "Trip completeness",
+      state: dispatchReleaseTripComplete ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseReviewCleared
+        ? "Clear."
+        : dispatchReleaseShortNoticeRequiresReview
+          ? "Admin review needed."
+          : dispatchReleaseAppliedIsCustomerRequest
+            ? `Status: ${dispatchReleaseReviewStatus || "Needs review"}.`
+            : "Complete trip details.",
+      key: "review-clearance",
+      label: "Review clearance",
+      state: dispatchReleaseReviewCleared ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverReady
+        ? "Name/contact/plate ready."
+        : `Needs: ${dispatchReleaseDriverMissing.join(", ")}.`,
+      key: "assigned-driver",
+      label: "Assigned driver details",
+      state: dispatchReleaseDriverReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseCustomerCopyReady
+        ? "Ready for staff review."
+        : "Needs trip/driver details.",
+      key: "customer-copy",
+      label: "Customer copy readiness",
+      state: dispatchReleaseCustomerCopyReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverDispatchReady
+        ? "Ready for staff review."
+        : dispatchReleaseDriverDispatchHasFinanceLine
+          ? "Remove private finance line."
+          : "Needs trip/driver details.",
+      key: "driver-dispatch-copy",
+      label: "Driver dispatch copy readiness",
+      state: dispatchReleaseDriverDispatchReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverJobLinkReady
+        ? "Link copy available."
+        : "Load saved booking first.",
+      key: "driver-job-link",
+      label: "Driver job link readiness",
+      state: dispatchReleaseDriverJobLinkReady ? "ready" : "needs-action",
+    },
+  ];
+  const dispatchReleaseReady = dispatchReleaseChecklist.every((item) => item.state === "ready");
+  const dispatchReleaseContextLabel = appliedAdminBookingSnapshot
+    ? `Applied snapshot: ${clean(appliedAdminBookingSnapshot.booking_reference) || "selected operational snapshot"}`
+    : loadedBookingId
+      ? `Loaded booking: ${loadedBookingId}`
+      : "Current dispatch draft";
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
   const mockMidnightChargeOverrideDetected =
     mockMidnightChargeOverrideMode === "force-on"
@@ -16814,6 +16993,104 @@ export default function Home() {
                   ))}
                 </div>
               ) : null}
+            </section>
+
+            <section
+              aria-label="Dispatch Release checklist"
+              className="mt-5 rounded-md border border-sky-200 bg-sky-50/70 p-2.5"
+              data-admin-dispatch-release-checklist="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-sky-950">
+                      Dispatch Release
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        dispatchReleaseReady
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-dispatch-release-state="true"
+                    >
+                      {dispatchReleaseReady ? "Ready" : "Needs action"}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-sky-900"
+                    data-admin-dispatch-release-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-sky-900">
+                    Admin-only local checklist before staff manually release a reviewed booking.
+                  </p>
+                </div>
+                <button
+                  className="min-h-9 rounded-md border border-sky-300 bg-white px-3 py-1.5 text-left text-sm font-semibold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                  data-admin-dispatch-release-mark-ready="true"
+                  disabled={!dispatchReleaseReady}
+                  onClick={() => {
+                    setDispatchReleaseMessage({
+                      tone: "success",
+                      text: "Dispatch release marked ready locally. No database write, notification, or driver action was sent.",
+                    });
+                  }}
+                  type="button"
+                >
+                  Mark Ready Locally
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {dispatchReleaseChecklist.map((item) => (
+                  <div
+                    className={`min-w-0 rounded-md border px-2 py-1.5 text-[11px] ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-dispatch-release-check={item.key}
+                    data-admin-dispatch-release-check-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p className="font-semibold leading-4" data-admin-dispatch-release-check-label={item.key}>
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 break-words leading-4" data-admin-dispatch-release-check-detail={item.key}>
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {dispatchReleaseMessage ? (
+                <p
+                  className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
+                    dispatchReleaseMessage.tone,
+                  )}`}
+                  data-admin-dispatch-release-feedback="true"
+                >
+                  {dispatchReleaseMessage.text}
+                </p>
+              ) : null}
+              <p
+                className="mt-2 border-t border-sky-200 pt-2 text-[11px] leading-4 text-sky-900"
+                data-admin-dispatch-release-boundary="true"
+              >
+                UI/local-state only. No Supabase write, live database access, customer message, driver notification,
+                billing, payment, PDF, payout, live location, or parser-learning behavior is created here.
+              </p>
             </section>
           </div>
 

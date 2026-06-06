@@ -2637,6 +2637,126 @@ function assertBookingUiState(state) {
   assert.match(state.billingPreparationSummaryReadyReview.boundary, /live location/);
   assert.match(state.billingPreparationSummaryReadyReview.boundary, /parser-learning/);
   assert.deepEqual(state.billingPreparationSummaryReadyReview.forbiddenPanelText, []);
+  assert.equal(state.monthlyBillingQueueReadinessReview.visible, true);
+  assert.match(state.monthlyBillingQueueReadinessReview.text, /Monthly Billing Queue Readiness Review/);
+  assert.equal(state.monthlyBillingQueueReadinessReview.context, "Current dispatch draft");
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.status,
+    "Monthly billing queue review needed",
+  );
+  assert.equal(state.monthlyBillingQueueReadinessReview.noteValue, "");
+  assert.deepEqual(
+    state.monthlyBillingQueueReadinessReview.options.map((option) => option.label),
+    [
+      "Review Needed",
+      "Account Reviewed",
+      "Month Reviewed",
+      "Trips Reviewed",
+      "Prep Reviewed",
+      "Exceptions Reviewed",
+      "Queued Locally",
+    ],
+  );
+  assert.deepEqual(
+    state.monthlyBillingQueueReadinessReview.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["review-needed", "selected"],
+      ["account-reviewed", "idle"],
+      ["month-reviewed", "idle"],
+      ["trips-reviewed", "idle"],
+      ["billing-prep-reviewed", "idle"],
+      ["exceptions-reviewed", "idle"],
+      ["queued-locally", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.monthlyBillingQueueReadinessReview.items.map((item) => item.label),
+    [
+      "Customer/account",
+      "Billing month",
+      "Ready trips count",
+      "Blocked trips count",
+      "Billing prep status",
+      "Exception status",
+      "Monthly billing queue status",
+      "Next action",
+      "Local queue note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.monthlyBillingQueueReadinessReview.items.map((item) => item.key),
+    [
+      "customer-account",
+      "billing-month",
+      "ready-trips-count",
+      "blocked-trips-count",
+      "billing-prep-status",
+      "exception-status",
+      "monthly-billing-queue-status",
+      "next-action",
+      "local-queue-note-status",
+    ],
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "customer-account")
+      ?.detail,
+    "BROWSER UI TEST COMPANY requires local review.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "billing-month")
+      ?.detail,
+    "May 2026 requires local review.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "ready-trips-count")
+      ?.detail,
+    "0 ready trips in local queue review.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "blocked-trips-count")
+      ?.detail,
+    "1 blocked trip in local queue review.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "billing-prep-status")
+      ?.detail,
+    "Billing preparation summary not ready locally.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "exception-status")
+      ?.detail,
+    "Billing-prep exceptions not cleared locally.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find(
+      (item) => item.key === "monthly-billing-queue-status",
+    )?.detail,
+    "Not queued for future monthly billing review locally.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "next-action")
+      ?.detail,
+    "Confirm customer/account before monthly queue review.",
+  );
+  assert.equal(
+    state.monthlyBillingQueueReadinessReview.items.find((item) => item.key === "local-queue-note-status")
+      ?.detail,
+    "Monthly billing queue review needed. No local queue note.",
+  );
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /Local UI only/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /No Supabase write/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /live database access/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /invoice creation/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /PDF/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /payment/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /payout/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /notification sending/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /auth change/);
+  assert.match(state.monthlyBillingQueueReadinessReview.boundary, /parser change/);
+  assert.deepEqual(state.monthlyBillingQueueReadinessReview.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -4263,6 +4383,71 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const monthlyBillingQueueReadinessReview = () => {
+        const section = document.querySelector("[data-admin-monthly-billing-queue-readiness-review='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-monthly-billing-queue-readiness-review-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section
+              ?.querySelector("[data-admin-monthly-billing-queue-readiness-review-context='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "driver payout",
+            "paynow",
+            "payout comparison",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [
+            ...(section?.querySelectorAll("[data-admin-monthly-billing-queue-readiness-review-item]") ||
+              []),
+          ].map((item) => ({
+            detail:
+              item
+                .querySelector("[data-admin-monthly-billing-queue-readiness-review-detail]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-monthly-billing-queue-readiness-review-item") || "",
+            label:
+              item
+                .querySelector("[data-admin-monthly-billing-queue-readiness-review-label]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-monthly-billing-queue-readiness-review-item-state") || "",
+          })),
+          noteValue:
+            section?.querySelector("[data-admin-monthly-billing-queue-readiness-review-note='true']")
+              ?.value ?? null,
+          options: [
+            ...(section?.querySelectorAll("[data-admin-monthly-billing-queue-readiness-review-option]") ||
+              []),
+          ].map((option) => ({
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-monthly-billing-queue-readiness-review-option-state") || "",
+            value: option.getAttribute("data-admin-monthly-billing-queue-readiness-review-option") || "",
+          })),
+          status:
+            section
+              ?.querySelector("[data-admin-monthly-billing-queue-readiness-review-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         billingPreparationExceptionReview: billingPreparationExceptionReview(),
@@ -4283,6 +4468,7 @@ async function runChromeTest() {
         driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
         errors: window.__prestigeErrors || [],
         fields,
+        monthlyBillingQueueReadinessReview: monthlyBillingQueueReadinessReview(),
         fieldText: [...Object.values(fields), ...overrideReasons].join("\\n"),
         jobCardPreview: preTextByHeading("Job Card Preview"),
         manualExtraChargesReviewPreview: manualExtraChargesReviewPreview(),

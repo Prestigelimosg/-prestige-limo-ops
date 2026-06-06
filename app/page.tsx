@@ -625,6 +625,15 @@ type BillingPreparationSummaryReviewStatus =
   | "exceptions-cleared"
   | "ready-for-monthly-review";
 
+type MonthlyBillingQueueReadinessReviewStatus =
+  | "review-needed"
+  | "account-reviewed"
+  | "month-reviewed"
+  | "trips-reviewed"
+  | "billing-prep-reviewed"
+  | "exceptions-reviewed"
+  | "queued-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3997,6 +4006,10 @@ export default function Home() {
   const [billingPreparationSummaryReviewStatus, setBillingPreparationSummaryReviewStatus] =
     useState<BillingPreparationSummaryReviewStatus>("review-needed");
   const [billingPreparationSummaryReviewNote, setBillingPreparationSummaryReviewNote] = useState("");
+  const [monthlyBillingQueueReadinessReviewStatus, setMonthlyBillingQueueReadinessReviewStatus] =
+    useState<MonthlyBillingQueueReadinessReviewStatus>("review-needed");
+  const [monthlyBillingQueueReadinessReviewNote, setMonthlyBillingQueueReadinessReviewNote] =
+    useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -10129,6 +10142,184 @@ export default function Home() {
       key: "local-summary-note-status",
       label: "Local summary note/status",
       state: billingPreparationSummaryReadyForMonthlyReview ? "ready" : "needs-action",
+    },
+  ];
+  const monthlyBillingQueueReadinessReviewStatusLabel =
+    monthlyBillingQueueReadinessReviewStatus === "queued-locally"
+      ? "Queued locally for monthly billing"
+      : monthlyBillingQueueReadinessReviewStatus === "exceptions-reviewed"
+        ? "Exceptions reviewed"
+        : monthlyBillingQueueReadinessReviewStatus === "billing-prep-reviewed"
+          ? "Billing prep reviewed"
+          : monthlyBillingQueueReadinessReviewStatus === "trips-reviewed"
+            ? "Trips reviewed"
+            : monthlyBillingQueueReadinessReviewStatus === "month-reviewed"
+              ? "Billing month reviewed"
+              : monthlyBillingQueueReadinessReviewStatus === "account-reviewed"
+                ? "Customer/account reviewed"
+                : "Monthly billing queue review needed";
+  const monthlyBillingQueueReadinessReviewOptions: {
+    label: string;
+    value: MonthlyBillingQueueReadinessReviewStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Account Reviewed", value: "account-reviewed" },
+    { label: "Month Reviewed", value: "month-reviewed" },
+    { label: "Trips Reviewed", value: "trips-reviewed" },
+    { label: "Prep Reviewed", value: "billing-prep-reviewed" },
+    { label: "Exceptions Reviewed", value: "exceptions-reviewed" },
+    { label: "Queued Locally", value: "queued-locally" },
+  ];
+  const monthlyBillingQueueReadinessReviewReached = (
+    status: MonthlyBillingQueueReadinessReviewStatus,
+  ) => {
+    const order: MonthlyBillingQueueReadinessReviewStatus[] = [
+      "account-reviewed",
+      "month-reviewed",
+      "trips-reviewed",
+      "billing-prep-reviewed",
+      "exceptions-reviewed",
+      "queued-locally",
+    ];
+    const currentIndex = order.indexOf(monthlyBillingQueueReadinessReviewStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const monthlyBillingQueueCustomerAccountLabel =
+    normalizeCompanyAccount(booking.company, booking.bookerEmail) ||
+    clean(booking.booker) ||
+    clean(booking.name) ||
+    "Customer/account not selected";
+  const monthlyBillingQueueBillingMonthLabel = (() => {
+    const dateValue = clean(booking.date);
+
+    if (!dateValue) {
+      return "Billing month not selected";
+    }
+
+    const date = new Date(`${dateValue}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+      return "Billing month needs review";
+    }
+
+    return new Intl.DateTimeFormat("en-SG", {
+      month: "long",
+      year: "numeric",
+    }).format(date);
+  })();
+  const monthlyBillingQueueCustomerAccountReady =
+    monthlyBillingQueueReadinessReviewReached("account-reviewed") &&
+    monthlyBillingQueueCustomerAccountLabel !== "Customer/account not selected";
+  const monthlyBillingQueueBillingMonthReady =
+    monthlyBillingQueueReadinessReviewReached("month-reviewed") &&
+    monthlyBillingQueueBillingMonthLabel !== "Billing month not selected" &&
+    monthlyBillingQueueBillingMonthLabel !== "Billing month needs review";
+  const monthlyBillingQueueReadyTripsCount = billingPreparationSummaryReadyForMonthlyReview ? 1 : 0;
+  const monthlyBillingQueueBlockedTripsCount = billingPreparationSummaryReadyForMonthlyReview ? 0 : 1;
+  const monthlyBillingQueueTripsReviewed =
+    monthlyBillingQueueReadinessReviewReached("trips-reviewed") &&
+    monthlyBillingQueueReadyTripsCount > 0 &&
+    monthlyBillingQueueBlockedTripsCount === 0;
+  const monthlyBillingQueueBillingPrepReviewed =
+    monthlyBillingQueueReadinessReviewReached("billing-prep-reviewed") &&
+    billingPreparationSummaryReadyForMonthlyReview;
+  const monthlyBillingQueueExceptionsReviewed =
+    monthlyBillingQueueReadinessReviewReached("exceptions-reviewed") &&
+    billingPreparationSummaryExceptionsCleared;
+  const monthlyBillingQueueReadyLocally =
+    monthlyBillingQueueReadinessReviewStatus === "queued-locally" &&
+    monthlyBillingQueueCustomerAccountReady &&
+    monthlyBillingQueueBillingMonthReady &&
+    monthlyBillingQueueTripsReviewed &&
+    monthlyBillingQueueBillingPrepReviewed &&
+    monthlyBillingQueueExceptionsReviewed;
+  const monthlyBillingQueueNextAction = monthlyBillingQueueReadyLocally
+    ? "Ready for future monthly billing queue review locally; keep queue note current."
+    : !monthlyBillingQueueCustomerAccountReady
+      ? "Confirm customer/account before monthly queue review."
+      : !monthlyBillingQueueBillingMonthReady
+        ? "Confirm billing month locally."
+        : monthlyBillingQueueReadyTripsCount === 0
+          ? "Move at least one completed trip to ready state locally."
+          : monthlyBillingQueueBlockedTripsCount > 0
+            ? "Clear blocked trips before monthly queue review."
+            : !monthlyBillingQueueBillingPrepReviewed
+              ? "Review billing preparation summary locally."
+              : !monthlyBillingQueueExceptionsReviewed
+                ? "Confirm exception status locally."
+                : "Mark queued locally for future monthly billing review.";
+  const monthlyBillingQueueReadinessReviewItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: monthlyBillingQueueCustomerAccountReady
+        ? `${monthlyBillingQueueCustomerAccountLabel} reviewed locally.`
+        : `${monthlyBillingQueueCustomerAccountLabel} requires local review.`,
+      key: "customer-account",
+      label: "Customer/account",
+      state: monthlyBillingQueueCustomerAccountReady ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueBillingMonthReady
+        ? `${monthlyBillingQueueBillingMonthLabel} reviewed locally.`
+        : `${monthlyBillingQueueBillingMonthLabel} requires local review.`,
+      key: "billing-month",
+      label: "Billing month",
+      state: monthlyBillingQueueBillingMonthReady ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingQueueReadyTripsCount} ready trip${
+        monthlyBillingQueueReadyTripsCount === 1 ? "" : "s"
+      } in local queue review.`,
+      key: "ready-trips-count",
+      label: "Ready trips count",
+      state: monthlyBillingQueueReadyTripsCount > 0 ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingQueueBlockedTripsCount} blocked trip${
+        monthlyBillingQueueBlockedTripsCount === 1 ? "" : "s"
+      } in local queue review.`,
+      key: "blocked-trips-count",
+      label: "Blocked trips count",
+      state: monthlyBillingQueueBlockedTripsCount === 0 ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueBillingPrepReviewed
+        ? "Billing preparation summary reviewed locally."
+        : "Billing preparation summary not ready locally.",
+      key: "billing-prep-status",
+      label: "Billing prep status",
+      state: monthlyBillingQueueBillingPrepReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueExceptionsReviewed
+        ? "Billing-prep exceptions reviewed locally."
+        : "Billing-prep exceptions not cleared locally.",
+      key: "exception-status",
+      label: "Exception status",
+      state: monthlyBillingQueueExceptionsReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueReadyLocally
+        ? "Queued locally for future monthly billing review."
+        : "Not queued for future monthly billing review locally.",
+      key: "monthly-billing-queue-status",
+      label: "Monthly billing queue status",
+      state: monthlyBillingQueueReadyLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingQueueNextAction,
+      key: "next-action",
+      label: "Next action",
+      state: monthlyBillingQueueReadyLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingQueueReadinessReviewStatusLabel}. ${
+        clean(monthlyBillingQueueReadinessReviewNote) || "No local queue note."
+      }`,
+      key: "local-queue-note-status",
+      label: "Local queue note/status",
+      state: monthlyBillingQueueReadyLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -19911,6 +20102,134 @@ export default function Home() {
                 Local UI only. No Supabase write, live database access, billing activation, invoice, PDF,
                 payment, payout, notification sending, customer message, driver notification, live location, or
                 parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Monthly Billing Queue Readiness Review"
+              className="mt-3 min-w-0 rounded-md border border-cyan-200 bg-cyan-50/70 p-0.5 sm:p-2.5"
+              data-admin-monthly-billing-queue-readiness-review="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-cyan-950">
+                      Monthly Billing Queue Readiness Review
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        monthlyBillingQueueReadyLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : monthlyBillingQueueBillingPrepReviewed || monthlyBillingQueueTripsReviewed
+                            ? "bg-cyan-100 text-cyan-950 ring-cyan-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-monthly-billing-queue-readiness-review-status="true"
+                    >
+                      {monthlyBillingQueueReadinessReviewStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-cyan-900"
+                    data-admin-monthly-billing-queue-readiness-review-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-cyan-900">
+                    Local queue review for completed trips before any future monthly billing work.
+                  </p>
+                </div>
+                <div
+                  aria-label="Monthly billing queue readiness review status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-cyan-200 bg-white p-1 sm:w-64 sm:shrink-0 sm:grid-cols-3 lg:w-72 xl:w-96"
+                  data-admin-monthly-billing-queue-readiness-review-controls="true"
+                  role="group"
+                >
+                  {monthlyBillingQueueReadinessReviewOptions.map((option) => {
+                    const isSelected = monthlyBillingQueueReadinessReviewStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-cyan-800 text-white"
+                            : "bg-white text-cyan-950 hover:bg-cyan-100"
+                        }`}
+                        data-admin-monthly-billing-queue-readiness-review-option={option.value}
+                        data-admin-monthly-billing-queue-readiness-review-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setMonthlyBillingQueueReadinessReviewStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-cyan-950 sm:mt-3">
+                <span>Local queue note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-cyan-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  data-admin-monthly-billing-queue-readiness-review-note="true"
+                  onChange={(event) => setMonthlyBillingQueueReadinessReviewNote(event.target.value)}
+                  placeholder="Local staff monthly billing queue readiness note"
+                  value={monthlyBillingQueueReadinessReviewNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 xl:grid-cols-3">
+                {monthlyBillingQueueReadinessReviewItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "billing-prep-status" ||
+                            item.key === "exception-status" ||
+                            item.key === "monthly-billing-queue-status" ||
+                            item.key === "next-action" ||
+                            item.key === "local-queue-note-status"
+                          ? "border-cyan-200 bg-white text-cyan-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-monthly-billing-queue-readiness-review-item={item.key}
+                    data-admin-monthly-billing-queue-readiness-review-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-monthly-billing-queue-readiness-review-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-monthly-billing-queue-readiness-review-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-cyan-200 pt-1.5 text-[11px] leading-4 text-cyan-900 md:text-[10px] md:leading-3"
+                data-admin-monthly-billing-queue-readiness-review-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, invoice creation, PDF, payment,
+                payout, notification sending, auth change, parser change, billing activation, customer message,
+                or driver notification behavior.
               </p>
             </section>
           </div>

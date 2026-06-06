@@ -2100,6 +2100,149 @@ async function runChromeTest() {
       );
     };
 
+    const checkMonthlyBillingQueueReadinessReview = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-monthly-billing-queue-readiness-review='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [
+          ...(section?.querySelectorAll("[data-admin-monthly-billing-queue-readiness-review-item]") || []),
+        ].map((item) => {
+          const itemRect = item.getBoundingClientRect();
+
+          return {
+            height: Math.round(itemRect.height),
+            key: item.getAttribute("data-admin-monthly-billing-queue-readiness-review-item") || "",
+            label:
+              item.querySelector("[data-admin-monthly-billing-queue-readiness-review-label]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            width: Math.round(itemRect.width),
+          };
+        });
+        const note = section?.querySelector("[data-admin-monthly-billing-queue-readiness-review-note='true']");
+        const noteRect = note?.getBoundingClientRect();
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-monthly-billing-queue-readiness-review-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-monthly-billing-queue-readiness-review-option-state") || "",
+            value: option.getAttribute("data-admin-monthly-billing-queue-readiness-review-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-monthly-billing-queue-readiness-review-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          options,
+          status:
+            section
+              ?.querySelector("[data-admin-monthly-billing-queue-readiness-review-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        true,
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review section`,
+      );
+      assert.equal(
+        state.text.includes("Monthly Billing Queue Readiness Review"),
+        true,
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        [
+          "Review Needed",
+          "Account Reviewed",
+          "Month Reviewed",
+          "Trips Reviewed",
+          "Prep Reviewed",
+          "Exceptions Reviewed",
+          "Queued Locally",
+        ],
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review local controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Customer/account",
+          "Billing month",
+          "Ready trips count",
+          "Blocked trips count",
+          "Billing prep status",
+          "Exception status",
+          "Monthly billing queue status",
+          "Next action",
+          "Local queue note/status",
+        ],
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review rows`,
+      );
+      assert.equal(
+        state.status,
+        "Monthly billing queue review needed",
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review to start at review needed`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected blank local queue note`);
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("live database access") &&
+          state.boundary.includes("invoice creation") &&
+          state.boundary.includes("PDF") &&
+          state.boundary.includes("payment") &&
+          state.boundary.includes("payout") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("auth change") &&
+          state.boundary.includes("parser change"),
+        true,
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 340 ? 1380 : viewport.width < 640 ? 1260 : 900),
+        true,
+        `${viewport.label}: expected compact Monthly Billing Queue Readiness Review, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review rows to stay readable`,
+      );
+      assert.equal(
+        state.noteHeight >= 40,
+        true,
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review note to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Monthly Billing Queue Readiness Review not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -2234,6 +2377,9 @@ async function runChromeTest() {
       );
       const adminBillingPreparationSummaryReadyReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-billing-preparation-summary-ready-review]"))`,
+      );
+      const adminMonthlyBillingQueueReadinessReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-monthly-billing-queue-readiness-review]"))`,
       );
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
@@ -2514,6 +2660,9 @@ async function runChromeTest() {
             "missing billing account",
             "billing preparation summary / ready review",
             "ready for monthly billing review",
+            "monthly billing queue readiness review",
+            "local queue note/status",
+            "queued locally for monthly billing",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -2852,6 +3001,11 @@ async function runChromeTest() {
         adminBillingPreparationSummaryReadyReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no admin billing preparation summary ready review`,
+      );
+      assert.equal(
+        adminMonthlyBillingQueueReadinessReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no admin monthly billing queue readiness review`,
       );
       assert.equal(
         internalQaMockArchiveVisible,
@@ -11042,6 +11196,7 @@ async function runChromeTest() {
           await checkCloseoutToBillingPreparationReview(viewport);
           await checkBillingPreparationExceptionReview(viewport);
           await checkBillingPreparationSummaryReadyReview(viewport);
+          await checkMonthlyBillingQueueReadinessReview(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }
@@ -11075,6 +11230,9 @@ async function runChromeTest() {
       );
       const adminBillingPreparationSummaryReadyReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-billing-preparation-summary-ready-review]"))`,
+      );
+      const adminMonthlyBillingQueueReadinessReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-monthly-billing-queue-readiness-review]"))`,
       );
       const driverAssignmentReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-assignment-readiness]"))`,
@@ -11355,6 +11513,9 @@ async function runChromeTest() {
             "missing billing account",
             "billing preparation summary / ready review",
             "ready for monthly billing review",
+            "monthly billing queue readiness review",
+            "local queue note/status",
+            "queued locally for monthly billing",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -11707,6 +11868,11 @@ async function runChromeTest() {
         adminBillingPreparationSummaryReadyReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin billing preparation summary ready review`,
+      );
+      assert.equal(
+        adminMonthlyBillingQueueReadinessReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin monthly billing queue readiness review`,
       );
       assert.equal(
         internalQaMockArchiveVisible,

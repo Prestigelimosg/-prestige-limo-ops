@@ -6689,6 +6689,252 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminBillingPreparationExceptionReview = async () => {
+      const reviewViewports = [
+        { height: 812, label: "mobile billing preparation exception review", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop billing preparation exception review", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-billing-preparation-exception-review]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-billing-preparation-exception-review-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-billing-preparation-exception-review-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-billing-preparation-exception-review-item") || "",
+                  label:
+                    item.querySelector("[data-admin-billing-preparation-exception-review-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-billing-preparation-exception-review-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = section.querySelector("[data-admin-billing-preparation-exception-review-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const options = [...section.querySelectorAll("[data-admin-billing-preparation-exception-review-option]")].map(
+                (option) => ({
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-billing-preparation-exception-review-option-state") || "",
+                  value: option.getAttribute("data-admin-billing-preparation-exception-review-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-billing-preparation-exception-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "driver payout",
+                  "paynow",
+                  "payout comparison",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                options,
+                status:
+                  section.querySelector("[data-admin-billing-preparation-exception-review-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin billing preparation exception review`,
+        );
+
+        assert.equal(
+          state.text.includes("Billing Preparation Exception Review"),
+          true,
+          `${viewport.label}: expected billing preparation exception review title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          [
+            "Review Needed",
+            "Missing Account",
+            "Details Missing",
+            "Extra Charges",
+            "Dispute/Waiver",
+            "Billing Action",
+            "Cleared Locally",
+          ],
+          `${viewport.label}: expected billing preparation exception review local controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state]),
+          [
+            ["review-needed", "selected"],
+            ["missing-account", "idle"],
+            ["details-incomplete", "idle"],
+            ["extra-charges-pending", "idle"],
+            ["disputed-waived-charges", "idle"],
+            ["billing-action-required", "idle"],
+            ["cleared-locally", "idle"],
+          ],
+          `${viewport.label}: expected billing preparation exception review to start at review needed`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Missing billing account",
+            "Incomplete trip/service details",
+            "Extra charges pending",
+            "Disputed or waived charges",
+            "Billing note/action required",
+            "Next billing-prep action",
+            "Local exception note/status",
+          ],
+          `${viewport.label}: expected billing preparation exception labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "missing-billing-account",
+            "incomplete-trip-service-details",
+            "extra-charges-pending",
+            "disputed-waived-charges",
+            "billing-note-action-required",
+            "next-billing-prep-action",
+            "local-exception-note-status",
+          ],
+          `${viewport.label}: expected billing preparation exception keys`,
+        );
+        assert.equal(
+          state.status,
+          "Billing preparation exception review needed",
+          `${viewport.label}: expected billing preparation exception review to start review needed`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected blank local exception note`);
+        assert.equal(
+          state.items.find((item) => item.key === "missing-billing-account")?.detail,
+          "Billing account readiness not confirmed locally.",
+          `${viewport.label}: expected missing billing account to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "incomplete-trip-service-details")?.detail,
+          "Trip/service details not complete locally.",
+          `${viewport.label}: expected incomplete trip/service details to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "extra-charges-pending")?.detail,
+          "Extra charges review not cleared locally.",
+          `${viewport.label}: expected extra charges pending to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "disputed-waived-charges")?.detail,
+          "No dispute or waiver flag recorded locally.",
+          `${viewport.label}: expected no dispute/waiver flag by default`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "billing-note-action-required")?.detail,
+          "Billing note/action not reviewed locally.",
+          `${viewport.label}: expected billing note/action to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "next-billing-prep-action")?.detail,
+          "Confirm billing account before billing preparation.",
+          `${viewport.label}: expected billing account confirmation as next action`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "billing activation",
+          "invoice",
+          "PDF",
+          "payment",
+          "payout",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected billing preparation exception boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in billing preparation exception review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1000 : 700),
+          true,
+          `${viewport.label}: expected compact billing preparation exception review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected billing preparation exception items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected billing preparation exception controls to stay readable`,
+        );
+        assert.equal(
+          state.noteHeight >= 40,
+          true,
+          `${viewport.label}: expected billing preparation exception note to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected billing preparation exception not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -36508,6 +36754,8 @@ async function runChromeTest() {
     state.adminCompletedTripCloseoutReview = await checkAdminCompletedTripCloseoutReview();
     state.adminCloseoutToBillingPreparationReview =
       await checkAdminCloseoutToBillingPreparationReview();
+    state.adminBillingPreparationExceptionReview =
+      await checkAdminBillingPreparationExceptionReview();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -36628,6 +36876,7 @@ async function runChromeTest() {
     state.adminDayOfTripCompletionHandoffRouteBoundaries = [];
     state.adminCompletedTripCloseoutReviewRouteBoundaries = [];
     state.adminCloseoutToBillingPreparationReviewRouteBoundaries = [];
+    state.adminBillingPreparationExceptionReviewRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -36950,6 +37199,32 @@ async function runChromeTest() {
         adminCloseoutToBillingPreparationReviewTextLeaks,
         [],
         `Expected no admin closeout to billing preparation wording leak for ${route.context}`,
+      );
+      const adminBillingPreparationExceptionReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-billing-preparation-exception-review]"))`,
+      );
+      const adminBillingPreparationExceptionReviewTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Billing Preparation Exception Review", "Missing billing account"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminBillingPreparationExceptionReviewRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminBillingPreparationExceptionReviewTextLeaks,
+        visible: adminBillingPreparationExceptionReviewVisible,
+      });
+      assert.equal(
+        adminBillingPreparationExceptionReviewVisible,
+        false,
+        `Expected admin billing preparation exception review boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminBillingPreparationExceptionReviewTextLeaks,
+        [],
+        `Expected no admin billing preparation exception review wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -37341,6 +37616,32 @@ async function runChromeTest() {
       customerDetailAdminCloseoutToBillingPreparationReviewTextLeaks,
       [],
       "Expected no admin closeout to billing preparation wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminBillingPreparationExceptionReviewVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-billing-preparation-exception-review]"))`,
+    );
+    const customerDetailAdminBillingPreparationExceptionReviewTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Billing Preparation Exception Review", "Missing billing account"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminBillingPreparationExceptionReviewRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminBillingPreparationExceptionReviewTextLeaks,
+      visible: customerDetailAdminBillingPreparationExceptionReviewVisible,
+    });
+    assert.equal(
+      customerDetailAdminBillingPreparationExceptionReviewVisible,
+      false,
+      "Expected admin billing preparation exception review boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminBillingPreparationExceptionReviewTextLeaks,
+      [],
+      "Expected no admin billing preparation exception review wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

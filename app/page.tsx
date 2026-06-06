@@ -607,6 +607,15 @@ type CloseoutToBillingPreparationReviewStatus =
   | "billing-note-reviewed"
   | "ready-locally";
 
+type BillingPreparationExceptionReviewStatus =
+  | "review-needed"
+  | "missing-account"
+  | "details-incomplete"
+  | "extra-charges-pending"
+  | "disputed-waived-charges"
+  | "billing-action-required"
+  | "cleared-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3971,6 +3980,10 @@ export default function Home() {
   const [closeoutToBillingPreparationReviewStatus, setCloseoutToBillingPreparationReviewStatus] =
     useState<CloseoutToBillingPreparationReviewStatus>("review-needed");
   const [closeoutToBillingPreparationReviewNote, setCloseoutToBillingPreparationReviewNote] =
+    useState("");
+  const [billingPreparationExceptionReviewStatus, setBillingPreparationExceptionReviewStatus] =
+    useState<BillingPreparationExceptionReviewStatus>("review-needed");
+  const [billingPreparationExceptionReviewNote, setBillingPreparationExceptionReviewNote] =
     useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
@@ -9826,6 +9839,139 @@ export default function Home() {
       key: "local-billing-prep-note-status",
       label: "Local billing-prep note/status",
       state: closeoutToBillingPreparationReviewReadyLocally ? "ready" : "needs-action",
+    },
+  ];
+  const billingPreparationExceptionReviewStatusLabel =
+    billingPreparationExceptionReviewStatus === "cleared-locally"
+      ? "Billing prep exceptions cleared"
+      : billingPreparationExceptionReviewStatus === "billing-action-required"
+        ? "Billing note/action required"
+        : billingPreparationExceptionReviewStatus === "disputed-waived-charges"
+          ? "Disputed or waived charges flagged"
+          : billingPreparationExceptionReviewStatus === "extra-charges-pending"
+            ? "Extra charges pending"
+            : billingPreparationExceptionReviewStatus === "details-incomplete"
+              ? "Trip/service details incomplete"
+              : billingPreparationExceptionReviewStatus === "missing-account"
+                ? "Missing billing account"
+                : "Billing preparation exception review needed";
+  const billingPreparationExceptionReviewOptions: {
+    label: string;
+    value: BillingPreparationExceptionReviewStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Missing Account", value: "missing-account" },
+    { label: "Details Missing", value: "details-incomplete" },
+    { label: "Extra Charges", value: "extra-charges-pending" },
+    { label: "Dispute/Waiver", value: "disputed-waived-charges" },
+    { label: "Billing Action", value: "billing-action-required" },
+    { label: "Cleared Locally", value: "cleared-locally" },
+  ];
+  const billingPreparationExceptionReviewClearedLocally =
+    billingPreparationExceptionReviewStatus === "cleared-locally";
+  const billingPreparationMissingBillingAccount =
+    !billingPreparationExceptionReviewClearedLocally &&
+    (billingPreparationExceptionReviewStatus === "missing-account" ||
+      !closeoutToBillingCustomerAccountReady);
+  const billingPreparationIncompleteTripServiceDetails =
+    !billingPreparationExceptionReviewClearedLocally &&
+    (billingPreparationExceptionReviewStatus === "details-incomplete" ||
+      !closeoutToBillingTripServiceDetailsReviewed);
+  const billingPreparationExtraChargesPending =
+    !billingPreparationExceptionReviewClearedLocally &&
+    (billingPreparationExceptionReviewStatus === "extra-charges-pending" ||
+      !closeoutToBillingExtraChargesReviewed);
+  const billingPreparationDisputedOrWaivedCharges =
+    !billingPreparationExceptionReviewClearedLocally &&
+    billingPreparationExceptionReviewStatus === "disputed-waived-charges";
+  const billingPreparationBillingNoteActionRequired =
+    !billingPreparationExceptionReviewClearedLocally &&
+    (billingPreparationExceptionReviewStatus === "billing-action-required" ||
+      !closeoutToBillingNoteReviewed);
+  const billingPreparationExceptionReviewNextAction =
+    billingPreparationExceptionReviewClearedLocally
+      ? "Billing preparation exceptions cleared locally; keep exception note current."
+      : billingPreparationMissingBillingAccount
+        ? "Confirm billing account before billing preparation."
+        : billingPreparationIncompleteTripServiceDetails
+          ? "Complete trip/service detail review locally."
+          : billingPreparationExtraChargesPending
+            ? "Resolve extra charges review locally."
+            : billingPreparationDisputedOrWaivedCharges
+              ? "Review disputed or waived charges locally."
+              : billingPreparationBillingNoteActionRequired
+                ? "Review billing note/action locally."
+                : "Mark billing-prep exceptions cleared locally.";
+  const billingPreparationExceptionReviewItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: billingPreparationExceptionReviewClearedLocally
+        ? "Billing account readiness cleared locally."
+        : billingPreparationExceptionReviewStatus === "missing-account"
+          ? "Missing billing account flagged locally."
+          : billingPreparationMissingBillingAccount
+            ? "Billing account readiness not confirmed locally."
+            : "Billing account readiness confirmed locally.",
+      key: "missing-billing-account",
+      label: "Missing billing account",
+      state: billingPreparationMissingBillingAccount ? "needs-action" : "ready",
+    },
+    {
+      detail: billingPreparationExceptionReviewClearedLocally
+        ? "Trip/service details cleared locally."
+        : billingPreparationExceptionReviewStatus === "details-incomplete"
+          ? "Incomplete trip/service details flagged locally."
+          : billingPreparationIncompleteTripServiceDetails
+            ? "Trip/service details not complete locally."
+            : "Trip/service details confirmed locally.",
+      key: "incomplete-trip-service-details",
+      label: "Incomplete trip/service details",
+      state: billingPreparationIncompleteTripServiceDetails ? "needs-action" : "ready",
+    },
+    {
+      detail: billingPreparationExceptionReviewClearedLocally
+        ? "Extra charges review cleared locally."
+        : billingPreparationExceptionReviewStatus === "extra-charges-pending"
+          ? "Extra charges pending locally."
+          : billingPreparationExtraChargesPending
+            ? "Extra charges review not cleared locally."
+            : "Extra charges review confirmed locally.",
+      key: "extra-charges-pending",
+      label: "Extra charges pending",
+      state: billingPreparationExtraChargesPending ? "needs-action" : "ready",
+    },
+    {
+      detail: billingPreparationDisputedOrWaivedCharges
+        ? "Disputed or waived charges flagged locally."
+        : "No dispute or waiver flag recorded locally.",
+      key: "disputed-waived-charges",
+      label: "Disputed or waived charges",
+      state: billingPreparationDisputedOrWaivedCharges ? "needs-action" : "ready",
+    },
+    {
+      detail: billingPreparationExceptionReviewClearedLocally
+        ? "Billing note/action cleared locally."
+        : billingPreparationExceptionReviewStatus === "billing-action-required"
+          ? "Billing note/action required locally."
+          : billingPreparationBillingNoteActionRequired
+            ? "Billing note/action not reviewed locally."
+            : "Billing note/action reviewed locally.",
+      key: "billing-note-action-required",
+      label: "Billing note/action required",
+      state: billingPreparationBillingNoteActionRequired ? "needs-action" : "ready",
+    },
+    {
+      detail: billingPreparationExceptionReviewNextAction,
+      key: "next-billing-prep-action",
+      label: "Next billing-prep action",
+      state: billingPreparationExceptionReviewClearedLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${billingPreparationExceptionReviewStatusLabel}. ${
+        clean(billingPreparationExceptionReviewNote) || "No local exception note."
+      }`,
+      key: "local-exception-note-status",
+      label: "Local exception note/status",
+      state: billingPreparationExceptionReviewClearedLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -19348,6 +19494,134 @@ export default function Home() {
               <p
                 className="mt-1.5 border-t border-cyan-200 pt-1.5 text-[11px] leading-4 text-cyan-900 md:text-[10px] md:leading-3"
                 data-admin-closeout-to-billing-preparation-review-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, billing activation, invoice, PDF,
+                payment, payout, notification sending, customer message, driver notification, live location, or
+                parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Billing Preparation Exception Review"
+              className="mt-3 min-w-0 rounded-md border border-rose-200 bg-rose-50/70 p-0.5 sm:p-2.5"
+              data-admin-billing-preparation-exception-review="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-rose-950">
+                      Billing Preparation Exception Review
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        billingPreparationExceptionReviewClearedLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : billingPreparationDisputedOrWaivedCharges ||
+                              billingPreparationBillingNoteActionRequired
+                            ? "bg-rose-100 text-rose-950 ring-rose-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-billing-preparation-exception-review-status="true"
+                    >
+                      {billingPreparationExceptionReviewStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-rose-900"
+                    data-admin-billing-preparation-exception-review-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-rose-900">
+                    Local exception check before any future billing preparation work.
+                  </p>
+                </div>
+                <div
+                  aria-label="Billing preparation exception review status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-rose-200 bg-white p-1 sm:w-64 sm:shrink-0 sm:grid-cols-3 lg:w-72 xl:w-96"
+                  data-admin-billing-preparation-exception-review-controls="true"
+                  role="group"
+                >
+                  {billingPreparationExceptionReviewOptions.map((option) => {
+                    const isSelected = billingPreparationExceptionReviewStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-rose-800 text-white"
+                            : "bg-white text-rose-950 hover:bg-rose-100"
+                        }`}
+                        data-admin-billing-preparation-exception-review-option={option.value}
+                        data-admin-billing-preparation-exception-review-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setBillingPreparationExceptionReviewStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-rose-950 sm:mt-3">
+                <span>Local exception note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                  data-admin-billing-preparation-exception-review-note="true"
+                  onChange={(event) => setBillingPreparationExceptionReviewNote(event.target.value)}
+                  placeholder="Local staff exception note"
+                  value={billingPreparationExceptionReviewNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {billingPreparationExceptionReviewItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "disputed-waived-charges" ||
+                            item.key === "billing-note-action-required" ||
+                            item.key === "next-billing-prep-action" ||
+                            item.key === "local-exception-note-status"
+                          ? "border-rose-200 bg-white text-rose-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-billing-preparation-exception-review-item={item.key}
+                    data-admin-billing-preparation-exception-review-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-billing-preparation-exception-review-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-billing-preparation-exception-review-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-rose-200 pt-1.5 text-[11px] leading-4 text-rose-900 md:text-[10px] md:leading-3"
+                data-admin-billing-preparation-exception-review-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, billing activation, invoice, PDF,
                 payment, payout, notification sending, customer message, driver notification, live location, or

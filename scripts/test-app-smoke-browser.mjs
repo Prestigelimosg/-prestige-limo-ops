@@ -4723,6 +4723,175 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDriverAcknowledgementReadiness = async () => {
+      const readinessViewports = [
+        { height: 812, label: "mobile driver acknowledgement readiness", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop driver acknowledgement readiness", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of readinessViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-driver-acknowledgement-readiness]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-driver-acknowledgement-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-driver-acknowledgement-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-driver-acknowledgement-item") || "",
+                  label:
+                    item.querySelector("[data-admin-driver-acknowledgement-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-driver-acknowledgement-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                actionCount: section.querySelectorAll("button").length,
+                boundary:
+                  section.querySelector("[data-admin-driver-acknowledgement-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                markReadyDisabled:
+                  section.querySelector("[data-admin-driver-acknowledgement-mark-ready]")?.disabled ?? null,
+                status:
+                  section.querySelector("[data-admin-driver-acknowledgement-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+                items,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin driver acknowledgement readiness`,
+        );
+
+        assert.equal(
+          state.text.includes("Driver Acknowledgement Readiness"),
+          true,
+          `${viewport.label}: expected Driver Acknowledgement Readiness title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Driver assigned",
+            "Driver contact available",
+            "Dispatch copy prepared",
+            "Driver job link prepared",
+            "Acknowledgement local status",
+            "Next dispatcher action",
+          ],
+          `${viewport.label}: expected driver acknowledgement readiness labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "driver-assigned",
+            "driver-contact",
+            "dispatch-copy",
+            "driver-job-link",
+            "acknowledgement-local-status",
+            "next-dispatcher-action",
+          ],
+          `${viewport.label}: expected driver acknowledgement readiness keys`,
+        );
+        assert.equal(
+          state.status,
+          "Acknowledgement pending",
+          `${viewport.label}: expected acknowledgement readiness to start pending`,
+        );
+        assert.equal(
+          state.markReadyDisabled,
+          true,
+          `${viewport.label}: expected blank acknowledgement readiness to block local ready mark`,
+        );
+        assert.equal(
+          state.actionCount,
+          1,
+          `${viewport.label}: expected one local-only acknowledgement readiness action`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected acknowledgement readiness boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in acknowledgement readiness`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 620 : 360),
+          true,
+          `${viewport.label}: expected compact acknowledgement readiness, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected acknowledgement readiness items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected acknowledgement readiness not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          markReadyDisabled: state.markReadyDisabled,
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -34531,6 +34700,7 @@ async function runChromeTest() {
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
     state.adminDispatchReleaseChecklist = await checkAdminDispatchReleaseChecklist();
     state.adminDispatchReleaseHandoffPacket = await checkAdminDispatchReleaseHandoffPacket();
+    state.adminDriverAcknowledgementReadiness = await checkAdminDriverAcknowledgementReadiness();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -34642,6 +34812,7 @@ async function runChromeTest() {
     state.adminCustomerAmendCancelReviewRouteBoundaries = [];
     state.adminDispatchReleaseChecklistRouteBoundaries = [];
     state.adminDispatchReleaseHandoffPacketRouteBoundaries = [];
+    state.adminDriverAcknowledgementReadinessRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -34732,6 +34903,32 @@ async function runChromeTest() {
         adminDispatchReleaseHandoffPacketTextLeaks,
         [],
         `Expected no admin Dispatch Release handoff packet wording leak for ${route.context}`,
+      );
+      const adminDriverAcknowledgementReadinessVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-driver-acknowledgement-readiness]"))`,
+      );
+      const adminDriverAcknowledgementReadinessTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Driver Acknowledgement Readiness", "Mark Ack Ready Locally"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminDriverAcknowledgementReadinessRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDriverAcknowledgementReadinessTextLeaks,
+        visible: adminDriverAcknowledgementReadinessVisible,
+      });
+      assert.equal(
+        adminDriverAcknowledgementReadinessVisible,
+        false,
+        `Expected admin driver acknowledgement readiness boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDriverAcknowledgementReadinessTextLeaks,
+        [],
+        `Expected no admin driver acknowledgement readiness wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -34891,6 +35088,32 @@ async function runChromeTest() {
       customerDetailAdminDispatchReleaseHandoffPacketTextLeaks,
       [],
       "Expected no admin Dispatch Release handoff packet wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDriverAcknowledgementReadinessVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-driver-acknowledgement-readiness]"))`,
+    );
+    const customerDetailAdminDriverAcknowledgementReadinessTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Driver Acknowledgement Readiness", "Mark Ack Ready Locally"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminDriverAcknowledgementReadinessRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDriverAcknowledgementReadinessTextLeaks,
+      visible: customerDetailAdminDriverAcknowledgementReadinessVisible,
+    });
+    assert.equal(
+      customerDetailAdminDriverAcknowledgementReadinessVisible,
+      false,
+      "Expected admin driver acknowledgement readiness boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDriverAcknowledgementReadinessTextLeaks,
+      [],
+      "Expected no admin driver acknowledgement readiness wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

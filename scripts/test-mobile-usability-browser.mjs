@@ -709,6 +709,99 @@ async function runChromeTest() {
       );
     };
 
+    const checkDriverAcknowledgementReadiness = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-driver-acknowledgement-readiness='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [...(section?.querySelectorAll("[data-admin-driver-acknowledgement-item]") || [])].map(
+          (item) => {
+            const itemRect = item.getBoundingClientRect();
+
+            return {
+              height: Math.round(itemRect.height),
+              key: item.getAttribute("data-admin-driver-acknowledgement-item") || "",
+              label:
+                item.querySelector("[data-admin-driver-acknowledgement-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              width: Math.round(itemRect.width),
+            };
+          },
+        );
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-driver-acknowledgement-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          markReadyDisabled:
+            section?.querySelector("[data-admin-driver-acknowledgement-mark-ready='true']")?.disabled ?? null,
+          status:
+            section?.querySelector("[data-admin-driver-acknowledgement-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(state.visible, true, `${viewport.label}: expected Driver Acknowledgement Readiness section`);
+      assert.equal(
+        state.text.includes("Driver Acknowledgement Readiness"),
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Readiness title`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Driver assigned",
+          "Driver contact available",
+          "Dispatch copy prepared",
+          "Driver job link prepared",
+          "Acknowledgement local status",
+          "Next dispatcher action",
+        ],
+        `${viewport.label}: expected Driver Acknowledgement Readiness rows`,
+      );
+      assert.equal(
+        state.status,
+        "Acknowledgement pending",
+        `${viewport.label}: expected Driver Acknowledgement Readiness to start pending`,
+      );
+      assert.equal(
+        state.markReadyDisabled,
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Readiness local action to start disabled`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Readiness local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 700 : 360),
+        true,
+        `${viewport.label}: expected compact Driver Acknowledgement Readiness, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Readiness rows to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Driver Acknowledgement Readiness not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -9570,6 +9663,7 @@ async function runChromeTest() {
         if (tabLabel === "Dispatch") {
           await checkDispatcherIntakeControls(viewport);
           await checkDispatchReleaseHandoffPacket(viewport);
+          await checkDriverAcknowledgementReadiness(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }

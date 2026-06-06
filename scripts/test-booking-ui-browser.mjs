@@ -1617,6 +1617,70 @@ function assertBookingUiState(state) {
   assert.match(state.dispatchReleaseHandoffPacket.boundary, /live location/);
   assert.match(state.dispatchReleaseHandoffPacket.boundary, /parser-learning/);
   assert.deepEqual(state.dispatchReleaseHandoffPacket.forbiddenPanelText, []);
+  assert.equal(state.driverAcknowledgementReadiness.visible, true);
+  assert.match(state.driverAcknowledgementReadiness.text, /Driver Acknowledgement Readiness/);
+  assert.equal(state.driverAcknowledgementReadiness.context, "Current dispatch draft");
+  assert.equal(state.driverAcknowledgementReadiness.status, "Acknowledgement pending");
+  assert.deepEqual(
+    state.driverAcknowledgementReadiness.items.map((item) => item.label),
+    [
+      "Driver assigned",
+      "Driver contact available",
+      "Dispatch copy prepared",
+      "Driver job link prepared",
+      "Acknowledgement local status",
+      "Next dispatcher action",
+    ],
+  );
+  assert.deepEqual(
+    state.driverAcknowledgementReadiness.items.map((item) => item.key),
+    [
+      "driver-assigned",
+      "driver-contact",
+      "dispatch-copy",
+      "driver-job-link",
+      "acknowledgement-local-status",
+      "next-dispatcher-action",
+    ],
+  );
+  assert.equal(
+    state.driverAcknowledgementReadiness.items.find((item) => item.key === "driver-assigned")?.state,
+    "ready",
+  );
+  assert.equal(
+    state.driverAcknowledgementReadiness.items.find((item) => item.key === "driver-contact")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.driverAcknowledgementReadiness.items.find((item) => item.key === "dispatch-copy")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.driverAcknowledgementReadiness.items.find((item) => item.key === "driver-job-link")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.driverAcknowledgementReadiness.items.find((item) => item.key === "acknowledgement-local-status")?.detail,
+    "Acknowledgement pending",
+  );
+  assert.equal(
+    state.driverAcknowledgementReadiness.items.find((item) => item.key === "next-dispatcher-action")?.detail,
+    "Add driver contact before acknowledgement.",
+  );
+  assert.equal(state.driverAcknowledgementReadiness.markReadyDisabled, true);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /Local UI only/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /No Supabase write/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /live database access/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /notification sending/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /customer message/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /driver notification/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /billing/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /payment/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /PDF/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /payout/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /live location/);
+  assert.match(state.driverAcknowledgementReadiness.boundary, /parser-learning/);
+  assert.deepEqual(state.driverAcknowledgementReadiness.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -2592,6 +2656,52 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const driverAcknowledgementReadiness = () => {
+        const section = document.querySelector("[data-admin-driver-acknowledgement-readiness='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-driver-acknowledgement-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section?.querySelector("[data-admin-driver-acknowledgement-context='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [...(section?.querySelectorAll("[data-admin-driver-acknowledgement-item]") || [])].map((item) => ({
+            detail:
+              item.querySelector("[data-admin-driver-acknowledgement-detail]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-driver-acknowledgement-item") || "",
+            label:
+              item.querySelector("[data-admin-driver-acknowledgement-label]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-driver-acknowledgement-item-state") || "",
+          })),
+          markReadyDisabled:
+            section?.querySelector("[data-admin-driver-acknowledgement-mark-ready='true']")?.disabled ?? null,
+          status:
+            section?.querySelector("[data-admin-driver-acknowledgement-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
@@ -2599,6 +2709,7 @@ async function runChromeTest() {
         customerCopy: preTextByHeading("Customer Copy"),
         dispatchReleaseChecklist: dispatchReleaseChecklist(),
         dispatchReleaseHandoffPacket: dispatchReleaseHandoffPacket(),
+        driverAcknowledgementReadiness: driverAcknowledgementReadiness(),
         driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
         errors: window.__prestigeErrors || [],
         fields,

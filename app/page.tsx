@@ -3886,6 +3886,7 @@ export default function Home() {
   const [driverJobLinkCopyMessage, setDriverJobLinkCopyMessage] = useState<Message | null>(null);
   const [dispatchReleaseMessage, setDispatchReleaseMessage] = useState<Message | null>(null);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
+  const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -8800,6 +8801,66 @@ export default function Home() {
       key: "local-release-note",
       label: "Local release note/status",
       state: dispatchReleaseReady ? "ready" : "needs-action",
+    },
+  ];
+  const driverAcknowledgementCoreReady =
+    Boolean(dispatchReleaseDriverName) &&
+    Boolean(dispatchReleaseDriverContact) &&
+    dispatchReleaseDriverDispatchReady &&
+    dispatchReleaseDriverJobLinkReady;
+  const driverAcknowledgementLocalStatus =
+    driverAcknowledgementMessage && driverAcknowledgementCoreReady
+      ? "Ready locally"
+      : driverAcknowledgementCoreReady
+        ? "Ready to mark locally"
+        : "Acknowledgement pending";
+  const driverAcknowledgementNextAction = !dispatchReleaseDriverName
+    ? "Assign driver before acknowledgement."
+    : !dispatchReleaseDriverContact
+      ? "Add driver contact before acknowledgement."
+      : !dispatchReleaseDriverDispatchReady
+        ? "Prepare driver dispatch copy."
+        : !dispatchReleaseDriverJobLinkReady
+          ? "Prepare driver job link."
+          : driverAcknowledgementMessage
+            ? "Monitor manual driver acknowledgement."
+            : "Mark ready locally, then contact driver manually.";
+  const driverAcknowledgementItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: dispatchReleaseDriverName ? dispatchReleaseDriverName : "Driver not assigned.",
+      key: "driver-assigned",
+      label: "Driver assigned",
+      state: dispatchReleaseDriverName ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverContact ? "Contact available." : "Driver contact missing.",
+      key: "driver-contact",
+      label: "Driver contact available",
+      state: dispatchReleaseDriverContact ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverDispatchReady ? "Dispatch copy prepared." : "Dispatch copy needs review.",
+      key: "dispatch-copy",
+      label: "Dispatch copy prepared",
+      state: dispatchReleaseDriverDispatchReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverJobLinkReady ? "Driver job link prepared." : "Driver job link not prepared.",
+      key: "driver-job-link",
+      label: "Driver job link prepared",
+      state: dispatchReleaseDriverJobLinkReady ? "ready" : "needs-action",
+    },
+    {
+      detail: driverAcknowledgementLocalStatus,
+      key: "acknowledgement-local-status",
+      label: "Acknowledgement local status",
+      state: driverAcknowledgementCoreReady ? "ready" : "needs-action",
+    },
+    {
+      detail: driverAcknowledgementNextAction,
+      key: "next-dispatcher-action",
+      label: "Next dispatcher action",
+      state: driverAcknowledgementCoreReady ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -17220,6 +17281,107 @@ export default function Home() {
               <p
                 className="mt-2 border-t border-teal-200 pt-2 text-[11px] leading-4 text-teal-900"
                 data-admin-dispatch-release-handoff-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Driver Acknowledgement Readiness"
+              className="mt-3 rounded-md border border-indigo-200 bg-indigo-50/70 p-2.5"
+              data-admin-driver-acknowledgement-readiness="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-indigo-950">
+                      Driver Acknowledgement Readiness
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        driverAcknowledgementCoreReady
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-driver-acknowledgement-status="true"
+                    >
+                      {driverAcknowledgementLocalStatus}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-indigo-900"
+                    data-admin-driver-acknowledgement-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-indigo-900">
+                    Admin-only follow-up before staff manually request driver acknowledgement.
+                  </p>
+                </div>
+                <button
+                  className="min-h-9 rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-left text-sm font-semibold text-indigo-950 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                  data-admin-driver-acknowledgement-mark-ready="true"
+                  disabled={!driverAcknowledgementCoreReady}
+                  onClick={() => {
+                    setDriverAcknowledgementMessage({
+                      tone: "success",
+                      text: "Driver acknowledgement readiness marked locally. No message, notification, or database write was sent.",
+                    });
+                  }}
+                  type="button"
+                >
+                  Mark Ack Ready Locally
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+                {driverAcknowledgementItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-2 py-1.5 text-[11px] ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-driver-acknowledgement-item={item.key}
+                    data-admin-driver-acknowledgement-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p className="font-semibold leading-4" data-admin-driver-acknowledgement-label={item.key}>
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-driver-acknowledgement-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {driverAcknowledgementMessage ? (
+                <p
+                  className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
+                    driverAcknowledgementMessage.tone,
+                  )}`}
+                  data-admin-driver-acknowledgement-feedback="true"
+                >
+                  {driverAcknowledgementMessage.text}
+                </p>
+              ) : null}
+              <p
+                className="mt-2 border-t border-indigo-200 pt-2 text-[11px] leading-4 text-indigo-900"
+                data-admin-driver-acknowledgement-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.

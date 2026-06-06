@@ -613,6 +613,102 @@ async function runChromeTest() {
       );
     };
 
+    const checkDispatchReleaseHandoffPacket = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const packet = document.querySelector("[data-admin-dispatch-release-handoff-packet='true']");
+        const note = packet?.querySelector("[data-admin-dispatch-release-handoff-note='true']");
+        const packetRect = packet?.getBoundingClientRect();
+        const noteRect = note?.getBoundingClientRect();
+        const items = [...(packet?.querySelectorAll("[data-admin-dispatch-release-handoff-item]") || [])].map(
+          (item) => {
+            const itemRect = item.getBoundingClientRect();
+
+            return {
+              height: Math.round(itemRect.height),
+              key: item.getAttribute("data-admin-dispatch-release-handoff-item") || "",
+              label:
+                item.querySelector("[data-admin-dispatch-release-handoff-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              width: Math.round(itemRect.width),
+            };
+          },
+        );
+
+        return {
+          boundary:
+            packet?.querySelector("[data-admin-dispatch-release-handoff-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(packetRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          status:
+            packet?.querySelector("[data-admin-dispatch-release-handoff-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text: packet?.innerText || "",
+          visible: Boolean(packetRect && packetRect.width > 0 && packetRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(state.visible, true, `${viewport.label}: expected Dispatch Release handoff packet`);
+      assert.equal(
+        state.text.includes("Dispatch Release Handoff Packet"),
+        true,
+        `${viewport.label}: expected Dispatch Release handoff packet title`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Release status",
+          "Customer update copy",
+          "Driver dispatch copy",
+          "Driver job link",
+          "Assigned driver summary",
+          "Local release note/status",
+        ],
+        `${viewport.label}: expected Dispatch Release handoff packet rows`,
+      );
+      assert.equal(
+        state.status,
+        "Not ready for local release",
+        `${viewport.label}: expected Dispatch Release handoff packet to start blocked`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected local release note to start empty`);
+      assert.equal(
+        state.noteHeight >= 60,
+        true,
+        `${viewport.label}: expected local release note field to be touch-friendly`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Dispatch Release handoff packet local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 700 : 460),
+        true,
+        `${viewport.label}: expected compact Dispatch Release handoff packet, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Dispatch Release handoff packet rows to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Dispatch Release handoff packet not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -9473,6 +9569,7 @@ async function runChromeTest() {
 
         if (tabLabel === "Dispatch") {
           await checkDispatcherIntakeControls(viewport);
+          await checkDispatchReleaseHandoffPacket(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }

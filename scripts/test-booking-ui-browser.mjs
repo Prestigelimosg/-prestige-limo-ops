@@ -1580,6 +1580,43 @@ function assertBookingUiState(state) {
   assert.match(state.dispatchReleaseChecklist.boundary, /live location/);
   assert.match(state.dispatchReleaseChecklist.boundary, /parser-learning/);
   assert.deepEqual(state.dispatchReleaseChecklist.forbiddenPanelText, []);
+  assert.equal(state.dispatchReleaseHandoffPacket.visible, true);
+  assert.match(state.dispatchReleaseHandoffPacket.text, /Dispatch Release Handoff Packet/);
+  assert.equal(state.dispatchReleaseHandoffPacket.context, "Current dispatch draft");
+  assert.equal(state.dispatchReleaseHandoffPacket.status, "Not ready for local release");
+  assert.deepEqual(
+    state.dispatchReleaseHandoffPacket.items.map((item) => item.label),
+    [
+      "Release status",
+      "Customer update copy",
+      "Driver dispatch copy",
+      "Driver job link",
+      "Assigned driver summary",
+      "Local release note/status",
+    ],
+  );
+  assert.equal(
+    state.dispatchReleaseHandoffPacket.items.find((item) => item.key === "release-status")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.dispatchReleaseHandoffPacket.items.find((item) => item.key === "assigned-driver-summary")?.state,
+    "needs-action",
+  );
+  assert.equal(state.dispatchReleaseHandoffPacket.noteValue, "");
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /Local UI only/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /No Supabase write/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /live database access/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /notification sending/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /customer message/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /driver notification/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /billing/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /payment/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /PDF/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /payout/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /live location/);
+  assert.match(state.dispatchReleaseHandoffPacket.boundary, /parser-learning/);
+  assert.deepEqual(state.dispatchReleaseHandoffPacket.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -2510,12 +2547,58 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const dispatchReleaseHandoffPacket = () => {
+        const packet = document.querySelector("[data-admin-dispatch-release-handoff-packet='true']");
+        const rect = packet?.getBoundingClientRect();
+        const text = packet?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            packet?.querySelector("[data-admin-dispatch-release-handoff-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            packet?.querySelector("[data-admin-dispatch-release-handoff-context='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [...(packet?.querySelectorAll("[data-admin-dispatch-release-handoff-item]") || [])].map((item) => ({
+            detail:
+              item.querySelector("[data-admin-dispatch-release-handoff-detail]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-dispatch-release-handoff-item") || "",
+            label:
+              item.querySelector("[data-admin-dispatch-release-handoff-label]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-dispatch-release-handoff-item-state") || "",
+          })),
+          noteValue: packet?.querySelector("[data-admin-dispatch-release-handoff-note='true']")?.value ?? null,
+          status:
+            packet?.querySelector("[data-admin-dispatch-release-handoff-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
         consoleErrors: window.__prestigeConsoleErrors || [],
         customerCopy: preTextByHeading("Customer Copy"),
         dispatchReleaseChecklist: dispatchReleaseChecklist(),
+        dispatchReleaseHandoffPacket: dispatchReleaseHandoffPacket(),
         driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
         errors: window.__prestigeErrors || [],
         fields,

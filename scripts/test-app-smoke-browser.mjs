@@ -4553,6 +4553,176 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDispatchReleaseHandoffPacket = async () => {
+      const packetViewports = [
+        { height: 812, label: "mobile dispatch release handoff packet", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop dispatch release handoff packet", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of packetViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const packet = document.querySelector("[data-admin-dispatch-release-handoff-packet]");
+              if (!packet) {
+                return false;
+              }
+
+              const rect = packet.getBoundingClientRect();
+              const items = [...packet.querySelectorAll("[data-admin-dispatch-release-handoff-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-dispatch-release-handoff-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-dispatch-release-handoff-item") || "",
+                  label:
+                    item.querySelector("[data-admin-dispatch-release-handoff-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-dispatch-release-handoff-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = packet.querySelector("[data-admin-dispatch-release-handoff-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const text = packet.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  packet.querySelector("[data-admin-dispatch-release-handoff-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                status:
+                  packet.querySelector("[data-admin-dispatch-release-handoff-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+                items,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin dispatch release handoff packet`,
+        );
+
+        assert.equal(
+          state.text.includes("Dispatch Release Handoff Packet"),
+          true,
+          `${viewport.label}: expected Dispatch Release handoff packet title`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Release status",
+            "Customer update copy",
+            "Driver dispatch copy",
+            "Driver job link",
+            "Assigned driver summary",
+            "Local release note/status",
+          ],
+          `${viewport.label}: expected Dispatch Release handoff packet labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "release-status",
+            "customer-update-copy",
+            "driver-dispatch-copy",
+            "driver-job-link",
+            "assigned-driver-summary",
+            "local-release-note",
+          ],
+          `${viewport.label}: expected Dispatch Release handoff packet keys`,
+        );
+        assert.equal(
+          state.status,
+          "Not ready for local release",
+          `${viewport.label}: expected handoff packet to remain blocked for blank dispatch draft`,
+        );
+        assert.equal(
+          state.noteValue,
+          "",
+          `${viewport.label}: expected local release note to start empty`,
+        );
+        assert.equal(
+          state.noteHeight >= 60,
+          true,
+          `${viewport.label}: expected touch-friendly local release note field`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected Dispatch Release handoff packet boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in Dispatch Release handoff packet`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 680 : 440),
+          true,
+          `${viewport.label}: expected compact Dispatch Release handoff packet, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected Dispatch Release handoff packet items to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected Dispatch Release handoff packet not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -34360,6 +34530,7 @@ async function runChromeTest() {
     };
     state.adminTelegramAlertPreview = await checkAdminTelegramAlertPreview();
     state.adminDispatchReleaseChecklist = await checkAdminDispatchReleaseChecklist();
+    state.adminDispatchReleaseHandoffPacket = await checkAdminDispatchReleaseHandoffPacket();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -34470,6 +34641,7 @@ async function runChromeTest() {
     state.adminBookingPersistenceRouteBoundaries = [];
     state.adminCustomerAmendCancelReviewRouteBoundaries = [];
     state.adminDispatchReleaseChecklistRouteBoundaries = [];
+    state.adminDispatchReleaseHandoffPacketRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -34536,6 +34708,30 @@ async function runChromeTest() {
         adminDispatchReleaseChecklistTextLeaks,
         [],
         `Expected no admin Dispatch Release wording leak for ${route.context}`,
+      );
+      const adminDispatchReleaseHandoffPacketVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-dispatch-release-handoff-packet]"))`,
+      );
+      const adminDispatchReleaseHandoffPacketTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Dispatch Release Handoff Packet", "Local release note"].filter((text) => bodyText.includes(text));
+        })()`,
+      );
+      state.adminDispatchReleaseHandoffPacketRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDispatchReleaseHandoffPacketTextLeaks,
+        visible: adminDispatchReleaseHandoffPacketVisible,
+      });
+      assert.equal(
+        adminDispatchReleaseHandoffPacketVisible,
+        false,
+        `Expected admin Dispatch Release handoff packet boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDispatchReleaseHandoffPacketTextLeaks,
+        [],
+        `Expected no admin Dispatch Release handoff packet wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -34671,6 +34867,30 @@ async function runChromeTest() {
       customerDetailAdminDispatchReleaseChecklistTextLeaks,
       [],
       "Expected no admin Dispatch Release wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDispatchReleaseHandoffPacketVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-dispatch-release-handoff-packet]"))`,
+    );
+    const customerDetailAdminDispatchReleaseHandoffPacketTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Dispatch Release Handoff Packet", "Local release note"].filter((text) => bodyText.includes(text));
+      })()`,
+    );
+    state.adminDispatchReleaseHandoffPacketRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDispatchReleaseHandoffPacketTextLeaks,
+      visible: customerDetailAdminDispatchReleaseHandoffPacketVisible,
+    });
+    assert.equal(
+      customerDetailAdminDispatchReleaseHandoffPacketVisible,
+      false,
+      "Expected admin Dispatch Release handoff packet boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDispatchReleaseHandoffPacketTextLeaks,
+      [],
+      "Expected no admin Dispatch Release handoff packet wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

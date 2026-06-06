@@ -3885,6 +3885,7 @@ export default function Home() {
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [driverJobLinkCopyMessage, setDriverJobLinkCopyMessage] = useState<Message | null>(null);
   const [dispatchReleaseMessage, setDispatchReleaseMessage] = useState<Message | null>(null);
+  const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -8753,6 +8754,54 @@ export default function Home() {
     : loadedBookingId
       ? `Loaded booking: ${loadedBookingId}`
       : "Current dispatch draft";
+  const dispatchReleasePendingCount = dispatchReleaseChecklist.filter((item) => item.state !== "ready").length;
+  const dispatchReleaseLocalStatus = dispatchReleaseMessage && dispatchReleaseReady
+    ? "Marked ready locally"
+    : dispatchReleaseReady
+      ? "Ready to mark locally"
+      : "Not ready for local release";
+  const dispatchReleaseHandoffItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: dispatchReleaseReady
+        ? "All release checks clear."
+        : `${dispatchReleasePendingCount} check${dispatchReleasePendingCount === 1 ? "" : "s"} pending.`,
+      key: "release-status",
+      label: "Release status",
+      state: dispatchReleaseReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseCustomerCopyReady ? "Customer update copy ready." : "Review customer copy.",
+      key: "customer-update-copy",
+      label: "Customer update copy",
+      state: dispatchReleaseCustomerCopyReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverDispatchReady ? "Driver dispatch copy ready." : "Review driver dispatch copy.",
+      key: "driver-dispatch-copy",
+      label: "Driver dispatch copy",
+      state: dispatchReleaseDriverDispatchReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverJobLinkReady ? "Driver job link ready." : "Driver job link not ready.",
+      key: "driver-job-link",
+      label: "Driver job link",
+      state: dispatchReleaseDriverJobLinkReady ? "ready" : "needs-action",
+    },
+    {
+      detail: dispatchReleaseDriverReady
+        ? `${dispatchReleaseDriverName} · ${dispatchReleaseDriverPlate}`
+        : `Needs: ${dispatchReleaseDriverMissing.join(", ")}.`,
+      key: "assigned-driver-summary",
+      label: "Assigned driver summary",
+      state: dispatchReleaseDriverReady ? "ready" : "needs-action",
+    },
+    {
+      detail: `${dispatchReleaseLocalStatus}. ${clean(dispatchReleaseLocalNote) || "No local release note."}`,
+      key: "local-release-note",
+      label: "Local release note/status",
+      state: dispatchReleaseReady ? "ready" : "needs-action",
+    },
+  ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
   const mockMidnightChargeOverrideDetected =
     mockMidnightChargeOverrideMode === "force-on"
@@ -17042,10 +17091,10 @@ export default function Home() {
                   Mark Ready Locally
                 </button>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
                 {dispatchReleaseChecklist.map((item) => (
                   <div
-                    className={`min-w-0 rounded-md border px-2 py-1.5 text-[11px] ${
+                    className={`min-h-12 min-w-0 rounded-md border px-2 py-1.5 text-[11px] ${
                       item.state === "ready"
                         ? "border-emerald-200 bg-white text-emerald-950"
                         : "border-amber-200 bg-white text-amber-950"
@@ -17090,6 +17139,90 @@ export default function Home() {
               >
                 UI/local-state only. No Supabase write, live database access, customer message, driver notification,
                 billing, payment, PDF, payout, live location, or parser-learning behavior is created here.
+              </p>
+            </section>
+
+            <section
+              aria-label="Dispatch Release handoff packet"
+              className="mt-3 rounded-md border border-teal-200 bg-teal-50/70 p-2.5"
+              data-admin-dispatch-release-handoff-packet="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-teal-950">
+                      Dispatch Release Handoff Packet
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        dispatchReleaseReady
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-dispatch-release-handoff-status="true"
+                    >
+                      {dispatchReleaseLocalStatus}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-teal-900"
+                    data-admin-dispatch-release-handoff-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                </div>
+                <label className="min-w-0 text-xs font-semibold text-teal-950 sm:w-64">
+                  <span>Local release note</span>
+                  <textarea
+                    className="mt-1 min-h-16 w-full min-w-0 resize-y rounded-md border border-teal-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    data-admin-dispatch-release-handoff-note="true"
+                    onChange={(event) => setDispatchReleaseLocalNote(event.target.value)}
+                    placeholder="Local staff note"
+                    value={dispatchReleaseLocalNote}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+                {dispatchReleaseHandoffItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-2 py-1.5 text-[11px] ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-dispatch-release-handoff-item={item.key}
+                    data-admin-dispatch-release-handoff-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p className="font-semibold leading-4" data-admin-dispatch-release-handoff-label={item.key}>
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-dispatch-release-handoff-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-2 border-t border-teal-200 pt-2 text-[11px] leading-4 text-teal-900"
+                data-admin-dispatch-release-handoff-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
               </p>
             </section>
           </div>

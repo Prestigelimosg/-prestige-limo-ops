@@ -548,6 +548,14 @@ type DispatchReleaseChecklistItem = {
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
+type DayOfTripDispatchMonitorStatus =
+  | "reminder-due"
+  | "otw"
+  | "ots"
+  | "pob"
+  | "completed"
+  | "needs-call";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3892,6 +3900,8 @@ export default function Home() {
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
     useState<DriverAcknowledgementFollowUpStatus>("pending");
   const [driverAcknowledgementFollowUpNote, setDriverAcknowledgementFollowUpNote] = useState("");
+  const [dayOfTripDispatchMonitorStatus, setDayOfTripDispatchMonitorStatus] =
+    useState<DayOfTripDispatchMonitorStatus>("reminder-due");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -8933,6 +8943,109 @@ export default function Home() {
       key: "local-follow-up-note",
       label: "Local follow-up note/status",
       state: driverAcknowledgementFollowUpStatus === "acknowledged" ? "ready" : "needs-action",
+    },
+  ];
+  const dayOfTripDriverAcknowledged = driverAcknowledgementFollowUpStatus === "acknowledged";
+  const dayOfTripNoResponse =
+    driverAcknowledgementFollowUpStatus === "needs-call" ||
+    dayOfTripDispatchMonitorStatus === "needs-call";
+  const dayOfTripDispatchMonitorStatusLabel =
+    dayOfTripDispatchMonitorStatus === "needs-call"
+      ? "No response / needs call"
+      : dayOfTripDispatchMonitorStatus === "completed"
+        ? "Completed"
+        : dayOfTripDispatchMonitorStatus === "pob"
+          ? "POB"
+          : dayOfTripDispatchMonitorStatus === "ots"
+            ? "OTS"
+            : dayOfTripDispatchMonitorStatus === "otw"
+              ? "OTW"
+              : "Reminder due";
+  const dayOfTripDispatchMonitorNextAction = dayOfTripNoResponse
+    ? "Call driver; escalate if no response."
+    : !dayOfTripDriverAcknowledged
+      ? "Confirm driver acknowledgement before day-of-trip progress."
+      : dayOfTripDispatchMonitorStatus === "completed"
+        ? "Close trip locally after staff review."
+        : dayOfTripDispatchMonitorStatus === "pob"
+          ? "Watch for manual completion update."
+          : dayOfTripDispatchMonitorStatus === "ots"
+            ? "Watch for manual POB update."
+            : dayOfTripDispatchMonitorStatus === "otw"
+              ? "Watch for manual OTS update."
+              : "Manual reminder due; update progress after driver reply.";
+  const dayOfTripDispatchMonitorOptions: {
+    label: string;
+    value: DayOfTripDispatchMonitorStatus;
+  }[] = [
+    { label: "Reminder Due", value: "reminder-due" },
+    { label: "OTW", value: "otw" },
+    { label: "OTS", value: "ots" },
+    { label: "POB", value: "pob" },
+    { label: "Completed", value: "completed" },
+    { label: "Needs Call", value: "needs-call" },
+  ];
+  const dayOfTripProgressReached = (status: DayOfTripDispatchMonitorStatus) => {
+    const order: DayOfTripDispatchMonitorStatus[] = ["otw", "ots", "pob", "completed"];
+    const currentIndex = order.indexOf(dayOfTripDispatchMonitorStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const dayOfTripDispatchMonitorItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: dayOfTripDriverAcknowledged ? "Acknowledged locally." : "Not acknowledged locally.",
+      key: "driver-acknowledged",
+      label: "Driver acknowledged",
+      state: dayOfTripDriverAcknowledged ? "ready" : "needs-action",
+    },
+    {
+      detail:
+        dayOfTripDispatchMonitorStatus === "reminder-due"
+          ? "Manual reminder due."
+          : "Reminder cleared locally.",
+      key: "reminder-due",
+      label: "Reminder due",
+      state: dayOfTripDispatchMonitorStatus === "reminder-due" ? "needs-action" : "ready",
+    },
+    {
+      detail: dayOfTripProgressReached("otw") ? "Marked OTW locally." : "Not marked OTW locally.",
+      key: "otw",
+      label: "OTW",
+      state: dayOfTripProgressReached("otw") ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripProgressReached("ots") ? "Marked OTS locally." : "Not marked OTS locally.",
+      key: "ots",
+      label: "OTS",
+      state: dayOfTripProgressReached("ots") ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripProgressReached("pob") ? "Marked POB locally." : "Not marked POB locally.",
+      key: "pob",
+      label: "POB",
+      state: dayOfTripProgressReached("pob") ? "ready" : "needs-action",
+    },
+    {
+      detail:
+        dayOfTripDispatchMonitorStatus === "completed"
+          ? "Marked completed locally."
+          : "Not completed locally.",
+      key: "completed",
+      label: "Completed",
+      state: dayOfTripDispatchMonitorStatus === "completed" ? "ready" : "needs-action",
+    },
+    {
+      detail: dayOfTripNoResponse ? "Call needed." : "No call flag.",
+      key: "no-response-needs-call",
+      label: "No response / needs call",
+      state: dayOfTripNoResponse ? "needs-action" : "ready",
+    },
+    {
+      detail: dayOfTripDispatchMonitorNextAction,
+      key: "next-dispatcher-action",
+      label: "Next dispatcher action",
+      state: dayOfTripDispatchMonitorStatus === "completed" ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -17580,6 +17693,124 @@ export default function Home() {
               <p
                 className="mt-2 border-t border-cyan-200 pt-2 text-[11px] leading-4 text-cyan-900"
                 data-admin-driver-acknowledgement-follow-up-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Day-of-Trip Dispatch Monitor"
+              className="mt-3 rounded-md border border-lime-200 bg-lime-50/70 p-1 sm:p-2.5"
+              data-admin-day-of-trip-dispatch-monitor="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-lime-950">
+                      Day-of-Trip Dispatch Monitor
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        dayOfTripDispatchMonitorStatus === "completed"
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : dayOfTripDispatchMonitorStatus === "needs-call"
+                            ? "bg-rose-100 text-rose-900 ring-rose-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-day-of-trip-dispatch-monitor-status="true"
+                    >
+                      {dayOfTripDispatchMonitorStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-lime-900"
+                    data-admin-day-of-trip-dispatch-monitor-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-lime-900">
+                    Local day-of-trip bridge from release to job progress.
+                  </p>
+                </div>
+                <div
+                  aria-label="Day-of-trip dispatch progress"
+                  className="grid w-full grid-cols-2 gap-1 rounded-md border border-lime-200 bg-white p-1 min-[360px]:grid-cols-3 sm:w-64 sm:shrink-0 lg:w-72 xl:w-96"
+                  data-admin-day-of-trip-dispatch-monitor-controls="true"
+                  role="group"
+                >
+                  {dayOfTripDispatchMonitorOptions.map((option) => {
+                    const isSelected = dayOfTripDispatchMonitorStatus === option.value;
+                    const isDisabled =
+                      !dayOfTripDriverAcknowledged &&
+                      option.value !== "reminder-due" &&
+                      option.value !== "needs-call";
+
+                    return (
+                      <button
+                        className={`min-h-9 rounded px-2 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+                          isSelected
+                            ? "bg-lime-700 text-white"
+                            : "bg-white text-lime-950 hover:bg-lime-100"
+                        }`}
+                        data-admin-day-of-trip-dispatch-monitor-option={option.value}
+                        data-admin-day-of-trip-dispatch-monitor-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        disabled={isDisabled}
+                        key={option.value}
+                        onClick={() => setDayOfTripDispatchMonitorStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {dayOfTripDispatchMonitorItems.map((item) => (
+                  <div
+                    className={`min-h-[52px] min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 md:min-h-12 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "no-response-needs-call" && dayOfTripNoResponse
+                          ? "border-rose-200 bg-white text-rose-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-day-of-trip-dispatch-monitor-item={item.key}
+                    data-admin-day-of-trip-dispatch-monitor-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="font-semibold leading-4"
+                        data-admin-day-of-trip-dispatch-monitor-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-day-of-trip-dispatch-monitor-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-2 border-t border-lime-200 pt-2 text-[11px] leading-4 text-lime-900 md:text-[10px] md:leading-3"
+                data-admin-day-of-trip-dispatch-monitor-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.

@@ -1755,6 +1755,84 @@ function assertBookingUiState(state) {
   assert.match(state.driverAcknowledgementFollowUp.boundary, /live location/);
   assert.match(state.driverAcknowledgementFollowUp.boundary, /parser-learning/);
   assert.deepEqual(state.driverAcknowledgementFollowUp.forbiddenPanelText, []);
+  assert.equal(state.dayOfTripDispatchMonitor.visible, true);
+  assert.match(state.dayOfTripDispatchMonitor.text, /Day-of-Trip Dispatch Monitor/);
+  assert.equal(state.dayOfTripDispatchMonitor.context, "Current dispatch draft");
+  assert.equal(state.dayOfTripDispatchMonitor.status, "Reminder due");
+  assert.deepEqual(
+    state.dayOfTripDispatchMonitor.options.map((option) => option.label),
+    ["Reminder Due", "OTW", "OTS", "POB", "Completed", "Needs Call"],
+  );
+  assert.deepEqual(
+    state.dayOfTripDispatchMonitor.options.map((option) => [
+      option.value,
+      option.state,
+      option.disabled,
+    ]),
+    [
+      ["reminder-due", "selected", false],
+      ["otw", "idle", true],
+      ["ots", "idle", true],
+      ["pob", "idle", true],
+      ["completed", "idle", true],
+      ["needs-call", "idle", false],
+    ],
+  );
+  assert.deepEqual(
+    state.dayOfTripDispatchMonitor.items.map((item) => item.label),
+    [
+      "Driver acknowledged",
+      "Reminder due",
+      "OTW",
+      "OTS",
+      "POB",
+      "Completed",
+      "No response / needs call",
+      "Next dispatcher action",
+    ],
+  );
+  assert.deepEqual(
+    state.dayOfTripDispatchMonitor.items.map((item) => item.key),
+    [
+      "driver-acknowledged",
+      "reminder-due",
+      "otw",
+      "ots",
+      "pob",
+      "completed",
+      "no-response-needs-call",
+      "next-dispatcher-action",
+    ],
+  );
+  assert.equal(
+    state.dayOfTripDispatchMonitor.items.find((item) => item.key === "driver-acknowledged")?.detail,
+    "Not acknowledged locally.",
+  );
+  assert.equal(
+    state.dayOfTripDispatchMonitor.items.find((item) => item.key === "reminder-due")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.dayOfTripDispatchMonitor.items.find((item) => item.key === "no-response-needs-call")?.state,
+    "ready",
+  );
+  assert.equal(
+    state.dayOfTripDispatchMonitor.items.find((item) => item.key === "next-dispatcher-action")?.detail,
+    "Confirm driver acknowledgement before day-of-trip progress.",
+  );
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /Local UI only/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /No Supabase write/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /live database access/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /notification sending/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /customer message/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /driver notification/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /billing/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /payment/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /PDF/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /payout/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /live location/);
+  assert.match(state.dayOfTripDispatchMonitor.boundary, /parser-learning/);
+  assert.deepEqual(state.dayOfTripDispatchMonitor.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -2832,11 +2910,66 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const dayOfTripDispatchMonitor = () => {
+        const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-day-of-trip-dispatch-monitor-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section?.querySelector("[data-admin-day-of-trip-dispatch-monitor-context='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [...(section?.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-item]") || [])].map(
+            (item) => ({
+              detail:
+                item.querySelector("[data-admin-day-of-trip-dispatch-monitor-detail]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              key: item.getAttribute("data-admin-day-of-trip-dispatch-monitor-item") || "",
+              label:
+                item.querySelector("[data-admin-day-of-trip-dispatch-monitor-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              state: item.getAttribute("data-admin-day-of-trip-dispatch-monitor-item-state") || "",
+            }),
+          ),
+          options: [...(section?.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-option]") || [])].map(
+            (option) => ({
+              disabled: option.disabled,
+              label: option.textContent.replace(/\\s+/g, " ").trim(),
+              state: option.getAttribute("data-admin-day-of-trip-dispatch-monitor-option-state") || "",
+              value: option.getAttribute("data-admin-day-of-trip-dispatch-monitor-option") || "",
+            }),
+          ),
+          status:
+            section?.querySelector("[data-admin-day-of-trip-dispatch-monitor-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
         consoleErrors: window.__prestigeConsoleErrors || [],
         customerCopy: preTextByHeading("Customer Copy"),
+        dayOfTripDispatchMonitor: dayOfTripDispatchMonitor(),
         dispatchReleaseChecklist: dispatchReleaseChecklist(),
         dispatchReleaseHandoffPacket: dispatchReleaseHandoffPacket(),
         driverAcknowledgementFollowUp: driverAcknowledgementFollowUp(),

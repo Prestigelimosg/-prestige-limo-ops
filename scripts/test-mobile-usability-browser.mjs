@@ -922,6 +922,120 @@ async function runChromeTest() {
       );
     };
 
+    const checkDayOfTripDispatchMonitor = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [...(section?.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-item]") || [])].map(
+          (item) => {
+            const itemRect = item.getBoundingClientRect();
+
+            return {
+              height: Math.round(itemRect.height),
+              key: item.getAttribute("data-admin-day-of-trip-dispatch-monitor-item") || "",
+              label:
+                item.querySelector("[data-admin-day-of-trip-dispatch-monitor-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              width: Math.round(itemRect.width),
+            };
+          },
+        );
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            disabled: option.disabled,
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-day-of-trip-dispatch-monitor-option-state") || "",
+            value: option.getAttribute("data-admin-day-of-trip-dispatch-monitor-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-day-of-trip-dispatch-monitor-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          options,
+          status:
+            section?.querySelector("[data-admin-day-of-trip-dispatch-monitor-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(state.visible, true, `${viewport.label}: expected Day-of-Trip Dispatch Monitor section`);
+      assert.equal(
+        state.text.includes("Day-of-Trip Dispatch Monitor"),
+        true,
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        ["Reminder Due", "OTW", "OTS", "POB", "Completed", "Needs Call"],
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor local status controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Driver acknowledged",
+          "Reminder due",
+          "OTW",
+          "OTS",
+          "POB",
+          "Completed",
+          "No response / needs call",
+          "Next dispatcher action",
+        ],
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor rows`,
+      );
+      assert.equal(
+        state.status,
+        "Reminder due",
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor to start reminder due`,
+      );
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("live location") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 760 : 500),
+        true,
+        `${viewport.label}: expected compact Day-of-Trip Dispatch Monitor, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor rows to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Day-of-Trip Dispatch Monitor not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -9785,6 +9899,7 @@ async function runChromeTest() {
           await checkDispatchReleaseHandoffPacket(viewport);
           await checkDriverAcknowledgementReadiness(viewport);
           await checkDriverAcknowledgementFollowUp(viewport);
+          await checkDayOfTripDispatchMonitor(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }

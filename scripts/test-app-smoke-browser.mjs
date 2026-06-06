@@ -5092,6 +5092,203 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDayOfTripDispatchMonitor = async () => {
+      const monitorViewports = [
+        { height: 812, label: "mobile day-of-trip dispatch monitor", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop day-of-trip dispatch monitor", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of monitorViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-day-of-trip-dispatch-monitor-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-day-of-trip-dispatch-monitor-item") || "",
+                  label:
+                    item.querySelector("[data-admin-day-of-trip-dispatch-monitor-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-day-of-trip-dispatch-monitor-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const options = [...section.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-option]")].map(
+                (option) => ({
+                  disabled: option.disabled,
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-day-of-trip-dispatch-monitor-option-state") || "",
+                  value: option.getAttribute("data-admin-day-of-trip-dispatch-monitor-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-day-of-trip-dispatch-monitor-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                options,
+                status:
+                  section.querySelector("[data-admin-day-of-trip-dispatch-monitor-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+                items,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin day-of-trip dispatch monitor`,
+        );
+
+        assert.equal(
+          state.text.includes("Day-of-Trip Dispatch Monitor"),
+          true,
+          `${viewport.label}: expected Day-of-Trip Dispatch Monitor title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          ["Reminder Due", "OTW", "OTS", "POB", "Completed", "Needs Call"],
+          `${viewport.label}: expected day-of-trip local status controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state, option.disabled]),
+          [
+            ["reminder-due", "selected", false],
+            ["otw", "idle", true],
+            ["ots", "idle", true],
+            ["pob", "idle", true],
+            ["completed", "idle", true],
+            ["needs-call", "idle", false],
+          ],
+          `${viewport.label}: expected day-of-trip progress to block before local acknowledgement`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Driver acknowledged",
+            "Reminder due",
+            "OTW",
+            "OTS",
+            "POB",
+            "Completed",
+            "No response / needs call",
+            "Next dispatcher action",
+          ],
+          `${viewport.label}: expected day-of-trip monitor labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "driver-acknowledged",
+            "reminder-due",
+            "otw",
+            "ots",
+            "pob",
+            "completed",
+            "no-response-needs-call",
+            "next-dispatcher-action",
+          ],
+          `${viewport.label}: expected day-of-trip monitor keys`,
+        );
+        assert.equal(
+          state.status,
+          "Reminder due",
+          `${viewport.label}: expected day-of-trip monitor to start at reminder due`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected day-of-trip boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in day-of-trip monitor`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 760 : 500),
+          true,
+          `${viewport.label}: expected compact day-of-trip monitor, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected day-of-trip monitor items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected day-of-trip monitor controls to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected day-of-trip monitor not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          options: state.options.map((option) => ({
+            disabled: option.disabled,
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -34902,6 +35099,7 @@ async function runChromeTest() {
     state.adminDispatchReleaseHandoffPacket = await checkAdminDispatchReleaseHandoffPacket();
     state.adminDriverAcknowledgementReadiness = await checkAdminDriverAcknowledgementReadiness();
     state.adminDriverAcknowledgementFollowUp = await checkAdminDriverAcknowledgementFollowUp();
+    state.adminDayOfTripDispatchMonitor = await checkAdminDayOfTripDispatchMonitor();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -35015,6 +35213,7 @@ async function runChromeTest() {
     state.adminDispatchReleaseHandoffPacketRouteBoundaries = [];
     state.adminDriverAcknowledgementReadinessRouteBoundaries = [];
     state.adminDriverAcknowledgementFollowUpRouteBoundaries = [];
+    state.adminDayOfTripDispatchMonitorRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -35157,6 +35356,30 @@ async function runChromeTest() {
         adminDriverAcknowledgementFollowUpTextLeaks,
         [],
         `Expected no admin driver acknowledgement follow-up wording leak for ${route.context}`,
+      );
+      const adminDayOfTripDispatchMonitorVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-day-of-trip-dispatch-monitor]"))`,
+      );
+      const adminDayOfTripDispatchMonitorTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Day-of-Trip Dispatch Monitor", "Reminder Due"].filter((text) => bodyText.includes(text));
+        })()`,
+      );
+      state.adminDayOfTripDispatchMonitorRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDayOfTripDispatchMonitorTextLeaks,
+        visible: adminDayOfTripDispatchMonitorVisible,
+      });
+      assert.equal(
+        adminDayOfTripDispatchMonitorVisible,
+        false,
+        `Expected admin day-of-trip dispatch monitor boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDayOfTripDispatchMonitorTextLeaks,
+        [],
+        `Expected no admin day-of-trip dispatch monitor wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -35368,6 +35591,30 @@ async function runChromeTest() {
       customerDetailAdminDriverAcknowledgementFollowUpTextLeaks,
       [],
       "Expected no admin driver acknowledgement follow-up wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDayOfTripDispatchMonitorVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-day-of-trip-dispatch-monitor]"))`,
+    );
+    const customerDetailAdminDayOfTripDispatchMonitorTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Day-of-Trip Dispatch Monitor", "Reminder Due"].filter((text) => bodyText.includes(text));
+      })()`,
+    );
+    state.adminDayOfTripDispatchMonitorRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDayOfTripDispatchMonitorTextLeaks,
+      visible: customerDetailAdminDayOfTripDispatchMonitorVisible,
+    });
+    assert.equal(
+      customerDetailAdminDayOfTripDispatchMonitorVisible,
+      false,
+      "Expected admin day-of-trip dispatch monitor boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDayOfTripDispatchMonitorTextLeaks,
+      [],
+      "Expected no admin day-of-trip dispatch monitor wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

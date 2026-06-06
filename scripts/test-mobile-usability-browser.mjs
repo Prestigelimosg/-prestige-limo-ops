@@ -2389,6 +2389,149 @@ async function runChromeTest() {
       );
     };
 
+    const checkMonthlyBillingMonthGroupingReview = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [
+          ...(section?.querySelectorAll("[data-admin-monthly-billing-month-grouping-review-item]") || []),
+        ].map((item) => {
+          const itemRect = item.getBoundingClientRect();
+
+          return {
+            height: Math.round(itemRect.height),
+            key: item.getAttribute("data-admin-monthly-billing-month-grouping-review-item") || "",
+            label:
+              item.querySelector("[data-admin-monthly-billing-month-grouping-review-label]")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            width: Math.round(itemRect.width),
+          };
+        });
+        const note = section?.querySelector("[data-admin-monthly-billing-month-grouping-review-note='true']");
+        const noteRect = note?.getBoundingClientRect();
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-monthly-billing-month-grouping-review-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-monthly-billing-month-grouping-review-option-state") || "",
+            value: option.getAttribute("data-admin-monthly-billing-month-grouping-review-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-monthly-billing-month-grouping-review-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          options,
+          status:
+            section
+              ?.querySelector("[data-admin-monthly-billing-month-grouping-review-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(
+        state.visible,
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review section`,
+      );
+      assert.equal(
+        state.text.includes("Monthly Billing Month Grouping Review"),
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        [
+          "Review Needed",
+          "Account Reviewed",
+          "Month Reviewed",
+          "Counts Reviewed",
+          "Grouping Reviewed",
+          "Admin Reviewed",
+          "Grouped Locally",
+        ],
+        `${viewport.label}: expected Monthly Billing Month Grouping Review local controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Customer/account",
+          "Billing month",
+          "Ready trips count",
+          "Blocked trips count",
+          "Total trips in month",
+          "Month grouping status",
+          "Admin review status",
+          "Next action",
+          "Local grouping note/status",
+        ],
+        `${viewport.label}: expected Monthly Billing Month Grouping Review rows`,
+      );
+      assert.equal(
+        state.status,
+        "Monthly billing month grouping review needed",
+        `${viewport.label}: expected Monthly Billing Month Grouping Review to start at review needed`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected blank local month grouping note`);
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("live database access") &&
+          state.boundary.includes("invoice creation") &&
+          state.boundary.includes("PDF") &&
+          state.boundary.includes("payment") &&
+          state.boundary.includes("payout") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("auth change") &&
+          state.boundary.includes("parser change"),
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 340 ? 1450 : viewport.width < 640 ? 1320 : 940),
+        true,
+        `${viewport.label}: expected compact Monthly Billing Month Grouping Review, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review rows to stay readable`,
+      );
+      assert.equal(
+        state.noteHeight >= 40,
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review note to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -2529,6 +2672,9 @@ async function runChromeTest() {
       );
       const adminMonthlyBillingQueueExceptionReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-monthly-billing-queue-exception-review]"))`,
+      );
+      const adminMonthlyBillingMonthGroupingReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-monthly-billing-month-grouping-review]"))`,
       );
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
@@ -2815,6 +2961,9 @@ async function runChromeTest() {
             "monthly billing queue exception review",
             "local exception note/status",
             "queue exception decision",
+            "monthly billing month grouping review",
+            "local grouping note/status",
+            "grouped locally for monthly billing review",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -3163,6 +3312,11 @@ async function runChromeTest() {
         adminMonthlyBillingQueueExceptionReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no admin monthly billing queue exception review`,
+      );
+      assert.equal(
+        adminMonthlyBillingMonthGroupingReviewVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no admin monthly billing month grouping review`,
       );
       assert.equal(
         internalQaMockArchiveVisible,
@@ -11355,6 +11509,7 @@ async function runChromeTest() {
           await checkBillingPreparationSummaryReadyReview(viewport);
           await checkMonthlyBillingQueueReadinessReview(viewport);
           await checkMonthlyBillingQueueExceptionReview(viewport);
+          await checkMonthlyBillingMonthGroupingReview(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }
@@ -11394,6 +11549,9 @@ async function runChromeTest() {
       );
       const adminMonthlyBillingQueueExceptionReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-monthly-billing-queue-exception-review]"))`,
+      );
+      const adminMonthlyBillingMonthGroupingReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-monthly-billing-month-grouping-review]"))`,
       );
       const driverAssignmentReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-assignment-readiness]"))`,
@@ -11680,6 +11838,9 @@ async function runChromeTest() {
             "monthly billing queue exception review",
             "local exception note/status",
             "queue exception decision",
+            "monthly billing month grouping review",
+            "local grouping note/status",
+            "grouped locally for monthly billing review",
             "internal/admin-only service recovery preview",
             "late driver / breakdown / missed job / replacement need",
             "driver exception and dispatcher escalation review",
@@ -12042,6 +12203,11 @@ async function runChromeTest() {
         adminMonthlyBillingQueueExceptionReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin monthly billing queue exception review`,
+      );
+      assert.equal(
+        adminMonthlyBillingMonthGroupingReviewVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin monthly billing month grouping review`,
       );
       assert.equal(
         internalQaMockArchiveVisible,

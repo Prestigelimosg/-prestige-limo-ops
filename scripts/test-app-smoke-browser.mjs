@@ -7734,6 +7734,271 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminMonthlyBillingMonthGroupingReview = async () => {
+      const reviewViewports = [
+        { height: 812, label: "mobile monthly billing month grouping review", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop monthly billing month grouping review", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-monthly-billing-month-grouping-review-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-monthly-billing-month-grouping-review-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-monthly-billing-month-grouping-review-item") || "",
+                  label:
+                    item.querySelector("[data-admin-monthly-billing-month-grouping-review-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-monthly-billing-month-grouping-review-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = section.querySelector("[data-admin-monthly-billing-month-grouping-review-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const options = [...section.querySelectorAll("[data-admin-monthly-billing-month-grouping-review-option]")].map(
+                (option) => ({
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-monthly-billing-month-grouping-review-option-state") || "",
+                  value: option.getAttribute("data-admin-monthly-billing-month-grouping-review-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-monthly-billing-month-grouping-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "driver payout",
+                  "paynow",
+                  "payout comparison",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                options,
+                status:
+                  section.querySelector("[data-admin-monthly-billing-month-grouping-review-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin monthly billing month grouping review`,
+        );
+
+        assert.equal(
+          state.text.includes("Monthly Billing Month Grouping Review"),
+          true,
+          `${viewport.label}: expected monthly billing month grouping review title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          [
+            "Review Needed",
+            "Account Reviewed",
+            "Month Reviewed",
+            "Counts Reviewed",
+            "Grouping Reviewed",
+            "Admin Reviewed",
+            "Grouped Locally",
+          ],
+          `${viewport.label}: expected monthly billing month grouping review local controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state]),
+          [
+            ["review-needed", "selected"],
+            ["account-reviewed", "idle"],
+            ["month-reviewed", "idle"],
+            ["counts-reviewed", "idle"],
+            ["grouping-reviewed", "idle"],
+            ["admin-reviewed", "idle"],
+            ["grouped-locally", "idle"],
+          ],
+          `${viewport.label}: expected monthly billing month grouping review to start at review needed`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Customer/account",
+            "Billing month",
+            "Ready trips count",
+            "Blocked trips count",
+            "Total trips in month",
+            "Month grouping status",
+            "Admin review status",
+            "Next action",
+            "Local grouping note/status",
+          ],
+          `${viewport.label}: expected monthly billing month grouping review labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "customer-account",
+            "billing-month",
+            "ready-trips-count",
+            "blocked-trips-count",
+            "total-trips-in-month",
+            "month-grouping-status",
+            "admin-review-status",
+            "next-action",
+            "local-grouping-note-status",
+          ],
+          `${viewport.label}: expected monthly billing month grouping review keys`,
+        );
+        assert.equal(
+          state.status,
+          "Monthly billing month grouping review needed",
+          `${viewport.label}: expected monthly billing month grouping review to start review needed`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected blank local month grouping note`);
+        assert.equal(
+          state.items.find((item) => item.key === "customer-account")?.detail,
+          "Customer/account not selected requires grouping review.",
+          `${viewport.label}: expected customer/account to need grouping review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "billing-month")?.detail,
+          "Billing month not selected requires grouping review.",
+          `${viewport.label}: expected billing month to need grouping review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "ready-trips-count")?.detail,
+          "0 ready trips in this local month group.",
+          `${viewport.label}: expected ready trips count by default`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "blocked-trips-count")?.detail,
+          "1 blocked trip in this local month group.",
+          `${viewport.label}: expected blocked trips count by default`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "total-trips-in-month")?.detail,
+          "1 total trip in this local billing month group.",
+          `${viewport.label}: expected total trips count by default`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "month-grouping-status")?.detail,
+          "Not grouped for future monthly billing review locally.",
+          `${viewport.label}: expected month grouping status to start ungrouped`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "admin-review-status")?.detail,
+          "Admin month grouping review not completed locally.",
+          `${viewport.label}: expected admin review status to start incomplete`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "next-action")?.detail,
+          "Confirm customer/account before month grouping review.",
+          `${viewport.label}: expected customer/account confirmation as next action`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "local-grouping-note-status")?.detail,
+          "Monthly billing month grouping review needed. No local grouping note.",
+          `${viewport.label}: expected local grouping note status to start blank`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "invoice creation",
+          "PDF",
+          "payment",
+          "payout",
+          "notification sending",
+          "auth change",
+          "parser change",
+          "billing activation",
+          "customer message",
+          "driver notification",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected monthly billing month grouping boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in monthly billing month grouping review`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 1320 : 940),
+          true,
+          `${viewport.label}: expected compact monthly billing month grouping review, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected monthly billing month grouping review items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected monthly billing month grouping review controls to stay readable`,
+        );
+        assert.equal(
+          state.noteHeight >= 40,
+          true,
+          `${viewport.label}: expected monthly billing month grouping review note to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected monthly billing month grouping review not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -37561,6 +37826,8 @@ async function runChromeTest() {
       await checkAdminMonthlyBillingQueueReadinessReview();
     state.adminMonthlyBillingQueueExceptionReview =
       await checkAdminMonthlyBillingQueueExceptionReview();
+    state.adminMonthlyBillingMonthGroupingReview =
+      await checkAdminMonthlyBillingMonthGroupingReview();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -37685,6 +37952,7 @@ async function runChromeTest() {
     state.adminBillingPreparationSummaryReadyReviewRouteBoundaries = [];
     state.adminMonthlyBillingQueueReadinessReviewRouteBoundaries = [];
     state.adminMonthlyBillingQueueExceptionReviewRouteBoundaries = [];
+    state.adminMonthlyBillingMonthGroupingReviewRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -38115,6 +38383,34 @@ async function runChromeTest() {
         adminMonthlyBillingQueueExceptionReviewTextLeaks,
         [],
         `Expected no admin monthly billing queue exception review wording leak for ${route.context}`,
+      );
+      const adminMonthlyBillingMonthGroupingReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-monthly-billing-month-grouping-review]"))`,
+      );
+      const adminMonthlyBillingMonthGroupingReviewTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return [
+            "Monthly Billing Month Grouping Review",
+            "Local grouping note/status",
+            "Grouped locally for monthly billing review",
+          ].filter((text) => bodyText.includes(text));
+        })()`,
+      );
+      state.adminMonthlyBillingMonthGroupingReviewRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminMonthlyBillingMonthGroupingReviewTextLeaks,
+        visible: adminMonthlyBillingMonthGroupingReviewVisible,
+      });
+      assert.equal(
+        adminMonthlyBillingMonthGroupingReviewVisible,
+        false,
+        `Expected admin monthly billing month grouping review boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminMonthlyBillingMonthGroupingReviewTextLeaks,
+        [],
+        `Expected no admin monthly billing month grouping review wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -38614,6 +38910,34 @@ async function runChromeTest() {
       customerDetailAdminMonthlyBillingQueueExceptionReviewTextLeaks,
       [],
       "Expected no admin monthly billing queue exception review wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminMonthlyBillingMonthGroupingReviewVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-monthly-billing-month-grouping-review]"))`,
+    );
+    const customerDetailAdminMonthlyBillingMonthGroupingReviewTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return [
+          "Monthly Billing Month Grouping Review",
+          "Local grouping note/status",
+          "Grouped locally for monthly billing review",
+        ].filter((text) => bodyText.includes(text));
+      })()`,
+    );
+    state.adminMonthlyBillingMonthGroupingReviewRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminMonthlyBillingMonthGroupingReviewTextLeaks,
+      visible: customerDetailAdminMonthlyBillingMonthGroupingReviewVisible,
+    });
+    assert.equal(
+      customerDetailAdminMonthlyBillingMonthGroupingReviewVisible,
+      false,
+      "Expected admin monthly billing month grouping review boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminMonthlyBillingMonthGroupingReviewTextLeaks,
+      [],
+      "Expected no admin monthly billing month grouping review wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

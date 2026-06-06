@@ -645,6 +645,15 @@ type MonthlyBillingQueueExceptionReviewStatus =
   | "decision-reviewed"
   | "cleared-locally";
 
+type MonthlyBillingMonthGroupingReviewStatus =
+  | "review-needed"
+  | "account-reviewed"
+  | "month-reviewed"
+  | "counts-reviewed"
+  | "grouping-reviewed"
+  | "admin-reviewed"
+  | "grouped-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -4024,6 +4033,10 @@ export default function Home() {
   const [monthlyBillingQueueExceptionReviewStatus, setMonthlyBillingQueueExceptionReviewStatus] =
     useState<MonthlyBillingQueueExceptionReviewStatus>("review-needed");
   const [monthlyBillingQueueExceptionReviewNote, setMonthlyBillingQueueExceptionReviewNote] =
+    useState("");
+  const [monthlyBillingMonthGroupingReviewStatus, setMonthlyBillingMonthGroupingReviewStatus] =
+    useState<MonthlyBillingMonthGroupingReviewStatus>("review-needed");
+  const [monthlyBillingMonthGroupingReviewNote, setMonthlyBillingMonthGroupingReviewNote] =
     useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
@@ -10530,6 +10543,161 @@ export default function Home() {
       key: "local-exception-note-status",
       label: "Local exception note/status",
       state: monthlyBillingQueueExceptionClearedLocally ? "ready" : "needs-action",
+    },
+  ];
+  const monthlyBillingMonthGroupingReviewStatusLabel =
+    monthlyBillingMonthGroupingReviewStatus === "grouped-locally"
+      ? "Grouped locally for monthly billing review"
+      : monthlyBillingMonthGroupingReviewStatus === "admin-reviewed"
+        ? "Admin grouping review complete"
+        : monthlyBillingMonthGroupingReviewStatus === "grouping-reviewed"
+          ? "Month grouping reviewed"
+          : monthlyBillingMonthGroupingReviewStatus === "counts-reviewed"
+            ? "Trip counts reviewed"
+            : monthlyBillingMonthGroupingReviewStatus === "month-reviewed"
+              ? "Billing month reviewed"
+              : monthlyBillingMonthGroupingReviewStatus === "account-reviewed"
+                ? "Customer/account reviewed"
+                : "Monthly billing month grouping review needed";
+  const monthlyBillingMonthGroupingReviewOptions: {
+    label: string;
+    value: MonthlyBillingMonthGroupingReviewStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Account Reviewed", value: "account-reviewed" },
+    { label: "Month Reviewed", value: "month-reviewed" },
+    { label: "Counts Reviewed", value: "counts-reviewed" },
+    { label: "Grouping Reviewed", value: "grouping-reviewed" },
+    { label: "Admin Reviewed", value: "admin-reviewed" },
+    { label: "Grouped Locally", value: "grouped-locally" },
+  ];
+  const monthlyBillingMonthGroupingReviewReached = (
+    status: MonthlyBillingMonthGroupingReviewStatus,
+  ) => {
+    const order: MonthlyBillingMonthGroupingReviewStatus[] = [
+      "account-reviewed",
+      "month-reviewed",
+      "counts-reviewed",
+      "grouping-reviewed",
+      "admin-reviewed",
+      "grouped-locally",
+    ];
+    const currentIndex = order.indexOf(monthlyBillingMonthGroupingReviewStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const monthlyBillingMonthGroupingCustomerAccountReviewed =
+    monthlyBillingMonthGroupingReviewReached("account-reviewed") &&
+    monthlyBillingQueueCustomerAccountLabel !== "Customer/account not selected";
+  const monthlyBillingMonthGroupingBillingMonthReviewed =
+    monthlyBillingMonthGroupingReviewReached("month-reviewed") &&
+    monthlyBillingQueueBillingMonthLabel !== "Billing month not selected" &&
+    monthlyBillingQueueBillingMonthLabel !== "Billing month needs review";
+  const monthlyBillingMonthGroupingTotalTrips =
+    monthlyBillingQueueReadyTripsCount + monthlyBillingQueueBlockedTripsCount;
+  const monthlyBillingMonthGroupingCountsReviewed =
+    monthlyBillingMonthGroupingReviewReached("counts-reviewed") &&
+    monthlyBillingMonthGroupingTotalTrips > 0;
+  const monthlyBillingMonthGroupingReviewed =
+    monthlyBillingMonthGroupingReviewReached("grouping-reviewed") &&
+    monthlyBillingMonthGroupingCustomerAccountReviewed &&
+    monthlyBillingMonthGroupingBillingMonthReviewed &&
+    monthlyBillingMonthGroupingCountsReviewed;
+  const monthlyBillingMonthGroupingAdminReviewed =
+    monthlyBillingMonthGroupingReviewReached("admin-reviewed") &&
+    monthlyBillingMonthGroupingReviewed;
+  const monthlyBillingMonthGroupingGroupedLocally =
+    monthlyBillingMonthGroupingReviewStatus === "grouped-locally" &&
+    monthlyBillingMonthGroupingAdminReviewed &&
+    monthlyBillingQueueReadyTripsCount > 0 &&
+    monthlyBillingQueueBlockedTripsCount === 0 &&
+    monthlyBillingQueueReadyLocally;
+  const monthlyBillingMonthGroupingNextAction = monthlyBillingMonthGroupingGroupedLocally
+    ? "Month group ready for future monthly billing review locally; keep grouping note current."
+    : !monthlyBillingMonthGroupingCustomerAccountReviewed
+      ? "Confirm customer/account before month grouping review."
+      : !monthlyBillingMonthGroupingBillingMonthReviewed
+        ? "Confirm billing month before month grouping review."
+        : !monthlyBillingMonthGroupingCountsReviewed
+          ? "Review ready and blocked trip counts locally."
+          : monthlyBillingQueueBlockedTripsCount > 0
+            ? "Resolve blocked trips before local month grouping can be marked ready."
+            : !monthlyBillingMonthGroupingReviewed
+              ? "Review customer/account and billing month grouping locally."
+              : !monthlyBillingMonthGroupingAdminReviewed
+                ? "Complete admin grouping review locally."
+                : "Mark grouped locally for future monthly billing review.";
+  const monthlyBillingMonthGroupingReviewItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: monthlyBillingMonthGroupingCustomerAccountReviewed
+        ? `${monthlyBillingQueueCustomerAccountLabel} reviewed for month grouping.`
+        : `${monthlyBillingQueueCustomerAccountLabel} requires grouping review.`,
+      key: "customer-account",
+      label: "Customer/account",
+      state: monthlyBillingMonthGroupingCustomerAccountReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingMonthGroupingBillingMonthReviewed
+        ? `${monthlyBillingQueueBillingMonthLabel} reviewed for month grouping.`
+        : `${monthlyBillingQueueBillingMonthLabel} requires grouping review.`,
+      key: "billing-month",
+      label: "Billing month",
+      state: monthlyBillingMonthGroupingBillingMonthReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingQueueReadyTripsCount} ready trip${
+        monthlyBillingQueueReadyTripsCount === 1 ? "" : "s"
+      } in this local month group.`,
+      key: "ready-trips-count",
+      label: "Ready trips count",
+      state: monthlyBillingQueueReadyTripsCount > 0 ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingQueueBlockedTripsCount} blocked trip${
+        monthlyBillingQueueBlockedTripsCount === 1 ? "" : "s"
+      } in this local month group.`,
+      key: "blocked-trips-count",
+      label: "Blocked trips count",
+      state: monthlyBillingQueueBlockedTripsCount === 0 ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingMonthGroupingTotalTrips} total trip${
+        monthlyBillingMonthGroupingTotalTrips === 1 ? "" : "s"
+      } in this local billing month group.`,
+      key: "total-trips-in-month",
+      label: "Total trips in month",
+      state: monthlyBillingMonthGroupingCountsReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingMonthGroupingGroupedLocally
+        ? "Grouped locally by customer/account and billing month."
+        : "Not grouped for future monthly billing review locally.",
+      key: "month-grouping-status",
+      label: "Month grouping status",
+      state: monthlyBillingMonthGroupingGroupedLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingMonthGroupingAdminReviewed
+        ? "Admin month grouping review completed locally."
+        : "Admin month grouping review not completed locally.",
+      key: "admin-review-status",
+      label: "Admin review status",
+      state: monthlyBillingMonthGroupingAdminReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: monthlyBillingMonthGroupingNextAction,
+      key: "next-action",
+      label: "Next action",
+      state: monthlyBillingMonthGroupingGroupedLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${monthlyBillingMonthGroupingReviewStatusLabel}. ${
+        clean(monthlyBillingMonthGroupingReviewNote) || "No local grouping note."
+      }`,
+      key: "local-grouping-note-status",
+      label: "Local grouping note/status",
+      state: monthlyBillingMonthGroupingGroupedLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -20564,6 +20732,134 @@ export default function Home() {
               <p
                 className="mt-1.5 border-t border-rose-200 pt-1.5 text-[11px] leading-4 text-rose-900 md:text-[10px] md:leading-3"
                 data-admin-monthly-billing-queue-exception-review-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, invoice creation, PDF, payment,
+                payout, notification sending, auth change, parser change, billing activation, customer message,
+                or driver notification behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Monthly Billing Month Grouping Review"
+              className="mt-3 min-w-0 rounded-md border border-teal-200 bg-teal-50/70 p-0.5 sm:p-2.5"
+              data-admin-monthly-billing-month-grouping-review="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-teal-950">
+                      Monthly Billing Month Grouping Review
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        monthlyBillingMonthGroupingGroupedLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : monthlyBillingMonthGroupingAdminReviewed ||
+                              monthlyBillingMonthGroupingReviewed
+                            ? "bg-teal-100 text-teal-950 ring-teal-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-monthly-billing-month-grouping-review-status="true"
+                    >
+                      {monthlyBillingMonthGroupingReviewStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-teal-900"
+                    data-admin-monthly-billing-month-grouping-review-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-teal-900">
+                    Local grouping preview by customer/account and billing month before any future monthly billing work.
+                  </p>
+                </div>
+                <div
+                  aria-label="Monthly billing month grouping review status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-teal-200 bg-white p-1 sm:w-64 sm:shrink-0 sm:grid-cols-3 lg:w-72 xl:w-96"
+                  data-admin-monthly-billing-month-grouping-review-controls="true"
+                  role="group"
+                >
+                  {monthlyBillingMonthGroupingReviewOptions.map((option) => {
+                    const isSelected = monthlyBillingMonthGroupingReviewStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-teal-800 text-white"
+                            : "bg-white text-teal-950 hover:bg-teal-100"
+                        }`}
+                        data-admin-monthly-billing-month-grouping-review-option={option.value}
+                        data-admin-monthly-billing-month-grouping-review-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setMonthlyBillingMonthGroupingReviewStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-teal-950 sm:mt-3">
+                <span>Local grouping note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-teal-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  data-admin-monthly-billing-month-grouping-review-note="true"
+                  onChange={(event) => setMonthlyBillingMonthGroupingReviewNote(event.target.value)}
+                  placeholder="Local staff monthly billing month grouping note"
+                  value={monthlyBillingMonthGroupingReviewNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 xl:grid-cols-3">
+                {monthlyBillingMonthGroupingReviewItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "month-grouping-status" ||
+                            item.key === "admin-review-status" ||
+                            item.key === "next-action" ||
+                            item.key === "local-grouping-note-status"
+                          ? "border-teal-200 bg-white text-teal-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-monthly-billing-month-grouping-review-item={item.key}
+                    data-admin-monthly-billing-month-grouping-review-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-monthly-billing-month-grouping-review-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-monthly-billing-month-grouping-review-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-teal-200 pt-1.5 text-[11px] leading-4 text-teal-900 md:text-[10px] md:leading-3"
+                data-admin-monthly-billing-month-grouping-review-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, invoice creation, PDF, payment,
                 payout, notification sending, auth change, parser change, billing activation, customer message,

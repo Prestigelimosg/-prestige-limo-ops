@@ -1833,6 +1833,94 @@ function assertBookingUiState(state) {
   assert.match(state.dayOfTripDispatchMonitor.boundary, /live location/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /parser-learning/);
   assert.deepEqual(state.dayOfTripDispatchMonitor.forbiddenPanelText, []);
+  assert.equal(state.dayOfTripExceptionEscalation.visible, true);
+  assert.match(state.dayOfTripExceptionEscalation.text, /Day-of-Trip Exception Escalation/);
+  assert.equal(state.dayOfTripExceptionEscalation.context, "Current dispatch draft");
+  assert.equal(state.dayOfTripExceptionEscalation.status, "Driver late / reminder due");
+  assert.equal(state.dayOfTripExceptionEscalation.noteValue, "");
+  assert.deepEqual(
+    state.dayOfTripExceptionEscalation.options.map((option) => option.label),
+    ["No Response", "Late Reminder", "Call Needed", "Replacement", "Customer Update", "Closed"],
+  );
+  assert.deepEqual(
+    state.dayOfTripExceptionEscalation.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["driver-no-response", "idle"],
+      ["late-reminder-due", "selected"],
+      ["dispatcher-call", "idle"],
+      ["replacement-review", "idle"],
+      ["customer-update", "idle"],
+      ["closed-locally", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.dayOfTripExceptionEscalation.items.map((item) => item.label),
+    [
+      "Driver no response",
+      "Driver late / reminder due",
+      "Needs dispatcher call",
+      "Replacement driver may be needed",
+      "Customer update may be needed",
+      "Next escalation action",
+      "Local escalation note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.dayOfTripExceptionEscalation.items.map((item) => item.key),
+    [
+      "driver-no-response",
+      "driver-late-reminder-due",
+      "needs-dispatcher-call",
+      "replacement-driver-may-be-needed",
+      "customer-update-may-be-needed",
+      "next-escalation-action",
+      "local-escalation-note-status",
+    ],
+  );
+  assert.equal(
+    state.dayOfTripExceptionEscalation.items.find((item) => item.key === "driver-no-response")?.state,
+    "ready",
+  );
+  assert.equal(
+    state.dayOfTripExceptionEscalation.items.find((item) => item.key === "driver-late-reminder-due")?.detail,
+    "Driver late / reminder due locally.",
+  );
+  assert.equal(
+    state.dayOfTripExceptionEscalation.items.find((item) => item.key === "needs-dispatcher-call")?.state,
+    "needs-action",
+  );
+  assert.equal(
+    state.dayOfTripExceptionEscalation.items.find((item) => item.key === "replacement-driver-may-be-needed")?.state,
+    "ready",
+  );
+  assert.equal(
+    state.dayOfTripExceptionEscalation.items.find((item) => item.key === "customer-update-may-be-needed")?.state,
+    "ready",
+  );
+  assert.equal(
+    state.dayOfTripExceptionEscalation.items.find((item) => item.key === "next-escalation-action")?.detail,
+    "Call driver and record the result in the local escalation note.",
+  );
+  assert.equal(
+    state.dayOfTripExceptionEscalation.items.find((item) => item.key === "local-escalation-note-status")?.detail,
+    "Driver late / reminder due. No local note.",
+  );
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /Local UI only/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /No Supabase write/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /live database access/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /notification sending/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /customer message/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /driver notification/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /billing/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /payment/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /PDF/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /payout/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /live location/);
+  assert.match(state.dayOfTripExceptionEscalation.boundary, /parser-learning/);
+  assert.deepEqual(state.dayOfTripExceptionEscalation.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -2964,11 +3052,67 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const dayOfTripExceptionEscalation = () => {
+        const section = document.querySelector("[data-admin-day-of-trip-exception-escalation='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-day-of-trip-exception-escalation-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section?.querySelector("[data-admin-day-of-trip-exception-escalation-context='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "paynow",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [...(section?.querySelectorAll("[data-admin-day-of-trip-exception-escalation-item]") || [])].map(
+            (item) => ({
+              detail:
+                item.querySelector("[data-admin-day-of-trip-exception-escalation-detail]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              key: item.getAttribute("data-admin-day-of-trip-exception-escalation-item") || "",
+              label:
+                item.querySelector("[data-admin-day-of-trip-exception-escalation-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              state: item.getAttribute("data-admin-day-of-trip-exception-escalation-item-state") || "",
+            }),
+          ),
+          noteValue:
+            section?.querySelector("[data-admin-day-of-trip-exception-escalation-note='true']")?.value ?? null,
+          options: [...(section?.querySelectorAll("[data-admin-day-of-trip-exception-escalation-option]") || [])].map(
+            (option) => ({
+              label: option.textContent.replace(/\\s+/g, " ").trim(),
+              state: option.getAttribute("data-admin-day-of-trip-exception-escalation-option-state") || "",
+              value: option.getAttribute("data-admin-day-of-trip-exception-escalation-option") || "",
+            }),
+          ),
+          status:
+            section?.querySelector("[data-admin-day-of-trip-exception-escalation-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
         consoleErrors: window.__prestigeConsoleErrors || [],
         customerCopy: preTextByHeading("Customer Copy"),
+        dayOfTripExceptionEscalation: dayOfTripExceptionEscalation(),
         dayOfTripDispatchMonitor: dayOfTripDispatchMonitor(),
         dispatchReleaseChecklist: dispatchReleaseChecklist(),
         dispatchReleaseHandoffPacket: dispatchReleaseHandoffPacket(),

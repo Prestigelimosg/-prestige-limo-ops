@@ -1036,6 +1036,128 @@ async function runChromeTest() {
       );
     };
 
+    const checkDayOfTripExceptionEscalation = async (viewport) => {
+      const state = await evaluate(`(() => {
+        const section = document.querySelector("[data-admin-day-of-trip-exception-escalation='true']");
+        const sectionRect = section?.getBoundingClientRect();
+        const items = [...(section?.querySelectorAll("[data-admin-day-of-trip-exception-escalation-item]") || [])].map(
+          (item) => {
+            const itemRect = item.getBoundingClientRect();
+
+            return {
+              height: Math.round(itemRect.height),
+              key: item.getAttribute("data-admin-day-of-trip-exception-escalation-item") || "",
+              label:
+                item.querySelector("[data-admin-day-of-trip-exception-escalation-label]")?.textContent
+                  .replace(/\\s+/g, " ")
+                  .trim() || "",
+              width: Math.round(itemRect.width),
+            };
+          },
+        );
+        const note = section?.querySelector("[data-admin-day-of-trip-exception-escalation-note='true']");
+        const noteRect = note?.getBoundingClientRect();
+        const options = [
+          ...(section?.querySelectorAll("[data-admin-day-of-trip-exception-escalation-option]") || []),
+        ].map((option) => {
+          const optionRect = option.getBoundingClientRect();
+
+          return {
+            height: Math.round(optionRect.height),
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-day-of-trip-exception-escalation-option-state") || "",
+            value: option.getAttribute("data-admin-day-of-trip-exception-escalation-option") || "",
+            width: Math.round(optionRect.width),
+          };
+        });
+
+        return {
+          boundary:
+            section?.querySelector("[data-admin-day-of-trip-exception-escalation-boundary='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          docClientWidth: document.documentElement.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          height: Math.round(sectionRect?.height || 0),
+          items,
+          noteHeight: Math.round(noteRect?.height || 0),
+          noteValue: note?.value ?? null,
+          options,
+          status:
+            section?.querySelector("[data-admin-day-of-trip-exception-escalation-status='true']")?.textContent
+              .replace(/\\s+/g, " ")
+              .trim() || "",
+          text: section?.innerText || "",
+          visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+        };
+      })()`);
+
+      assert.equal(state.visible, true, `${viewport.label}: expected Day-of-Trip Exception Escalation section`);
+      assert.equal(
+        state.text.includes("Day-of-Trip Exception Escalation"),
+        true,
+        `${viewport.label}: expected Day-of-Trip Exception Escalation title`,
+      );
+      assert.deepEqual(
+        state.options.map((option) => option.label),
+        ["No Response", "Late Reminder", "Call Needed", "Replacement", "Customer Update", "Closed"],
+        `${viewport.label}: expected Day-of-Trip Exception Escalation local controls`,
+      );
+      assert.deepEqual(
+        state.items.map((item) => item.label),
+        [
+          "Driver no response",
+          "Driver late / reminder due",
+          "Needs dispatcher call",
+          "Replacement driver may be needed",
+          "Customer update may be needed",
+          "Next escalation action",
+          "Local escalation note/status",
+        ],
+        `${viewport.label}: expected Day-of-Trip Exception Escalation rows`,
+      );
+      assert.equal(
+        state.status,
+        "Driver late / reminder due",
+        `${viewport.label}: expected Day-of-Trip Exception Escalation to start late/reminder due`,
+      );
+      assert.equal(state.noteValue, "", `${viewport.label}: expected blank local escalation note`);
+      assert.equal(
+        state.options.every((option) => option.height >= 36 && option.width >= 72),
+        true,
+        `${viewport.label}: expected Day-of-Trip Exception Escalation controls to stay readable`,
+      );
+      assert.equal(
+        state.boundary.includes("Local UI only.") &&
+          state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("notification sending") &&
+          state.boundary.includes("live location") &&
+          state.boundary.includes("parser-learning"),
+        true,
+        `${viewport.label}: expected Day-of-Trip Exception Escalation local-only boundary`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 820 : 560),
+        true,
+        `${viewport.label}: expected compact Day-of-Trip Exception Escalation, got ${state.height}px`,
+      );
+      assert.equal(
+        state.items.every((item) => item.height >= 48 && item.width >= 120),
+        true,
+        `${viewport.label}: expected Day-of-Trip Exception Escalation rows to stay readable`,
+      );
+      assert.equal(
+        state.noteHeight >= 40,
+        true,
+        `${viewport.label}: expected Day-of-Trip Exception Escalation note to stay readable`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected Day-of-Trip Exception Escalation not to create horizontal overflow`,
+      );
+    };
+
     const checkManualExtraChargesBookingFields = async (viewport) => {
       const state = await evaluate(`(() => {
         const section = document.querySelector("[data-route-extras-child-seat-section='true']");
@@ -9900,6 +10022,7 @@ async function runChromeTest() {
           await checkDriverAcknowledgementReadiness(viewport);
           await checkDriverAcknowledgementFollowUp(viewport);
           await checkDayOfTripDispatchMonitor(viewport);
+          await checkDayOfTripExceptionEscalation(viewport);
           await checkManualExtraChargesBookingFields(viewport);
         }
       }

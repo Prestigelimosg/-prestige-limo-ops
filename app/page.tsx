@@ -556,6 +556,14 @@ type DayOfTripDispatchMonitorStatus =
   | "completed"
   | "needs-call";
 
+type DayOfTripExceptionEscalationStatus =
+  | "driver-no-response"
+  | "late-reminder-due"
+  | "dispatcher-call"
+  | "replacement-review"
+  | "customer-update"
+  | "closed-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3902,6 +3910,9 @@ export default function Home() {
   const [driverAcknowledgementFollowUpNote, setDriverAcknowledgementFollowUpNote] = useState("");
   const [dayOfTripDispatchMonitorStatus, setDayOfTripDispatchMonitorStatus] =
     useState<DayOfTripDispatchMonitorStatus>("reminder-due");
+  const [dayOfTripExceptionEscalationStatus, setDayOfTripExceptionEscalationStatus] =
+    useState<DayOfTripExceptionEscalationStatus>("late-reminder-due");
+  const [dayOfTripExceptionEscalationNote, setDayOfTripExceptionEscalationNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9046,6 +9057,114 @@ export default function Home() {
       key: "next-dispatcher-action",
       label: "Next dispatcher action",
       state: dayOfTripDispatchMonitorStatus === "completed" ? "ready" : "needs-action",
+    },
+  ];
+  const dayOfTripExceptionEscalationClosed =
+    dayOfTripExceptionEscalationStatus === "closed-locally";
+  const dayOfTripExceptionDriverNoResponse =
+    !dayOfTripExceptionEscalationClosed &&
+    (dayOfTripNoResponse || dayOfTripExceptionEscalationStatus === "driver-no-response");
+  const dayOfTripExceptionReminderDue =
+    !dayOfTripExceptionEscalationClosed &&
+    (dayOfTripDispatchMonitorStatus === "reminder-due" ||
+      dayOfTripExceptionEscalationStatus === "late-reminder-due");
+  const dayOfTripExceptionNeedsDispatcherCall =
+    !dayOfTripExceptionEscalationClosed &&
+    (dayOfTripExceptionEscalationStatus === "dispatcher-call" ||
+      dayOfTripExceptionDriverNoResponse ||
+      dayOfTripExceptionReminderDue);
+  const dayOfTripExceptionReplacementMayBeNeeded =
+    !dayOfTripExceptionEscalationClosed &&
+    (dayOfTripExceptionEscalationStatus === "replacement-review" ||
+      dayOfTripExceptionEscalationStatus === "driver-no-response");
+  const dayOfTripExceptionCustomerUpdateMayBeNeeded =
+    !dayOfTripExceptionEscalationClosed &&
+    (dayOfTripExceptionEscalationStatus === "customer-update" ||
+      dayOfTripExceptionEscalationStatus === "replacement-review");
+  const dayOfTripExceptionEscalationStatusLabel =
+    dayOfTripExceptionEscalationStatus === "closed-locally"
+      ? "Closed locally"
+      : dayOfTripExceptionEscalationStatus === "customer-update"
+        ? "Customer update may be needed"
+        : dayOfTripExceptionEscalationStatus === "replacement-review"
+          ? "Replacement driver may be needed"
+          : dayOfTripExceptionEscalationStatus === "dispatcher-call"
+            ? "Needs dispatcher call"
+            : dayOfTripExceptionEscalationStatus === "driver-no-response"
+              ? "Driver no response"
+              : "Driver late / reminder due";
+  const dayOfTripExceptionEscalationOptions: {
+    label: string;
+    value: DayOfTripExceptionEscalationStatus;
+  }[] = [
+    { label: "No Response", value: "driver-no-response" },
+    { label: "Late Reminder", value: "late-reminder-due" },
+    { label: "Call Needed", value: "dispatcher-call" },
+    { label: "Replacement", value: "replacement-review" },
+    { label: "Customer Update", value: "customer-update" },
+    { label: "Closed", value: "closed-locally" },
+  ];
+  const dayOfTripExceptionEscalationNextAction = dayOfTripExceptionEscalationClosed
+    ? "No open escalation; keep the local note for staff handoff."
+    : dayOfTripExceptionCustomerUpdateMayBeNeeded
+      ? "Prepare local customer update wording after dispatcher review."
+      : dayOfTripExceptionReplacementMayBeNeeded
+        ? "Check backup driver options locally and call dispatcher lead."
+        : dayOfTripExceptionNeedsDispatcherCall
+          ? "Call driver and record the result in the local escalation note."
+          : "Monitor progress and keep the local escalation note current.";
+  const dayOfTripExceptionEscalationItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: dayOfTripExceptionDriverNoResponse ? "No response flag is open." : "No no-response flag.",
+      key: "driver-no-response",
+      label: "Driver no response",
+      state: dayOfTripExceptionDriverNoResponse ? "needs-action" : "ready",
+    },
+    {
+      detail: dayOfTripExceptionReminderDue
+        ? "Driver late / reminder due locally."
+        : "No late/reminder due flag.",
+      key: "driver-late-reminder-due",
+      label: "Driver late / reminder due",
+      state: dayOfTripExceptionReminderDue ? "needs-action" : "ready",
+    },
+    {
+      detail: dayOfTripExceptionNeedsDispatcherCall
+        ? "Dispatcher call needed."
+        : "No dispatcher call flag.",
+      key: "needs-dispatcher-call",
+      label: "Needs dispatcher call",
+      state: dayOfTripExceptionNeedsDispatcherCall ? "needs-action" : "ready",
+    },
+    {
+      detail: dayOfTripExceptionReplacementMayBeNeeded
+        ? "Review backup driver locally."
+        : "No replacement flag.",
+      key: "replacement-driver-may-be-needed",
+      label: "Replacement driver may be needed",
+      state: dayOfTripExceptionReplacementMayBeNeeded ? "needs-action" : "ready",
+    },
+    {
+      detail: dayOfTripExceptionCustomerUpdateMayBeNeeded
+        ? "Prepare customer update locally."
+        : "No customer update flag.",
+      key: "customer-update-may-be-needed",
+      label: "Customer update may be needed",
+      state: dayOfTripExceptionCustomerUpdateMayBeNeeded ? "needs-action" : "ready",
+    },
+    {
+      detail: dayOfTripExceptionEscalationNextAction,
+      key: "next-escalation-action",
+      label: "Next escalation action",
+      state: dayOfTripExceptionEscalationClosed ? "ready" : "needs-action",
+    },
+    {
+      detail: `${dayOfTripExceptionEscalationStatusLabel}. ${
+        clean(dayOfTripExceptionEscalationNote) || "No local note."
+      }`,
+      key: "local-escalation-note-status",
+      label: "Local escalation note/status",
+      state: dayOfTripExceptionEscalationClosed ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -17811,6 +17930,134 @@ export default function Home() {
               <p
                 className="mt-2 border-t border-lime-200 pt-2 text-[11px] leading-4 text-lime-900 md:text-[10px] md:leading-3"
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, notification sending, customer message,
+                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Day-of-Trip Exception Escalation"
+              className="mt-3 rounded-md border border-rose-200 bg-rose-50/60 p-0.5 sm:p-2.5"
+              data-admin-day-of-trip-exception-escalation="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-rose-950">
+                      Day-of-Trip Exception Escalation
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        dayOfTripExceptionEscalationClosed
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : dayOfTripExceptionDriverNoResponse ||
+                              dayOfTripExceptionReplacementMayBeNeeded ||
+                              dayOfTripExceptionCustomerUpdateMayBeNeeded
+                            ? "bg-rose-100 text-rose-900 ring-rose-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-day-of-trip-exception-escalation-status="true"
+                    >
+                      {dayOfTripExceptionEscalationStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-rose-900"
+                    data-admin-day-of-trip-exception-escalation-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-rose-900">
+                    Local exception bridge for day-of-trip dispatcher escalation.
+                  </p>
+                </div>
+                <div
+                  aria-label="Day-of-trip exception escalation status"
+                  className="grid w-full grid-cols-2 gap-1 rounded-md border border-rose-200 bg-white p-1 min-[300px]:grid-cols-3 sm:w-64 sm:shrink-0 lg:w-72 xl:w-96"
+                  data-admin-day-of-trip-exception-escalation-controls="true"
+                  role="group"
+                >
+                  {dayOfTripExceptionEscalationOptions.map((option) => {
+                    const isSelected = dayOfTripExceptionEscalationStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 rounded px-2 py-1 text-[11px] font-semibold transition ${
+                          isSelected
+                            ? "bg-rose-700 text-white"
+                            : "bg-white text-rose-950 hover:bg-rose-100"
+                        }`}
+                        data-admin-day-of-trip-exception-escalation-option={option.value}
+                        data-admin-day-of-trip-exception-escalation-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setDayOfTripExceptionEscalationStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-rose-950 sm:mt-3">
+                <span>Local escalation note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                  data-admin-day-of-trip-exception-escalation-note="true"
+                  onChange={(event) => setDayOfTripExceptionEscalationNote(event.target.value)}
+                  placeholder="Local staff escalation note"
+                  value={dayOfTripExceptionEscalationNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {dayOfTripExceptionEscalationItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "driver-no-response" ||
+                            item.key === "needs-dispatcher-call" ||
+                            item.key === "replacement-driver-may-be-needed" ||
+                            item.key === "customer-update-may-be-needed"
+                          ? "border-rose-200 bg-white text-rose-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-day-of-trip-exception-escalation-item={item.key}
+                    data-admin-day-of-trip-exception-escalation-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="font-semibold leading-4"
+                        data-admin-day-of-trip-exception-escalation-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-day-of-trip-exception-escalation-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-rose-200 pt-1.5 text-[11px] leading-4 text-rose-900 md:text-[10px] md:leading-3"
+                data-admin-day-of-trip-exception-escalation-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.

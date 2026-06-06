@@ -5289,6 +5289,211 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminDayOfTripExceptionEscalation = async () => {
+      const escalationViewports = [
+        { height: 812, label: "mobile day-of-trip exception escalation", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop day-of-trip exception escalation", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of escalationViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-day-of-trip-exception-escalation]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-day-of-trip-exception-escalation-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-day-of-trip-exception-escalation-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-day-of-trip-exception-escalation-item") || "",
+                  label:
+                    item.querySelector("[data-admin-day-of-trip-exception-escalation-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-day-of-trip-exception-escalation-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = section.querySelector("[data-admin-day-of-trip-exception-escalation-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const options = [...section.querySelectorAll("[data-admin-day-of-trip-exception-escalation-option]")].map(
+                (option) => ({
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-day-of-trip-exception-escalation-option-state") || "",
+                  value: option.getAttribute("data-admin-day-of-trip-exception-escalation-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-day-of-trip-exception-escalation-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "driver payout",
+                  "paynow",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                options,
+                status:
+                  section.querySelector("[data-admin-day-of-trip-exception-escalation-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin day-of-trip exception escalation`,
+        );
+
+        assert.equal(
+          state.text.includes("Day-of-Trip Exception Escalation"),
+          true,
+          `${viewport.label}: expected Day-of-Trip Exception Escalation title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          ["No Response", "Late Reminder", "Call Needed", "Replacement", "Customer Update", "Closed"],
+          `${viewport.label}: expected exception escalation local controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state]),
+          [
+            ["driver-no-response", "idle"],
+            ["late-reminder-due", "selected"],
+            ["dispatcher-call", "idle"],
+            ["replacement-review", "idle"],
+            ["customer-update", "idle"],
+            ["closed-locally", "idle"],
+          ],
+          `${viewport.label}: expected exception escalation to start at late reminder`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Driver no response",
+            "Driver late / reminder due",
+            "Needs dispatcher call",
+            "Replacement driver may be needed",
+            "Customer update may be needed",
+            "Next escalation action",
+            "Local escalation note/status",
+          ],
+          `${viewport.label}: expected exception escalation labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "driver-no-response",
+            "driver-late-reminder-due",
+            "needs-dispatcher-call",
+            "replacement-driver-may-be-needed",
+            "customer-update-may-be-needed",
+            "next-escalation-action",
+            "local-escalation-note-status",
+          ],
+          `${viewport.label}: expected exception escalation keys`,
+        );
+        assert.equal(
+          state.status,
+          "Driver late / reminder due",
+          `${viewport.label}: expected exception escalation to start late/reminder due`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected blank local escalation note`);
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "billing",
+          "payment",
+          "PDF",
+          "payout",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected exception escalation boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in exception escalation`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 820 : 560),
+          true,
+          `${viewport.label}: expected compact exception escalation, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected exception escalation items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected exception escalation controls to stay readable`,
+        );
+        assert.equal(
+          state.noteHeight >= 40,
+          true,
+          `${viewport.label}: expected exception escalation note to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected exception escalation not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -35100,6 +35305,7 @@ async function runChromeTest() {
     state.adminDriverAcknowledgementReadiness = await checkAdminDriverAcknowledgementReadiness();
     state.adminDriverAcknowledgementFollowUp = await checkAdminDriverAcknowledgementFollowUp();
     state.adminDayOfTripDispatchMonitor = await checkAdminDayOfTripDispatchMonitor();
+    state.adminDayOfTripExceptionEscalation = await checkAdminDayOfTripExceptionEscalation();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -35214,6 +35420,7 @@ async function runChromeTest() {
     state.adminDriverAcknowledgementReadinessRouteBoundaries = [];
     state.adminDriverAcknowledgementFollowUpRouteBoundaries = [];
     state.adminDayOfTripDispatchMonitorRouteBoundaries = [];
+    state.adminDayOfTripExceptionEscalationRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -35380,6 +35587,32 @@ async function runChromeTest() {
         adminDayOfTripDispatchMonitorTextLeaks,
         [],
         `Expected no admin day-of-trip dispatch monitor wording leak for ${route.context}`,
+      );
+      const adminDayOfTripExceptionEscalationVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-day-of-trip-exception-escalation]"))`,
+      );
+      const adminDayOfTripExceptionEscalationTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Day-of-Trip Exception Escalation", "Replacement driver may be needed"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminDayOfTripExceptionEscalationRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminDayOfTripExceptionEscalationTextLeaks,
+        visible: adminDayOfTripExceptionEscalationVisible,
+      });
+      assert.equal(
+        adminDayOfTripExceptionEscalationVisible,
+        false,
+        `Expected admin day-of-trip exception escalation boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminDayOfTripExceptionEscalationTextLeaks,
+        [],
+        `Expected no admin day-of-trip exception escalation wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -35615,6 +35848,32 @@ async function runChromeTest() {
       customerDetailAdminDayOfTripDispatchMonitorTextLeaks,
       [],
       "Expected no admin day-of-trip dispatch monitor wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDayOfTripExceptionEscalationVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-day-of-trip-exception-escalation]"))`,
+    );
+    const customerDetailAdminDayOfTripExceptionEscalationTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Day-of-Trip Exception Escalation", "Replacement driver may be needed"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminDayOfTripExceptionEscalationRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminDayOfTripExceptionEscalationTextLeaks,
+      visible: customerDetailAdminDayOfTripExceptionEscalationVisible,
+    });
+    assert.equal(
+      customerDetailAdminDayOfTripExceptionEscalationVisible,
+      false,
+      "Expected admin day-of-trip exception escalation boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminDayOfTripExceptionEscalationTextLeaks,
+      [],
+      "Expected no admin day-of-trip exception escalation wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

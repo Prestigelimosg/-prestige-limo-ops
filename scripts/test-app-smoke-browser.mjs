@@ -6198,6 +6198,251 @@ async function runChromeTest() {
       return states;
     };
 
+    const checkAdminCompletedTripCloseoutReview = async () => {
+      const reviewViewports = [
+        { height: 812, label: "mobile completed trip closeout review", mobile: true, scale: 3, width: 375 },
+        { height: 900, label: "desktop completed trip closeout review", mobile: false, scale: 1, width: 1440 },
+      ];
+      const states = [];
+
+      for (const viewport of reviewViewports) {
+        await setViewportAndReload(viewport);
+        const state = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector("[data-admin-completed-trip-closeout-review]");
+              if (!section) {
+                return false;
+              }
+
+              const rect = section.getBoundingClientRect();
+              const items = [...section.querySelectorAll("[data-admin-completed-trip-closeout-review-item]")].map((item) => {
+                const itemRect = item.getBoundingClientRect();
+
+                return {
+                  detail:
+                    item.querySelector("[data-admin-completed-trip-closeout-review-detail]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  height: Math.round(itemRect.height),
+                  key: item.getAttribute("data-admin-completed-trip-closeout-review-item") || "",
+                  label:
+                    item.querySelector("[data-admin-completed-trip-closeout-review-label]")?.textContent
+                      .replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state: item.getAttribute("data-admin-completed-trip-closeout-review-item-state") || "",
+                  width: Math.round(itemRect.width),
+                };
+              });
+              const note = section.querySelector("[data-admin-completed-trip-closeout-review-note]");
+              const noteRect = note?.getBoundingClientRect();
+              const options = [...section.querySelectorAll("[data-admin-completed-trip-closeout-review-option]")].map(
+                (option) => ({
+                  height: Math.round(option.getBoundingClientRect().height),
+                  label: option.textContent.replace(/\\s+/g, " ").trim(),
+                  state: option.getAttribute("data-admin-completed-trip-closeout-review-option-state") || "",
+                  value: option.getAttribute("data-admin-completed-trip-closeout-review-option") || "",
+                  width: Math.round(option.getBoundingClientRect().width),
+                }),
+              );
+              const text = section.innerText;
+              const lowerText = text.toLowerCase();
+
+              return {
+                boundary:
+                  section.querySelector("[data-admin-completed-trip-closeout-review-boundary]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                forbiddenPrivateText: [
+                  "customer price",
+                  "driver payout",
+                  "paynow",
+                  "payout comparison",
+                  "parser/debug",
+                  "debug internals",
+                  "invoice number",
+                  "payment link",
+                  "supabase url",
+                ].filter((value) => lowerText.includes(value)),
+                height: Math.round(rect.height),
+                items,
+                noteHeight: Math.round(noteRect?.height || 0),
+                noteValue: note?.value ?? null,
+                options,
+                status:
+                  section.querySelector("[data-admin-completed-trip-closeout-review-status]")?.textContent
+                    .replace(/\\s+/g, " ")
+                    .trim() || "",
+                text,
+              };
+            })()`),
+          10000,
+          `${viewport.label} admin completed trip closeout review`,
+        );
+
+        assert.equal(
+          state.text.includes("Completed Trip Closeout Review"),
+          true,
+          `${viewport.label}: expected completed trip closeout review title`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => option.label),
+          [
+            "Review Needed",
+            "Trip Complete",
+            "Driver Reviewed",
+            "Customer Closeout",
+            "Exception Reviewed",
+            "Billing Note",
+            "Ready Locally",
+          ],
+          `${viewport.label}: expected completed trip closeout local controls`,
+        );
+        assert.deepEqual(
+          state.options.map((option) => [option.value, option.state]),
+          [
+            ["review-needed", "selected"],
+            ["trip-completed", "idle"],
+            ["driver-reviewed", "idle"],
+            ["customer-closeout-reviewed", "idle"],
+            ["exception-reviewed", "idle"],
+            ["billing-note-reviewed", "idle"],
+            ["ready-locally", "idle"],
+          ],
+          `${viewport.label}: expected closeout review to start at review needed`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.label),
+          [
+            "Trip completed",
+            "Driver completion reviewed",
+            "Customer closeout reviewed",
+            "Exception/resolution reviewed",
+            "Billing-readiness note reviewed",
+            "Next admin closeout action",
+            "Local closeout note/status",
+          ],
+          `${viewport.label}: expected completed trip closeout labels`,
+        );
+        assert.deepEqual(
+          state.items.map((item) => item.key),
+          [
+            "trip-completed",
+            "driver-completion-reviewed",
+            "customer-closeout-reviewed",
+            "exception-resolution-reviewed",
+            "billing-readiness-note-reviewed",
+            "next-admin-closeout-action",
+            "local-closeout-note-status",
+          ],
+          `${viewport.label}: expected completed trip closeout keys`,
+        );
+        assert.equal(
+          state.status,
+          "Completed trip closeout review needed",
+          `${viewport.label}: expected closeout review to start review needed`,
+        );
+        assert.equal(state.noteValue, "", `${viewport.label}: expected blank local closeout note`);
+        assert.equal(
+          state.items.find((item) => item.key === "trip-completed")?.detail,
+          "Trip completion not reviewed locally.",
+          `${viewport.label}: expected trip completion to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "driver-completion-reviewed")?.detail,
+          "Driver completion not reviewed locally.",
+          `${viewport.label}: expected driver completion to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "customer-closeout-reviewed")?.detail,
+          "Customer closeout not reviewed locally.",
+          `${viewport.label}: expected customer closeout to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "exception-resolution-reviewed")?.detail,
+          "Exception/resolution not reviewed locally.",
+          `${viewport.label}: expected exception/resolution to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "billing-readiness-note-reviewed")?.detail,
+          "Billing-readiness note not reviewed locally.",
+          `${viewport.label}: expected billing-readiness note to need review`,
+        );
+        assert.equal(
+          state.items.find((item) => item.key === "next-admin-closeout-action")?.detail,
+          "Confirm trip completion locally.",
+          `${viewport.label}: expected trip completion as next closeout action`,
+        );
+        for (const expectedBoundaryText of [
+          "Local UI only.",
+          "No Supabase write",
+          "live database access",
+          "invoice",
+          "PDF",
+          "payment",
+          "payout",
+          "notification sending",
+          "customer message",
+          "driver notification",
+          "live location",
+          "parser-learning",
+        ]) {
+          assert.equal(
+            state.boundary.includes(expectedBoundaryText),
+            true,
+            `${viewport.label}: expected completed trip closeout boundary text ${expectedBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.forbiddenPrivateText,
+          [],
+          `${viewport.label}: expected no private/customer/driver forbidden text in completed trip closeout`,
+        );
+        assert.equal(
+          state.height <= (viewport.width < 640 ? 980 : 680),
+          true,
+          `${viewport.label}: expected compact completed trip closeout, got ${state.height}px`,
+        );
+        assert.equal(
+          state.items.every((item) => item.height >= 48 && item.width >= 120),
+          true,
+          `${viewport.label}: expected completed trip closeout items to stay readable`,
+        );
+        assert.equal(
+          state.options.every((option) => option.height >= 36 && option.width >= 72),
+          true,
+          `${viewport.label}: expected completed trip closeout controls to stay readable`,
+        );
+        assert.equal(
+          state.noteHeight >= 40,
+          true,
+          `${viewport.label}: expected completed trip closeout note to stay readable`,
+        );
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected completed trip closeout not to create horizontal overflow`,
+        );
+
+        states.push({
+          boundary: state.boundary,
+          height: state.height,
+          items: state.items.map((item) => ({ key: item.key, label: item.label, state: item.state })),
+          noteValue: state.noteValue,
+          options: state.options.map((option) => ({
+            state: option.state,
+            value: option.value,
+          })),
+          status: state.status,
+          viewport: viewport.label,
+        });
+      }
+
+      return states;
+    };
+
     const checkAdminDspCompletionBillingPrepHandoff = async () => {
       const handoffViewports = [
         { height: 812, label: "mobile DSP completion billing prep handoff", mobile: true, scale: 3, width: 375 },
@@ -36014,6 +36259,7 @@ async function runChromeTest() {
       await checkAdminDispatchRecoveryReplacementReadiness();
     state.adminPostRecoveryUpdateReadiness = await checkAdminPostRecoveryUpdateReadiness();
     state.adminDayOfTripCompletionHandoff = await checkAdminDayOfTripCompletionHandoff();
+    state.adminCompletedTripCloseoutReview = await checkAdminCompletedTripCloseoutReview();
     await withInternalQaMockArchiveOpen(async () => {
       state.adminCustomerIntakeHandoff = await checkAdminCustomerIntakeHandoff();
       state.adminIntakeConfirmationReadiness = await checkAdminIntakeConfirmationReadiness();
@@ -36132,6 +36378,7 @@ async function runChromeTest() {
     state.adminDispatchRecoveryReplacementReadinessRouteBoundaries = [];
     state.adminPostRecoveryUpdateReadinessRouteBoundaries = [];
     state.adminDayOfTripCompletionHandoffRouteBoundaries = [];
+    state.adminCompletedTripCloseoutReviewRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -36402,6 +36649,32 @@ async function runChromeTest() {
         adminDayOfTripCompletionHandoffTextLeaks,
         [],
         `Expected no admin day-of-trip completion handoff wording leak for ${route.context}`,
+      );
+      const adminCompletedTripCloseoutReviewVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-completed-trip-closeout-review]"))`,
+      );
+      const adminCompletedTripCloseoutReviewTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return ["Completed Trip Closeout Review", "Billing-readiness note reviewed"].filter((text) =>
+            bodyText.includes(text),
+          );
+        })()`,
+      );
+      state.adminCompletedTripCloseoutReviewRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminCompletedTripCloseoutReviewTextLeaks,
+        visible: adminCompletedTripCloseoutReviewVisible,
+      });
+      assert.equal(
+        adminCompletedTripCloseoutReviewVisible,
+        false,
+        `Expected admin completed trip closeout review boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminCompletedTripCloseoutReviewTextLeaks,
+        [],
+        `Expected no admin completed trip closeout review wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -36741,6 +37014,32 @@ async function runChromeTest() {
       customerDetailAdminDayOfTripCompletionHandoffTextLeaks,
       [],
       "Expected no admin day-of-trip completion handoff wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminCompletedTripCloseoutReviewVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-completed-trip-closeout-review]"))`,
+    );
+    const customerDetailAdminCompletedTripCloseoutReviewTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return ["Completed Trip Closeout Review", "Billing-readiness note reviewed"].filter((text) =>
+          bodyText.includes(text),
+        );
+      })()`,
+    );
+    state.adminCompletedTripCloseoutReviewRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminCompletedTripCloseoutReviewTextLeaks,
+      visible: customerDetailAdminCompletedTripCloseoutReviewVisible,
+    });
+    assert.equal(
+      customerDetailAdminCompletedTripCloseoutReviewVisible,
+      false,
+      "Expected admin completed trip closeout review boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminCompletedTripCloseoutReviewTextLeaks,
+      [],
+      "Expected no admin completed trip closeout review wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

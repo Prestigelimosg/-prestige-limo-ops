@@ -2204,6 +2204,103 @@ function assertBookingUiState(state) {
   assert.match(state.dayOfTripCompletionHandoff.boundary, /live location/);
   assert.match(state.dayOfTripCompletionHandoff.boundary, /parser-learning/);
   assert.deepEqual(state.dayOfTripCompletionHandoff.forbiddenPanelText, []);
+  assert.equal(state.completedTripCloseoutReview.visible, true);
+  assert.match(state.completedTripCloseoutReview.text, /Completed Trip Closeout Review/);
+  assert.equal(state.completedTripCloseoutReview.context, "Current dispatch draft");
+  assert.equal(state.completedTripCloseoutReview.status, "Completed trip closeout review needed");
+  assert.equal(state.completedTripCloseoutReview.noteValue, "");
+  assert.deepEqual(
+    state.completedTripCloseoutReview.options.map((option) => option.label),
+    [
+      "Review Needed",
+      "Trip Complete",
+      "Driver Reviewed",
+      "Customer Closeout",
+      "Exception Reviewed",
+      "Billing Note",
+      "Ready Locally",
+    ],
+  );
+  assert.deepEqual(
+    state.completedTripCloseoutReview.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["review-needed", "selected"],
+      ["trip-completed", "idle"],
+      ["driver-reviewed", "idle"],
+      ["customer-closeout-reviewed", "idle"],
+      ["exception-reviewed", "idle"],
+      ["billing-note-reviewed", "idle"],
+      ["ready-locally", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.completedTripCloseoutReview.items.map((item) => item.label),
+    [
+      "Trip completed",
+      "Driver completion reviewed",
+      "Customer closeout reviewed",
+      "Exception/resolution reviewed",
+      "Billing-readiness note reviewed",
+      "Next admin closeout action",
+      "Local closeout note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.completedTripCloseoutReview.items.map((item) => item.key),
+    [
+      "trip-completed",
+      "driver-completion-reviewed",
+      "customer-closeout-reviewed",
+      "exception-resolution-reviewed",
+      "billing-readiness-note-reviewed",
+      "next-admin-closeout-action",
+      "local-closeout-note-status",
+    ],
+  );
+  assert.equal(
+    state.completedTripCloseoutReview.items.find((item) => item.key === "trip-completed")?.detail,
+    "Trip completion not reviewed locally.",
+  );
+  assert.equal(
+    state.completedTripCloseoutReview.items.find((item) => item.key === "driver-completion-reviewed")?.detail,
+    "Driver completion not reviewed locally.",
+  );
+  assert.equal(
+    state.completedTripCloseoutReview.items.find((item) => item.key === "customer-closeout-reviewed")?.detail,
+    "Customer closeout not reviewed locally.",
+  );
+  assert.equal(
+    state.completedTripCloseoutReview.items.find((item) => item.key === "exception-resolution-reviewed")?.detail,
+    "Exception/resolution not reviewed locally.",
+  );
+  assert.equal(
+    state.completedTripCloseoutReview.items.find((item) => item.key === "billing-readiness-note-reviewed")?.detail,
+    "Billing-readiness note not reviewed locally.",
+  );
+  assert.equal(
+    state.completedTripCloseoutReview.items.find((item) => item.key === "next-admin-closeout-action")?.detail,
+    "Confirm trip completion locally.",
+  );
+  assert.equal(
+    state.completedTripCloseoutReview.items.find((item) => item.key === "local-closeout-note-status")?.detail,
+    "Completed trip closeout review needed. No local note.",
+  );
+  assert.match(state.completedTripCloseoutReview.boundary, /Local UI only/);
+  assert.match(state.completedTripCloseoutReview.boundary, /No Supabase write/);
+  assert.match(state.completedTripCloseoutReview.boundary, /live database access/);
+  assert.match(state.completedTripCloseoutReview.boundary, /invoice/);
+  assert.match(state.completedTripCloseoutReview.boundary, /PDF/);
+  assert.match(state.completedTripCloseoutReview.boundary, /payment/);
+  assert.match(state.completedTripCloseoutReview.boundary, /payout/);
+  assert.match(state.completedTripCloseoutReview.boundary, /notification sending/);
+  assert.match(state.completedTripCloseoutReview.boundary, /customer message/);
+  assert.match(state.completedTripCloseoutReview.boundary, /driver notification/);
+  assert.match(state.completedTripCloseoutReview.boundary, /live location/);
+  assert.match(state.completedTripCloseoutReview.boundary, /parser-learning/);
+  assert.deepEqual(state.completedTripCloseoutReview.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -3576,9 +3673,73 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const completedTripCloseoutReview = () => {
+        const section = document.querySelector("[data-admin-completed-trip-closeout-review='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-completed-trip-closeout-review-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section
+              ?.querySelector("[data-admin-completed-trip-closeout-review-context='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "driver payout",
+            "paynow",
+            "payout comparison",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [
+            ...(section?.querySelectorAll("[data-admin-completed-trip-closeout-review-item]") || []),
+          ].map((item) => ({
+            detail:
+              item
+                .querySelector("[data-admin-completed-trip-closeout-review-detail]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-completed-trip-closeout-review-item") || "",
+            label:
+              item
+                .querySelector("[data-admin-completed-trip-closeout-review-label]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-completed-trip-closeout-review-item-state") || "",
+          })),
+          noteValue:
+            section?.querySelector("[data-admin-completed-trip-closeout-review-note='true']")?.value ??
+            null,
+          options: [
+            ...(section?.querySelectorAll("[data-admin-completed-trip-closeout-review-option]") || []),
+          ].map((option) => ({
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-completed-trip-closeout-review-option-state") || "",
+            value: option.getAttribute("data-admin-completed-trip-closeout-review-option") || "",
+          })),
+          status:
+            section
+              ?.querySelector("[data-admin-completed-trip-closeout-review-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
+        completedTripCloseoutReview: completedTripCloseoutReview(),
         consoleErrors: window.__prestigeConsoleErrors || [],
         customerCopy: preTextByHeading("Customer Copy"),
         dayOfTripExceptionEscalation: dayOfTripExceptionEscalation(),

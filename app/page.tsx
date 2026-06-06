@@ -589,6 +589,15 @@ type DayOfTripCompletionHandoffStatus =
   | "exception-reviewed"
   | "ready-locally";
 
+type CompletedTripCloseoutReviewStatus =
+  | "review-needed"
+  | "trip-completed"
+  | "driver-reviewed"
+  | "customer-closeout-reviewed"
+  | "exception-reviewed"
+  | "billing-note-reviewed"
+  | "ready-locally";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3947,6 +3956,9 @@ export default function Home() {
   const [dayOfTripCompletionHandoffStatus, setDayOfTripCompletionHandoffStatus] =
     useState<DayOfTripCompletionHandoffStatus>("review-needed");
   const [dayOfTripCompletionHandoffNote, setDayOfTripCompletionHandoffNote] = useState("");
+  const [completedTripCloseoutReviewStatus, setCompletedTripCloseoutReviewStatus] =
+    useState<CompletedTripCloseoutReviewStatus>("review-needed");
+  const [completedTripCloseoutReviewNote, setCompletedTripCloseoutReviewNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9550,6 +9562,131 @@ export default function Home() {
       key: "local-completion-note-status",
       label: "Local completion note/status",
       state: dayOfTripCompletionHandoffReadyLocally ? "ready" : "needs-action",
+    },
+  ];
+  const completedTripCloseoutReviewStatusLabel =
+    completedTripCloseoutReviewStatus === "ready-locally"
+      ? "Completed trip closeout ready"
+      : completedTripCloseoutReviewStatus === "billing-note-reviewed"
+        ? "Billing-readiness note reviewed"
+        : completedTripCloseoutReviewStatus === "exception-reviewed"
+          ? "Exception/resolution reviewed"
+          : completedTripCloseoutReviewStatus === "customer-closeout-reviewed"
+            ? "Customer closeout reviewed"
+            : completedTripCloseoutReviewStatus === "driver-reviewed"
+              ? "Driver completion reviewed"
+              : completedTripCloseoutReviewStatus === "trip-completed"
+                ? "Trip completion reviewed"
+                : "Completed trip closeout review needed";
+  const completedTripCloseoutReviewOptions: {
+    label: string;
+    value: CompletedTripCloseoutReviewStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Trip Complete", value: "trip-completed" },
+    { label: "Driver Reviewed", value: "driver-reviewed" },
+    { label: "Customer Closeout", value: "customer-closeout-reviewed" },
+    { label: "Exception Reviewed", value: "exception-reviewed" },
+    { label: "Billing Note", value: "billing-note-reviewed" },
+    { label: "Ready Locally", value: "ready-locally" },
+  ];
+  const completedTripCloseoutReviewReached = (status: CompletedTripCloseoutReviewStatus) => {
+    const order: CompletedTripCloseoutReviewStatus[] = [
+      "trip-completed",
+      "driver-reviewed",
+      "customer-closeout-reviewed",
+      "exception-reviewed",
+      "billing-note-reviewed",
+      "ready-locally",
+    ];
+    const currentIndex = order.indexOf(completedTripCloseoutReviewStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const completedTripCloseoutTripCompleted =
+    completedTripCloseoutReviewReached("trip-completed") ||
+    dayOfTripCompletionFinalTripStatusReady;
+  const completedTripCloseoutDriverCompletionReviewed =
+    completedTripCloseoutReviewReached("driver-reviewed") ||
+    dayOfTripCompletionDriverStatusReady;
+  const completedTripCloseoutCustomerCloseoutReviewed =
+    completedTripCloseoutReviewReached("customer-closeout-reviewed") ||
+    dayOfTripCompletionCustomerCloseoutReady;
+  const completedTripCloseoutExceptionResolutionReviewed =
+    completedTripCloseoutReviewReached("exception-reviewed") ||
+    dayOfTripCompletionExceptionResolutionReviewed;
+  const completedTripCloseoutBillingReadinessNoteReviewed =
+    completedTripCloseoutReviewReached("billing-note-reviewed");
+  const completedTripCloseoutReviewReadyLocally =
+    completedTripCloseoutReviewStatus === "ready-locally";
+  const completedTripCloseoutReviewNextAction = completedTripCloseoutReviewReadyLocally
+    ? "Completed trip closeout ready locally; keep closeout note current."
+    : !completedTripCloseoutTripCompleted
+      ? "Confirm trip completion locally."
+      : !completedTripCloseoutDriverCompletionReviewed
+        ? "Review driver completion locally."
+        : !completedTripCloseoutCustomerCloseoutReviewed
+          ? "Review customer closeout locally."
+          : !completedTripCloseoutExceptionResolutionReviewed
+            ? "Review exception/resolution locally."
+            : !completedTripCloseoutBillingReadinessNoteReviewed
+              ? "Review billing-readiness note locally."
+              : "Mark completed trip closeout ready locally.";
+  const completedTripCloseoutReviewItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: completedTripCloseoutTripCompleted
+        ? "Trip completion reviewed locally."
+        : "Trip completion not reviewed locally.",
+      key: "trip-completed",
+      label: "Trip completed",
+      state: completedTripCloseoutTripCompleted ? "ready" : "needs-action",
+    },
+    {
+      detail: completedTripCloseoutDriverCompletionReviewed
+        ? "Driver completion reviewed locally."
+        : "Driver completion not reviewed locally.",
+      key: "driver-completion-reviewed",
+      label: "Driver completion reviewed",
+      state: completedTripCloseoutDriverCompletionReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: completedTripCloseoutCustomerCloseoutReviewed
+        ? "Customer closeout reviewed locally."
+        : "Customer closeout not reviewed locally.",
+      key: "customer-closeout-reviewed",
+      label: "Customer closeout reviewed",
+      state: completedTripCloseoutCustomerCloseoutReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: completedTripCloseoutExceptionResolutionReviewed
+        ? "Exception/resolution reviewed locally."
+        : "Exception/resolution not reviewed locally.",
+      key: "exception-resolution-reviewed",
+      label: "Exception/resolution reviewed",
+      state: completedTripCloseoutExceptionResolutionReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: completedTripCloseoutBillingReadinessNoteReviewed
+        ? "Billing-readiness note reviewed locally."
+        : "Billing-readiness note not reviewed locally.",
+      key: "billing-readiness-note-reviewed",
+      label: "Billing-readiness note reviewed",
+      state: completedTripCloseoutBillingReadinessNoteReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: completedTripCloseoutReviewNextAction,
+      key: "next-admin-closeout-action",
+      label: "Next admin closeout action",
+      state: completedTripCloseoutReviewReadyLocally ? "ready" : "needs-action",
+    },
+    {
+      detail: `${completedTripCloseoutReviewStatusLabel}. ${
+        clean(completedTripCloseoutReviewNote) || "No local note."
+      }`,
+      key: "local-closeout-note-status",
+      label: "Local closeout note/status",
+      state: completedTripCloseoutReviewReadyLocally ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -18823,6 +18960,132 @@ export default function Home() {
               >
                 Local UI only. No Supabase write, live database access, notification sending, customer message,
                 driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Completed Trip Closeout Review"
+              className="mt-3 min-w-0 rounded-md border border-zinc-200 bg-zinc-50/80 p-0.5 sm:p-2.5"
+              data-admin-completed-trip-closeout-review="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-zinc-950">
+                      Completed Trip Closeout Review
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        completedTripCloseoutReviewReadyLocally
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : completedTripCloseoutBillingReadinessNoteReviewed ||
+                              completedTripCloseoutExceptionResolutionReviewed
+                            ? "bg-zinc-200 text-zinc-950 ring-zinc-300"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-completed-trip-closeout-review-status="true"
+                    >
+                      {completedTripCloseoutReviewStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-zinc-800"
+                    data-admin-completed-trip-closeout-review-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-zinc-700">
+                    Local closeout review after completion handoff.
+                  </p>
+                </div>
+                <div
+                  aria-label="Completed trip closeout review status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-zinc-200 bg-white p-1 sm:w-64 sm:shrink-0 sm:grid-cols-3 lg:w-72 xl:w-96"
+                  data-admin-completed-trip-closeout-review-controls="true"
+                  role="group"
+                >
+                  {completedTripCloseoutReviewOptions.map((option) => {
+                    const isSelected = completedTripCloseoutReviewStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-zinc-800 text-white"
+                            : "bg-white text-zinc-950 hover:bg-zinc-100"
+                        }`}
+                        data-admin-completed-trip-closeout-review-option={option.value}
+                        data-admin-completed-trip-closeout-review-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setCompletedTripCloseoutReviewStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-zinc-950 sm:mt-3">
+                <span>Local closeout note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-100"
+                  data-admin-completed-trip-closeout-review-note="true"
+                  onChange={(event) => setCompletedTripCloseoutReviewNote(event.target.value)}
+                  placeholder="Local staff closeout note"
+                  value={completedTripCloseoutReviewNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 md:grid-cols-3">
+                {completedTripCloseoutReviewItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "billing-readiness-note-reviewed" ||
+                            item.key === "next-admin-closeout-action" ||
+                            item.key === "local-closeout-note-status"
+                          ? "border-zinc-200 bg-white text-zinc-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-completed-trip-closeout-review-item={item.key}
+                    data-admin-completed-trip-closeout-review-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-completed-trip-closeout-review-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-completed-trip-closeout-review-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-zinc-200 pt-1.5 text-[11px] leading-4 text-zinc-700 md:text-[10px] md:leading-3"
+                data-admin-completed-trip-closeout-review-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, invoice, PDF, payment, payout,
+                notification sending, customer message, driver notification, live location, or parser-learning behavior.
               </p>
             </section>
           </div>

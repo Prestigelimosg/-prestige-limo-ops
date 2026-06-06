@@ -616,6 +616,15 @@ type BillingPreparationExceptionReviewStatus =
   | "billing-action-required"
   | "cleared-locally";
 
+type BillingPreparationSummaryReviewStatus =
+  | "review-needed"
+  | "closeout-ready"
+  | "account-ready"
+  | "details-ready"
+  | "charges-reviewed"
+  | "exceptions-cleared"
+  | "ready-for-monthly-review";
+
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
   source_channel?: string | null;
@@ -3985,6 +3994,9 @@ export default function Home() {
     useState<BillingPreparationExceptionReviewStatus>("review-needed");
   const [billingPreparationExceptionReviewNote, setBillingPreparationExceptionReviewNote] =
     useState("");
+  const [billingPreparationSummaryReviewStatus, setBillingPreparationSummaryReviewStatus] =
+    useState<BillingPreparationSummaryReviewStatus>("review-needed");
+  const [billingPreparationSummaryReviewNote, setBillingPreparationSummaryReviewNote] = useState("");
   const [acceptedReviewWarningKey, setAcceptedReviewWarningKey] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [message, setMessage] = useState<Message>({
@@ -9972,6 +9984,151 @@ export default function Home() {
       key: "local-exception-note-status",
       label: "Local exception note/status",
       state: billingPreparationExceptionReviewClearedLocally ? "ready" : "needs-action",
+    },
+  ];
+  const billingPreparationSummaryReviewStatusLabel =
+    billingPreparationSummaryReviewStatus === "ready-for-monthly-review"
+      ? "Ready for monthly billing review"
+      : billingPreparationSummaryReviewStatus === "exceptions-cleared"
+        ? "Exceptions cleared"
+        : billingPreparationSummaryReviewStatus === "charges-reviewed"
+          ? "Extra charges reviewed"
+          : billingPreparationSummaryReviewStatus === "details-ready"
+            ? "Trip/service details ready"
+            : billingPreparationSummaryReviewStatus === "account-ready"
+              ? "Billing account ready"
+              : billingPreparationSummaryReviewStatus === "closeout-ready"
+                ? "Closeout ready"
+                : "Billing preparation summary review needed";
+  const billingPreparationSummaryReviewOptions: {
+    label: string;
+    value: BillingPreparationSummaryReviewStatus;
+  }[] = [
+    { label: "Review Needed", value: "review-needed" },
+    { label: "Closeout Ready", value: "closeout-ready" },
+    { label: "Account Ready", value: "account-ready" },
+    { label: "Details Ready", value: "details-ready" },
+    { label: "Charges Reviewed", value: "charges-reviewed" },
+    { label: "Exceptions Clear", value: "exceptions-cleared" },
+    { label: "Monthly Ready", value: "ready-for-monthly-review" },
+  ];
+  const billingPreparationSummaryReviewReached = (
+    status: BillingPreparationSummaryReviewStatus,
+  ) => {
+    const order: BillingPreparationSummaryReviewStatus[] = [
+      "closeout-ready",
+      "account-ready",
+      "details-ready",
+      "charges-reviewed",
+      "exceptions-cleared",
+      "ready-for-monthly-review",
+    ];
+    const currentIndex = order.indexOf(billingPreparationSummaryReviewStatus);
+    const statusIndex = order.indexOf(status);
+
+    return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
+  };
+  const billingPreparationSummaryCloseoutReady =
+    billingPreparationSummaryReviewReached("closeout-ready") ||
+    closeoutToBillingCloseoutReviewed;
+  const billingPreparationSummaryAccountReady =
+    billingPreparationSummaryReviewReached("account-ready") &&
+    closeoutToBillingCustomerAccountReady &&
+    !billingPreparationMissingBillingAccount;
+  const billingPreparationSummaryDetailsReady =
+    billingPreparationSummaryReviewReached("details-ready") &&
+    closeoutToBillingTripServiceDetailsReviewed &&
+    !billingPreparationIncompleteTripServiceDetails;
+  const billingPreparationSummaryExtraChargesReviewed =
+    billingPreparationSummaryReviewReached("charges-reviewed") &&
+    closeoutToBillingExtraChargesReviewed &&
+    !billingPreparationExtraChargesPending;
+  const billingPreparationSummaryExceptionsCleared =
+    billingPreparationSummaryReviewReached("exceptions-cleared") &&
+    billingPreparationExceptionReviewClearedLocally;
+  const billingPreparationSummaryReadyForMonthlyReview =
+    billingPreparationSummaryReviewStatus === "ready-for-monthly-review" &&
+    billingPreparationSummaryCloseoutReady &&
+    billingPreparationSummaryAccountReady &&
+    billingPreparationSummaryDetailsReady &&
+    billingPreparationSummaryExtraChargesReviewed &&
+    billingPreparationSummaryExceptionsCleared;
+  const billingPreparationSummaryNextAction =
+    billingPreparationSummaryReadyForMonthlyReview
+      ? "Ready for future monthly billing review locally; keep summary note current."
+      : !billingPreparationSummaryCloseoutReady
+        ? "Confirm closeout readiness locally."
+        : !billingPreparationSummaryAccountReady
+          ? "Confirm billing account readiness locally."
+          : !billingPreparationSummaryDetailsReady
+            ? "Confirm trip/service details locally."
+            : !billingPreparationSummaryExtraChargesReviewed
+              ? "Confirm extra charges review locally."
+              : !billingPreparationSummaryExceptionsCleared
+                ? "Clear or document billing-prep exceptions locally."
+                : "Mark ready for monthly billing review locally.";
+  const billingPreparationSummaryReviewItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: billingPreparationSummaryCloseoutReady
+        ? "Closeout readiness confirmed locally."
+        : "Closeout readiness not confirmed locally.",
+      key: "closeout-ready",
+      label: "Closeout ready",
+      state: billingPreparationSummaryCloseoutReady ? "ready" : "needs-action",
+    },
+    {
+      detail: billingPreparationSummaryAccountReady
+        ? "Billing account readiness confirmed locally."
+        : "Billing account readiness not confirmed locally.",
+      key: "billing-account-ready",
+      label: "Billing account ready",
+      state: billingPreparationSummaryAccountReady ? "ready" : "needs-action",
+    },
+    {
+      detail: billingPreparationSummaryDetailsReady
+        ? "Trip/service details readiness confirmed locally."
+        : "Trip/service details readiness not confirmed locally.",
+      key: "trip-service-details-ready",
+      label: "Trip/service details ready",
+      state: billingPreparationSummaryDetailsReady ? "ready" : "needs-action",
+    },
+    {
+      detail: billingPreparationSummaryExtraChargesReviewed
+        ? "Extra charges reviewed locally."
+        : "Extra charges not fully reviewed locally.",
+      key: "extra-charges-reviewed",
+      label: "Extra charges reviewed",
+      state: billingPreparationSummaryExtraChargesReviewed ? "ready" : "needs-action",
+    },
+    {
+      detail: billingPreparationSummaryExceptionsCleared
+        ? "Billing-prep exceptions cleared locally."
+        : "Billing-prep exceptions pending locally.",
+      key: "exceptions-cleared-or-pending",
+      label: "Exceptions cleared or pending",
+      state: billingPreparationSummaryExceptionsCleared ? "ready" : "needs-action",
+    },
+    {
+      detail: billingPreparationSummaryReadyForMonthlyReview
+        ? "Ready for future monthly billing review locally."
+        : "Not ready for future monthly billing review locally.",
+      key: "ready-for-monthly-billing-review",
+      label: "Ready for monthly billing review",
+      state: billingPreparationSummaryReadyForMonthlyReview ? "ready" : "needs-action",
+    },
+    {
+      detail: billingPreparationSummaryNextAction,
+      key: "next-admin-billing-action",
+      label: "Next admin billing action",
+      state: billingPreparationSummaryReadyForMonthlyReview ? "ready" : "needs-action",
+    },
+    {
+      detail: `${billingPreparationSummaryReviewStatusLabel}. ${
+        clean(billingPreparationSummaryReviewNote) || "No local summary note."
+      }`,
+      key: "local-summary-note-status",
+      label: "Local summary note/status",
+      state: billingPreparationSummaryReadyForMonthlyReview ? "ready" : "needs-action",
     },
   ];
   const mockMidnightChargeOverrideAutoDetected = isMockMidnightChargeDetected("22:59");
@@ -19622,6 +19779,134 @@ export default function Home() {
               <p
                 className="mt-1.5 border-t border-rose-200 pt-1.5 text-[11px] leading-4 text-rose-900 md:text-[10px] md:leading-3"
                 data-admin-billing-preparation-exception-review-boundary="true"
+              >
+                Local UI only. No Supabase write, live database access, billing activation, invoice, PDF,
+                payment, payout, notification sending, customer message, driver notification, live location, or
+                parser-learning behavior.
+              </p>
+            </section>
+
+            <section
+              aria-label="Billing Preparation Summary / Ready Review"
+              className="mt-3 min-w-0 rounded-md border border-sky-200 bg-sky-50/70 p-0.5 sm:p-2.5"
+              data-admin-billing-preparation-summary-ready-review="true"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="break-words text-sm font-semibold text-sky-950">
+                      Billing Preparation Summary / Ready Review
+                    </h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
+                        billingPreparationSummaryReadyForMonthlyReview
+                          ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                          : billingPreparationSummaryExceptionsCleared ||
+                              billingPreparationSummaryExtraChargesReviewed
+                            ? "bg-sky-100 text-sky-950 ring-sky-200"
+                            : "bg-amber-100 text-amber-950 ring-amber-200"
+                      }`}
+                      data-admin-billing-preparation-summary-ready-review-status="true"
+                    >
+                      {billingPreparationSummaryReviewStatusLabel}
+                    </span>
+                  </div>
+                  <p
+                    className="mt-1 break-words text-xs font-semibold leading-5 text-sky-900"
+                    data-admin-billing-preparation-summary-ready-review-context="true"
+                  >
+                    {dispatchReleaseContextLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-4 text-sky-900">
+                    Local summary for future monthly billing readiness after closeout and exception review.
+                  </p>
+                </div>
+                <div
+                  aria-label="Billing preparation summary ready review status"
+                  className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-sky-200 bg-white p-1 sm:w-64 sm:shrink-0 sm:grid-cols-3 lg:w-72 xl:w-96"
+                  data-admin-billing-preparation-summary-ready-review-controls="true"
+                  role="group"
+                >
+                  {billingPreparationSummaryReviewOptions.map((option) => {
+                    const isSelected = billingPreparationSummaryReviewStatus === option.value;
+
+                    return (
+                      <button
+                        className={`min-h-9 min-w-0 break-words rounded px-1.5 py-1 text-[10px] font-semibold leading-3 transition sm:px-2 sm:text-[11px] ${
+                          isSelected
+                            ? "bg-sky-800 text-white"
+                            : "bg-white text-sky-950 hover:bg-sky-100"
+                        }`}
+                        data-admin-billing-preparation-summary-ready-review-option={option.value}
+                        data-admin-billing-preparation-summary-ready-review-option-state={
+                          isSelected ? "selected" : "idle"
+                        }
+                        key={option.value}
+                        onClick={() => setBillingPreparationSummaryReviewStatus(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label className="mt-1 block min-w-0 text-xs font-semibold text-sky-950 sm:mt-3">
+                <span>Local summary note</span>
+                <textarea
+                  className="mt-1 min-h-10 w-full min-w-0 resize-y rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  data-admin-billing-preparation-summary-ready-review-note="true"
+                  onChange={(event) => setBillingPreparationSummaryReviewNote(event.target.value)}
+                  placeholder="Local staff monthly billing readiness summary"
+                  value={billingPreparationSummaryReviewNote}
+                />
+              </label>
+              <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 xl:grid-cols-4">
+                {billingPreparationSummaryReviewItems.map((item) => (
+                  <div
+                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                      item.state === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-950"
+                        : item.key === "exceptions-cleared-or-pending" ||
+                            item.key === "ready-for-monthly-billing-review" ||
+                            item.key === "next-admin-billing-action" ||
+                            item.key === "local-summary-note-status"
+                          ? "border-sky-200 bg-white text-sky-950"
+                          : "border-amber-200 bg-white text-amber-950"
+                    }`}
+                    data-admin-billing-preparation-summary-ready-review-item={item.key}
+                    data-admin-billing-preparation-summary-ready-review-item-state={item.state}
+                    key={item.key}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-1.5">
+                      <p
+                        className="min-w-0 break-words font-semibold leading-4"
+                        data-admin-billing-preparation-summary-ready-review-label={item.key}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                          item.state === "ready"
+                            ? "bg-emerald-100 text-emerald-900"
+                            : "bg-amber-100 text-amber-900"
+                        }`}
+                      >
+                        {item.state === "ready" ? "Ready" : "Check"}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-0.5 break-words leading-4"
+                      data-admin-billing-preparation-summary-ready-review-detail={item.key}
+                    >
+                      {item.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p
+                className="mt-1.5 border-t border-sky-200 pt-1.5 text-[11px] leading-4 text-sky-900 md:text-[10px] md:leading-3"
+                data-admin-billing-preparation-summary-ready-review-boundary="true"
               >
                 Local UI only. No Supabase write, live database access, billing activation, invoice, PDF,
                 payment, payout, notification sending, customer message, driver notification, live location, or

@@ -2520,6 +2520,123 @@ function assertBookingUiState(state) {
   assert.match(state.billingPreparationExceptionReview.boundary, /live location/);
   assert.match(state.billingPreparationExceptionReview.boundary, /parser-learning/);
   assert.deepEqual(state.billingPreparationExceptionReview.forbiddenPanelText, []);
+  assert.equal(state.billingPreparationSummaryReadyReview.visible, true);
+  assert.match(state.billingPreparationSummaryReadyReview.text, /Billing Preparation Summary \/ Ready Review/);
+  assert.equal(state.billingPreparationSummaryReadyReview.context, "Current dispatch draft");
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.status,
+    "Billing preparation summary review needed",
+  );
+  assert.equal(state.billingPreparationSummaryReadyReview.noteValue, "");
+  assert.deepEqual(
+    state.billingPreparationSummaryReadyReview.options.map((option) => option.label),
+    [
+      "Review Needed",
+      "Closeout Ready",
+      "Account Ready",
+      "Details Ready",
+      "Charges Reviewed",
+      "Exceptions Clear",
+      "Monthly Ready",
+    ],
+  );
+  assert.deepEqual(
+    state.billingPreparationSummaryReadyReview.options.map((option) => [
+      option.value,
+      option.state,
+    ]),
+    [
+      ["review-needed", "selected"],
+      ["closeout-ready", "idle"],
+      ["account-ready", "idle"],
+      ["details-ready", "idle"],
+      ["charges-reviewed", "idle"],
+      ["exceptions-cleared", "idle"],
+      ["ready-for-monthly-review", "idle"],
+    ],
+  );
+  assert.deepEqual(
+    state.billingPreparationSummaryReadyReview.items.map((item) => item.label),
+    [
+      "Closeout ready",
+      "Billing account ready",
+      "Trip/service details ready",
+      "Extra charges reviewed",
+      "Exceptions cleared or pending",
+      "Ready for monthly billing review",
+      "Next admin billing action",
+      "Local summary note/status",
+    ],
+  );
+  assert.deepEqual(
+    state.billingPreparationSummaryReadyReview.items.map((item) => item.key),
+    [
+      "closeout-ready",
+      "billing-account-ready",
+      "trip-service-details-ready",
+      "extra-charges-reviewed",
+      "exceptions-cleared-or-pending",
+      "ready-for-monthly-billing-review",
+      "next-admin-billing-action",
+      "local-summary-note-status",
+    ],
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find((item) => item.key === "closeout-ready")
+      ?.detail,
+    "Closeout readiness not confirmed locally.",
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find((item) => item.key === "billing-account-ready")
+      ?.detail,
+    "Billing account readiness not confirmed locally.",
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find((item) => item.key === "trip-service-details-ready")
+      ?.detail,
+    "Trip/service details readiness not confirmed locally.",
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find((item) => item.key === "extra-charges-reviewed")
+      ?.detail,
+    "Extra charges not fully reviewed locally.",
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find(
+      (item) => item.key === "exceptions-cleared-or-pending",
+    )?.detail,
+    "Billing-prep exceptions pending locally.",
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find(
+      (item) => item.key === "ready-for-monthly-billing-review",
+    )?.detail,
+    "Not ready for future monthly billing review locally.",
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find((item) => item.key === "next-admin-billing-action")
+      ?.detail,
+    "Confirm closeout readiness locally.",
+  );
+  assert.equal(
+    state.billingPreparationSummaryReadyReview.items.find((item) => item.key === "local-summary-note-status")
+      ?.detail,
+    "Billing preparation summary review needed. No local summary note.",
+  );
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /Local UI only/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /No Supabase write/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /live database access/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /billing activation/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /invoice/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /PDF/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /payment/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /payout/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /notification sending/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /customer message/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /driver notification/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /live location/);
+  assert.match(state.billingPreparationSummaryReadyReview.boundary, /parser-learning/);
+  assert.deepEqual(state.billingPreparationSummaryReadyReview.forbiddenPanelText, []);
 }
 
 async function runChromeTest() {
@@ -4081,9 +4198,75 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const billingPreparationSummaryReadyReview = () => {
+        const section = document.querySelector("[data-admin-billing-preparation-summary-ready-review='true']");
+        const rect = section?.getBoundingClientRect();
+        const text = section?.innerText || "";
+        const lowerText = text.toLowerCase();
+
+        return {
+          boundary:
+            section
+              ?.querySelector("[data-admin-billing-preparation-summary-ready-review-boundary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          context:
+            section
+              ?.querySelector("[data-admin-billing-preparation-summary-ready-review-context='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          forbiddenPanelText: [
+            "customer price",
+            "driver payout",
+            "paynow",
+            "payout comparison",
+            "parser/debug",
+            "debug internals",
+            "invoice number",
+            "payment link",
+            "supabase url",
+          ].filter((value) => lowerText.includes(value)),
+          items: [
+            ...(section?.querySelectorAll("[data-admin-billing-preparation-summary-ready-review-item]") ||
+              []),
+          ].map((item) => ({
+            detail:
+              item
+                .querySelector("[data-admin-billing-preparation-summary-ready-review-detail]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            key: item.getAttribute("data-admin-billing-preparation-summary-ready-review-item") || "",
+            label:
+              item
+                .querySelector("[data-admin-billing-preparation-summary-ready-review-label]")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state: item.getAttribute("data-admin-billing-preparation-summary-ready-review-item-state") || "",
+          })),
+          noteValue:
+            section?.querySelector("[data-admin-billing-preparation-summary-ready-review-note='true']")
+              ?.value ?? null,
+          options: [
+            ...(section?.querySelectorAll("[data-admin-billing-preparation-summary-ready-review-option]") ||
+              []),
+          ].map((option) => ({
+            label: option.textContent.replace(/\\s+/g, " ").trim(),
+            state: option.getAttribute("data-admin-billing-preparation-summary-ready-review-option-state") || "",
+            value: option.getAttribute("data-admin-billing-preparation-summary-ready-review-option") || "",
+          })),
+          status:
+            section
+              ?.querySelector("[data-admin-billing-preparation-summary-ready-review-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          text,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      };
 
       return {
         billingPreparationExceptionReview: billingPreparationExceptionReview(),
+        billingPreparationSummaryReadyReview: billingPreparationSummaryReadyReview(),
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
         closeoutToBillingPreparationReview: closeoutToBillingPreparationReview(),
         completedTripCloseoutReview: completedTripCloseoutReview(),

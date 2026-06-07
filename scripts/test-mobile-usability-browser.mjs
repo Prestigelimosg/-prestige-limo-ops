@@ -2504,9 +2504,9 @@ async function runChromeTest() {
         `${viewport.label}: expected Monthly Billing Month Grouping Review controls to stay readable`,
       );
       assert.equal(
-        state.boundary.includes("Local UI only.") &&
+        state.boundary.includes("Read-only admin API GET only.") &&
           state.boundary.includes("No Supabase write") &&
-          state.boundary.includes("live database access") &&
+          state.boundary.includes("live database write") &&
           state.boundary.includes("invoice creation") &&
           state.boundary.includes("PDF") &&
           state.boundary.includes("payment") &&
@@ -2515,7 +2515,7 @@ async function runChromeTest() {
           state.boundary.includes("auth change") &&
           state.boundary.includes("parser change"),
         true,
-        `${viewport.label}: expected Monthly Billing Month Grouping Review local-only boundary`,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review read-only boundary`,
       );
       assert.equal(
         state.height <= (viewport.width < 340 ? 1450 : viewport.width < 640 ? 1320 : 940),

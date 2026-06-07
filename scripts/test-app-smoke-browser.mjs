@@ -808,6 +808,17 @@ async function runChromeTest() {
       await evaluate(`(() => {
         window.__adminBookingPersistenceCalls = [];
         window.__adminBookingPersistenceMockMode = "success";
+        window.__adminMonthlyBillingGroupingCalls = [];
+        window.__adminMonthlyBillingGroupingGroups = [
+          {
+            billing_month: "2026-06",
+            blocked_count: 0,
+            customer_account: "Loaded Ops Customer",
+            ready_count: 1,
+            safe_readiness_status: "ready",
+            total_count: 1,
+          },
+        ];
         window.__adminWorkflowStatusCalls = [];
         window.__adminWorkflowStatusMockRows = {
           "LOADED-OPS-001:dispatch_release": {
@@ -880,6 +891,34 @@ async function runChromeTest() {
                 JSON.stringify({
                   ok: true,
                   status: row,
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
+
+          if (String(url).includes("/api/admin-monthly-billing-groups")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const groups = window.__adminMonthlyBillingGroupingGroups || [];
+
+            window.__adminMonthlyBillingGroupingCalls.push({
+              method,
+              search: parsedUrl.search,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              return new Response(
+                JSON.stringify({
+                  groups,
+                  ok: true,
+                  summary: {
+                    blocked_count: groups.reduce((total, group) => total + Number(group.blocked_count || 0), 0),
+                    group_count: groups.length,
+                    ready_count: groups.reduce((total, group) => total + Number(group.ready_count || 0), 0),
+                    total_count: groups.reduce((total, group) => total + Number(group.total_count || 0), 0),
+                  },
+                  version: "app-smoke-monthly-billing-grouping-read-mock",
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -2034,13 +2073,18 @@ async function runChromeTest() {
               .querySelector("[data-admin-driver-acknowledgement-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const monthlyBillingGroupingFeedback = document
+              .querySelector("[data-admin-monthly-billing-month-grouping-read-feedback]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
             const baitPattern =
               /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i;
 
             return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
               fields.pickup === "Loaded Ops Pickup" &&
               dispatchReleaseFeedback.includes("Loaded dispatch release workflow status for LOADED-OPS-001") &&
-              driverAcknowledgementFeedback.includes("Loaded driver acknowledgement workflow status for LOADED-OPS-001")
+              driverAcknowledgementFeedback.includes("Loaded driver acknowledgement workflow status for LOADED-OPS-001") &&
+              monthlyBillingGroupingFeedback.includes("Loaded 1 saved monthly billing group for June 2026")
               ? {
                   bodyBaitLeaked: baitPattern.test(bodyText),
                   clearAppliedVisible: Boolean(
@@ -2055,6 +2099,8 @@ async function runChromeTest() {
                   fieldBaitLeaked: baitPattern.test(fieldText),
                   identityBaitLeaked: baitPattern.test(identityText),
                   identityText,
+                  monthlyBillingGroupingCalls: window.__adminMonthlyBillingGroupingCalls || [],
+                  monthlyBillingGroupingFeedback,
                   workflowStatusCalls: window.__adminWorkflowStatusCalls || [],
                 }
               : false;
@@ -2124,6 +2170,11 @@ async function runChromeTest() {
         /Loaded driver acknowledgement workflow status for LOADED-OPS-001: Driver acknowledgement ready\./,
         "Expected applied snapshot load to show saved driver acknowledgement workflow status in existing UI feedback",
       );
+      assert.match(
+        appliedSnapshotState.monthlyBillingGroupingFeedback,
+        /Loaded 1 saved monthly billing group for June 2026\./,
+        "Expected applied snapshot load to show saved monthly billing grouping read feedback in existing UI",
+      );
       assert.deepEqual(
         appliedSnapshotState.workflowStatusCalls.map((call) => ({
           bookingReference: call.bookingReference,
@@ -2143,6 +2194,19 @@ async function runChromeTest() {
           },
         ],
         "Expected applied snapshot load to GET dispatch_release and driver_acknowledgement workflow statuses through the guarded API path",
+      );
+      assert.deepEqual(
+        appliedSnapshotState.monthlyBillingGroupingCalls.map((call) => ({
+          method: call.method,
+          search: call.search,
+        })),
+        [
+          {
+            method: "GET",
+            search: "?limit=25&billing_month=2026-06",
+          },
+        ],
+        "Expected applied snapshot load to GET monthly billing grouping through the guarded read API path",
       );
       assert.equal(
         appliedSnapshotState.fieldBaitLeaked ||
@@ -8053,9 +8117,9 @@ async function runChromeTest() {
           `${viewport.label}: expected local grouping note status to start blank`,
         );
         for (const expectedBoundaryText of [
-          "Local UI only.",
+          "Read-only admin API GET only.",
           "No Supabase write",
-          "live database access",
+          "live database write",
           "invoice creation",
           "PDF",
           "payment",

@@ -1,4 +1,5 @@
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
+import { createMonthlyBillingDraftPrepAppEvent } from "../../../lib/admin-app-notification-events";
 import {
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
@@ -146,9 +147,16 @@ export async function POST(request: Request) {
       );
     }
 
+    const outboxEvent = await createMonthlyBillingDraftPrepAppEvent(result.data, actor);
+
     return Response.json({
       invoice_draft: result.data,
       ok: true,
+      outbox_event: {
+        delivery_surface: outboxEvent.delivery_surface,
+        external_send: outboxEvent.external_send,
+        status: outboxEvent.status,
+      },
     });
   } catch {
     return safeFailureResponse();

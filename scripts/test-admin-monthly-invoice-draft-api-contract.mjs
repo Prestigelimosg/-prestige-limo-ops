@@ -17,6 +17,8 @@ const safeApiLeakPattern =
 const unsafeInvoiceDraftLeakPattern =
   /contact_phone|contact_email|passenger|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice_number|final_invoice|issued_invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
+  "lib/admin-app-notification-events.ts",
+  "lib/admin-app-notification-persistence.ts",
   "lib/admin-monthly-invoice-draft-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
@@ -248,6 +250,7 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      admin_app_notification_outbox: [],
       monthly_invoice_draft_trip_links: [],
       monthly_invoice_drafts: [],
     };
@@ -319,7 +322,7 @@ class MockSupabaseClient {
     };
   }
 
-  insertRows(table, payload) {
+  insertRows(table, payload, resultMode) {
     const failure = this.failureFor("insert", table);
 
     this.recordOperation("insert", table, payload);
@@ -343,7 +346,7 @@ class MockSupabaseClient {
     this.tables[table].push(...inserted);
 
     return {
-      data: inserted.map((row) => clone(row)),
+      data: resultMode === "single" ? clone(inserted[0] || null) : inserted.map((row) => clone(row)),
       error: null,
     };
   }
@@ -883,7 +886,12 @@ try {
   assert.equal(saveResult.body.invoice_draft.billing_month, "2026-07");
   assert.equal(saveResult.body.invoice_draft.actor_role, "dispatcher");
   assert.equal(saveResult.body.invoice_draft.linked_trips.length, 1);
-  assert.equal(saveMock.client.operations.length, 3);
+  assert.deepEqual(saveResult.body.outbox_event, {
+    delivery_surface: "admin_app",
+    external_send: false,
+    status: "created",
+  });
+  assert.equal(saveMock.client.operations.length, 4);
   assert.equal(saveMock.client.operations[0].action, "upsert");
   assert.equal(saveMock.client.operations[0].table, "monthly_invoice_drafts");
   assert.deepEqual(saveMock.client.operations[0].options, {
@@ -893,7 +901,58 @@ try {
   assert.equal(saveMock.client.operations[1].table, "monthly_invoice_draft_trip_links");
   assert.equal(saveMock.client.operations[2].action, "insert");
   assert.equal(saveMock.client.operations[2].table, "monthly_invoice_draft_trip_links");
+  assert.equal(saveMock.client.operations[3].action, "insert");
+  assert.equal(saveMock.client.operations[3].table, "admin_app_notification_outbox");
+  assert.equal(saveMock.client.operations[3].payload.notification_type, "monthly_billing");
+  assert.equal(saveMock.client.operations[3].payload.notification_status, "queued");
+  assert.equal(saveMock.client.operations[3].payload.delivery_surface, "admin_app");
+  assert.equal(saveMock.client.operations[3].payload.workflow_area, "monthly_billing_draft_prep");
+  assert.equal(saveMock.client.operations[3].payload.safe_title, "Monthly billing draft prep saved");
+  assert.equal(
+    saveMock.client.operations[3].payload.safe_message,
+    "Admin monthly billing draft prep was saved from grouped completed trip data.",
+  );
+  assert.equal(saveMock.client.operations[3].payload.safe_context.billing_month, "2026-07");
+  assert.equal(saveMock.client.operations[3].payload.safe_context.ready_count, 4);
+  assert.equal(saveMock.client.operations[3].payload.safe_context.blocked_count, 0);
+  assert.match(
+    saveMock.client.operations[3].payload.event_key,
+    /^monthly-billing-draft-prep-00000000-0000-4000-8000-000000000003-2026-07-\d+$/,
+  );
   assertNoLeaks(saveResult, "monthly invoice draft save response should stay safe");
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
+
+  const failedOutboxMock = installMockClient(seed, {
+    failures: {
+      "insert:admin_app_notification_outbox": {
+        code: "42501",
+        message: `Outbox insert denied with ${serviceRoleSentinel} should not leak`,
+      },
+    },
+  });
+  const failedOutboxResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-drafts", {
+        body: JSON.stringify(validCreatePayload),
+        headers: sessionHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(failedOutboxResult.status, 200);
+  assert.equal(failedOutboxResult.body.ok, true);
+  assert.equal(failedOutboxResult.body.invoice_draft.customer_account, "Foundation Account");
+  assert.deepEqual(failedOutboxResult.body.outbox_event, {
+    delivery_surface: "admin_app",
+    external_send: false,
+    status: "failed_safely",
+  });
+  assert.equal(failedOutboxMock.client.operations.length, 4);
+  assert.equal(failedOutboxMock.client.operations[3].action, "insert");
+  assert.equal(failedOutboxMock.client.operations[3].table, "admin_app_notification_outbox");
+  assertNoLeaks(failedOutboxResult, "monthly invoice draft failed outbox response should stay safe");
 
   setEnv(enabledEnv());
 

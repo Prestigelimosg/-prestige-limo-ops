@@ -11766,9 +11766,17 @@ async function runChromeTest() {
 
         if (String(target).includes("/api/admin-monthly-invoice-drafts")) {
           const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
 
           window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
           window.__prestigeMonthlyInvoiceDraftRequests.push({
+            body: parsedBody,
             headers,
             method,
             search: url.search,
@@ -11812,6 +11820,62 @@ async function runChromeTest() {
                   total_draft_count: filteredDrafts.length,
                 },
                 version: "focused-browser-monthly-invoice-draft-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "PATCH") {
+            const draftId = parsedBody?.draft_id || "";
+            const draftIndex = (window.__prestigeMonthlyInvoiceDrafts || []).findIndex((draft) =>
+              draft.id === draftId ||
+                (draft.customer_account === parsedBody?.customer_account &&
+                  draft.billing_month === parsedBody?.billing_month),
+            );
+            const existingDraft = draftIndex >= 0 ? window.__prestigeMonthlyInvoiceDrafts[draftIndex] : {};
+            const invoiceDraft = {
+              ...existingDraft,
+              ...parsedBody,
+              actor_label: "Focused browser monthly invoice draft mock",
+              actor_role: "admin",
+              linked_trips: existingDraft.linked_trips || [],
+              source_surface: "admin_api",
+              updated_at: "2026-06-07T00:00:00.000Z",
+            };
+
+            if (draftIndex >= 0) {
+              window.__prestigeMonthlyInvoiceDrafts[draftIndex] = invoiceDraft;
+            } else {
+              window.__prestigeMonthlyInvoiceDrafts.push(invoiceDraft);
+            }
+
+            return new Response(
+              JSON.stringify({
+                invoice_draft: invoiceDraft,
+                ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "POST") {
+            const invoiceDraft = {
+              ...parsedBody,
+              actor_label: "Focused browser monthly invoice draft mock",
+              actor_role: "admin",
+              created_at: "2026-06-07T00:00:00.000Z",
+              id: "focused-browser-monthly-invoice-draft-created",
+              linked_trips: parsedBody?.linked_trips || [],
+              source_surface: "admin_api",
+              updated_at: "2026-06-07T00:00:00.000Z",
+            };
+
+            window.__prestigeMonthlyInvoiceDrafts.push(invoiceDraft);
+
+            return new Response(
+              JSON.stringify({
+                invoice_draft: invoiceDraft,
+                ok: true,
               }),
               { status: 200, headers: { "content-type": "application/json" } },
             );
@@ -11919,6 +11983,18 @@ async function runChromeTest() {
                   section?.querySelector("[data-admin-monthly-invoice-draft-read-feedback='true']")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
+                invoiceDraftActionSummary:
+                  section?.querySelector("[data-admin-monthly-invoice-draft-prep-action-summary='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                invoiceDraftSaveButton: (() => {
+                  const button = section?.querySelector("[data-admin-monthly-invoice-draft-save-action='true']");
+
+                  return {
+                    disabled: button?.disabled ?? true,
+                    text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+                  };
+                })(),
                 readinessFilterValue:
                   section?.querySelector("[data-admin-monthly-billing-month-grouping-readiness-filter='true']")
                     ?.value || "",
@@ -12089,6 +12165,17 @@ async function runChromeTest() {
       "Loaded 1 of 2 saved monthly invoice drafts for May 2026.",
     );
     assert.equal(
+      loadedBookingState.monthlyBillingMonthGroupingReview.invoiceDraftActionSummary,
+      "Saved draft prep: Pending admin review",
+    );
+    assert.deepEqual(
+      loadedBookingState.monthlyBillingMonthGroupingReview.invoiceDraftSaveButton,
+      {
+        disabled: false,
+        text: "Refresh draft prep",
+      },
+    );
+    assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.pageSummary,
       "Page 1 of 2 / All readiness",
     );
@@ -12130,6 +12217,102 @@ async function runChromeTest() {
       loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "admin-review-status")
         ?.detail,
       "Saved monthly invoice draft status: Pending admin review. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved invoice draft page 1 of 2.",
+    );
+    const clickedMonthlyInvoiceDraftSave = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-monthly-invoice-draft-save-action='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedMonthlyInvoiceDraftSave,
+      true,
+      "Expected saved monthly invoice draft prep refresh button to be clickable",
+    );
+    const monthlyInvoiceDraftSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+
+          return {
+            feedback:
+              section?.querySelector("[data-admin-monthly-invoice-draft-read-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            requests: window.__prestigeMonthlyInvoiceDraftRequests || [],
+            summary:
+              section?.querySelector("[data-admin-monthly-invoice-draft-prep-action-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.requests?.some((request) => request.method === "PATCH") &&
+          candidateState.feedback.includes("Refreshed monthly invoice draft preparation for LOADED SAVED COMPANY")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly invoice draft prep refresh",
+    );
+    const monthlyInvoiceDraftPatchRequest = monthlyInvoiceDraftSaveState.requests.find(
+      (request) => request.method === "PATCH",
+    );
+    assert.deepEqual(
+      {
+        body: {
+          billing_month: monthlyInvoiceDraftPatchRequest.body.billing_month,
+          blocked_count: monthlyInvoiceDraftPatchRequest.body.blocked_count,
+          customer_account: monthlyInvoiceDraftPatchRequest.body.customer_account,
+          draft_id: monthlyInvoiceDraftPatchRequest.body.draft_id,
+          draft_status: monthlyInvoiceDraftPatchRequest.body.draft_status,
+          ready_count: monthlyInvoiceDraftPatchRequest.body.ready_count,
+          readiness_status: monthlyInvoiceDraftPatchRequest.body.readiness_status,
+          total_count: monthlyInvoiceDraftPatchRequest.body.total_count,
+        },
+        hasSessionTokenHeader: Boolean(monthlyInvoiceDraftPatchRequest.headers["x-prestige-admin-session-token"]),
+        method: monthlyInvoiceDraftPatchRequest.method,
+        purpose: monthlyInvoiceDraftPatchRequest.headers["x-prestige-admin-purpose"] || "",
+        search: monthlyInvoiceDraftPatchRequest.search,
+      },
+      {
+        body: {
+          billing_month: "2026-05",
+          blocked_count: 1,
+          customer_account: "LOADED SAVED COMPANY",
+          draft_id: "focused-browser-monthly-invoice-draft-one",
+          draft_status: "pending_admin_review",
+          ready_count: 2,
+          readiness_status: "mixed",
+          total_count: 3,
+        },
+        hasSessionTokenHeader: false,
+        method: "PATCH",
+        purpose: "admin-booking-persistence",
+        search: "",
+      },
+      "Expected monthly invoice draft prep refresh to PATCH safe grouped counts through the guarded API path",
+    );
+    assert.deepEqual(
+      Object.keys(monthlyInvoiceDraftPatchRequest.body).sort(),
+      [
+        "billing_month",
+        "blocked_count",
+        "customer_account",
+        "draft_id",
+        "draft_status",
+        "readiness_status",
+        "ready_count",
+        "safe_draft_context",
+        "safe_draft_note",
+        "source_grouping_summary",
+        "total_count",
+      ],
+      "Expected monthly invoice draft prep refresh to avoid invoice/payment/PDF/payout fields",
     );
     const clickedMonthlyGroupingNextPage = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-billing-month-grouping-next-page='true']");

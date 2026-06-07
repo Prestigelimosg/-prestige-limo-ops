@@ -598,6 +598,7 @@ type AdminMonthlyBillingGroup = {
   billing_month?: string | null;
   blocked_count?: number | null;
   customer_account?: string | null;
+  customer_id?: string | null;
   ready_count?: number | null;
   safe_readiness_status?: AdminMonthlyBillingGroupingReadinessStatus | null;
   total_count?: number | null;
@@ -674,6 +675,8 @@ type AdminMonthlyInvoiceDraftReadState = {
   pagination: AdminMonthlyInvoiceDraftPagination | null;
   status: "idle" | "loading" | "loaded" | "error";
 };
+
+type AdminMonthlyInvoiceDraftAction = "save-draft-prep";
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
@@ -3988,6 +3991,95 @@ async function loadAdminMonthlyInvoiceDraftsRead({
   };
 }
 
+async function saveAdminMonthlyInvoiceDraftPreparation({
+  existingDraft,
+  group,
+}: {
+  existingDraft: AdminMonthlyInvoiceDraftRecord | null;
+  group: AdminMonthlyBillingGroup;
+}) {
+  const customerAccount = clean(group.customer_account);
+  const billingMonth = clean(group.billing_month);
+  const readyCount = adminMonthlyBillingGroupingCount(group.ready_count);
+  const blockedCount = adminMonthlyBillingGroupingCount(group.blocked_count);
+  const totalCount = adminMonthlyBillingGroupingCount(group.total_count);
+  const readinessStatus = group.safe_readiness_status || "blocked";
+
+  if (!customerAccount || !billingMonth || totalCount < 1) {
+    throw new Error("Monthly invoice draft preparation requires a saved customer/month group.");
+  }
+
+  const safeDraftContext = {
+    draft_summary: `${totalCount} saved completed trip${totalCount === 1 ? "" : "s"} grouped for monthly draft prep.`,
+    next_action:
+      blockedCount > 0
+        ? "Review blocked saved trips before manager approval."
+        : "Review saved group counts before manager approval.",
+    review_status: existingDraft
+      ? "Saved draft prep refreshed from grouped data."
+      : "Saved draft prep created from grouped data.",
+  };
+  const sharedPayload = {
+    billing_month: billingMonth,
+    blocked_count: blockedCount,
+    customer_account: customerAccount,
+    draft_status: existingDraft?.draft_status || "pending_admin_review",
+    ready_count: readyCount,
+    readiness_status: readinessStatus,
+    safe_draft_context: safeDraftContext,
+    safe_draft_note: "Saved from admin monthly group read.",
+    source_grouping_summary: {
+      billing_month: billingMonth,
+      blocked_count: blockedCount,
+      customer_account: customerAccount,
+      readiness_status: readinessStatus,
+      ready_count: readyCount,
+      source: "admin_monthly_billing_grouping_read",
+      total_count: totalCount,
+    },
+    total_count: totalCount,
+  };
+  const request =
+    existingDraft?.id
+      ? {
+          body: {
+            ...sharedPayload,
+            draft_id: existingDraft.id,
+          },
+          method: "PATCH",
+        }
+      : {
+          body: {
+            ...sharedPayload,
+            customer_id: clean(group.customer_id) || null,
+            linked_trips: [],
+          },
+          method: "POST",
+        };
+
+  const response = await fetch(adminMonthlyInvoiceDraftsApiPath, {
+    body: JSON.stringify(request.body),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: request.method,
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly invoice draft preparation save failed.");
+  }
+
+  const invoiceDraft = result.invoice_draft as AdminMonthlyInvoiceDraftRecord | null;
+
+  if (!invoiceDraft) {
+    throw new Error("Monthly invoice draft preparation response was empty.");
+  }
+
+  return invoiceDraft;
+}
+
 function completedTripCloseoutReviewStatusFromApi(
   closeout: AdminCompletedBookingCloseoutRecord | null,
 ): CompletedTripCloseoutReviewStatus {
@@ -4044,6 +4136,25 @@ function adminMonthlyInvoiceDraftFailureMessage(rawError: unknown) {
   }
 
   return "Saved monthly invoice draft read failed safely.";
+}
+
+function adminMonthlyInvoiceDraftSaveFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Saved monthly invoice draft preparation is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Saved monthly invoice draft preparation requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Saved monthly invoice draft preparation details need review.";
+  }
+
+  return "Saved monthly invoice draft preparation failed safely.";
 }
 
 function adminMonthlyBillingGroupingBillingMonthFromDate(value: string | null | undefined) {
@@ -4518,6 +4629,8 @@ export default function Home() {
       pagination: null,
       status: "idle",
     });
+  const [adminMonthlyInvoiceDraftAction, setAdminMonthlyInvoiceDraftAction] =
+    useState<AdminMonthlyInvoiceDraftAction | null>(null);
   const [adminMonthlyBillingGroupingCustomerSearch, setAdminMonthlyBillingGroupingCustomerSearch] =
     useState("");
   const [adminMonthlyBillingGroupingReadinessFilter, setAdminMonthlyBillingGroupingReadinessFilter] =
@@ -12037,6 +12150,83 @@ export default function Home() {
       ? "Admin month grouping review completed locally."
       : "Admin month grouping review not completed locally.";
   })();
+  const monthlyInvoiceDraftSaving = adminMonthlyInvoiceDraftAction === "save-draft-prep";
+  const monthlyInvoiceDraftSaveDisabled =
+    !monthlyBillingSavedGroupingPrimaryGroup ||
+    monthlyBillingSavedGroupingTotalTrips < 1 ||
+    monthlyBillingSavedGroupingLoading ||
+    monthlyInvoiceDraftLoading ||
+    monthlyInvoiceDraftSaving;
+  const monthlyInvoiceDraftSaveButtonLabel = monthlyInvoiceDraftSaving
+    ? "Saving draft prep..."
+    : monthlyInvoiceDraftHasDraft
+      ? "Refresh draft prep"
+      : "Create draft prep";
+  const saveMonthlyInvoiceDraftPrepFromGroup = async () => {
+    if (!monthlyBillingSavedGroupingPrimaryGroup || monthlyInvoiceDraftSaveDisabled) {
+      setAdminMonthlyInvoiceDraftReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Load a saved monthly billing group before saving draft preparation.",
+        },
+      }));
+      return;
+    }
+
+    setAdminMonthlyInvoiceDraftAction("save-draft-prep");
+    setAdminMonthlyInvoiceDraftReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Saving monthly invoice draft preparation through the guarded admin API...",
+      },
+    }));
+
+    try {
+      const savedDraft = await saveAdminMonthlyInvoiceDraftPreparation({
+        existingDraft: monthlyInvoiceDraftPrimaryDraft,
+        group: monthlyBillingSavedGroupingPrimaryGroup,
+      });
+
+      setAdminMonthlyInvoiceDraftReadState((current) => {
+        const savedId = clean(savedDraft.id);
+        const savedAccount = clean(savedDraft.customer_account);
+        const savedMonth = clean(savedDraft.billing_month);
+        const savedActionLabel = monthlyInvoiceDraftPrimaryDraft ? "Refreshed" : "Created";
+        const savedMonthLabel = adminMonthlyBillingGroupingMonthLabel(savedMonth);
+        const savedStatusLabel = adminMonthlyInvoiceDraftStatusLabel(savedDraft.draft_status);
+        const otherDrafts = current.invoiceDrafts.filter((draft) => {
+          if (savedId && clean(draft.id) === savedId) {
+            return false;
+          }
+
+          return clean(draft.customer_account) !== savedAccount || clean(draft.billing_month) !== savedMonth;
+        });
+
+        return {
+          ...current,
+          invoiceDrafts: [savedDraft, ...otherDrafts],
+          message: {
+            tone: "success",
+            text: `${savedActionLabel} monthly invoice draft preparation for ${savedAccount} / ${savedMonthLabel}: ${savedStatusLabel}.`,
+          },
+          status: "loaded",
+        };
+      });
+    } catch (error) {
+      setAdminMonthlyInvoiceDraftReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminMonthlyInvoiceDraftSaveFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminMonthlyInvoiceDraftAction(null);
+    }
+  };
   const monthlyBillingMonthGroupingLocalNoteDetail = `${monthlyBillingMonthGroupingReviewStatusLabel}. ${
     clean(monthlyBillingMonthGroupingReviewNote) || "No local grouping note."
   }`;
@@ -22313,6 +22503,30 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+              {monthlyBillingSavedGroupingHasGroup ? (
+                <div
+                  className="mt-2 flex min-w-0 flex-col gap-1 rounded-md border border-teal-200 bg-white p-1.5 sm:flex-row sm:items-center sm:justify-between"
+                  data-admin-monthly-invoice-draft-prep-action-row="true"
+                >
+                  <p
+                    className="min-w-0 break-words text-xs font-semibold text-teal-950"
+                    data-admin-monthly-invoice-draft-prep-action-summary="true"
+                  >
+                    {monthlyInvoiceDraftHasDraft
+                      ? `Saved draft prep: ${monthlyInvoiceDraftStatusLabel}`
+                      : "No saved draft prep for this group yet."}
+                  </p>
+                  <button
+                    className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-teal-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
+                    data-admin-monthly-invoice-draft-save-action="true"
+                    disabled={monthlyInvoiceDraftSaveDisabled}
+                    onClick={saveMonthlyInvoiceDraftPrepFromGroup}
+                    type="button"
+                  >
+                    {monthlyInvoiceDraftSaveButtonLabel}
+                  </button>
+                </div>
+              ) : null}
               <label className="mt-1 block min-w-0 text-xs font-semibold text-teal-950 sm:mt-3">
                 <span>Local grouping note</span>
                 <textarea

@@ -535,6 +535,173 @@ try {
 
   setEnv(enabledEnv());
 
+  const defaultReadMock = installMockClient(seed);
+  const defaultReadResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(defaultReadResult.status, 200);
+  assert.equal(defaultReadResult.body.ok, true);
+  assert.deepEqual(defaultReadResult.body.groups, [
+    {
+      billing_month: "2026-06",
+      blocked_count: 2,
+      customer_account: "Acme Corporate",
+      customer_id: "customer-acme",
+      ready_count: 1,
+      safe_readiness_status: "mixed",
+      total_count: 3,
+    },
+    {
+      billing_month: "2026-07",
+      blocked_count: 0,
+      customer_account: "Acme Corporate",
+      customer_id: "customer-acme",
+      ready_count: 1,
+      safe_readiness_status: "ready",
+      total_count: 1,
+    },
+    {
+      billing_month: "2026-06",
+      blocked_count: 0,
+      customer_account: "Zeta Account",
+      customer_id: "customer-zeta",
+      ready_count: 1,
+      safe_readiness_status: "ready",
+      total_count: 1,
+    },
+  ]);
+  assert.deepEqual(defaultReadResult.body.summary, {
+    blocked_count: 2,
+    group_count: 3,
+    ready_count: 3,
+    total_count: 5,
+  });
+  assert.deepEqual(defaultReadResult.body.pagination, {
+    has_next_page: false,
+    has_previous_page: false,
+    page: 1,
+    page_count: 1,
+    page_size: 25,
+    total_group_count: 3,
+  });
+  assert.equal(defaultReadMock.client.operations.length, 0);
+  assertNoLeaks(defaultReadResult, "default monthly billing grouping response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const billingMonthFilterMock = installMockClient(seed);
+  const billingMonthFilterResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-06", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(billingMonthFilterResult.status, 200);
+  assert.deepEqual(
+    billingMonthFilterResult.body.groups.map((group) => group.billing_month),
+    ["2026-06", "2026-06"],
+  );
+  assert.deepEqual(billingMonthFilterResult.body.summary, {
+    blocked_count: 2,
+    group_count: 2,
+    ready_count: 2,
+    total_count: 4,
+  });
+  assert.deepEqual(billingMonthFilterResult.body.pagination, {
+    has_next_page: false,
+    has_previous_page: false,
+    page: 1,
+    page_count: 1,
+    page_size: 25,
+    total_group_count: 2,
+  });
+  assert.equal(billingMonthFilterMock.client.operations.length, 0);
+  assertNoLeaks(
+    billingMonthFilterResult,
+    "billing month filtered monthly billing grouping response should stay safe",
+  );
+
+  setEnv(enabledEnv());
+
+  const customerSearchMock = installMockClient(seed);
+  const customerSearchResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?customer_account_search=acme", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(customerSearchResult.status, 200);
+  assert.deepEqual(
+    customerSearchResult.body.groups.map((group) => `${group.customer_account}:${group.billing_month}`),
+    ["Acme Corporate:2026-06", "Acme Corporate:2026-07"],
+  );
+  assert.deepEqual(customerSearchResult.body.summary, {
+    blocked_count: 2,
+    group_count: 2,
+    ready_count: 2,
+    total_count: 4,
+  });
+  assert.deepEqual(customerSearchResult.body.pagination, {
+    has_next_page: false,
+    has_previous_page: false,
+    page: 1,
+    page_count: 1,
+    page_size: 25,
+    total_group_count: 2,
+  });
+  assert.equal(customerSearchMock.client.operations.length, 0);
+  assertNoLeaks(
+    customerSearchResult,
+    "customer search monthly billing grouping response should stay safe",
+  );
+
+  setEnv(enabledEnv());
+
+  const readinessFilterMock = installMockClient(seed);
+  const readinessFilterResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?readiness_status=ready", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(readinessFilterResult.status, 200);
+  assert.deepEqual(
+    readinessFilterResult.body.groups.map((group) => `${group.customer_account}:${group.safe_readiness_status}`),
+    ["Acme Corporate:ready", "Zeta Account:ready"],
+  );
+  assert.deepEqual(readinessFilterResult.body.summary, {
+    blocked_count: 0,
+    group_count: 2,
+    ready_count: 2,
+    total_count: 2,
+  });
+  assert.deepEqual(readinessFilterResult.body.pagination, {
+    has_next_page: false,
+    has_previous_page: false,
+    page: 1,
+    page_count: 1,
+    page_size: 25,
+    total_group_count: 2,
+  });
+  assert.equal(readinessFilterMock.client.operations.length, 0);
+  assertNoLeaks(
+    readinessFilterResult,
+    "readiness filtered monthly billing grouping response should stay safe",
+  );
+
+  setEnv(enabledEnv());
+
   const readMock = installMockClient(seed);
   const readResult = await readRouteResponse(
     await route.GET(

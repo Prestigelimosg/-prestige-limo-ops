@@ -1824,6 +1824,15 @@ function assertBookingUiState(state) {
   assert.match(state.dayOfTripDispatchMonitor.boundary, /payout/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /live location/);
   assert.match(state.dayOfTripDispatchMonitor.boundary, /parser-learning/);
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.visible, true);
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.state, "No saved status");
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.latest, "No saved driver status");
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.time, "Time not recorded");
+  assert.equal(state.dayOfTripDispatchMonitor.savedDriverStatus.history, "No saved history loaded.");
+  assert.match(
+    state.dayOfTripDispatchMonitor.savedDriverStatus.message,
+    /Load saved booking before reading saved driver status/,
+  );
   assert.deepEqual(state.dayOfTripDispatchMonitor.forbiddenPanelText, []);
   assert.equal(state.dayOfTripExceptionEscalation.visible, true);
   assert.match(state.dayOfTripExceptionEscalation.text, /Day-of-Trip Exception Escalation/);
@@ -4131,6 +4140,29 @@ async function runChromeTest() {
               state: item.getAttribute("data-admin-day-of-trip-dispatch-monitor-item-state") || "",
             }),
           ),
+          savedDriverStatus: {
+            history:
+              section?.querySelector("[data-admin-driver-job-status-readout-detail='status-history']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            latest:
+              section?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            message:
+              section?.querySelector("[data-admin-driver-job-status-readout-message='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state:
+              section?.querySelector("[data-admin-driver-job-status-readout-state='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            time:
+              section?.querySelector("[data-admin-driver-job-status-readout-detail='status-time']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            visible: Boolean(section?.querySelector("[data-admin-driver-job-status-readout='true']")),
+          },
           options: [...(section?.querySelectorAll("[data-admin-day-of-trip-dispatch-monitor-option]") || [])].map(
             (option) => ({
               disabled: option.disabled,
@@ -5863,6 +5895,8 @@ async function runChromeTest() {
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeCompletedCloseoutRequests = [];
       window.__prestigeCompletedCloseouts = {};
+      window.__prestigeDriverJobStatusRequests = [];
+      window.__prestigeDriverJobStatuses = {};
       window.__prestigeMonthlyBillingGroupingRequests = [];
       window.__prestigeMonthlyBillingGroupingGroups = [
         {
@@ -6006,6 +6040,44 @@ async function runChromeTest() {
           }
 
           return new Response(JSON.stringify({ ok: false, error: "Completed closeout method not mocked." }), {
+            status: 405,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (String(target).includes("/api/admin-driver-job-statuses")) {
+          const url = new URL(String(target), window.location.origin);
+          const bookingReference = url.searchParams.get("booking_reference") || "";
+
+          window.__prestigeDriverJobStatusRequests.push({
+            body: null,
+            booking_reference: bookingReference,
+            headers,
+            limit: url.searchParams.get("limit") || "",
+            method,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const statuses = window.__prestigeDriverJobStatuses[bookingReference] || [];
+
+            return new Response(
+              JSON.stringify({
+                booking_reference: bookingReference,
+                latest_status: statuses[0]?.status_value || null,
+                ok: true,
+                statuses,
+                summary: {
+                  event_count: statuses.length,
+                  has_status_history: statuses.length > 0,
+                },
+                version: "booking-ui-driver-job-status-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(JSON.stringify({ ok: false, error: "Driver status method not mocked." }), {
             status: 405,
             headers: { "content-type": "application/json" },
           });
@@ -11824,6 +11896,22 @@ async function runChromeTest() {
           total_count: 1,
         },
       ];
+      window.__prestigeDriverJobStatusRequests = [];
+      window.__prestigeDriverJobStatuses = {
+        "ui-cleanup-load-fixture": [
+          {
+            actor_label: "Browser driver status mock",
+            actor_role: "driver",
+            booking_reference: "ui-cleanup-load-fixture",
+            created_at: "2026-06-07T09:25:00.000Z",
+            occurred_at: "2026-06-07T09:25:00.000Z",
+            safe_status_note: "Do not display this safe note in compact status history",
+            source_surface: "driver_job_api",
+            status_source: "driver_job_api",
+            status_value: "ots",
+          },
+        ],
+      };
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
       window.fetch = async (...args) => {
@@ -11942,6 +12030,40 @@ async function runChromeTest() {
               JSON.stringify({
                 closeout,
                 ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
+        if (String(target).includes("/api/admin-driver-job-statuses")) {
+          const url = new URL(String(target), window.location.origin);
+          const bookingReference = url.searchParams.get("booking_reference") || "";
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeDriverJobStatusRequests.push({
+            body: null,
+            booking_reference: bookingReference,
+            headers,
+            limit: url.searchParams.get("limit") || "",
+            method,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const statuses = window.__prestigeDriverJobStatuses[bookingReference] || [];
+
+            return new Response(
+              JSON.stringify({
+                booking_reference: bookingReference,
+                latest_status: statuses[0]?.status_value || null,
+                ok: true,
+                statuses,
+                summary: {
+                  event_count: statuses.length,
+                  has_status_history: statuses.length > 0,
+                },
+                version: "focused-browser-driver-job-status-read-mock",
               }),
               { status: 200, headers: { "content-type": "application/json" } },
             );
@@ -12199,6 +12321,7 @@ async function runChromeTest() {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
+            driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             monthlyBillingGroupingRequests: window.__prestigeMonthlyBillingGroupingRequests || [],
             monthlyInvoiceDraftRequests: window.__prestigeMonthlyInvoiceDraftRequests || [],
@@ -12259,6 +12382,32 @@ async function runChromeTest() {
                 })),
               };
             })(),
+            savedDriverStatusReadout: (() => {
+              const section = document.querySelector("[data-admin-day-of-trip-dispatch-monitor='true']");
+
+              return {
+                history:
+                  section?.querySelector("[data-admin-driver-job-status-readout-detail='status-history']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                latest:
+                  section?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                message:
+                  section?.querySelector("[data-admin-driver-job-status-readout-message='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                state:
+                  section?.querySelector("[data-admin-driver-job-status-readout-state='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                time:
+                  section?.querySelector("[data-admin-driver-job-status-readout-detail='status-time']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+              };
+            })(),
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
             driverDispatch: preTextByHeading("Driver Dispatch"),
@@ -12294,6 +12443,14 @@ async function runChromeTest() {
               request.method === "GET" &&
               request.booking_reference === "ui-cleanup-load-fixture",
           ) &&
+          candidateState?.driverJobStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.limit === "4",
+          ) &&
+          candidateState?.savedDriverStatusReadout?.latest === "OTS" &&
+          candidateState?.savedDriverStatusReadout?.time === "2026-06-07 09:25 UTC" &&
           candidateState?.monthlyBillingGroupingRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -12318,6 +12475,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
+      "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-drafts?limit=1&page=1&billing_month=2026-05",
     ];
@@ -12365,6 +12523,45 @@ async function runChromeTest() {
         },
       ],
       "Expected saved booking load to GET completed closeout through the guarded API path",
+    );
+    assert.deepEqual(
+      loadedBookingState.driverJobStatusRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        body: request.body,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        limit: request.limit,
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: null,
+          hasSessionTokenHeader: false,
+          limit: "4",
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected saved booking load to GET saved driver status through the guarded read API path",
+    );
+    assert.deepEqual(
+      loadedBookingState.savedDriverStatusReadout,
+      {
+        history: "OTS at 2026-06-07 09:25 UTC",
+        latest: "OTS",
+        message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
+        state: "Saved status",
+        time: "2026-06-07 09:25 UTC",
+      },
+      "Expected saved driver status readout in the existing Day-of-Trip Dispatch Monitor",
+    );
+    assert.equal(
+      /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token_hash|raw_token|driver_job_link_id/i.test(
+        JSON.stringify(loadedBookingState.driverJobStatusRequests),
+      ),
+      false,
+      "Expected driver status read request shape to avoid private finance, parser, secret, and token/link internals",
     );
     assert.deepEqual(
       loadedBookingState.monthlyBillingGroupingRequests.map((request) => ({
@@ -12912,6 +13109,7 @@ async function runChromeTest() {
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
       window.__prestigeCompletedCloseoutRequests = [];
+      window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeWorkflowStatusRequests = [];
     })()`);
 
@@ -12954,6 +13152,7 @@ async function runChromeTest() {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
+            driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             fields: {
@@ -12981,6 +13180,12 @@ async function runChromeTest() {
             (request) =>
               request.method === "GET" &&
               request.booking_reference === "ui-cleanup-load-fixture",
+          ) &&
+          candidateState?.driverJobStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.limit === "4",
           )
           ? candidateState
           : false;
@@ -13000,6 +13205,27 @@ async function runChromeTest() {
       `Expected Recent Load this booking to make only the workflow status GETs, got ${recentLoadedBookingState.workflowStatusRequests
         .map((request) => `${request.method} ${request.url}`)
         .join(", ")}`,
+    );
+    assert.deepEqual(
+      recentLoadedBookingState.driverJobStatusRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        body: request.body,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        limit: request.limit,
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: null,
+          hasSessionTokenHeader: false,
+          limit: "4",
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected Recent Load this booking to GET saved driver status through the guarded read-only API path",
     );
     assert.deepEqual(
       recentLoadedBookingState.completedCloseoutRequests.map((request) => ({
@@ -13254,6 +13480,7 @@ async function runChromeTest() {
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
       window.__prestigeCompletedCloseoutRequests = [];
+      window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeWorkflowStatusRequests = [];
     })()`);
 
@@ -13310,6 +13537,7 @@ async function runChromeTest() {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
+            driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
@@ -13346,6 +13574,12 @@ async function runChromeTest() {
             (request) =>
               request.method === "GET" &&
               request.booking_reference === "ui-completed-load-fixture",
+          ) &&
+          candidateState?.driverJobStatusRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-completed-load-fixture" &&
+              request.limit === "4",
           )
           ? candidateState
           : false;
@@ -13384,6 +13618,27 @@ async function runChromeTest() {
         },
       ],
       "Expected Completed Load this booking to GET completed closeout through the guarded API path",
+    );
+    assert.deepEqual(
+      completedLoadedBookingState.driverJobStatusRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        body: request.body,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        limit: request.limit,
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-completed-load-fixture",
+          body: null,
+          hasSessionTokenHeader: false,
+          limit: "4",
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected Completed Load this booking to GET saved driver status through the guarded read-only API path",
     );
     assert.equal(completedLoadedBookingState.fields.bookingType, "DEP");
     assert.equal(completedLoadedBookingState.fields.vehicle, "AVF");

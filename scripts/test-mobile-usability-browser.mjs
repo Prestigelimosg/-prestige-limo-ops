@@ -961,6 +961,8 @@ async function runChromeTest() {
             width: Math.round(optionRect.width),
           };
         });
+        const savedDriverStatusReadout = section?.querySelector("[data-admin-driver-job-status-readout='true']");
+        const savedDriverStatusReadoutRect = savedDriverStatusReadout?.getBoundingClientRect();
 
         return {
           boundary:
@@ -972,6 +974,31 @@ async function runChromeTest() {
           height: Math.round(sectionRect?.height || 0),
           items,
           options,
+          savedDriverStatusReadout: {
+            height: Math.round(savedDriverStatusReadoutRect?.height || 0),
+            latest:
+              savedDriverStatusReadout
+                ?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            message:
+              savedDriverStatusReadout
+                ?.querySelector("[data-admin-driver-job-status-readout-message='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            state:
+              savedDriverStatusReadout
+                ?.querySelector("[data-admin-driver-job-status-readout-state='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            text: savedDriverStatusReadout?.textContent.replace(/\\s+/g, " ").trim() || "",
+            visible: Boolean(
+              savedDriverStatusReadoutRect &&
+                savedDriverStatusReadoutRect.width > 0 &&
+                savedDriverStatusReadoutRect.height > 0,
+            ),
+            width: Math.round(savedDriverStatusReadoutRect?.width || 0),
+          },
           status:
             section?.querySelector("[data-admin-day-of-trip-dispatch-monitor-status='true']")?.textContent
               .replace(/\\s+/g, " ")
@@ -1012,6 +1039,23 @@ async function runChromeTest() {
         `${viewport.label}: expected Day-of-Trip Dispatch Monitor to start reminder due`,
       );
       assert.equal(
+        state.savedDriverStatusReadout.visible,
+        true,
+        `${viewport.label}: expected saved driver status readout inside Day-of-Trip Dispatch Monitor`,
+      );
+      assert.equal(
+        state.savedDriverStatusReadout.text.includes("Saved driver status") &&
+          state.savedDriverStatusReadout.latest === "No saved driver status" &&
+          state.savedDriverStatusReadout.state === "No saved status",
+        true,
+        `${viewport.label}: expected saved driver status readout to stay safe and empty by default`,
+      );
+      assert.equal(
+        state.savedDriverStatusReadout.width > 0 && state.savedDriverStatusReadout.height >= 48,
+        true,
+        `${viewport.label}: expected saved driver status readout to stay readable`,
+      );
+      assert.equal(
         state.options.every((option) => option.height >= 36 && option.width >= 72),
         true,
         `${viewport.label}: expected Day-of-Trip Dispatch Monitor controls to stay readable`,
@@ -1026,7 +1070,7 @@ async function runChromeTest() {
         `${viewport.label}: expected Day-of-Trip Dispatch Monitor local-only boundary`,
       );
       assert.equal(
-        state.height <= (viewport.width < 640 ? 760 : 500),
+        state.height <= (viewport.width < 640 ? 880 : 620),
         true,
         `${viewport.label}: expected compact Day-of-Trip Dispatch Monitor, got ${state.height}px`,
       );

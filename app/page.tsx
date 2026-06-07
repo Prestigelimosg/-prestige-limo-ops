@@ -34,6 +34,7 @@ import { mockDriverJobTokens } from "../lib/driver-job-link-mock-tokens";
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
+const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
 const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
 const adminMonthlyInvoiceDraftTripCandidatesApiPath =
@@ -592,6 +593,34 @@ type AdminCompletedBookingCloseoutRecord = {
 type AdminCompletedBookingCloseoutAction =
   | "load-completed-closeout"
   | "save-completed-closeout";
+
+type AdminDriverJobStatusValue =
+  | "acknowledged"
+  | "driver_otw"
+  | "ots"
+  | "pob"
+  | "completed"
+  | "needs_call";
+
+type AdminDriverJobStatusEvent = {
+  actor_label?: string | null;
+  actor_role?: string | null;
+  booking_reference?: string | null;
+  created_at?: string | null;
+  occurred_at?: string | null;
+  safe_status_note?: string | null;
+  source_surface?: string | null;
+  status_source?: string | null;
+  status_value?: AdminDriverJobStatusValue | string | null;
+};
+
+type AdminDriverJobStatusReadState = {
+  bookingReference: string;
+  latestStatus: AdminDriverJobStatusEvent | null;
+  message: Message | null;
+  status: "idle" | "loading" | "loaded" | "error";
+  statuses: AdminDriverJobStatusEvent[];
+};
 
 type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
 type AdminMonthlyBillingGroupingReadinessFilter =
@@ -3875,6 +3904,75 @@ function adminCompletedBookingCloseoutDisplayLabel(
   return closeoutStatus ? closeoutStatus.replace(/_/g, " ") : "No saved closeout";
 }
 
+function adminDriverJobStatusFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Saved driver job status read is not enabled or configured on this server.";
+  }
+
+  if (/forbidden/.test(normalizedError)) {
+    return "Saved driver job status read is available only from the internal admin dashboard.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Saved driver job status reference needs review.";
+  }
+
+  return "Saved driver job status read failed safely.";
+}
+
+function adminDriverJobStatusDisplayLabel(statusValue: string | null | undefined) {
+  const normalized = clean(statusValue).toLowerCase();
+
+  if (normalized === "acknowledged") {
+    return "Acknowledged";
+  }
+
+  if (normalized === "driver_otw") {
+    return "OTW";
+  }
+
+  if (normalized === "ots") {
+    return "OTS";
+  }
+
+  if (normalized === "pob") {
+    return "POB";
+  }
+
+  if (normalized === "completed") {
+    return "Completed";
+  }
+
+  if (normalized === "needs_call") {
+    return "Needs call";
+  }
+
+  return "No saved driver status";
+}
+
+function adminDriverJobStatusTimeLabel(value: string | null | undefined) {
+  const cleaned = clean(value);
+
+  if (!cleaned) {
+    return "Time not recorded";
+  }
+
+  const parsedDate = new Date(cleaned);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return cleaned.slice(0, 80);
+  }
+
+  return `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    parsedDate.getUTCDate(),
+  ).padStart(2, "0")} ${String(parsedDate.getUTCHours()).padStart(2, "0")}:${String(
+    parsedDate.getUTCMinutes(),
+  ).padStart(2, "0")} UTC`;
+}
+
 function adminMapRouteAssistFailureMessage(rawError: unknown, label = "OneMap route assist") {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -3984,6 +4082,39 @@ async function loadAdminCompletedBookingCloseoutRecord(bookingReference: string)
   const closeout = result.closeout as AdminCompletedBookingCloseoutRecord | null;
 
   return clean(closeout?.booking_reference) === bookingReference ? closeout : null;
+}
+
+async function loadAdminDriverJobStatusRead(bookingReference: string) {
+  const params = new URLSearchParams({
+    booking_reference: bookingReference,
+    limit: "4",
+  });
+
+  const response = await fetch(`${adminDriverJobStatusesApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Driver job status read failed.");
+  }
+
+  const statuses = Array.isArray(result.statuses)
+    ? (result.statuses as AdminDriverJobStatusEvent[])
+    : [];
+  const matchingStatuses = statuses.filter(
+    (status) => clean(status.booking_reference) === bookingReference,
+  );
+  const latestStatus = matchingStatuses.find((status) => clean(status.status_value)) || null;
+
+  return {
+    bookingReference,
+    latestStatus,
+    statuses: matchingStatuses.slice(0, 4),
+  };
 }
 
 async function loadAdminMapLocationSearchFirstMatch(query: string) {
@@ -4849,6 +4980,14 @@ export default function Home() {
     useState<AdminCompletedBookingCloseoutRecord | null>(null);
   const [completedBookingCloseoutAction, setCompletedBookingCloseoutAction] =
     useState<AdminCompletedBookingCloseoutAction | null>(null);
+  const [adminDriverJobStatusReadState, setAdminDriverJobStatusReadState] =
+    useState<AdminDriverJobStatusReadState>({
+      bookingReference: "",
+      latestStatus: null,
+      message: null,
+      status: "idle",
+      statuses: [],
+    });
   const [completedTripCloseoutReviewMessage, setCompletedTripCloseoutReviewMessage] =
     useState<Message | null>(null);
   const [adminMonthlyBillingGroupingReadState, setAdminMonthlyBillingGroupingReadState] =
@@ -5019,6 +5158,16 @@ export default function Home() {
         setDispatchReleaseWorkflowStatus(null);
         setDriverAcknowledgementWorkflowStatus(null);
         setCompletedBookingCloseoutRecord(null);
+        setAdminDriverJobStatusReadState({
+          bookingReference: "",
+          latestStatus: null,
+          message: {
+            tone: "info",
+            text: "Load saved booking before reading saved driver status.",
+          },
+          status: "idle",
+          statuses: [],
+        });
         setAdminBookingWorkflowStatusAction(null);
         setCompletedBookingCloseoutAction(null);
         setDispatchReleaseMessage(null);
@@ -5095,6 +5244,58 @@ export default function Home() {
           if (!cancelled) {
             setCompletedBookingCloseoutAction(null);
           }
+        }
+      }
+
+      if (!cancelled) {
+        setAdminDriverJobStatusReadState({
+          bookingReference,
+          latestStatus: null,
+          message: {
+            tone: "info",
+            text: `Loading saved driver status for ${bookingReference}...`,
+          },
+          status: "loading",
+          statuses: [],
+        });
+
+        try {
+          const loadedDriverStatuses = await loadAdminDriverJobStatusRead(bookingReference);
+
+          if (cancelled) {
+            return;
+          }
+
+          setAdminDriverJobStatusReadState({
+            bookingReference,
+            latestStatus: loadedDriverStatuses.latestStatus,
+            message: {
+              tone: loadedDriverStatuses.statuses.length > 0 ? "success" : "info",
+              text:
+                loadedDriverStatuses.statuses.length > 0
+                  ? `Loaded ${loadedDriverStatuses.statuses.length} saved driver status event${
+                      loadedDriverStatuses.statuses.length === 1 ? "" : "s"
+                    } for ${bookingReference}.`
+                  : `No saved driver status history for ${bookingReference}.`,
+            },
+            status: "loaded",
+            statuses: loadedDriverStatuses.statuses,
+          });
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+
+          setAdminDriverJobStatusReadState({
+            bookingReference,
+            latestStatus: null,
+            message: {
+              tone: "error",
+              text: adminDriverJobStatusFailureMessage(error),
+            },
+            status: "error",
+            statuses: [],
+          });
         }
       }
 
@@ -8448,6 +8649,16 @@ export default function Home() {
     setDispatchReleaseWorkflowStatus(null);
     setDriverAcknowledgementWorkflowStatus(null);
     setCompletedBookingCloseoutRecord(null);
+    setAdminDriverJobStatusReadState({
+      bookingReference: "",
+      latestStatus: null,
+      message: {
+        tone: "info",
+        text: "Load saved booking before reading saved driver status.",
+      },
+      status: "idle",
+      statuses: [],
+    });
     setCompletedTripCloseoutReviewMessage(null);
     setAdminBookingPersistenceMessage({
       tone: "success",
@@ -10727,6 +10938,25 @@ export default function Home() {
 
     return currentIndex >= 0 && statusIndex >= 0 && currentIndex >= statusIndex;
   };
+  const adminDriverJobStatusLatest = adminDriverJobStatusReadState.latestStatus;
+  const adminDriverJobStatusLatestLabel = adminDriverJobStatusDisplayLabel(
+    adminDriverJobStatusLatest?.status_value,
+  );
+  const adminDriverJobStatusLatestTime = adminDriverJobStatusTimeLabel(
+    adminDriverJobStatusLatest?.occurred_at || adminDriverJobStatusLatest?.created_at,
+  );
+  const adminDriverJobStatusHistory = adminDriverJobStatusReadState.statuses.slice(0, 3);
+  const adminDriverJobStatusHistorySummary =
+    adminDriverJobStatusHistory.length > 0
+      ? adminDriverJobStatusHistory
+          .map(
+            (status) =>
+              `${adminDriverJobStatusDisplayLabel(status.status_value)} at ${adminDriverJobStatusTimeLabel(
+                status.occurred_at || status.created_at,
+              )}`,
+          )
+          .join(" | ")
+      : "No saved history loaded.";
   const dayOfTripDispatchMonitorItems: DispatchReleaseChecklistItem[] = [
     {
       detail: dayOfTripDriverAcknowledged ? "Acknowledged locally." : "Not acknowledged locally.",
@@ -21526,12 +21756,95 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+              <div
+                className="mt-2 rounded-md border border-lime-200 bg-white/80 p-1.5 text-[10px] leading-3 text-lime-950 sm:text-[11px] sm:leading-4"
+                data-admin-driver-job-status-readout="true"
+              >
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="font-semibold leading-3 sm:leading-4" data-admin-driver-job-status-readout-title="true">
+                      Saved driver status
+                    </p>
+                    <p
+                      className="mt-0.5 break-words leading-3 sm:leading-4"
+                      data-admin-driver-job-status-readout-message="true"
+                    >
+                      {adminDriverJobStatusReadState.message?.text ||
+                        "Load saved booking before reading saved driver status."}
+                    </p>
+                  </div>
+                  <span
+                    className={`w-fit shrink-0 rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase sm:px-2 sm:text-[9px] ${
+                      adminDriverJobStatusReadState.status === "loaded" && adminDriverJobStatusLatest
+                        ? "bg-emerald-100 text-emerald-900"
+                        : adminDriverJobStatusReadState.status === "error"
+                          ? "bg-rose-100 text-rose-900"
+                          : "bg-amber-100 text-amber-900"
+                    }`}
+                    data-admin-driver-job-status-readout-state="true"
+                  >
+                    {adminDriverJobStatusReadState.status === "loading"
+                      ? "Loading"
+                      : adminDriverJobStatusReadState.status === "error"
+                        ? "Read error"
+                        : adminDriverJobStatusLatest
+                          ? "Saved status"
+                          : "No saved status"}
+                  </span>
+                </div>
+                <div className="mt-1 grid grid-cols-3 gap-x-1 gap-y-0.5 border-t border-lime-100 pt-1">
+                  <div
+                    className="min-w-0"
+                    data-admin-driver-job-status-readout-item="latest-status"
+                  >
+                    <p className="font-semibold leading-3 sm:leading-4" data-admin-driver-job-status-readout-label="latest-status">
+                      Latest
+                    </p>
+                    <p
+                      className="mt-0.5 break-words leading-3 sm:leading-4"
+                      data-admin-driver-job-status-readout-detail="latest-status"
+                    >
+                      {adminDriverJobStatusLatestLabel}
+                    </p>
+                  </div>
+                  <div
+                    className="min-w-0"
+                    data-admin-driver-job-status-readout-item="status-time"
+                  >
+                    <p className="font-semibold leading-3 sm:leading-4" data-admin-driver-job-status-readout-label="status-time">
+                      Status time
+                    </p>
+                    <p
+                      className="mt-0.5 break-words leading-3 sm:leading-4"
+                      data-admin-driver-job-status-readout-detail="status-time"
+                    >
+                      {adminDriverJobStatusLatest ? adminDriverJobStatusLatestTime : "Time not recorded"}
+                    </p>
+                  </div>
+                  <div
+                    className="min-w-0"
+                    data-admin-driver-job-status-readout-item="status-history"
+                  >
+                    <p className="font-semibold leading-3 sm:leading-4" data-admin-driver-job-status-readout-label="status-history">
+                      History
+                    </p>
+                    <p
+                      className="mt-0.5 break-words leading-3 sm:leading-4"
+                      data-admin-driver-job-status-readout-detail="status-history"
+                    >
+                      {adminDriverJobStatusHistorySummary}
+                    </p>
+                  </div>
+                </div>
+              </div>
               <p
                 className="mt-2 border-t border-lime-200 pt-2 text-[11px] leading-4 text-lime-900 md:text-[10px] md:leading-3"
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"
               >
-                Local UI only. No Supabase write, live database access, notification sending, customer message,
-                driver notification, billing, payment, PDF, payout, live location, or parser-learning behavior.
+                Local UI only. Saved driver status reads use the guarded admin driver-status API only. No
+                Supabase write, direct live database access outside that read path, notification sending, customer
+                message, driver notification, billing, payment, PDF, payout, live location, or parser-learning
+                behavior.
               </p>
             </section>
 

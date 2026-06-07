@@ -838,6 +838,21 @@ async function runChromeTest() {
             total_count: 1,
           },
         ];
+        window.__adminDriverJobStatusCalls = [];
+        window.__adminDriverJobStatusRows = {
+          "LOADED-OPS-001": [
+            {
+              actor_label: "Smoke driver status mock",
+              actor_role: "driver",
+              booking_reference: "LOADED-OPS-001",
+              created_at: "2026-06-07T10:45:00.000Z",
+              occurred_at: "2026-06-07T10:45:00.000Z",
+              source_surface: "driver_job_api",
+              status_source: "driver_job_api",
+              status_value: "pob",
+            },
+          ],
+        };
         window.__adminWorkflowStatusCalls = [];
         window.__adminWorkflowStatusMockRows = {
           "LOADED-OPS-001:dispatch_release": {
@@ -910,6 +925,31 @@ async function runChromeTest() {
                 JSON.stringify({
                   ok: true,
                   status: row,
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
+
+          if (String(url).includes("/api/admin-driver-job-statuses")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const bookingReference = parsedUrl.searchParams.get("booking_reference") || "";
+            const limit = parsedUrl.searchParams.get("limit") || "";
+
+            window.__adminDriverJobStatusCalls.push({
+              bookingReference,
+              headers: options?.headers || {},
+              limit,
+              method,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  statuses: window.__adminDriverJobStatusRows[bookingReference] || [],
+                  version: "app-smoke-admin-driver-job-status-read-mock",
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -2174,6 +2214,34 @@ async function runChromeTest() {
               .querySelector("[data-admin-driver-acknowledgement-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const driverStatusReadout = document.querySelector("[data-admin-driver-job-status-readout='true']");
+            const savedDriverStatusReadout = {
+              history:
+                driverStatusReadout
+                  ?.querySelector("[data-admin-driver-job-status-readout-detail='status-history']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              latest:
+                driverStatusReadout
+                  ?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              message:
+                driverStatusReadout
+                  ?.querySelector("[data-admin-driver-job-status-readout-message='true']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              state:
+                driverStatusReadout
+                  ?.querySelector("[data-admin-driver-job-status-readout-state='true']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              time:
+                driverStatusReadout
+                  ?.querySelector("[data-admin-driver-job-status-readout-detail='status-time']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+            };
             const monthlyBillingGroupingFeedback = document
               .querySelector("[data-admin-monthly-billing-month-grouping-read-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
@@ -2189,6 +2257,8 @@ async function runChromeTest() {
               fields.pickup === "Loaded Ops Pickup" &&
               dispatchReleaseFeedback.includes("Loaded dispatch release workflow status for LOADED-OPS-001") &&
               driverAcknowledgementFeedback.includes("Loaded driver acknowledgement workflow status for LOADED-OPS-001") &&
+              savedDriverStatusReadout.latest === "POB" &&
+              savedDriverStatusReadout.time === "2026-06-07 10:45 UTC" &&
               monthlyBillingGroupingFeedback.includes("Loaded 1 saved monthly billing group for June 2026") &&
               monthlyInvoiceDraftFeedback.includes("Loaded 1 saved monthly invoice draft for June 2026")
               ? {
@@ -2198,6 +2268,7 @@ async function runChromeTest() {
                   ),
                   dispatchReleaseFeedback,
                   driverAcknowledgementFeedback,
+                  driverStatusCalls: window.__adminDriverJobStatusCalls || [],
                   duplicateGuidance,
                   feedback,
                   fields,
@@ -2209,6 +2280,7 @@ async function runChromeTest() {
                   monthlyBillingGroupingFeedback,
                   monthlyInvoiceDraftCalls: window.__adminMonthlyInvoiceDraftCalls || [],
                   monthlyInvoiceDraftFeedback,
+                  savedDriverStatusReadout,
                   workflowStatusCalls: window.__adminWorkflowStatusCalls || [],
                 }
               : false;
@@ -2278,6 +2350,17 @@ async function runChromeTest() {
         /Loaded driver acknowledgement workflow status for LOADED-OPS-001: Driver acknowledgement ready\./,
         "Expected applied snapshot load to show saved driver acknowledgement workflow status in existing UI feedback",
       );
+      assert.deepEqual(
+        appliedSnapshotState.savedDriverStatusReadout,
+        {
+          history: "POB at 2026-06-07 10:45 UTC",
+          latest: "POB",
+          message: "Loaded 1 saved driver status event for LOADED-OPS-001.",
+          state: "Saved status",
+          time: "2026-06-07 10:45 UTC",
+        },
+        "Expected applied snapshot load to show saved driver status through the existing Day-of-Trip Dispatch Monitor",
+      );
       assert.match(
         appliedSnapshotState.monthlyBillingGroupingFeedback,
         /Loaded 1 saved monthly billing group for June 2026\./,
@@ -2307,6 +2390,23 @@ async function runChromeTest() {
           },
         ],
         "Expected applied snapshot load to GET dispatch_release and driver_acknowledgement workflow statuses through the guarded API path",
+      );
+      assert.deepEqual(
+        appliedSnapshotState.driverStatusCalls.map((call) => ({
+          bookingReference: call.bookingReference,
+          limit: call.limit,
+          method: call.method,
+          purpose: call.headers["x-prestige-admin-purpose"] || "",
+        })),
+        [
+          {
+            bookingReference: "LOADED-OPS-001",
+            limit: "4",
+            method: "GET",
+            purpose: "admin-booking-persistence",
+          },
+        ],
+        "Expected applied snapshot load to GET saved driver status through the guarded admin read API",
       );
       assert.deepEqual(
         appliedSnapshotState.monthlyBillingGroupingCalls.map((call) => ({
@@ -5451,6 +5551,8 @@ async function runChromeTest() {
               );
               const text = section.innerText;
               const lowerText = text.toLowerCase();
+              const savedDriverStatusReadout = section.querySelector("[data-admin-driver-job-status-readout]");
+              const savedDriverStatusReadoutRect = savedDriverStatusReadout?.getBoundingClientRect();
 
               return {
                 boundary:
@@ -5470,6 +5572,31 @@ async function runChromeTest() {
                 ].filter((value) => lowerText.includes(value)),
                 height: Math.round(rect.height),
                 options,
+                savedDriverStatusReadout: {
+                  height: Math.round(savedDriverStatusReadoutRect?.height || 0),
+                  latest:
+                    savedDriverStatusReadout
+                      ?.querySelector("[data-admin-driver-job-status-readout-detail='latest-status']")
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                  message:
+                    savedDriverStatusReadout
+                      ?.querySelector("[data-admin-driver-job-status-readout-message='true']")
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                  state:
+                    savedDriverStatusReadout
+                      ?.querySelector("[data-admin-driver-job-status-readout-state='true']")
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                  text: savedDriverStatusReadout?.textContent.replace(/\\s+/g, " ").trim() || "",
+                  visible: Boolean(
+                    savedDriverStatusReadoutRect &&
+                      savedDriverStatusReadoutRect.width > 0 &&
+                      savedDriverStatusReadoutRect.height > 0,
+                  ),
+                  width: Math.round(savedDriverStatusReadoutRect?.width || 0),
+                },
                 status:
                   section.querySelector("[data-admin-day-of-trip-dispatch-monitor-status]")?.textContent
                     .replace(/\\s+/g, " ")
@@ -5537,6 +5664,23 @@ async function runChromeTest() {
           "Reminder due",
           `${viewport.label}: expected day-of-trip monitor to start at reminder due`,
         );
+        assert.equal(
+          state.savedDriverStatusReadout.visible,
+          true,
+          `${viewport.label}: expected saved driver status readout inside day-of-trip monitor`,
+        );
+        assert.equal(
+          state.savedDriverStatusReadout.text.includes("Saved driver status") &&
+            state.savedDriverStatusReadout.latest === "No saved driver status" &&
+            state.savedDriverStatusReadout.state === "No saved status",
+          true,
+          `${viewport.label}: expected initial saved driver status readout to stay safe and empty`,
+        );
+        assert.equal(
+          state.savedDriverStatusReadout.width > 0 && state.savedDriverStatusReadout.height >= 48,
+          true,
+          `${viewport.label}: expected saved driver status readout to stay readable`,
+        );
         for (const expectedBoundaryText of [
           "Local UI only.",
           "No Supabase write",
@@ -5563,7 +5707,7 @@ async function runChromeTest() {
           `${viewport.label}: expected no private/customer/driver forbidden text in day-of-trip monitor`,
         );
         assert.equal(
-          state.height <= (viewport.width < 640 ? 760 : 500),
+          state.height <= (viewport.width < 640 ? 880 : 620),
           true,
           `${viewport.label}: expected compact day-of-trip monitor, got ${state.height}px`,
         );
@@ -5592,6 +5736,7 @@ async function runChromeTest() {
             state: option.state,
             value: option.value,
           })),
+          savedDriverStatusReadout: state.savedDriverStatusReadout,
           status: state.status,
           viewport: viewport.label,
         });
@@ -38447,6 +38592,14 @@ async function runChromeTest() {
         [],
         `Expected no admin day-of-trip dispatch monitor wording leak for ${route.context}`,
       );
+      const adminDriverJobStatusReadoutVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-driver-job-status-readout]"))`,
+      );
+      assert.equal(
+        adminDriverJobStatusReadoutVisible,
+        false,
+        `Expected admin driver job status readout boundary for ${route.context}`,
+      );
       const adminDayOfTripExceptionEscalationVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-day-of-trip-exception-escalation]"))`,
       );
@@ -38974,6 +39127,14 @@ async function runChromeTest() {
       customerDetailAdminDayOfTripDispatchMonitorTextLeaks,
       [],
       "Expected no admin day-of-trip dispatch monitor wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminDriverJobStatusReadoutVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-driver-job-status-readout]"))`,
+    );
+    assert.equal(
+      customerDetailAdminDriverJobStatusReadoutVisible,
+      false,
+      "Expected admin driver job status readout boundary for /customers/[customerId]",
     );
     const customerDetailAdminDayOfTripExceptionEscalationVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-day-of-trip-exception-escalation]"))`,

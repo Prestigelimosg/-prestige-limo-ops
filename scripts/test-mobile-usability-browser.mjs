@@ -2417,6 +2417,37 @@ async function runChromeTest() {
         });
         const note = section?.querySelector("[data-admin-monthly-billing-month-grouping-review-note='true']");
         const noteRect = note?.getBoundingClientRect();
+        const readControls = [
+          section?.querySelector("[data-admin-monthly-billing-month-grouping-customer-search='true']"),
+          section?.querySelector("[data-admin-monthly-billing-month-grouping-readiness-filter='true']"),
+          section?.querySelector("[data-admin-monthly-billing-month-grouping-limit='true']"),
+        ].filter(Boolean).map((control) => {
+          const controlRect = control.getBoundingClientRect();
+
+          return {
+            height: Math.round(controlRect.height),
+            label:
+              control.closest("label")?.querySelector("span")?.textContent
+                .replace(/\\s+/g, " ")
+                .trim() || "",
+            tag: control.tagName.toLowerCase(),
+            value: control.value || "",
+            width: Math.round(controlRect.width),
+          };
+        });
+        const pageButtons = [
+          section?.querySelector("[data-admin-monthly-billing-month-grouping-previous-page='true']"),
+          section?.querySelector("[data-admin-monthly-billing-month-grouping-next-page='true']"),
+        ].filter(Boolean).map((button) => {
+          const buttonRect = button.getBoundingClientRect();
+
+          return {
+            disabled: button.disabled,
+            height: Math.round(buttonRect.height),
+            label: button.textContent.replace(/\\s+/g, " ").trim(),
+            width: Math.round(buttonRect.width),
+          };
+        });
         const options = [
           ...(section?.querySelectorAll("[data-admin-monthly-billing-month-grouping-review-option]") || []),
         ].map((option) => {
@@ -2444,6 +2475,13 @@ async function runChromeTest() {
           noteHeight: Math.round(noteRect?.height || 0),
           noteValue: note?.value ?? null,
           options,
+          pageButtons,
+          pageSummary:
+            section
+              ?.querySelector("[data-admin-monthly-billing-month-grouping-page-summary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          readControls,
           status:
             section
               ?.querySelector("[data-admin-monthly-billing-month-grouping-review-status='true']")
@@ -2503,6 +2541,35 @@ async function runChromeTest() {
         true,
         `${viewport.label}: expected Monthly Billing Month Grouping Review controls to stay readable`,
       );
+      assert.deepEqual(
+        state.readControls.map((control) => [control.label, control.tag]),
+        [
+          ["Customer/account filter", "input"],
+          ["Readiness filter", "select"],
+          ["Groups per read", "select"],
+        ],
+        `${viewport.label}: expected Monthly Billing Month Grouping Review read filters`,
+      );
+      assert.equal(
+        state.readControls.every((control) => control.height >= 36 && control.width >= 120),
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review read filters to stay readable`,
+      );
+      assert.deepEqual(
+        state.pageButtons.map((button) => button.label),
+        ["Previous", "Next"],
+        `${viewport.label}: expected Monthly Billing Month Grouping Review pagination controls`,
+      );
+      assert.equal(
+        state.pageButtons.every((button) => button.height >= 36 && button.width >= 72),
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review pagination controls to stay readable`,
+      );
+      assert.equal(
+        state.pageSummary.includes("Page 1") || state.pageSummary.includes("No matching saved groups"),
+        true,
+        `${viewport.label}: expected Monthly Billing Month Grouping Review page summary`,
+      );
       assert.equal(
         state.boundary.includes("Read-only admin API GET only.") &&
           state.boundary.includes("No Supabase write") &&
@@ -2518,7 +2585,7 @@ async function runChromeTest() {
         `${viewport.label}: expected Monthly Billing Month Grouping Review read-only boundary`,
       );
       assert.equal(
-        state.height <= (viewport.width < 340 ? 1450 : viewport.width < 640 ? 1320 : 940),
+        state.height <= (viewport.width < 340 ? 1640 : viewport.width < 640 ? 1540 : 1040),
         true,
         `${viewport.label}: expected compact Monthly Billing Month Grouping Review, got ${state.height}px`,
       );

@@ -335,6 +335,13 @@ const seed = {
       customer_id: "customer-acme",
       pickup_at: "2026-07-02T10:00:00.000Z",
     },
+    {
+      admin_internal_status: "completed",
+      booking_reference: "MONTHLY-READY-ZETA-JUN",
+      customer_display_name: "Zeta Account",
+      customer_id: "customer-zeta",
+      pickup_at: "2026-06-24T10:00:00.000Z",
+    },
   ],
   completed_booking_closeouts: [
     {
@@ -375,6 +382,15 @@ const seed = {
     },
     {
       billing_prep_readiness: "ready",
+      booking_reference: "MONTHLY-READY-ZETA-JUN",
+      closeout_status: "ready_for_billing_prep",
+      completed_job_status: "completed",
+      dsp_actual_hours_readiness: "ready",
+      extra_charges_readiness: "ready",
+      updated_at: "2026-06-24T12:00:00.000Z",
+    },
+    {
+      billing_prep_readiness: "ready",
       booking_reference: "MONTHLY-NOBOOK-JUN",
       closeout_status: "ready_for_billing_prep",
       completed_job_status: "completed",
@@ -392,25 +408,34 @@ try {
 
   assert.equal(
     grouping.adminMonthlyBillingGroupingReadVersion,
-    "stage-4a-439-admin-monthly-billing-grouping-read-v1",
+    "stage-4a-442-admin-monthly-billing-grouping-read-v2",
   );
 
   assert.deepEqual(grouping.parseAdminMonthlyBillingGroupingReadParams({}), {
     data: {
       billing_month: null,
-      limit: 100,
+      customer_account_search: null,
+      limit: 25,
+      page: 1,
+      readiness_status: null,
     },
     ok: true,
   });
   assert.deepEqual(
     grouping.parseAdminMonthlyBillingGroupingReadParams({
       billing_month: "2026-06",
+      customer_account_search: "Acme",
       limit: "1",
+      page: "2",
+      readiness_status: "mixed",
     }),
     {
       data: {
         billing_month: "2026-06",
+        customer_account_search: "Acme",
         limit: 1,
+        page: 2,
+        readiness_status: "mixed",
       },
       ok: true,
     },
@@ -426,6 +451,21 @@ try {
       "bad limit",
       { limit: "999" },
       "Malformed monthly billing grouping limit rejected.",
+    ],
+    [
+      "bad customer search",
+      { customer_account_search: "customer_price" },
+      "Malformed monthly billing grouping customer/account search rejected.",
+    ],
+    [
+      "bad readiness",
+      { readiness_status: "ready;drop" },
+      "Malformed monthly billing grouping readiness status rejected.",
+    ],
+    [
+      "bad page",
+      { page: "0" },
+      "Malformed monthly billing grouping page rejected.",
     ],
   ]) {
     const parsed = grouping.parseAdminMonthlyBillingGroupingReadParams(params);
@@ -498,9 +538,12 @@ try {
   const readMock = installMockClient(seed);
   const readResult = await readRouteResponse(
     await route.GET(
-      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-06", {
-        headers: sessionHeaders(),
-      }),
+      new Request(
+        "http://localhost/api/admin-monthly-billing-groups?billing_month=2026-06&customer_account_search=acme&readiness_status=mixed&page=1&limit=1",
+        {
+          headers: sessionHeaders(),
+        },
+      ),
     ),
   );
 
@@ -524,6 +567,14 @@ try {
     ready_count: 1,
     total_count: 3,
   });
+  assert.deepEqual(readResult.body.pagination, {
+    has_next_page: false,
+    has_previous_page: false,
+    page: 1,
+    page_count: 1,
+    page_size: 1,
+    total_group_count: 1,
+  });
   assert.equal(readMock.createdClients.length, 1);
   assert.deepEqual(readMock.createdClients[0].options, {
     auth: {
@@ -546,6 +597,7 @@ try {
         "MONTHLY-BLOCKED-JUN",
         "MONTHLY-DRAFT-JUN",
         "MONTHLY-READY-JUL",
+        "MONTHLY-READY-ZETA-JUN",
         "MONTHLY-NOBOOK-JUN",
       ],
     },
@@ -565,9 +617,51 @@ try {
 
   assert.equal(dispatcherResult.status, 200);
   assert.equal(dispatcherResult.body.groups.length, 1);
-  assert.equal(dispatcherResult.body.summary.group_count, 1);
+  assert.equal(dispatcherResult.body.summary.group_count, 3);
+  assert.deepEqual(dispatcherResult.body.pagination, {
+    has_next_page: true,
+    has_previous_page: false,
+    page: 1,
+    page_count: 3,
+    page_size: 1,
+    total_group_count: 3,
+  });
   assert.equal(dispatcherMock.client.operations.length, 0);
   assertNoLeaks(dispatcherResult, "dispatcher monthly billing grouping response should stay safe");
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
+
+  const secondPageMock = installMockClient(seed);
+  const secondPageResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-06&page=2&limit=1", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(secondPageResult.status, 200);
+  assert.deepEqual(secondPageResult.body.groups, [
+    {
+      billing_month: "2026-06",
+      blocked_count: 0,
+      customer_account: "Zeta Account",
+      customer_id: "customer-zeta",
+      ready_count: 1,
+      safe_readiness_status: "ready",
+      total_count: 1,
+    },
+  ]);
+  assert.deepEqual(secondPageResult.body.pagination, {
+    has_next_page: false,
+    has_previous_page: true,
+    page: 2,
+    page_count: 2,
+    page_size: 1,
+    total_group_count: 2,
+  });
+  assert.equal(secondPageMock.client.operations.length, 0);
+  assertNoLeaks(secondPageResult, "second page monthly billing grouping response should stay safe");
 
   setEnv(enabledEnv());
 

@@ -12,13 +12,16 @@ import {
 } from "./admin-booking-supabase-adapter";
 
 export const adminMonthlyBillingGroupingReadVersion =
-  "stage-4a-439-admin-monthly-billing-grouping-read-v1";
+  "stage-4a-442-admin-monthly-billing-grouping-read-v2";
 
 export type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
 
 export type AdminMonthlyBillingGroupingReadParams = {
   billing_month: string | null;
+  customer_account_search: string | null;
   limit: number;
+  page: number;
+  readiness_status: AdminMonthlyBillingGroupingReadinessStatus | null;
 };
 
 export type AdminMonthlyBillingGroup = {
@@ -38,8 +41,18 @@ export type AdminMonthlyBillingGroupingSummary = {
   total_count: number;
 };
 
+export type AdminMonthlyBillingGroupingPagination = {
+  has_next_page: boolean;
+  has_previous_page: boolean;
+  page: number;
+  page_count: number;
+  page_size: number;
+  total_group_count: number;
+};
+
 export type AdminMonthlyBillingGroupingReadResult = {
   groups: AdminMonthlyBillingGroup[];
+  pagination: AdminMonthlyBillingGroupingPagination;
   summary: AdminMonthlyBillingGroupingSummary;
   version: typeof adminMonthlyBillingGroupingReadVersion;
 };
@@ -53,9 +66,11 @@ type BillingCandidate = {
   ready: boolean;
 };
 
-const defaultGroupingLimit = 100;
+const defaultGroupingLimit = 25;
 const maxGroupingLimit = 250;
+const maxGroupingPage = 1000;
 const maxReadRows = 500;
+const maxCustomerAccountSearchLength = 80;
 const maxSafeTextLength = 160;
 const disabledMonthlyBillingGroupingReadError =
   "Admin monthly billing grouping read is not enabled on this server.";
@@ -203,20 +218,41 @@ function billingMonthFromDate(value: unknown) {
   return validBillingMonth(month);
 }
 
-function positiveInteger(value: unknown) {
+function positiveInteger(value: unknown, defaultValue: number, maxValue: number) {
   if (value === undefined || value === null || value === "") {
-    return defaultGroupingLimit;
+    return defaultValue;
   }
 
   const parsed = Number(value);
 
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= maxGroupingLimit
-    ? parsed
-    : null;
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= maxValue ? parsed : null;
 }
 
 function readParamsValue(params: URLSearchParams | UnknownRecord, key: string) {
   return params instanceof URLSearchParams ? params.get(key) : params[key];
+}
+
+function safeCustomerAccountSearch(value: unknown) {
+  const cleaned = textOrNull(value)?.replace(/\s+/g, " ");
+
+  if (!cleaned) {
+    return null;
+  }
+
+  if (
+    cleaned.length > maxCustomerAccountSearchLength ||
+    includesForbiddenSafeTextFragment(cleaned)
+  ) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function validReadinessStatus(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  return cleaned === "ready" || cleaned === "blocked" || cleaned === "mixed" ? cleaned : null;
 }
 
 export function parseAdminMonthlyBillingGroupingReadParams(
@@ -236,7 +272,44 @@ export function parseAdminMonthlyBillingGroupingReadParams(
     };
   }
 
-  const limit = positiveInteger(readParamsValue(params, "limit"));
+  const customerAccountSearchValue =
+    readParamsValue(params, "customer_account_search") ||
+    readParamsValue(params, "customer_search") ||
+    readParamsValue(params, "account_search");
+  const customerAccountSearch =
+    customerAccountSearchValue === undefined ||
+    customerAccountSearchValue === null ||
+    customerAccountSearchValue === ""
+      ? null
+      : safeCustomerAccountSearch(customerAccountSearchValue);
+
+  if (customerAccountSearchValue && !customerAccountSearch) {
+    return {
+      error: "Malformed monthly billing grouping customer/account search rejected.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const readinessStatusValue = readParamsValue(params, "readiness_status");
+  const readinessStatus =
+    readinessStatusValue === undefined || readinessStatusValue === null || readinessStatusValue === ""
+      ? null
+      : validReadinessStatus(readinessStatusValue);
+
+  if (readinessStatusValue && !readinessStatus) {
+    return {
+      error: "Malformed monthly billing grouping readiness status rejected.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const limit = positiveInteger(
+    readParamsValue(params, "limit"),
+    defaultGroupingLimit,
+    maxGroupingLimit,
+  );
 
   if (!limit) {
     return {
@@ -246,10 +319,23 @@ export function parseAdminMonthlyBillingGroupingReadParams(
     };
   }
 
+  const page = positiveInteger(readParamsValue(params, "page"), 1, maxGroupingPage);
+
+  if (!page) {
+    return {
+      error: "Malformed monthly billing grouping page rejected.",
+      ok: false,
+      status: 400,
+    };
+  }
+
   return {
     data: {
       billing_month: billingMonth,
+      customer_account_search: customerAccountSearch,
       limit,
+      page,
+      readiness_status: readinessStatus,
     },
     ok: true,
   };
@@ -561,8 +647,50 @@ function groupCandidates(
     .sort((first, second) =>
       first.customer_account.localeCompare(second.customer_account) ||
       first.billing_month.localeCompare(second.billing_month),
-    )
-    .slice(0, params.limit);
+    );
+}
+
+function filterGroupedCandidates(
+  groups: AdminMonthlyBillingGroup[],
+  params: AdminMonthlyBillingGroupingReadParams,
+) {
+  const customerAccountSearch = params.customer_account_search?.toLowerCase() || "";
+
+  return groups.filter((group) => {
+    if (
+      customerAccountSearch &&
+      !group.customer_account.toLowerCase().includes(customerAccountSearch)
+    ) {
+      return false;
+    }
+
+    return !params.readiness_status || group.safe_readiness_status === params.readiness_status;
+  });
+}
+
+function paginateGroups(
+  groups: AdminMonthlyBillingGroup[],
+  params: AdminMonthlyBillingGroupingReadParams,
+) {
+  const startIndex = (params.page - 1) * params.limit;
+
+  return groups.slice(startIndex, startIndex + params.limit);
+}
+
+function buildPagination(
+  groups: AdminMonthlyBillingGroup[],
+  params: AdminMonthlyBillingGroupingReadParams,
+): AdminMonthlyBillingGroupingPagination {
+  const pageCount = groups.length > 0 ? Math.ceil(groups.length / params.limit) : 0;
+
+  return {
+    has_next_page: pageCount > 0 && params.page < pageCount,
+    has_previous_page: pageCount > 0 && params.page > 1,
+    page: params.page,
+    page_count: pageCount,
+    page_size: params.limit,
+    total_group_count: groups.length,
+  };
 }
 
 function summarizeGroups(groups: AdminMonthlyBillingGroup[]): AdminMonthlyBillingGroupingSummary {
@@ -613,12 +741,13 @@ export async function loadAdminMonthlyBillingGroups(
   ] as string[];
 
   if (bookingReferences.length === 0) {
-    const groups: AdminMonthlyBillingGroup[] = [];
+    const filteredGroups: AdminMonthlyBillingGroup[] = [];
 
     return {
       data: {
-        groups,
-        summary: summarizeGroups(groups),
+        groups: [],
+        pagination: buildPagination(filteredGroups, parsed.data),
+        summary: summarizeGroups(filteredGroups),
         version: adminMonthlyBillingGroupingReadVersion,
       },
       ok: true,
@@ -647,12 +776,15 @@ export async function loadAdminMonthlyBillingGroups(
       ),
     )
     .filter((candidate): candidate is BillingCandidate => Boolean(candidate));
-  const groups = groupCandidates(candidates, parsed.data);
+  const groupedCandidates = groupCandidates(candidates, parsed.data);
+  const filteredGroups = filterGroupedCandidates(groupedCandidates, parsed.data);
+  const groups = paginateGroups(filteredGroups, parsed.data);
 
   return {
     data: {
       groups,
-      summary: summarizeGroups(groups),
+      pagination: buildPagination(filteredGroups, parsed.data),
+      summary: summarizeGroups(filteredGroups),
       version: adminMonthlyBillingGroupingReadVersion,
     },
     ok: true,

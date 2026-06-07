@@ -589,6 +589,9 @@ type AdminCompletedBookingCloseoutAction =
   | "save-completed-closeout";
 
 type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
+type AdminMonthlyBillingGroupingReadinessFilter =
+  | "all"
+  | AdminMonthlyBillingGroupingReadinessStatus;
 
 type AdminMonthlyBillingGroup = {
   billing_month?: string | null;
@@ -597,6 +600,15 @@ type AdminMonthlyBillingGroup = {
   ready_count?: number | null;
   safe_readiness_status?: AdminMonthlyBillingGroupingReadinessStatus | null;
   total_count?: number | null;
+};
+
+type AdminMonthlyBillingGroupingPagination = {
+  has_next_page?: boolean | null;
+  has_previous_page?: boolean | null;
+  page?: number | null;
+  page_count?: number | null;
+  page_size?: number | null;
+  total_group_count?: number | null;
 };
 
 type AdminMonthlyBillingGroupingSummary = {
@@ -609,6 +621,7 @@ type AdminMonthlyBillingGroupingSummary = {
 type AdminMonthlyBillingGroupingReadState = {
   groups: AdminMonthlyBillingGroup[];
   message: Message | null;
+  pagination: AdminMonthlyBillingGroupingPagination | null;
   status: "idle" | "loading" | "loaded" | "error";
   summary: AdminMonthlyBillingGroupingSummary | null;
 };
@@ -3823,13 +3836,36 @@ async function loadAdminCompletedBookingCloseoutRecord(bookingReference: string)
   return clean(closeout?.booking_reference) === bookingReference ? closeout : null;
 }
 
-async function loadAdminMonthlyBillingGroupsRead(billingMonth: string | null) {
+async function loadAdminMonthlyBillingGroupsRead({
+  billingMonth,
+  customerAccountSearch,
+  limit,
+  page,
+  readinessStatus,
+}: {
+  billingMonth: string | null;
+  customerAccountSearch: string;
+  limit: number;
+  page: number;
+  readinessStatus: AdminMonthlyBillingGroupingReadinessFilter;
+}) {
   const params = new URLSearchParams({
-    limit: "25",
+    limit: String(limit),
+    page: String(page),
   });
 
   if (billingMonth) {
     params.set("billing_month", billingMonth);
+  }
+
+  const cleanedCustomerAccountSearch = clean(customerAccountSearch);
+
+  if (cleanedCustomerAccountSearch) {
+    params.set("customer_account_search", cleanedCustomerAccountSearch);
+  }
+
+  if (readinessStatus !== "all") {
+    params.set("readiness_status", readinessStatus);
   }
 
   const response = await fetch(`${adminMonthlyBillingGroupsApiPath}?${params.toString()}`, {
@@ -3846,6 +3882,7 @@ async function loadAdminMonthlyBillingGroupsRead(billingMonth: string | null) {
 
   return {
     groups: Array.isArray(result.groups) ? (result.groups as AdminMonthlyBillingGroup[]) : [],
+    pagination: (result.pagination || null) as AdminMonthlyBillingGroupingPagination | null,
     summary: (result.summary || null) as AdminMonthlyBillingGroupingSummary | null,
   };
 }
@@ -4318,9 +4355,16 @@ export default function Home() {
     useState<AdminMonthlyBillingGroupingReadState>({
       groups: [],
       message: null,
+      pagination: null,
       status: "idle",
       summary: null,
     });
+  const [adminMonthlyBillingGroupingCustomerSearch, setAdminMonthlyBillingGroupingCustomerSearch] =
+    useState("");
+  const [adminMonthlyBillingGroupingReadinessFilter, setAdminMonthlyBillingGroupingReadinessFilter] =
+    useState<AdminMonthlyBillingGroupingReadinessFilter>("all");
+  const [adminMonthlyBillingGroupingLimit, setAdminMonthlyBillingGroupingLimit] = useState(1);
+  const [adminMonthlyBillingGroupingPage, setAdminMonthlyBillingGroupingPage] = useState(1);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
@@ -4563,6 +4607,7 @@ export default function Home() {
             tone: "info",
             text: "Load or apply a saved operational booking before reading saved monthly billing groups.",
           },
+          pagination: null,
           status: "idle",
           summary: null,
         });
@@ -4579,9 +4624,13 @@ export default function Home() {
       }));
 
       try {
-        const { groups, summary } = await loadAdminMonthlyBillingGroupsRead(
-          adminMonthlyBillingGroupingBillingMonthFilter,
-        );
+        const { groups, pagination, summary } = await loadAdminMonthlyBillingGroupsRead({
+          billingMonth: adminMonthlyBillingGroupingBillingMonthFilter,
+          customerAccountSearch: adminMonthlyBillingGroupingCustomerSearch,
+          limit: adminMonthlyBillingGroupingLimit,
+          page: adminMonthlyBillingGroupingPage,
+          readinessStatus: adminMonthlyBillingGroupingReadinessFilter,
+        });
 
         if (cancelled) {
           return;
@@ -4590,6 +4639,13 @@ export default function Home() {
         const billingMonthLabel = adminMonthlyBillingGroupingBillingMonthFilter
           ? ` for ${adminMonthlyBillingGroupingMonthLabel(adminMonthlyBillingGroupingBillingMonthFilter)}`
           : "";
+        const totalGroupCount = adminMonthlyBillingGroupingCount(pagination?.total_group_count);
+        const loadedGroupsText =
+          totalGroupCount > groups.length
+            ? `Loaded ${groups.length} of ${totalGroupCount} saved monthly billing groups${billingMonthLabel}.`
+            : `Loaded ${groups.length} saved monthly billing group${
+                groups.length === 1 ? "" : "s"
+              }${billingMonthLabel}.`;
 
         setAdminMonthlyBillingGroupingReadState({
           groups,
@@ -4597,11 +4653,10 @@ export default function Home() {
             tone: groups.length > 0 ? "success" : "info",
             text:
               groups.length > 0
-                ? `Loaded ${groups.length} saved monthly billing group${
-                    groups.length === 1 ? "" : "s"
-                  }${billingMonthLabel}.`
-                : `No saved monthly billing groups returned${billingMonthLabel}.`,
+                ? loadedGroupsText
+                : `No saved monthly billing groups matched${billingMonthLabel}.`,
           },
+          pagination,
           status: "loaded",
           summary,
         });
@@ -4616,6 +4671,7 @@ export default function Home() {
             tone: "error",
             text: adminMonthlyBillingGroupingFailureMessage(error),
           },
+          pagination: null,
           status: "error",
           summary: null,
         });
@@ -4625,7 +4681,14 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [adminMonthlyBillingGroupingBillingMonthFilter, dispatchReleaseWorkflowBookingReference]);
+  }, [
+    adminMonthlyBillingGroupingBillingMonthFilter,
+    adminMonthlyBillingGroupingCustomerSearch,
+    adminMonthlyBillingGroupingLimit,
+    adminMonthlyBillingGroupingPage,
+    adminMonthlyBillingGroupingReadinessFilter,
+    dispatchReleaseWorkflowBookingReference,
+  ]);
 
   const adminBookingPersistenceStatusOptions = useMemo(
     () => getAdminBookingPersistenceStatusOptions(adminBookingPersistenceRecords),
@@ -11419,6 +11482,55 @@ export default function Home() {
     adminMonthlyBillingGroupingReadState.status === "loading";
   const monthlyBillingSavedGroupingError =
     adminMonthlyBillingGroupingReadState.status === "error";
+  const monthlyBillingSavedGroupingPagination = adminMonthlyBillingGroupingReadState.pagination;
+  const monthlyBillingSavedGroupingPageCount = adminMonthlyBillingGroupingCount(
+    monthlyBillingSavedGroupingPagination?.page_count,
+  );
+  const monthlyBillingSavedGroupingPage = adminMonthlyBillingGroupingCount(
+    monthlyBillingSavedGroupingPagination?.page,
+  ) || adminMonthlyBillingGroupingPage;
+  const monthlyBillingSavedGroupingTotalGroupCount =
+    adminMonthlyBillingGroupingCount(monthlyBillingSavedGroupingPagination?.total_group_count) ||
+    adminMonthlyBillingGroupingReadState.groups.length;
+  const monthlyBillingSavedGroupingCanGoPrevious =
+    !monthlyBillingSavedGroupingLoading &&
+    Boolean(monthlyBillingSavedGroupingPagination?.has_previous_page);
+  const monthlyBillingSavedGroupingCanGoNext =
+    !monthlyBillingSavedGroupingLoading &&
+    Boolean(monthlyBillingSavedGroupingPagination?.has_next_page);
+  const monthlyBillingSavedGroupingPageLabel = monthlyBillingSavedGroupingPageCount
+    ? `Page ${monthlyBillingSavedGroupingPage} of ${monthlyBillingSavedGroupingPageCount}`
+    : monthlyBillingSavedGroupingLoaded
+      ? "No matching saved groups"
+      : `Page ${adminMonthlyBillingGroupingPage}`;
+  const monthlyBillingSavedGroupingFilterStatusLabel =
+    adminMonthlyBillingGroupingReadinessFilter === "all"
+      ? "All readiness"
+      : adminMonthlyBillingGroupingReadinessLabel(adminMonthlyBillingGroupingReadinessFilter);
+  const monthlyBillingSavedGroupingReadLimitOptions = [1, 3, 5];
+  const monthlyBillingSavedGroupingReadinessFilterOptions: {
+    label: string;
+    value: AdminMonthlyBillingGroupingReadinessFilter;
+  }[] = [
+    { label: "All readiness", value: "all" },
+    { label: "Ready", value: "ready" },
+    { label: "Blocked", value: "blocked" },
+    { label: "Mixed", value: "mixed" },
+  ];
+  const setMonthlyBillingGroupingCustomerSearchFilter = (value: string) => {
+    setAdminMonthlyBillingGroupingCustomerSearch(value);
+    setAdminMonthlyBillingGroupingPage(1);
+  };
+  const setMonthlyBillingGroupingReadinessStatusFilter = (
+    value: AdminMonthlyBillingGroupingReadinessFilter,
+  ) => {
+    setAdminMonthlyBillingGroupingReadinessFilter(value);
+    setAdminMonthlyBillingGroupingPage(1);
+  };
+  const setMonthlyBillingGroupingReadLimit = (value: number) => {
+    setAdminMonthlyBillingGroupingLimit(value);
+    setAdminMonthlyBillingGroupingPage(1);
+  };
   const monthlyBillingSavedGroupingReadyTripsCount =
     monthlyBillingSavedGroupingPrimaryGroup
       ? adminMonthlyBillingGroupingCount(monthlyBillingSavedGroupingPrimaryGroup.ready_count)
@@ -11549,9 +11661,11 @@ export default function Home() {
             ? "Grouped locally by customer/account and billing month."
             : "Not grouped for future monthly billing review locally.";
   const monthlyBillingMonthGroupingAdminReviewDetail = monthlyBillingSavedGroupingHasGroup
-    ? adminMonthlyBillingGroupingReadState.groups.length > 1
-      ? `Showing first of ${adminMonthlyBillingGroupingReadState.groups.length} saved monthly billing groups for admin review.`
-      : "Saved monthly billing group ready for admin review."
+    ? monthlyBillingSavedGroupingTotalGroupCount > adminMonthlyBillingGroupingReadState.groups.length
+      ? `Showing saved monthly billing group ${monthlyBillingSavedGroupingPageLabel.toLowerCase()} from ${monthlyBillingSavedGroupingTotalGroupCount} matching group${monthlyBillingSavedGroupingTotalGroupCount === 1 ? "" : "s"}.`
+      : adminMonthlyBillingGroupingReadState.groups.length > 1
+        ? `Showing first of ${adminMonthlyBillingGroupingReadState.groups.length} saved monthly billing groups on this read.`
+        : "Saved monthly billing group ready for admin review."
     : monthlyBillingMonthGroupingAdminReviewed
       ? "Admin month grouping review completed locally."
       : "Admin month grouping review not completed locally.";
@@ -21735,6 +21849,90 @@ export default function Home() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+              <div
+                aria-label="Saved monthly billing grouping read filters"
+                className="mt-2 grid min-w-0 grid-cols-1 gap-1 rounded-md border border-teal-200 bg-white p-1.5 text-xs text-teal-950 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-4"
+                data-admin-monthly-billing-month-grouping-read-controls="true"
+              >
+                <label className="min-w-0 font-semibold">
+                  <span>Customer/account filter</span>
+                  <input
+                    className="mt-1 h-9 w-full min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    data-admin-monthly-billing-month-grouping-customer-search="true"
+                    maxLength={80}
+                    onChange={(event) =>
+                      setMonthlyBillingGroupingCustomerSearchFilter(event.target.value)
+                    }
+                    placeholder="Search saved account"
+                    type="search"
+                    value={adminMonthlyBillingGroupingCustomerSearch}
+                  />
+                </label>
+                <label className="min-w-0 font-semibold">
+                  <span>Readiness filter</span>
+                  <select
+                    className="mt-1 h-9 w-full min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    data-admin-monthly-billing-month-grouping-readiness-filter="true"
+                    onChange={(event) =>
+                      setMonthlyBillingGroupingReadinessStatusFilter(
+                        event.target.value as AdminMonthlyBillingGroupingReadinessFilter,
+                      )
+                    }
+                    value={adminMonthlyBillingGroupingReadinessFilter}
+                  >
+                    {monthlyBillingSavedGroupingReadinessFilterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="min-w-0 font-semibold">
+                  <span>Groups per read</span>
+                  <select
+                    className="mt-1 h-9 w-full min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-medium text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    data-admin-monthly-billing-month-grouping-limit="true"
+                    onChange={(event) => setMonthlyBillingGroupingReadLimit(Number(event.target.value))}
+                    value={String(adminMonthlyBillingGroupingLimit)}
+                  >
+                    {monthlyBillingSavedGroupingReadLimitOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="min-w-0 font-semibold">
+                  <span
+                    className="block truncate"
+                    data-admin-monthly-billing-month-grouping-page-summary="true"
+                  >
+                    {monthlyBillingSavedGroupingPageLabel} / {monthlyBillingSavedGroupingFilterStatusLabel}
+                  </span>
+                  <div className="mt-1 grid grid-cols-2 gap-1">
+                    <button
+                      className="min-h-9 min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-semibold text-teal-950 transition enabled:hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      data-admin-monthly-billing-month-grouping-previous-page="true"
+                      disabled={!monthlyBillingSavedGroupingCanGoPrevious}
+                      onClick={() =>
+                        setAdminMonthlyBillingGroupingPage((current) => Math.max(1, current - 1))
+                      }
+                      type="button"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      className="min-h-9 min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-semibold text-teal-950 transition enabled:hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      data-admin-monthly-billing-month-grouping-next-page="true"
+                      disabled={!monthlyBillingSavedGroupingCanGoNext}
+                      onClick={() => setAdminMonthlyBillingGroupingPage((current) => current + 1)}
+                      type="button"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
               <label className="mt-1 block min-w-0 text-xs font-semibold text-teal-950 sm:mt-3">

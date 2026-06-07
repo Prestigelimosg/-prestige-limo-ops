@@ -899,7 +899,7 @@ async function runChromeTest() {
 
           if (String(url).includes("/api/admin-monthly-billing-groups")) {
             const parsedUrl = new URL(String(url), window.location.origin);
-            const groups = window.__adminMonthlyBillingGroupingGroups || [];
+            const allGroups = window.__adminMonthlyBillingGroupingGroups || [];
 
             window.__adminMonthlyBillingGroupingCalls.push({
               method,
@@ -908,15 +908,45 @@ async function runChromeTest() {
             });
 
             if (method === "GET") {
+              const billingMonth = parsedUrl.searchParams.get("billing_month") || "";
+              const customerSearch = (parsedUrl.searchParams.get("customer_account_search") || "").toLowerCase();
+              const readinessStatus = parsedUrl.searchParams.get("readiness_status") || "";
+              const limit = Math.max(1, Number(parsedUrl.searchParams.get("limit") || 25));
+              const page = Math.max(1, Number(parsedUrl.searchParams.get("page") || 1));
+              const filteredGroups = allGroups.filter((group) => {
+                if (billingMonth && group.billing_month !== billingMonth) {
+                  return false;
+                }
+
+                if (
+                  customerSearch &&
+                  !String(group.customer_account || "").toLowerCase().includes(customerSearch)
+                ) {
+                  return false;
+                }
+
+                return !readinessStatus || group.safe_readiness_status === readinessStatus;
+              });
+              const pageCount = filteredGroups.length ? Math.ceil(filteredGroups.length / limit) : 0;
+              const groups = filteredGroups.slice((page - 1) * limit, page * limit);
+
               return new Response(
                 JSON.stringify({
                   groups,
                   ok: true,
+                  pagination: {
+                    has_next_page: pageCount > 0 && page < pageCount,
+                    has_previous_page: pageCount > 0 && page > 1,
+                    page,
+                    page_count: pageCount,
+                    page_size: limit,
+                    total_group_count: filteredGroups.length,
+                  },
                   summary: {
-                    blocked_count: groups.reduce((total, group) => total + Number(group.blocked_count || 0), 0),
-                    group_count: groups.length,
-                    ready_count: groups.reduce((total, group) => total + Number(group.ready_count || 0), 0),
-                    total_count: groups.reduce((total, group) => total + Number(group.total_count || 0), 0),
+                    blocked_count: filteredGroups.reduce((total, group) => total + Number(group.blocked_count || 0), 0),
+                    group_count: filteredGroups.length,
+                    ready_count: filteredGroups.reduce((total, group) => total + Number(group.ready_count || 0), 0),
+                    total_count: filteredGroups.reduce((total, group) => total + Number(group.total_count || 0), 0),
                   },
                   version: "app-smoke-monthly-billing-grouping-read-mock",
                 }),
@@ -2203,7 +2233,7 @@ async function runChromeTest() {
         [
           {
             method: "GET",
-            search: "?limit=25&billing_month=2026-06",
+            search: "?limit=1&page=1&billing_month=2026-06",
           },
         ],
         "Expected applied snapshot load to GET monthly billing grouping through the guarded read API path",

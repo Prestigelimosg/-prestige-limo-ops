@@ -79,6 +79,7 @@ export async function GET(request: Request) {
     return Response.json({
       groups: result.data.groups,
       ok: true,
+      pagination: result.data.pagination,
       summary: result.data.summary,
       version: result.data.version,
     });

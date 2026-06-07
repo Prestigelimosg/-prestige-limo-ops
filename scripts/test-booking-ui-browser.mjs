@@ -6022,17 +6022,46 @@ async function runChromeTest() {
           });
 
           if (method === "GET") {
-            const groups = window.__prestigeMonthlyBillingGroupingGroups || [];
+            const allGroups = window.__prestigeMonthlyBillingGroupingGroups || [];
+            const billingMonth = url.searchParams.get("billing_month") || "";
+            const customerSearch = (url.searchParams.get("customer_account_search") || "").toLowerCase();
+            const readinessStatus = url.searchParams.get("readiness_status") || "";
+            const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
+            const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+            const filteredGroups = allGroups.filter((group) => {
+              if (billingMonth && group.billing_month !== billingMonth) {
+                return false;
+              }
+
+              if (
+                customerSearch &&
+                !String(group.customer_account || "").toLowerCase().includes(customerSearch)
+              ) {
+                return false;
+              }
+
+              return !readinessStatus || group.safe_readiness_status === readinessStatus;
+            });
+            const pageCount = filteredGroups.length ? Math.ceil(filteredGroups.length / limit) : 0;
+            const groups = filteredGroups.slice((page - 1) * limit, page * limit);
 
             return new Response(
               JSON.stringify({
                 groups,
                 ok: true,
+                pagination: {
+                  has_next_page: pageCount > 0 && page < pageCount,
+                  has_previous_page: pageCount > 0 && page > 1,
+                  page,
+                  page_count: pageCount,
+                  page_size: limit,
+                  total_group_count: filteredGroups.length,
+                },
                 summary: {
-                  blocked_count: groups.reduce((total, group) => total + Number(group.blocked_count || 0), 0),
-                  group_count: groups.length,
-                  ready_count: groups.reduce((total, group) => total + Number(group.ready_count || 0), 0),
-                  total_count: groups.reduce((total, group) => total + Number(group.total_count || 0), 0),
+                  blocked_count: filteredGroups.reduce((total, group) => total + Number(group.blocked_count || 0), 0),
+                  group_count: filteredGroups.length,
+                  ready_count: filteredGroups.reduce((total, group) => total + Number(group.ready_count || 0), 0),
+                  total_count: filteredGroups.reduce((total, group) => total + Number(group.total_count || 0), 0),
                 },
                 version: "browser-monthly-billing-grouping-read-mock",
               }),
@@ -11507,6 +11536,14 @@ async function runChromeTest() {
           safe_readiness_status: "mixed",
           total_count: 3,
         },
+        {
+          billing_month: "2026-05",
+          blocked_count: 0,
+          customer_account: "SECOND SAVED ACCOUNT",
+          ready_count: 1,
+          safe_readiness_status: "ready",
+          total_count: 1,
+        },
       ];
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
@@ -11644,17 +11681,46 @@ async function runChromeTest() {
           });
 
           if (method === "GET") {
-            const groups = window.__prestigeMonthlyBillingGroupingGroups || [];
+            const allGroups = window.__prestigeMonthlyBillingGroupingGroups || [];
+            const billingMonth = url.searchParams.get("billing_month") || "";
+            const customerSearch = (url.searchParams.get("customer_account_search") || "").toLowerCase();
+            const readinessStatus = url.searchParams.get("readiness_status") || "";
+            const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
+            const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+            const filteredGroups = allGroups.filter((group) => {
+              if (billingMonth && group.billing_month !== billingMonth) {
+                return false;
+              }
+
+              if (
+                customerSearch &&
+                !String(group.customer_account || "").toLowerCase().includes(customerSearch)
+              ) {
+                return false;
+              }
+
+              return !readinessStatus || group.safe_readiness_status === readinessStatus;
+            });
+            const pageCount = filteredGroups.length ? Math.ceil(filteredGroups.length / limit) : 0;
+            const groups = filteredGroups.slice((page - 1) * limit, page * limit);
 
             return new Response(
               JSON.stringify({
                 groups,
                 ok: true,
+                pagination: {
+                  has_next_page: pageCount > 0 && page < pageCount,
+                  has_previous_page: pageCount > 0 && page > 1,
+                  page,
+                  page_count: pageCount,
+                  page_size: limit,
+                  total_group_count: filteredGroups.length,
+                },
                 summary: {
-                  blocked_count: groups.reduce((total, group) => total + Number(group.blocked_count || 0), 0),
-                  group_count: groups.length,
-                  ready_count: groups.reduce((total, group) => total + Number(group.ready_count || 0), 0),
-                  total_count: groups.reduce((total, group) => total + Number(group.total_count || 0), 0),
+                  blocked_count: filteredGroups.reduce((total, group) => total + Number(group.blocked_count || 0), 0),
+                  group_count: filteredGroups.length,
+                  ready_count: filteredGroups.reduce((total, group) => total + Number(group.ready_count || 0), 0),
+                  total_count: filteredGroups.reduce((total, group) => total + Number(group.total_count || 0), 0),
                 },
                 version: "focused-browser-monthly-billing-grouping-read-mock",
               }),
@@ -11742,10 +11808,26 @@ async function runChromeTest() {
               const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
 
               return {
+                customerSearchValue:
+                  section?.querySelector("[data-admin-monthly-billing-month-grouping-customer-search='true']")
+                    ?.value || "",
+                limitValue:
+                  section?.querySelector("[data-admin-monthly-billing-month-grouping-limit='true']")
+                    ?.value || "",
+                nextPageDisabled:
+                  section?.querySelector("[data-admin-monthly-billing-month-grouping-next-page='true']")
+                    ?.disabled ?? true,
+                pageSummary:
+                  section?.querySelector("[data-admin-monthly-billing-month-grouping-page-summary='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
                 readFeedback:
                   section?.querySelector("[data-admin-monthly-billing-month-grouping-read-feedback='true']")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
+                readinessFilterValue:
+                  section?.querySelector("[data-admin-monthly-billing-month-grouping-readiness-filter='true']")
+                    ?.value || "",
                 items: [
                   ...(section?.querySelectorAll("[data-admin-monthly-billing-month-grouping-review-item]") || []),
                 ].map((item) => ({
@@ -11801,7 +11883,7 @@ async function runChromeTest() {
           candidateState?.monthlyBillingGroupingRequests?.some(
             (request) =>
               request.method === "GET" &&
-              request.search === "?limit=25&billing_month=2026-05",
+              request.search === "?limit=1&page=1&billing_month=2026-05",
           )
           ? candidateState
           : false;
@@ -11817,7 +11899,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
-      "GET /api/admin-monthly-billing-groups?limit=25&billing_month=2026-05",
+      "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
     ];
     assert.deepEqual(
       [...loadedBookingState.fetchCalls].sort(),
@@ -11876,15 +11958,23 @@ async function runChromeTest() {
           hasSessionTokenHeader: false,
           method: "GET",
           purpose: "admin-booking-persistence",
-          search: "?limit=25&billing_month=2026-05",
+          search: "?limit=1&page=1&billing_month=2026-05",
         },
       ],
       "Expected saved booking load to GET monthly billing grouping through the guarded read API path",
     );
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.readFeedback,
-      "Loaded 1 saved monthly billing group for May 2026.",
+      "Loaded 1 of 2 saved monthly billing groups for May 2026.",
     );
+    assert.equal(
+      loadedBookingState.monthlyBillingMonthGroupingReview.pageSummary,
+      "Page 1 of 2 / All readiness",
+    );
+    assert.equal(loadedBookingState.monthlyBillingMonthGroupingReview.customerSearchValue, "");
+    assert.equal(loadedBookingState.monthlyBillingMonthGroupingReview.readinessFilterValue, "all");
+    assert.equal(loadedBookingState.monthlyBillingMonthGroupingReview.limitValue, "1");
+    assert.equal(loadedBookingState.monthlyBillingMonthGroupingReview.nextPageDisabled, false);
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "customer-account")
         ?.detail,
@@ -11914,6 +12004,121 @@ async function runChromeTest() {
       loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "month-grouping-status")
         ?.detail,
       "Saved readiness status: Mixed.",
+    );
+    const clickedMonthlyGroupingNextPage = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-monthly-billing-month-grouping-next-page='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedMonthlyGroupingNextPage,
+      true,
+      "Expected monthly billing grouping next page control to be clickable",
+    );
+    const monthlyGroupingNextPageState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+          const itemDetail = (key) =>
+            section
+              ?.querySelector(\`[data-admin-monthly-billing-month-grouping-review-item='\${key}'] [data-admin-monthly-billing-month-grouping-review-detail]\`)
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+
+          return {
+            requests: window.__prestigeMonthlyBillingGroupingRequests || [],
+            customerAccountDetail: itemDetail("customer-account"),
+            pageSummary:
+              section?.querySelector("[data-admin-monthly-billing-month-grouping-page-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            readFeedback:
+              section?.querySelector("[data-admin-monthly-billing-month-grouping-read-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.requests?.some(
+          (request) => request.method === "GET" && request.search === "?limit=1&page=2&billing_month=2026-05",
+        ) &&
+          candidateState.customerAccountDetail === "SECOND SAVED ACCOUNT from saved grouped data."
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly billing grouping second page read",
+    );
+    assert.equal(monthlyGroupingNextPageState.pageSummary, "Page 2 of 2 / All readiness");
+    assert.equal(
+      monthlyGroupingNextPageState.readFeedback,
+      "Loaded 1 of 2 saved monthly billing groups for May 2026.",
+    );
+
+    await setFieldValueByLabel(
+      "Customer/account filter",
+      "LOADED",
+      "monthly billing grouping customer/account filter",
+    );
+    await setFieldValueByLabel(
+      "Readiness filter",
+      "mixed",
+      "monthly billing grouping readiness filter",
+    );
+    const monthlyGroupingFilteredState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+          const itemDetail = (key) =>
+            section
+              ?.querySelector(\`[data-admin-monthly-billing-month-grouping-review-item='\${key}'] [data-admin-monthly-billing-month-grouping-review-detail]\`)
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+
+          return {
+            requests: window.__prestigeMonthlyBillingGroupingRequests || [],
+            customerSearchValue:
+              section?.querySelector("[data-admin-monthly-billing-month-grouping-customer-search='true']")
+                ?.value || "",
+            customerAccountDetail: itemDetail("customer-account"),
+            pageSummary:
+              section?.querySelector("[data-admin-monthly-billing-month-grouping-page-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            readinessFilterValue:
+              section?.querySelector("[data-admin-monthly-billing-month-grouping-readiness-filter='true']")
+                ?.value || "",
+            readFeedback:
+              section?.querySelector("[data-admin-monthly-billing-month-grouping-read-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.requests?.some(
+          (request) =>
+            request.method === "GET" &&
+            request.search ===
+              "?limit=1&page=1&billing_month=2026-05&customer_account_search=LOADED&readiness_status=mixed",
+        ) &&
+          candidateState.customerAccountDetail === "LOADED SAVED COMPANY from saved grouped data."
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly billing grouping filtered read",
+    );
+    assert.equal(monthlyGroupingFilteredState.customerSearchValue, "LOADED");
+    assert.equal(monthlyGroupingFilteredState.readinessFilterValue, "mixed");
+    assert.equal(monthlyGroupingFilteredState.pageSummary, "Page 1 of 1 / Mixed");
+    assert.equal(
+      monthlyGroupingFilteredState.readFeedback,
+      "Loaded 1 saved monthly billing group for May 2026.",
     );
     assert.equal(loadedBookingState.fields.bookingType, "DEP");
     assert.equal(loadedBookingState.fields.vehicle, "VAN");

@@ -1652,7 +1652,8 @@ async function runChromeTest() {
         `${viewport.label}: expected Completed Trip Closeout Review controls to stay readable`,
       );
       assert.equal(
-        state.boundary.includes("Local UI only.") &&
+        state.boundary.includes("UI/local-state") &&
+          state.boundary.includes("completed closeout API") &&
           state.boundary.includes("No Supabase write") &&
           state.boundary.includes("invoice") &&
           state.boundary.includes("PDF") &&
@@ -1661,7 +1662,7 @@ async function runChromeTest() {
           state.boundary.includes("notification sending") &&
           state.boundary.includes("parser-learning"),
         true,
-        `${viewport.label}: expected Completed Trip Closeout Review local-only boundary`,
+        `${viewport.label}: expected Completed Trip Closeout Review completed-closeout API boundary`,
       );
       assert.equal(
         state.height <= (viewport.width < 640 ? 980 : 680),

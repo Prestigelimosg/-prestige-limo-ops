@@ -33,6 +33,7 @@ import { mockDriverJobTokens } from "../lib/driver-job-link-mock-tokens";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
+const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
 const adminLegacyTables = {
@@ -566,6 +567,25 @@ type AdminBookingWorkflowStatusAction =
   | "load-driver-acknowledgement"
   | "save-dispatch-release"
   | "save-driver-acknowledgement";
+
+type AdminCompletedBookingCloseoutRecord = {
+  billing_prep_readiness?: string | null;
+  booking_reference?: string | null;
+  closeout_status?: string | null;
+  completed_job_status?: string | null;
+  dsp_actual_hours_readiness?: string | null;
+  extra_charges_readiness?: string | null;
+  safe_closeout_context?: {
+    closeout_summary?: string | null;
+    next_action?: string | null;
+  } | null;
+  safe_closeout_note?: string | null;
+  updated_at?: string | null;
+};
+
+type AdminCompletedBookingCloseoutAction =
+  | "load-completed-closeout"
+  | "save-completed-closeout";
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
@@ -3694,6 +3714,33 @@ function adminBookingWorkflowStatusDisplayLabel(
   return statusValue ? statusValue.replace(/_/g, " ") : "No saved status";
 }
 
+function adminCompletedBookingCloseoutFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Completed closeout persistence is not enabled or configured on this server.";
+  }
+
+  if (/forbidden/.test(normalizedError)) {
+    return "Completed closeout request is outside the approved admin closeout scope.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Completed closeout details need review.";
+  }
+
+  return "Completed closeout request failed safely.";
+}
+
+function adminCompletedBookingCloseoutDisplayLabel(
+  closeout: AdminCompletedBookingCloseoutRecord | null | undefined,
+) {
+  const closeoutStatus = clean(closeout?.closeout_status);
+
+  return closeoutStatus ? closeoutStatus.replace(/_/g, " ") : "No saved closeout";
+}
+
 async function loadAdminBookingWorkflowStatusRecord(
   bookingReference: string,
   workflowArea: string,
@@ -3726,6 +3773,48 @@ async function loadAdminBookingWorkflowStatusRecord(
         clean(status.workflow_area) === workflowArea,
     ) || null
   );
+}
+
+async function loadAdminCompletedBookingCloseoutRecord(bookingReference: string) {
+  const params = new URLSearchParams({
+    booking_reference: bookingReference,
+  });
+
+  const response = await fetch(`${adminCompletedBookingCloseoutApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Completed closeout load failed.");
+  }
+
+  const closeout = result.closeout as AdminCompletedBookingCloseoutRecord | null;
+
+  return clean(closeout?.booking_reference) === bookingReference ? closeout : null;
+}
+
+function completedTripCloseoutReviewStatusFromApi(
+  closeout: AdminCompletedBookingCloseoutRecord | null,
+): CompletedTripCloseoutReviewStatus {
+  if (!closeout) {
+    return "review-needed";
+  }
+
+  const closeoutStatus = clean(closeout.closeout_status);
+
+  if (closeoutStatus === "ready_for_billing_prep" || closeoutStatus === "closed") {
+    return "ready-locally";
+  }
+
+  if (clean(closeout.completed_job_status) === "completed") {
+    return "trip-completed";
+  }
+
+  return "review-needed";
 }
 
 function adminSnapshotPickupDateTimeParts(value: string | null | undefined) {
@@ -4087,6 +4176,12 @@ export default function Home() {
     useState<AdminBookingWorkflowStatusRecord | null>(null);
   const [adminBookingWorkflowStatusAction, setAdminBookingWorkflowStatusAction] =
     useState<AdminBookingWorkflowStatusAction | null>(null);
+  const [completedBookingCloseoutRecord, setCompletedBookingCloseoutRecord] =
+    useState<AdminCompletedBookingCloseoutRecord | null>(null);
+  const [completedBookingCloseoutAction, setCompletedBookingCloseoutAction] =
+    useState<AdminCompletedBookingCloseoutAction | null>(null);
+  const [completedTripCloseoutReviewMessage, setCompletedTripCloseoutReviewMessage] =
+    useState<Message | null>(null);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
@@ -4219,9 +4314,12 @@ export default function Home() {
       if (!bookingReference) {
         setDispatchReleaseWorkflowStatus(null);
         setDriverAcknowledgementWorkflowStatus(null);
+        setCompletedBookingCloseoutRecord(null);
         setAdminBookingWorkflowStatusAction(null);
+        setCompletedBookingCloseoutAction(null);
         setDispatchReleaseMessage(null);
         setDriverAcknowledgementMessage(null);
+        setCompletedTripCloseoutReviewMessage(null);
         return;
       }
 
@@ -4250,6 +4348,51 @@ export default function Home() {
         workflowArea: adminDriverAcknowledgementWorkflowArea,
         workflowLabel: "Driver acknowledgement",
       });
+
+      if (!cancelled) {
+        setCompletedBookingCloseoutAction("load-completed-closeout");
+
+        try {
+          const loadedCloseout = await loadAdminCompletedBookingCloseoutRecord(bookingReference);
+
+          if (cancelled) {
+            return;
+          }
+
+          setCompletedBookingCloseoutRecord(loadedCloseout);
+
+          if (loadedCloseout) {
+            setCompletedTripCloseoutReviewStatus(
+              completedTripCloseoutReviewStatusFromApi(loadedCloseout),
+            );
+            setCompletedTripCloseoutReviewMessage({
+              tone: "success",
+              text: `Loaded completed closeout for ${bookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
+                loadedCloseout,
+              )}.`,
+            });
+          } else {
+            setCompletedTripCloseoutReviewMessage({
+              tone: "info",
+              text: `No saved completed closeout for ${bookingReference}.`,
+            });
+          }
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+
+          setCompletedBookingCloseoutRecord(null);
+          setCompletedTripCloseoutReviewMessage({
+            tone: "error",
+            text: adminCompletedBookingCloseoutFailureMessage(error),
+          });
+        } finally {
+          if (!cancelled) {
+            setCompletedBookingCloseoutAction(null);
+          }
+        }
+      }
 
       if (!cancelled) {
         setAdminBookingWorkflowStatusAction(null);
@@ -7302,6 +7445,8 @@ export default function Home() {
     setAppliedAdminBookingSnapshotReference("");
     setDispatchReleaseWorkflowStatus(null);
     setDriverAcknowledgementWorkflowStatus(null);
+    setCompletedBookingCloseoutRecord(null);
+    setCompletedTripCloseoutReviewMessage(null);
     setAdminBookingPersistenceMessage({
       tone: "success",
       text: "Applied operational snapshot cleared. Current dispatch form values were kept.",
@@ -7441,6 +7586,95 @@ export default function Home() {
       });
     } finally {
       setAdminBookingWorkflowStatusAction(null);
+    }
+  }
+
+  async function saveCompletedTripCloseoutReviewStatus(
+    nextStatus: CompletedTripCloseoutReviewStatus,
+  ) {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+
+    setCompletedTripCloseoutReviewStatus(nextStatus);
+
+    if (!bookingReference) {
+      setCompletedTripCloseoutReviewMessage({
+        tone: "error",
+        text: "Load a saved booking or apply an operational snapshot before saving completed closeout.",
+      });
+      return;
+    }
+
+    const selectedLabel =
+      completedTripCloseoutReviewOptions.find((option) => option.value === nextStatus)?.label ||
+      "Completed closeout";
+    const closeoutStatus =
+      nextStatus === "ready-locally" ? "ready_for_billing_prep" : "needs_review";
+    const completedJobStatus =
+      nextStatus === "review-needed" ? "needs_review" : "completed";
+    const dspActualHoursReadiness =
+      nextStatus === "ready-locally" || nextStatus === "billing-note-reviewed"
+        ? "ready"
+        : "needs_review";
+    const extraChargesReadiness =
+      nextStatus === "ready-locally" ? "ready" : "needs_review";
+    const billingPrepReadiness = nextStatus === "ready-locally" ? "ready" : "not_ready";
+
+    setCompletedBookingCloseoutAction("save-completed-closeout");
+    setCompletedTripCloseoutReviewMessage({
+      tone: "info",
+      text: `Saving completed closeout for ${bookingReference}...`,
+    });
+
+    try {
+      const response = await fetch(adminCompletedBookingCloseoutApiPath, {
+        body: JSON.stringify({
+          billing_prep_readiness: billingPrepReadiness,
+          booking_reference: bookingReference,
+          closeout_status: closeoutStatus,
+          completed_job_status: completedJobStatus,
+          dsp_actual_hours_readiness: dspActualHoursReadiness,
+          extra_charges_readiness: extraChargesReadiness,
+          safe_closeout_context: {
+            closeout_summary: `${selectedLabel} from the existing Completed Trip Closeout Review control.`,
+            next_action:
+              nextStatus === "ready-locally"
+                ? "Continue monthly billing preparation review after closeout."
+                : "Continue completed trip closeout review before billing preparation.",
+          },
+          safe_closeout_note:
+            clean(completedTripCloseoutReviewNote) ||
+            "Admin updated completed closeout from the existing closeout review control.",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Completed closeout save failed.");
+      }
+
+      const savedCloseout = result.closeout as AdminCompletedBookingCloseoutRecord;
+      setCompletedBookingCloseoutRecord(savedCloseout);
+      setCompletedTripCloseoutReviewStatus(
+        completedTripCloseoutReviewStatusFromApi(savedCloseout),
+      );
+      setCompletedTripCloseoutReviewMessage({
+        tone: "success",
+        text: `Completed closeout saved for ${bookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
+          savedCloseout,
+        )}.`,
+      });
+    } catch (error) {
+      setCompletedTripCloseoutReviewMessage({
+        tone: "error",
+        text: adminCompletedBookingCloseoutFailureMessage(error),
+      });
+    } finally {
+      setCompletedBookingCloseoutAction(null);
     }
   }
 
@@ -10062,6 +10296,9 @@ export default function Home() {
     completedTripCloseoutReviewReached("billing-note-reviewed");
   const completedTripCloseoutReviewReadyLocally =
     completedTripCloseoutReviewStatus === "ready-locally";
+  const completedTripCloseoutSavedStatusDetail = completedBookingCloseoutRecord
+    ? ` Saved API status: ${adminCompletedBookingCloseoutDisplayLabel(completedBookingCloseoutRecord)}.`
+    : "";
   const completedTripCloseoutReviewNextAction = completedTripCloseoutReviewReadyLocally
     ? "Completed trip closeout ready locally; keep closeout note current."
     : !completedTripCloseoutTripCompleted
@@ -10125,7 +10362,7 @@ export default function Home() {
     {
       detail: `${completedTripCloseoutReviewStatusLabel}. ${
         clean(completedTripCloseoutReviewNote) || "No local note."
-      }`,
+      }${completedTripCloseoutSavedStatusDetail}`,
       key: "local-closeout-note-status",
       label: "Local closeout note/status",
       state: completedTripCloseoutReviewReadyLocally ? "ready" : "needs-action",
@@ -20389,8 +20626,9 @@ export default function Home() {
                         data-admin-completed-trip-closeout-review-option-state={
                           isSelected ? "selected" : "idle"
                         }
+                        disabled={completedBookingCloseoutAction !== null}
                         key={option.value}
-                        onClick={() => setCompletedTripCloseoutReviewStatus(option.value)}
+                        onClick={() => saveCompletedTripCloseoutReviewStatus(option.value)}
                         type="button"
                       >
                         {option.label}
@@ -20451,12 +20689,23 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+              {completedTripCloseoutReviewMessage ? (
+                <p
+                  className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
+                    completedTripCloseoutReviewMessage.tone,
+                  )}`}
+                  data-admin-completed-trip-closeout-review-feedback="true"
+                >
+                  {completedTripCloseoutReviewMessage.text}
+                </p>
+              ) : null}
               <p
-                className="mt-1.5 border-t border-zinc-200 pt-1.5 text-[11px] leading-4 text-zinc-700 md:text-[10px] md:leading-3"
+                className="mt-1 border-t border-zinc-200 pt-1 text-[11px] leading-4 text-zinc-700 md:text-[10px] md:leading-3"
                 data-admin-completed-trip-closeout-review-boundary="true"
               >
-                Local UI only. No Supabase write, live database access, invoice, PDF, payment, payout,
-                notification sending, customer message, driver notification, live location, or parser-learning behavior.
+                UI/local-state review; completed closeout API saves status only.
+                No Supabase write outside it; no live database access beyond that path, invoice, PDF, payment,
+                payout, notification sending, customer message, driver notification, live location, or parser-learning behavior.
               </p>
             </section>
 

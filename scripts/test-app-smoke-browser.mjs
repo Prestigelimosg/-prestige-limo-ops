@@ -6497,7 +6497,8 @@ async function runChromeTest() {
           `${viewport.label}: expected trip completion as next closeout action`,
         );
         for (const expectedBoundaryText of [
-          "Local UI only.",
+          "UI/local-state",
+          "completed closeout API",
           "No Supabase write",
           "live database access",
           "invoice",

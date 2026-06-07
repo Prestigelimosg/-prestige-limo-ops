@@ -2280,7 +2280,8 @@ function assertBookingUiState(state) {
     state.completedTripCloseoutReview.items.find((item) => item.key === "local-closeout-note-status")?.detail,
     "Completed trip closeout review needed. No local note.",
   );
-  assert.match(state.completedTripCloseoutReview.boundary, /Local UI only/);
+  assert.match(state.completedTripCloseoutReview.boundary, /UI\/local-state/);
+  assert.match(state.completedTripCloseoutReview.boundary, /completed closeout API/);
   assert.match(state.completedTripCloseoutReview.boundary, /No Supabase write/);
   assert.match(state.completedTripCloseoutReview.boundary, /live database access/);
   assert.match(state.completedTripCloseoutReview.boundary, /invoice/);
@@ -5851,6 +5852,8 @@ async function runChromeTest() {
       window.__prestigeCompletedDeleteRequests = [];
       window.__prestigeLoadedBookings = loadedBookings;
       window.__prestigeUnhandledSupabaseCalls = [];
+      window.__prestigeCompletedCloseoutRequests = [];
+      window.__prestigeCompletedCloseouts = {};
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = {};
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
@@ -5925,6 +5928,64 @@ async function runChromeTest() {
           }
 
           return new Response(JSON.stringify({ ok: false, error: "Workflow status method not mocked." }), {
+            status: 405,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (String(target).includes("/api/admin-completed-booking-closeouts")) {
+          const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeCompletedCloseoutRequests.push({
+            body: parsedBody,
+            booking_reference: url.searchParams.get("booking_reference") || parsedBody?.booking_reference || "",
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const bookingReference = url.searchParams.get("booking_reference") || "";
+            const closeout = window.__prestigeCompletedCloseouts[bookingReference] || null;
+
+            return new Response(
+              JSON.stringify({
+                closeout,
+                ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "POST") {
+            const closeout = {
+              ...parsedBody,
+              actor_label: "Browser completed closeout mock",
+              actor_role: "admin",
+              created_at: "2026-06-07T00:00:00.000Z",
+              id: "browser-completed-closeout-row",
+              source_surface: "admin_api",
+              updated_at: "2026-06-07T00:00:00.000Z",
+            };
+            window.__prestigeCompletedCloseouts[closeout.booking_reference] = closeout;
+
+            return new Response(
+              JSON.stringify({
+                closeout,
+                ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(JSON.stringify({ ok: false, error: "Completed closeout method not mocked." }), {
             status: 405,
             headers: { "content-type": "application/json" },
           });
@@ -11379,6 +11440,8 @@ async function runChromeTest() {
       const previousFetch = window.fetch.bind(window);
 
       window.__prestigeFetchCalls = [];
+      window.__prestigeCompletedCloseoutRequests = [];
+      window.__prestigeCompletedCloseouts = window.__prestigeCompletedCloseouts || {};
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
       window.fetch = async (...args) => {
@@ -11443,6 +11506,60 @@ async function runChromeTest() {
               JSON.stringify({
                 ok: true,
                 status,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
+        if (String(target).includes("/api/admin-completed-booking-closeouts")) {
+          const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeCompletedCloseoutRequests.push({
+            body: parsedBody,
+            booking_reference: url.searchParams.get("booking_reference") || parsedBody?.booking_reference || "",
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const bookingReference = url.searchParams.get("booking_reference") || "";
+            const closeout = window.__prestigeCompletedCloseouts[bookingReference] || null;
+
+            return new Response(
+              JSON.stringify({
+                closeout,
+                ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "POST") {
+            const closeout = {
+              ...parsedBody,
+              actor_label: "Focused browser completed closeout mock",
+              actor_role: "admin",
+              created_at: "2026-06-07T00:00:00.000Z",
+              id: "focused-browser-completed-closeout-row",
+              source_surface: "admin_api",
+              updated_at: "2026-06-07T00:00:00.000Z",
+            };
+            window.__prestigeCompletedCloseouts[closeout.booking_reference] = closeout;
+
+            return new Response(
+              JSON.stringify({
+                closeout,
+                ok: true,
               }),
               { status: 200, headers: { "content-type": "application/json" } },
             );
@@ -11521,6 +11638,7 @@ async function runChromeTest() {
             bodyText,
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
+            completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
@@ -11551,6 +11669,11 @@ async function runChromeTest() {
               request.method === "GET" &&
               request.booking_reference === "ui-cleanup-load-fixture" &&
               request.workflow_area === "driver_acknowledgement",
+          ) &&
+          candidateState?.completedCloseoutRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture",
           )
           ? candidateState
           : false;
@@ -11567,8 +11690,9 @@ async function runChromeTest() {
       [
         "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
         "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
+        "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
       ],
-      `Expected Load this booking to make only the workflow status GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
+      `Expected Load this booking to make only the workflow status and completed closeout GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
     );
     assert.deepEqual(
       loadedBookingState.workflowStatusRequests.map((request) => ({
@@ -11592,6 +11716,23 @@ async function runChromeTest() {
         },
       ],
       "Expected saved booking load to GET dispatch_release and driver_acknowledgement workflow statuses through the guarded API path",
+    );
+    assert.deepEqual(
+      loadedBookingState.completedCloseoutRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected saved booking load to GET completed closeout through the guarded API path",
     );
     assert.equal(loadedBookingState.fields.bookingType, "DEP");
     assert.equal(loadedBookingState.fields.vehicle, "VAN");
@@ -11831,6 +11972,7 @@ async function runChromeTest() {
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
+      window.__prestigeCompletedCloseoutRequests = [];
       window.__prestigeWorkflowStatusRequests = [];
     })()`);
 
@@ -11872,6 +12014,7 @@ async function runChromeTest() {
           return {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
+            completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             fields: {
@@ -11894,6 +12037,11 @@ async function runChromeTest() {
               request.method === "GET" &&
               request.booking_reference === "ui-cleanup-load-fixture" &&
               request.workflow_area === "driver_acknowledgement",
+          ) &&
+          candidateState?.completedCloseoutRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture",
           )
           ? candidateState
           : false;
@@ -11913,6 +12061,23 @@ async function runChromeTest() {
       `Expected Recent Load this booking to make only the workflow status GETs, got ${recentLoadedBookingState.workflowStatusRequests
         .map((request) => `${request.method} ${request.url}`)
         .join(", ")}`,
+    );
+    assert.deepEqual(
+      recentLoadedBookingState.completedCloseoutRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected Recent Load this booking to GET completed closeout through the guarded API path",
     );
 
     await clickTab("Bookings", "Recent Bookings");
@@ -12149,6 +12314,7 @@ async function runChromeTest() {
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
+      window.__prestigeCompletedCloseoutRequests = [];
       window.__prestigeWorkflowStatusRequests = [];
     })()`);
 
@@ -12204,6 +12370,7 @@ async function runChromeTest() {
               ?.textContent.trim() || "",
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
+            completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
@@ -12235,6 +12402,11 @@ async function runChromeTest() {
               request.method === "GET" &&
               request.booking_reference === "ui-completed-load-fixture" &&
               request.workflow_area === "driver_acknowledgement",
+          ) &&
+          candidateState?.completedCloseoutRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-completed-load-fixture",
           )
           ? candidateState
           : false;
@@ -12257,6 +12429,23 @@ async function runChromeTest() {
         .map((request) => `${request.method} ${request.url}`)
         .join(", ")}`,
     );
+    assert.deepEqual(
+      completedLoadedBookingState.completedCloseoutRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-completed-load-fixture",
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected Completed Load this booking to GET completed closeout through the guarded API path",
+    );
     assert.equal(completedLoadedBookingState.fields.bookingType, "DEP");
     assert.equal(completedLoadedBookingState.fields.vehicle, "AVF");
     assert.equal(completedLoadedBookingState.fields.pickup, "Mandarin Oriental Singapore");
@@ -12267,6 +12456,92 @@ async function runChromeTest() {
     assert.match(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST COMPANY/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST DRIVER/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST TRAVELER/);
+
+    await evaluate(`(() => {
+      window.__prestigeCompletedCloseoutRequests = [];
+      window.__prestigeFetchCalls = [];
+    })()`);
+
+    const clickedCompletedCloseoutSave = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-completed-trip-closeout-review-option='ready-locally']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedCompletedCloseoutSave,
+      true,
+      "Expected Completed Trip Closeout Review Ready Locally control to be clickable for completed closeout API save",
+    );
+
+    const completedCloseoutSavedState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-completed-trip-closeout-review='true']");
+          const feedback =
+            section?.querySelector("[data-admin-completed-trip-closeout-review-feedback='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+
+          return feedback.includes("Completed closeout saved for ui-completed-load-fixture")
+            ? {
+                completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
+                feedback,
+                fetchCalls: window.__prestigeFetchCalls || [],
+              }
+            : false;
+        })()`);
+
+        return candidateState;
+      },
+      10000,
+      "completed closeout API save feedback",
+    );
+
+    assert.deepEqual(
+      completedCloseoutSavedState.completedCloseoutRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        body: request.body,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-completed-load-fixture",
+          body: {
+            billing_prep_readiness: "ready",
+            booking_reference: "ui-completed-load-fixture",
+            closeout_status: "ready_for_billing_prep",
+            completed_job_status: "completed",
+            dsp_actual_hours_readiness: "ready",
+            extra_charges_readiness: "ready",
+            safe_closeout_context: {
+              closeout_summary:
+                "Ready Locally from the existing Completed Trip Closeout Review control.",
+              next_action: "Continue monthly billing preparation review after closeout.",
+            },
+            safe_closeout_note:
+              "Admin updated completed closeout from the existing closeout review control.",
+          },
+          hasSessionTokenHeader: false,
+          method: "POST",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected completed closeout POST to use the safe guarded API shape",
+    );
+    assert.equal(
+      /customer_price|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token/i.test(
+        JSON.stringify(completedCloseoutSavedState.completedCloseoutRequests.map((request) => request.body)),
+      ),
+      false,
+      "Expected completed closeout request body to avoid private finance, invoice/payment, notification, parser, and secret fields",
+    );
 
     const clickedClearBeforeCrmSave = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(

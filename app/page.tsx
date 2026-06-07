@@ -36,6 +36,8 @@ const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
+const adminMonthlyInvoiceDraftTripCandidatesApiPath =
+  "/api/admin-monthly-invoice-draft-trip-candidates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
 const adminLegacyTables = {
@@ -638,6 +640,16 @@ type AdminMonthlyInvoiceDraftStatus =
   | "archived";
 
 type AdminMonthlyInvoiceDraftReadinessStatus = "ready" | "blocked" | "mixed";
+type AdminMonthlyInvoiceDraftTripReadinessStatus = "ready" | "blocked";
+
+type AdminMonthlyInvoiceDraftTripCandidate = {
+  billing_prep_readiness?: string | null;
+  booking_reference?: string | null;
+  closeout_id?: string | null;
+  closeout_status?: string | null;
+  safe_trip_context?: Record<string, unknown> | null;
+  trip_readiness_status?: AdminMonthlyInvoiceDraftTripReadinessStatus | null;
+};
 
 type AdminMonthlyInvoiceDraftRecord = {
   billing_month?: string | null;
@@ -646,8 +658,12 @@ type AdminMonthlyInvoiceDraftRecord = {
   draft_status?: AdminMonthlyInvoiceDraftStatus | null;
   id?: string | null;
   linked_trips?: Array<{
+    billing_prep_readiness?: string | null;
     booking_reference?: string | null;
-    trip_readiness_status?: "ready" | "blocked" | null;
+    closeout_id?: string | null;
+    closeout_status?: string | null;
+    safe_trip_context?: Record<string, unknown> | null;
+    trip_readiness_status?: AdminMonthlyInvoiceDraftTripReadinessStatus | null;
   }> | null;
   readiness_status?: AdminMonthlyInvoiceDraftReadinessStatus | null;
   ready_count?: number | null;
@@ -3991,6 +4007,46 @@ async function loadAdminMonthlyInvoiceDraftsRead({
   };
 }
 
+async function loadAdminMonthlyInvoiceDraftTripCandidatesRead(group: AdminMonthlyBillingGroup) {
+  const customerAccount = clean(group.customer_account);
+  const billingMonth = clean(group.billing_month);
+
+  if (!customerAccount || !billingMonth) {
+    throw new Error("Monthly invoice draft trip candidate read requires a saved customer/month group.");
+  }
+
+  const params = new URLSearchParams({
+    billing_month: billingMonth,
+    customer_account: customerAccount,
+    limit: "250",
+    page: "1",
+  });
+  const customerId = clean(group.customer_id);
+
+  if (customerId) {
+    params.set("customer_id", customerId);
+  }
+
+  const response = await fetch(
+    `${adminMonthlyInvoiceDraftTripCandidatesApiPath}?${params.toString()}`,
+    {
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "GET",
+    },
+  );
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly invoice draft trip candidate read failed.");
+  }
+
+  return Array.isArray(result.trip_candidates)
+    ? (result.trip_candidates as AdminMonthlyInvoiceDraftTripCandidate[])
+    : [];
+}
+
 async function saveAdminMonthlyInvoiceDraftPreparation({
   existingDraft,
   group,
@@ -4039,6 +4095,22 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
     },
     total_count: totalCount,
   };
+  const linkedTrips = existingDraft?.id
+    ? []
+    : (await loadAdminMonthlyInvoiceDraftTripCandidatesRead(group)).map((candidate) => ({
+        billing_prep_readiness: clean(candidate.billing_prep_readiness) || null,
+        booking_reference: clean(candidate.booking_reference),
+        closeout_id: clean(candidate.closeout_id) || null,
+        closeout_status: clean(candidate.closeout_status) || null,
+        safe_trip_context: candidate.safe_trip_context || {},
+        trip_readiness_status:
+          candidate.trip_readiness_status === "blocked" ? "blocked" : "ready",
+      })).filter((candidate) => Boolean(candidate.booking_reference));
+
+  if (!existingDraft?.id && linkedTrips.length === 0) {
+    throw new Error("Monthly invoice draft preparation requires saved trip references.");
+  }
+
   const request =
     existingDraft?.id
       ? {
@@ -4052,7 +4124,7 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
           body: {
             ...sharedPayload,
             customer_id: clean(group.customer_id) || null,
-            linked_trips: [],
+            linked_trips: linkedTrips,
           },
           method: "POST",
         };

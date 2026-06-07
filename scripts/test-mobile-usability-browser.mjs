@@ -13317,3 +13317,4 @@ async function runBrowserTest() {
 }
 
 await runBrowserTest();
+process.exit(0);

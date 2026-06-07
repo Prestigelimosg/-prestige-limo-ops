@@ -38,6 +38,8 @@ const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
 const adminMonthlyInvoiceDraftTripCandidatesApiPath =
   "/api/admin-monthly-invoice-draft-trip-candidates";
+const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
+const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
 const adminLegacyTables = {
@@ -693,6 +695,31 @@ type AdminMonthlyInvoiceDraftReadState = {
 };
 
 type AdminMonthlyInvoiceDraftAction = "save-draft-prep";
+
+type AdminMapRouteAssistLocationField = "dropoff" | "pickup";
+
+type AdminMapLocationSearchResultItem = {
+  address?: string | null;
+  block_no?: string | null;
+  building?: string | null;
+  label?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  postal?: string | null;
+  road_name?: string | null;
+};
+
+type AdminMapRouteEstimateResult = {
+  distance_meters?: number | null;
+  duration_seconds?: number | null;
+  provider?: "onemap_routing" | string | null;
+  route_type?: "cycle" | "drive" | "walk" | string | null;
+};
+
+type AdminMapRouteAssistAction =
+  | "estimate-route"
+  | "search-dropoff"
+  | "search-pickup";
 
 type DriverAcknowledgementFollowUpStatus = "pending" | "acknowledged" | "needs-call";
 
@@ -3848,6 +3875,61 @@ function adminCompletedBookingCloseoutDisplayLabel(
   return closeoutStatus ? closeoutStatus.replace(/_/g, " ") : "No saved closeout";
 }
 
+function adminMapRouteAssistFailureMessage(rawError: unknown, label = "OneMap route assist") {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return `${label} is not enabled or configured on this server.`;
+  }
+
+  if (/forbidden/.test(normalizedError)) {
+    return `${label} is available only from the internal admin dashboard.`;
+  }
+
+  if (/missing|required|malformed|invalid|unknown|no onemap match/.test(normalizedError)) {
+    return `${label} details need review.`;
+  }
+
+  return `${label} request failed safely.`;
+}
+
+function formatAdminMapDistance(distanceMeters: number | null | undefined) {
+  const meters = Number(distanceMeters);
+
+  if (!Number.isFinite(meters) || meters < 0) {
+    return "Distance TBC";
+  }
+
+  if (meters < 1000) {
+    return `${Math.round(meters)} m`;
+  }
+
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function formatAdminMapDuration(durationSeconds: number | null | undefined) {
+  const seconds = Number(durationSeconds);
+
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "Duration TBC";
+  }
+
+  const roundedMinutes = Math.max(1, Math.round(seconds / 60));
+  const hours = Math.floor(roundedMinutes / 60);
+  const minutes = roundedMinutes % 60;
+
+  if (hours === 0) {
+    return `${roundedMinutes} min`;
+  }
+
+  return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
+}
+
+function adminMapLocationLabel(location: AdminMapLocationSearchResultItem | null) {
+  return clean(location?.label) || clean(location?.address) || "No OneMap match selected";
+}
+
 async function loadAdminBookingWorkflowStatusRecord(
   bookingReference: string,
   workflowArea: string,
@@ -3902,6 +3984,89 @@ async function loadAdminCompletedBookingCloseoutRecord(bookingReference: string)
   const closeout = result.closeout as AdminCompletedBookingCloseoutRecord | null;
 
   return clean(closeout?.booking_reference) === bookingReference ? closeout : null;
+}
+
+async function loadAdminMapLocationSearchFirstMatch(query: string) {
+  const cleanedQuery = clean(query);
+
+  if (!cleanedQuery) {
+    throw new Error("OneMap location search requires a pickup or drop-off value.");
+  }
+
+  const params = new URLSearchParams({
+    page: "1",
+    query: cleanedQuery,
+  });
+
+  const response = await fetch(`${adminMapLocationSearchApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "OneMap location search failed.");
+  }
+
+  const results = Array.isArray(result.location_search?.results)
+    ? (result.location_search.results as AdminMapLocationSearchResultItem[])
+    : [];
+  const firstMatch = results.find((candidate) =>
+    Number.isFinite(Number(candidate.latitude)) &&
+      Number.isFinite(Number(candidate.longitude)) &&
+      Boolean(adminMapLocationLabel(candidate)),
+  );
+
+  if (!firstMatch) {
+    throw new Error("No OneMap match found.");
+  }
+
+  return {
+    ...firstMatch,
+    latitude: Number(firstMatch.latitude),
+    longitude: Number(firstMatch.longitude),
+  };
+}
+
+async function loadAdminMapRouteEstimate({
+  bookingReference,
+  destination,
+  origin,
+}: {
+  bookingReference: string;
+  destination: AdminMapLocationSearchResultItem;
+  origin: AdminMapLocationSearchResultItem;
+}) {
+  const response = await fetch(adminMapRouteEstimatesApiPath, {
+    body: JSON.stringify({
+      ...(bookingReference ? { booking_reference: bookingReference } : {}),
+      destination: {
+        label: adminMapLocationLabel(destination),
+        latitude: Number(destination.latitude),
+        longitude: Number(destination.longitude),
+      },
+      origin: {
+        label: adminMapLocationLabel(origin),
+        latitude: Number(origin.latitude),
+        longitude: Number(origin.longitude),
+      },
+      route_type: "drive",
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "OneMap route estimate failed.");
+  }
+
+  return result.route_estimate as AdminMapRouteEstimateResult;
 }
 
 async function loadAdminMonthlyBillingGroupsRead({
@@ -4709,6 +4874,16 @@ export default function Home() {
     useState<AdminMonthlyBillingGroupingReadinessFilter>("all");
   const [adminMonthlyBillingGroupingLimit, setAdminMonthlyBillingGroupingLimit] = useState(1);
   const [adminMonthlyBillingGroupingPage, setAdminMonthlyBillingGroupingPage] = useState(1);
+  const [adminMapPickupLocation, setAdminMapPickupLocation] =
+    useState<AdminMapLocationSearchResultItem | null>(null);
+  const [adminMapDropoffLocation, setAdminMapDropoffLocation] =
+    useState<AdminMapLocationSearchResultItem | null>(null);
+  const [adminMapRouteEstimate, setAdminMapRouteEstimate] =
+    useState<AdminMapRouteEstimateResult | null>(null);
+  const [adminMapRouteAssistAction, setAdminMapRouteAssistAction] =
+    useState<AdminMapRouteAssistAction | null>(null);
+  const [adminMapRouteAssistMessage, setAdminMapRouteAssistMessage] =
+    useState<Message | null>(null);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
@@ -5767,10 +5942,112 @@ export default function Home() {
 
   function update(field: keyof BookingForm, value: string) {
     setCustomerMatchFeedback(null);
+    if (field === "pickup") {
+      setAdminMapPickupLocation(null);
+      setAdminMapRouteEstimate(null);
+      setAdminMapRouteAssistMessage(null);
+    }
+    if (field === "dropoff") {
+      setAdminMapDropoffLocation(null);
+      setAdminMapRouteEstimate(null);
+      setAdminMapRouteAssistMessage(null);
+    }
     setBooking((current) => ({
       ...current,
       [field]: value,
     }));
+  }
+
+  async function resolveAdminMapLocation(
+    field: AdminMapRouteAssistLocationField,
+    options?: { silent?: boolean },
+  ) {
+    const label = field === "pickup" ? "Pickup" : "Drop-off";
+    const query = field === "pickup" ? booking.pickup : booking.dropoff;
+    const action = field === "pickup" ? "search-pickup" : "search-dropoff";
+
+    if (!options?.silent) {
+      setAdminMapRouteAssistAction(action);
+      setAdminMapRouteAssistMessage({
+        tone: "info",
+        text: `Searching OneMap for ${label.toLowerCase()}...`,
+      });
+    }
+
+    try {
+      const match = await loadAdminMapLocationSearchFirstMatch(query);
+
+      if (field === "pickup") {
+        setAdminMapPickupLocation(match);
+      } else {
+        setAdminMapDropoffLocation(match);
+      }
+
+      if (!options?.silent) {
+        setAdminMapRouteAssistMessage({
+          tone: "success",
+          text: `${label} matched in OneMap: ${adminMapLocationLabel(match)}.`,
+        });
+      }
+
+      return match;
+    } catch (error) {
+      if (!options?.silent) {
+        setAdminMapRouteAssistMessage({
+          tone: "error",
+          text: adminMapRouteAssistFailureMessage(error, `${label} OneMap search`),
+        });
+      }
+
+      throw error;
+    } finally {
+      if (!options?.silent) {
+        setAdminMapRouteAssistAction(null);
+      }
+    }
+  }
+
+  async function estimateAdminMapRouteFromBooking() {
+    if (!clean(booking.pickup) || !clean(booking.dropoff)) {
+      setAdminMapRouteAssistMessage({
+        tone: "error",
+        text: "OneMap route estimate needs pickup and drop-off values.",
+      });
+      return;
+    }
+
+    setAdminMapRouteAssistAction("estimate-route");
+    setAdminMapRouteAssistMessage({
+      tone: "info",
+      text: "Resolving pickup/drop-off and estimating route with OneMap...",
+    });
+
+    try {
+      const origin = adminMapPickupLocation || await resolveAdminMapLocation("pickup", { silent: true });
+      const destination =
+        adminMapDropoffLocation || await resolveAdminMapLocation("dropoff", { silent: true });
+      const estimate = await loadAdminMapRouteEstimate({
+        bookingReference: dispatchReleaseWorkflowBookingReference,
+        destination,
+        origin,
+      });
+
+      setAdminMapRouteEstimate(estimate);
+      setAdminMapRouteAssistMessage({
+        tone: "success",
+        text: `OneMap route estimate loaded: ${formatAdminMapDistance(
+          estimate.distance_meters,
+        )}, ${formatAdminMapDuration(estimate.duration_seconds)}.`,
+      });
+    } catch (error) {
+      setAdminMapRouteEstimate(null);
+      setAdminMapRouteAssistMessage({
+        tone: "error",
+        text: adminMapRouteAssistFailureMessage(error),
+      });
+    } finally {
+      setAdminMapRouteAssistAction(null);
+    }
   }
 
   function setDriverAssignmentMessage(bookingId: string, nextMessage: Message | null) {
@@ -19542,6 +19819,140 @@ export default function Home() {
                 </label>
               ))}
             </div>
+
+            <section
+              aria-label="OneMap Route Assist"
+              className="mt-5 rounded-md border border-cyan-200 bg-cyan-50/70 p-3"
+              data-admin-onemap-route-assist="true"
+            >
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-cyan-950">
+                    OneMap Route Assist
+                  </h3>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-cyan-900">
+                    Admin-only route planning from the existing pickup and drop-off fields.
+                  </p>
+                </div>
+                <button
+                  className="min-h-10 rounded-md border border-cyan-300 bg-white px-3 py-2 text-left text-sm font-semibold text-cyan-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                  data-admin-onemap-estimate-route="true"
+                  disabled={
+                    adminMapRouteAssistAction !== null ||
+                    !clean(booking.pickup) ||
+                    !clean(booking.dropoff)
+                  }
+                  onClick={estimateAdminMapRouteFromBooking}
+                  type="button"
+                >
+                  {adminMapRouteAssistAction === "estimate-route"
+                    ? "Estimating..."
+                    : "Estimate Route"}
+                </button>
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                {([
+                  {
+                    action: "search-pickup" as const,
+                    buttonData: "pickup",
+                    field: "pickup" as const,
+                    label: "Pickup",
+                    location: adminMapPickupLocation,
+                    value: booking.pickup,
+                  },
+                  {
+                    action: "search-dropoff" as const,
+                    buttonData: "dropoff",
+                    field: "dropoff" as const,
+                    label: "Drop-off",
+                    location: adminMapDropoffLocation,
+                    value: booking.dropoff,
+                  },
+                ]).map((item) => (
+                  <div
+                    className="min-w-0 rounded-md border border-cyan-200 bg-white p-3 text-xs text-cyan-950"
+                    data-admin-onemap-location-card={item.field}
+                    key={item.field}
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-semibold">{item.label}</p>
+                        <p
+                          className="mt-1 break-words text-cyan-900"
+                          data-admin-onemap-location-query={item.field}
+                        >
+                          {clean(item.value) || `${item.label} TBC`}
+                        </p>
+                      </div>
+                      <button
+                        className="min-h-9 rounded-md border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-left text-xs font-semibold text-cyan-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-admin-onemap-location-search={item.buttonData}
+                        disabled={adminMapRouteAssistAction !== null || !clean(item.value)}
+                        onClick={() => void resolveAdminMapLocation(item.field)}
+                        type="button"
+                      >
+                        {adminMapRouteAssistAction === item.action
+                          ? "Searching..."
+                          : "Resolve"}
+                      </button>
+                    </div>
+                    <p
+                      className="mt-2 break-words font-semibold text-cyan-950"
+                      data-admin-onemap-location-result={item.field}
+                    >
+                      {item.location
+                        ? adminMapLocationLabel(item.location)
+                        : "No OneMap coordinate selected"}
+                    </p>
+                    {item.location ? (
+                      <p
+                        className="mt-1 break-words text-cyan-900"
+                        data-admin-onemap-location-coordinate={item.field}
+                      >
+                        {Number(item.location.latitude).toFixed(6)},{" "}
+                        {Number(item.location.longitude).toFixed(6)}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              {adminMapRouteEstimate ? (
+                <div
+                  className="mt-3 grid gap-2 rounded-md border border-cyan-200 bg-white p-3 text-xs text-cyan-950 sm:grid-cols-3"
+                  data-admin-onemap-route-result="true"
+                >
+                  <p className="min-w-0 break-words">
+                    <span className="block font-semibold uppercase text-cyan-700">Distance</span>
+                    <span>{formatAdminMapDistance(adminMapRouteEstimate.distance_meters)}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span className="block font-semibold uppercase text-cyan-700">Duration</span>
+                    <span>{formatAdminMapDuration(adminMapRouteEstimate.duration_seconds)}</span>
+                  </p>
+                  <p className="min-w-0 break-words">
+                    <span className="block font-semibold uppercase text-cyan-700">Provider</span>
+                    <span>{clean(adminMapRouteEstimate.provider) || "OneMap"}</span>
+                  </p>
+                </div>
+              ) : null}
+              {adminMapRouteAssistMessage ? (
+                <p
+                  className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
+                    adminMapRouteAssistMessage.tone,
+                  )}`}
+                  data-admin-onemap-feedback="true"
+                >
+                  {adminMapRouteAssistMessage.text}
+                </p>
+              ) : null}
+              <p
+                className="mt-2 border-t border-cyan-200 pt-2 text-[11px] leading-4 text-cyan-900"
+                data-admin-onemap-boundary="true"
+              >
+                Uses guarded admin OneMap APIs only. No booking save, Supabase write, customer message, driver
+                notification, live location activation, invoice, PDF, payment, payout, or parser-learning behavior.
+              </p>
+            </section>
 
             {customerMatchSuggestion ? (
               <section

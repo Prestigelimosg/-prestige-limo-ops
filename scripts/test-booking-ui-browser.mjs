@@ -11517,6 +11517,250 @@ async function runChromeTest() {
     assert.equal(dispatchDraftAfterDashboardAssignment.fields.flight, "SQ333");
     assert.equal(dispatchDraftAfterDashboardAssignment.fields.driverName, "TEST DRIVER CRM 20260516");
 
+    reporter.step("checking OneMap route assist API calls");
+
+    await evaluate(`(() => {
+      const previousFetch = window.fetch.bind(window);
+
+      window.__prestigeFetchCalls = [];
+      window.__prestigeMapLocationSearchRequests = [];
+      window.__prestigeMapRouteEstimateRequests = [];
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
+        const headers = (() => {
+          try {
+            return Object.fromEntries(new Headers(args[1]?.headers || args[0]?.headers || {}).entries());
+          } catch {
+            return {};
+          }
+        })();
+
+        if (String(target).includes("/api/admin-map-location-search")) {
+          const url = new URL(String(target), window.location.origin);
+          const query = url.searchParams.get("query") || "";
+          const isPickup = query.toLowerCase().includes("raffles");
+          const result = isPickup
+            ? {
+                address: "1 BEACH ROAD RAFFLES HOTEL SINGAPORE 189673",
+                block_no: "1",
+                building: "RAFFLES HOTEL SINGAPORE",
+                label: "RAFFLES HOTEL SINGAPORE",
+                latitude: 1.294781,
+                longitude: 103.854556,
+                postal: "189673",
+                road_name: "BEACH ROAD",
+              }
+            : {
+                address: "CHANGI AIRPORT TERMINAL 2 SINGAPORE 819643",
+                block_no: "",
+                building: "CHANGI AIRPORT TERMINAL 2",
+                label: "CHANGI AIRPORT TERMINAL 2",
+                latitude: 1.355537,
+                longitude: 103.986477,
+                postal: "819643",
+                road_name: "AIRPORT BOULEVARD",
+              };
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMapLocationSearchRequests.push({
+            headers,
+            method,
+            searchParams: Object.fromEntries(url.searchParams.entries()),
+            url: String(target),
+          });
+
+          return new Response(
+            JSON.stringify({
+              location_search: {
+                found: 1,
+                page: 1,
+                provider: "onemap_search",
+                query,
+                results: [result],
+                total_pages: 1,
+              },
+              ok: true,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        if (String(target).includes("/api/admin-map-route-estimates")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMapRouteEstimateRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              route_estimate: {
+                distance_meters: 22750,
+                duration_seconds: 2150,
+                provider: "onemap_routing",
+                route_type: "drive",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        return previousFetch(...args);
+      };
+    })()`);
+
+    await setFieldValueByLabel("Pickup", "Raffles Hotel Singapore", "OneMap pickup field");
+    await setFieldValueByLabel("Drop-off", "Changi Airport T2", "OneMap drop-off field");
+
+    const clickedOneMapRouteEstimate = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-onemap-estimate-route='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedOneMapRouteEstimate, true, "Expected OneMap route estimate button to be clickable");
+
+    const oneMapRouteAssistState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-onemap-route-assist='true']");
+
+          return {
+            boundary:
+              section?.querySelector("[data-admin-onemap-boundary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            feedback:
+              section?.querySelector("[data-admin-onemap-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            pickupResult:
+              section?.querySelector("[data-admin-onemap-location-result='pickup']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            dropoffResult:
+              section?.querySelector("[data-admin-onemap-location-result='dropoff']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            routeResult:
+              section?.querySelector("[data-admin-onemap-route-result='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            locationRequests: window.__prestigeMapLocationSearchRequests || [],
+            routeRequests: window.__prestigeMapRouteEstimateRequests || [],
+            fetchCalls: window.__prestigeFetchCalls || [],
+          };
+        })()`);
+
+        return candidateState?.feedback?.includes("OneMap route estimate loaded") &&
+          candidateState?.locationRequests?.length === 2 &&
+          candidateState?.routeRequests?.length === 1
+          ? candidateState
+          : false;
+      },
+      10000,
+      "OneMap route assist estimate",
+    );
+
+    assert.equal(oneMapRouteAssistState.pickupResult, "RAFFLES HOTEL SINGAPORE");
+    assert.equal(oneMapRouteAssistState.dropoffResult, "CHANGI AIRPORT TERMINAL 2");
+    assert.match(oneMapRouteAssistState.routeResult, /22\.8 km/);
+    assert.match(oneMapRouteAssistState.routeResult, /36 min/);
+    assert.match(oneMapRouteAssistState.routeResult, /onemap_routing/);
+    assert.deepEqual(
+      oneMapRouteAssistState.locationRequests.map((request) => ({
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        searchParams: request.searchParams,
+      })),
+      [
+        {
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          searchParams: {
+            page: "1",
+            query: "Raffles Hotel Singapore",
+          },
+        },
+        {
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          searchParams: {
+            page: "1",
+            query: "Changi Airport T2",
+          },
+        },
+      ],
+      "Expected OneMap location search to use guarded admin GETs for pickup and drop-off",
+    );
+    assert.deepEqual(
+      {
+        body: {
+          destination: oneMapRouteAssistState.routeRequests[0].body.destination,
+          origin: oneMapRouteAssistState.routeRequests[0].body.origin,
+          route_type: oneMapRouteAssistState.routeRequests[0].body.route_type,
+        },
+        hasSessionTokenHeader: Boolean(
+          oneMapRouteAssistState.routeRequests[0].headers["x-prestige-admin-session-token"],
+        ),
+        method: oneMapRouteAssistState.routeRequests[0].method,
+        purpose: oneMapRouteAssistState.routeRequests[0].headers["x-prestige-admin-purpose"] || "",
+      },
+      {
+        body: {
+          destination: {
+            label: "CHANGI AIRPORT TERMINAL 2",
+            latitude: 1.355537,
+            longitude: 103.986477,
+          },
+          origin: {
+            label: "RAFFLES HOTEL SINGAPORE",
+            latitude: 1.294781,
+            longitude: 103.854556,
+          },
+          route_type: "drive",
+        },
+        hasSessionTokenHeader: false,
+        method: "POST",
+        purpose: "admin-booking-persistence",
+      },
+      "Expected OneMap route estimate to POST safe coordinates through the guarded admin route",
+    );
+    assert.equal(
+      /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token/i.test(
+        JSON.stringify(oneMapRouteAssistState.routeRequests.map((request) => request.body)),
+      ),
+      false,
+      "Expected OneMap route estimate body to avoid private finance, notification, parser, and secret fields",
+    );
+    assert.equal(
+      oneMapRouteAssistState.boundary.includes("No booking save") &&
+        oneMapRouteAssistState.boundary.includes("Supabase write") &&
+        oneMapRouteAssistState.boundary.includes("driver notification"),
+      true,
+      "Expected OneMap route assist boundary to state that route planning does not save bookings, write to Supabase, or notify drivers",
+    );
+
     await clickTab("Dashboard", "Operations Dashboard");
     reporter.step("workflow status API: dashboard load and save");
 

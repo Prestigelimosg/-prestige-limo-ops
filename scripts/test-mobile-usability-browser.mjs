@@ -782,15 +782,17 @@ async function runChromeTest() {
         `${viewport.label}: expected Driver Acknowledgement Readiness local action to start disabled`,
       );
       assert.equal(
-        state.boundary.includes("Local UI only.") &&
+        state.boundary.includes("UI/local-state") &&
+          state.boundary.includes("workflow-status API") &&
           state.boundary.includes("No Supabase write") &&
+          state.boundary.includes("live database access") &&
           state.boundary.includes("notification sending") &&
           state.boundary.includes("parser-learning"),
         true,
-        `${viewport.label}: expected Driver Acknowledgement Readiness local-only boundary`,
+        `${viewport.label}: expected Driver Acknowledgement Readiness workflow-status API boundary`,
       );
       assert.equal(
-        state.height <= (viewport.width < 640 ? 700 : 360),
+        state.height <= (viewport.width < 640 ? 700 : 390),
         true,
         `${viewport.label}: expected compact Driver Acknowledgement Readiness, got ${state.height}px`,
       );

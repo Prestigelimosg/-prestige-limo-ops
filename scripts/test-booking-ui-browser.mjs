@@ -11545,6 +11545,41 @@ async function runChromeTest() {
           total_count: 1,
         },
       ];
+      window.__prestigeMonthlyInvoiceDraftRequests = [];
+      window.__prestigeMonthlyInvoiceDrafts = [
+        {
+          billing_month: "2026-05",
+          blocked_count: 1,
+          customer_account: "LOADED SAVED COMPANY",
+          draft_status: "pending_admin_review",
+          id: "focused-browser-monthly-invoice-draft-one",
+          linked_trips: [
+            {
+              booking_reference: "ui-cleanup-load-fixture",
+              trip_readiness_status: "ready",
+            },
+          ],
+          readiness_status: "mixed",
+          ready_count: 2,
+          total_count: 3,
+        },
+        {
+          billing_month: "2026-05",
+          blocked_count: 0,
+          customer_account: "SECOND SAVED ACCOUNT",
+          draft_status: "admin_reviewed",
+          id: "focused-browser-monthly-invoice-draft-two",
+          linked_trips: [
+            {
+              booking_reference: "ui-cleanup-load-fixture-second",
+              trip_readiness_status: "ready",
+            },
+          ],
+          readiness_status: "ready",
+          ready_count: 1,
+          total_count: 1,
+        },
+      ];
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
       window.fetch = async (...args) => {
@@ -11729,6 +11764,60 @@ async function runChromeTest() {
           }
         }
 
+        if (String(target).includes("/api/admin-monthly-invoice-drafts")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMonthlyInvoiceDraftRequests.push({
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const allDrafts = window.__prestigeMonthlyInvoiceDrafts || [];
+            const billingMonth = url.searchParams.get("billing_month") || "";
+            const customerSearch = (url.searchParams.get("customer_account_search") || "").toLowerCase();
+            const readinessStatus = url.searchParams.get("readiness_status") || "";
+            const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
+            const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+            const filteredDrafts = allDrafts.filter((draft) => {
+              if (billingMonth && draft.billing_month !== billingMonth) {
+                return false;
+              }
+
+              if (
+                customerSearch &&
+                !String(draft.customer_account || "").toLowerCase().includes(customerSearch)
+              ) {
+                return false;
+              }
+
+              return !readinessStatus || draft.readiness_status === readinessStatus;
+            });
+            const pageCount = filteredDrafts.length ? Math.ceil(filteredDrafts.length / limit) : 0;
+            const invoiceDrafts = filteredDrafts.slice((page - 1) * limit, page * limit);
+
+            return new Response(
+              JSON.stringify({
+                invoice_drafts: invoiceDrafts,
+                ok: true,
+                pagination: {
+                  has_next_page: pageCount > 0 && page < pageCount,
+                  has_previous_page: pageCount > 0 && page > 1,
+                  page,
+                  page_count: pageCount,
+                  page_size: limit,
+                  total_draft_count: filteredDrafts.length,
+                },
+                version: "focused-browser-monthly-invoice-draft-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
         return previousFetch(...args);
       };
     })()`);
@@ -11804,6 +11893,7 @@ async function runChromeTest() {
             completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             monthlyBillingGroupingRequests: window.__prestigeMonthlyBillingGroupingRequests || [],
+            monthlyInvoiceDraftRequests: window.__prestigeMonthlyInvoiceDraftRequests || [],
             monthlyBillingMonthGroupingReview: (() => {
               const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
 
@@ -11823,6 +11913,10 @@ async function runChromeTest() {
                     .trim() || "",
                 readFeedback:
                   section?.querySelector("[data-admin-monthly-billing-month-grouping-read-feedback='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                invoiceDraftReadFeedback:
+                  section?.querySelector("[data-admin-monthly-invoice-draft-read-feedback='true']")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
                 readinessFilterValue:
@@ -11884,6 +11978,11 @@ async function runChromeTest() {
             (request) =>
               request.method === "GET" &&
               request.search === "?limit=1&page=1&billing_month=2026-05",
+          ) &&
+          candidateState?.monthlyInvoiceDraftRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.search === "?limit=1&page=1&billing_month=2026-05",
           )
           ? candidateState
           : false;
@@ -11900,6 +11999,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
+      "GET /api/admin-monthly-invoice-drafts?limit=1&page=1&billing_month=2026-05",
     ];
     assert.deepEqual(
       [...loadedBookingState.fetchCalls].sort(),
@@ -11963,9 +12063,30 @@ async function runChromeTest() {
       ],
       "Expected saved booking load to GET monthly billing grouping through the guarded read API path",
     );
+    assert.deepEqual(
+      loadedBookingState.monthlyInvoiceDraftRequests.map((request) => ({
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        search: request.search,
+      })),
+      [
+        {
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          search: "?limit=1&page=1&billing_month=2026-05",
+        },
+      ],
+      "Expected saved booking load to GET monthly invoice drafts through the guarded read API path",
+    );
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.readFeedback,
       "Loaded 1 of 2 saved monthly billing groups for May 2026.",
+    );
+    assert.equal(
+      loadedBookingState.monthlyBillingMonthGroupingReview.invoiceDraftReadFeedback,
+      "Loaded 1 of 2 saved monthly invoice drafts for May 2026.",
     );
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.pageSummary,
@@ -12004,6 +12125,11 @@ async function runChromeTest() {
       loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "month-grouping-status")
         ?.detail,
       "Saved readiness status: Mixed.",
+    );
+    assert.equal(
+      loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "admin-review-status")
+        ?.detail,
+      "Saved monthly invoice draft status: Pending admin review. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved invoice draft page 1 of 2.",
     );
     const clickedMonthlyGroupingNextPage = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-billing-month-grouping-next-page='true']");

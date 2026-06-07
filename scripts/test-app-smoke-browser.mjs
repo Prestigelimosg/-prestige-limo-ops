@@ -819,6 +819,19 @@ async function runChromeTest() {
             total_count: 1,
           },
         ];
+        window.__adminMonthlyBillingDraftPlanCalls = [];
+        window.__adminMonthlyBillingDraftPlans = [
+          {
+            billing_month: "2026-06",
+            blocked_count: 0,
+            customer_account: "Loaded Ops Customer",
+            draft_status: "ready_for_billing_draft_review",
+            id: "app-smoke-monthly-billing-draft-plan-one",
+            readiness_status: "ready",
+            ready_count: 1,
+            total_count: 1,
+          },
+        ];
         window.__adminMonthlyInvoiceDraftCalls = [];
         window.__adminMonthlyInvoiceDrafts = [
           {
@@ -1008,6 +1021,86 @@ async function runChromeTest() {
                     total_count: filteredGroups.reduce((total, group) => total + Number(group.total_count || 0), 0),
                   },
                   version: "app-smoke-monthly-billing-grouping-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
+
+          if (String(url).includes("/api/admin-monthly-billing-draft-plans")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const allPlans = window.__adminMonthlyBillingDraftPlans || [];
+
+            window.__adminMonthlyBillingDraftPlanCalls.push({
+              body: options?.body ? JSON.parse(String(options.body)) : null,
+              method,
+              search: parsedUrl.search,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              const billingMonth = parsedUrl.searchParams.get("billing_month") || "";
+              const customerSearch = (parsedUrl.searchParams.get("customer_account_search") || "").toLowerCase();
+              const readinessStatus = parsedUrl.searchParams.get("readiness_status") || "";
+              const limit = Math.max(1, Number(parsedUrl.searchParams.get("limit") || 25));
+              const page = Math.max(1, Number(parsedUrl.searchParams.get("page") || 1));
+              const filteredPlans = allPlans.filter((plan) => {
+                if (billingMonth && plan.billing_month !== billingMonth) {
+                  return false;
+                }
+
+                if (
+                  customerSearch &&
+                  !String(plan.customer_account || "").toLowerCase().includes(customerSearch)
+                ) {
+                  return false;
+                }
+
+                return !readinessStatus || plan.readiness_status === readinessStatus;
+              });
+              const pageCount = filteredPlans.length ? Math.ceil(filteredPlans.length / limit) : 0;
+              const draftPlans = filteredPlans.slice((page - 1) * limit, page * limit);
+
+              return new Response(
+                JSON.stringify({
+                  draft_plans: draftPlans,
+                  ok: true,
+                  pagination: {
+                    has_next_page: pageCount > 0 && page < pageCount,
+                    has_previous_page: pageCount > 0 && page > 1,
+                    page,
+                    page_count: pageCount,
+                    page_size: limit,
+                    total_plan_count: filteredPlans.length,
+                  },
+                  version: "app-smoke-monthly-billing-draft-plan-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
+            if (method === "POST") {
+              const body = options?.body ? JSON.parse(String(options.body)) : {};
+              const draftPlan = {
+                ...body,
+                id: "app-smoke-monthly-billing-draft-plan-saved",
+              };
+
+              window.__adminMonthlyBillingDraftPlans = [
+                draftPlan,
+                ...allPlans.filter(
+                  (plan) =>
+                    !(
+                      plan.customer_account === body.customer_account &&
+                      plan.billing_month === body.billing_month
+                    ),
+                ),
+              ];
+
+              return new Response(
+                JSON.stringify({
+                  draft_plan: draftPlan,
+                  ok: true,
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -2246,6 +2339,10 @@ async function runChromeTest() {
               .querySelector("[data-admin-monthly-billing-month-grouping-read-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const monthlyBillingDraftPlanFeedback = document
+              .querySelector("[data-admin-monthly-billing-draft-plan-read-feedback]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
             const monthlyInvoiceDraftFeedback = document
               .querySelector("[data-admin-monthly-invoice-draft-read-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
@@ -2260,6 +2357,7 @@ async function runChromeTest() {
               savedDriverStatusReadout.latest === "POB" &&
               savedDriverStatusReadout.time === "2026-06-07 10:45 UTC" &&
               monthlyBillingGroupingFeedback.includes("Loaded 1 saved monthly billing group for June 2026") &&
+              monthlyBillingDraftPlanFeedback.includes("Loaded 1 saved monthly billing draft plan for June 2026") &&
               monthlyInvoiceDraftFeedback.includes("Loaded 1 saved monthly invoice draft for June 2026")
               ? {
                   bodyBaitLeaked: baitPattern.test(bodyText),
@@ -2276,6 +2374,8 @@ async function runChromeTest() {
                   fieldBaitLeaked: baitPattern.test(fieldText),
                   identityBaitLeaked: baitPattern.test(identityText),
                   identityText,
+                  monthlyBillingDraftPlanCalls: window.__adminMonthlyBillingDraftPlanCalls || [],
+                  monthlyBillingDraftPlanFeedback,
                   monthlyBillingGroupingCalls: window.__adminMonthlyBillingGroupingCalls || [],
                   monthlyBillingGroupingFeedback,
                   monthlyInvoiceDraftCalls: window.__adminMonthlyInvoiceDraftCalls || [],
@@ -2367,6 +2467,11 @@ async function runChromeTest() {
         "Expected applied snapshot load to show saved monthly billing grouping read feedback in existing UI",
       );
       assert.match(
+        appliedSnapshotState.monthlyBillingDraftPlanFeedback,
+        /Loaded 1 saved monthly billing draft plan for June 2026\./,
+        "Expected applied snapshot load to show saved monthly billing draft-plan read feedback in existing UI",
+      );
+      assert.match(
         appliedSnapshotState.monthlyInvoiceDraftFeedback,
         /Loaded 1 saved monthly invoice draft for June 2026\./,
         "Expected applied snapshot load to show saved monthly invoice draft read feedback in existing UI",
@@ -2420,6 +2525,19 @@ async function runChromeTest() {
           },
         ],
         "Expected applied snapshot load to GET monthly billing grouping through the guarded read API path",
+      );
+      assert.deepEqual(
+        appliedSnapshotState.monthlyBillingDraftPlanCalls.map((call) => ({
+          method: call.method,
+          search: call.search,
+        })),
+        [
+          {
+            method: "GET",
+            search: "?limit=1&page=1&billing_month=2026-06",
+          },
+        ],
+        "Expected applied snapshot load to GET monthly billing draft plans through the guarded read API path",
       );
       assert.deepEqual(
         appliedSnapshotState.monthlyInvoiceDraftCalls.map((call) => ({
@@ -8388,9 +8506,8 @@ async function runChromeTest() {
           `${viewport.label}: expected local grouping note status to start blank`,
         );
         for (const expectedBoundaryText of [
-          "Read-only admin API GET only.",
-          "No Supabase write",
-          "live database write",
+          "Guarded admin API read plus monthly billing draft-plan save only.",
+          "No direct Supabase write outside approved API routes",
           "invoice creation",
           "PDF",
           "payment",

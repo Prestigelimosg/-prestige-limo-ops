@@ -36,6 +36,7 @@ const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
 const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
+const adminMonthlyBillingDraftPlansApiPath = "/api/admin-monthly-billing-draft-plans";
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
 const adminMonthlyInvoiceDraftTripCandidatesApiPath =
   "/api/admin-monthly-invoice-draft-trip-candidates";
@@ -660,6 +661,48 @@ type AdminMonthlyBillingGroupingReadState = {
   status: "idle" | "loading" | "loaded" | "error";
   summary: AdminMonthlyBillingGroupingSummary | null;
 };
+
+type AdminMonthlyBillingDraftPlanStatus =
+  | "planning"
+  | "blocked"
+  | "ready_for_billing_draft_review"
+  | "archived";
+
+type AdminMonthlyBillingDraftPlanRecord = {
+  billing_month?: string | null;
+  blocked_count?: number | null;
+  customer_account?: string | null;
+  customer_id?: string | null;
+  draft_status?: AdminMonthlyBillingDraftPlanStatus | null;
+  id?: string | null;
+  readiness_status?: AdminMonthlyBillingGroupingReadinessStatus | null;
+  ready_count?: number | null;
+  safe_draft_context?: {
+    draft_summary?: string | null;
+    next_action?: string | null;
+  } | null;
+  safe_draft_note?: string | null;
+  source_grouping_summary?: Record<string, unknown> | null;
+  total_count?: number | null;
+};
+
+type AdminMonthlyBillingDraftPlanPagination = {
+  has_next_page?: boolean | null;
+  has_previous_page?: boolean | null;
+  page?: number | null;
+  page_count?: number | null;
+  page_size?: number | null;
+  total_plan_count?: number | null;
+};
+
+type AdminMonthlyBillingDraftPlanReadState = {
+  draftPlans: AdminMonthlyBillingDraftPlanRecord[];
+  message: Message | null;
+  pagination: AdminMonthlyBillingDraftPlanPagination | null;
+  status: "idle" | "loading" | "loaded" | "error";
+};
+
+type AdminMonthlyBillingDraftPlanAction = "save-draft-plan";
 
 type AdminMonthlyInvoiceDraftStatus =
   | "draft_planning"
@@ -4251,6 +4294,58 @@ async function loadAdminMonthlyBillingGroupsRead({
   };
 }
 
+async function loadAdminMonthlyBillingDraftPlansRead({
+  billingMonth,
+  customerAccountSearch,
+  limit,
+  page,
+  readinessStatus,
+}: {
+  billingMonth: string | null;
+  customerAccountSearch: string;
+  limit: number;
+  page: number;
+  readinessStatus: AdminMonthlyBillingGroupingReadinessFilter;
+}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    page: String(page),
+  });
+
+  if (billingMonth) {
+    params.set("billing_month", billingMonth);
+  }
+
+  const cleanedCustomerAccountSearch = clean(customerAccountSearch);
+
+  if (cleanedCustomerAccountSearch) {
+    params.set("customer_account_search", cleanedCustomerAccountSearch);
+  }
+
+  if (readinessStatus !== "all") {
+    params.set("readiness_status", readinessStatus);
+  }
+
+  const response = await fetch(`${adminMonthlyBillingDraftPlansApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly billing draft plan read failed.");
+  }
+
+  return {
+    draftPlans: Array.isArray(result.draft_plans)
+      ? (result.draft_plans as AdminMonthlyBillingDraftPlanRecord[])
+      : [],
+    pagination: (result.pagination || null) as AdminMonthlyBillingDraftPlanPagination | null,
+  };
+}
+
 async function loadAdminMonthlyInvoiceDraftsRead({
   billingMonth,
   customerAccountSearch,
@@ -4301,6 +4396,73 @@ async function loadAdminMonthlyInvoiceDraftsRead({
       : [],
     pagination: (result.pagination || null) as AdminMonthlyInvoiceDraftPagination | null,
   };
+}
+
+async function saveAdminMonthlyBillingDraftPlanFromGroup(group: AdminMonthlyBillingGroup) {
+  const customerAccount = clean(group.customer_account);
+  const billingMonth = clean(group.billing_month);
+  const readyCount = adminMonthlyBillingGroupingCount(group.ready_count);
+  const blockedCount = adminMonthlyBillingGroupingCount(group.blocked_count);
+  const totalCount = adminMonthlyBillingGroupingCount(group.total_count);
+  const readinessStatus = group.safe_readiness_status || "blocked";
+
+  if (!customerAccount || !billingMonth || totalCount < 1) {
+    throw new Error("Monthly billing draft plan requires a saved customer/month group.");
+  }
+
+  const draftStatus: AdminMonthlyBillingDraftPlanStatus =
+    readinessStatus === "ready" && blockedCount === 0
+      ? "ready_for_billing_draft_review"
+      : blockedCount > 0
+        ? "blocked"
+        : "planning";
+  const response = await fetch(adminMonthlyBillingDraftPlansApiPath, {
+    body: JSON.stringify({
+      billing_month: billingMonth,
+      blocked_count: blockedCount,
+      customer_account: customerAccount,
+      customer_id: clean(group.customer_id) || null,
+      draft_status: draftStatus,
+      ready_count: readyCount,
+      readiness_status: readinessStatus,
+      safe_draft_context: {
+        draft_summary: `${totalCount} saved completed trip${totalCount === 1 ? "" : "s"} grouped for monthly billing draft planning.`,
+        next_action:
+          draftStatus === "blocked"
+            ? "Resolve blocked saved trips before invoice draft preparation."
+            : "Review saved group counts before invoice draft preparation.",
+      },
+      safe_draft_note: "Saved from admin monthly billing grouping read.",
+      source_grouping_summary: {
+        billing_month: billingMonth,
+        blocked_count: blockedCount,
+        customer_account: customerAccount,
+        readiness_status: readinessStatus,
+        ready_count: readyCount,
+        source: "admin_monthly_billing_grouping_read",
+        total_count: totalCount,
+      },
+      total_count: totalCount,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly billing draft plan save failed.");
+  }
+
+  const draftPlan = result.draft_plan as AdminMonthlyBillingDraftPlanRecord | null;
+
+  if (!draftPlan) {
+    throw new Error("Monthly billing draft plan response was empty.");
+  }
+
+  return draftPlan;
 }
 
 async function loadAdminMonthlyInvoiceDraftTripCandidatesRead(group: AdminMonthlyBillingGroup) {
@@ -4487,6 +4649,44 @@ function adminMonthlyBillingGroupingFailureMessage(rawError: unknown) {
   return "Saved monthly billing grouping read failed safely.";
 }
 
+function adminMonthlyBillingDraftPlanFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Saved monthly billing draft plan read is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Saved monthly billing draft plan read requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Saved monthly billing draft plan read details need review.";
+  }
+
+  return "Saved monthly billing draft plan read failed safely.";
+}
+
+function adminMonthlyBillingDraftPlanSaveFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Saved monthly billing draft plan preparation is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Saved monthly billing draft plan preparation requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Saved monthly billing draft plan preparation details need review.";
+  }
+
+  return "Saved monthly billing draft plan preparation failed safely.";
+}
+
 function adminMonthlyInvoiceDraftFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -4583,6 +4783,28 @@ function adminMonthlyBillingGroupingReadinessLabel(
   }
 
   return "Needs review";
+}
+
+function adminMonthlyBillingDraftPlanStatusLabel(
+  status: AdminMonthlyBillingDraftPlanStatus | null | undefined,
+) {
+  if (status === "planning") {
+    return "Planning";
+  }
+
+  if (status === "blocked") {
+    return "Blocked";
+  }
+
+  if (status === "ready_for_billing_draft_review") {
+    return "Ready for billing draft review";
+  }
+
+  if (status === "archived") {
+    return "Archived";
+  }
+
+  return "Draft plan status unavailable";
 }
 
 function adminMonthlyInvoiceDraftStatusLabel(status: AdminMonthlyInvoiceDraftStatus | null | undefined) {
@@ -4998,6 +5220,15 @@ export default function Home() {
       status: "idle",
       summary: null,
     });
+  const [adminMonthlyBillingDraftPlanReadState, setAdminMonthlyBillingDraftPlanReadState] =
+    useState<AdminMonthlyBillingDraftPlanReadState>({
+      draftPlans: [],
+      message: null,
+      pagination: null,
+      status: "idle",
+    });
+  const [adminMonthlyBillingDraftPlanAction, setAdminMonthlyBillingDraftPlanAction] =
+    useState<AdminMonthlyBillingDraftPlanAction | null>(null);
   const [adminMonthlyInvoiceDraftReadState, setAdminMonthlyInvoiceDraftReadState] =
     useState<AdminMonthlyInvoiceDraftReadState>({
       invoiceDrafts: [],
@@ -5394,6 +5625,101 @@ export default function Home() {
           pagination: null,
           status: "error",
           summary: null,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    adminMonthlyBillingGroupingBillingMonthFilter,
+    adminMonthlyBillingGroupingCustomerSearch,
+    adminMonthlyBillingGroupingLimit,
+    adminMonthlyBillingGroupingPage,
+    adminMonthlyBillingGroupingReadinessFilter,
+    dispatchReleaseWorkflowBookingReference,
+  ]);
+
+  useEffect(() => {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    let cancelled = false;
+
+    void (async () => {
+      await Promise.resolve();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!bookingReference) {
+        setAdminMonthlyBillingDraftPlanReadState({
+          draftPlans: [],
+          message: null,
+          pagination: null,
+          status: "idle",
+        });
+        return;
+      }
+
+      setAdminMonthlyBillingDraftPlanReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Loading saved monthly billing draft plans through the guarded admin API...",
+        },
+        status: "loading",
+      }));
+
+      try {
+        const { draftPlans, pagination } = await loadAdminMonthlyBillingDraftPlansRead({
+          billingMonth: adminMonthlyBillingGroupingBillingMonthFilter,
+          customerAccountSearch: adminMonthlyBillingGroupingCustomerSearch,
+          limit: adminMonthlyBillingGroupingLimit,
+          page: adminMonthlyBillingGroupingPage,
+          readinessStatus: adminMonthlyBillingGroupingReadinessFilter,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const billingMonthLabel = adminMonthlyBillingGroupingBillingMonthFilter
+          ? ` for ${adminMonthlyBillingGroupingMonthLabel(adminMonthlyBillingGroupingBillingMonthFilter)}`
+          : "";
+        const totalPlanCount = adminMonthlyBillingGroupingCount(pagination?.total_plan_count);
+        const loadedPlansText =
+          totalPlanCount > draftPlans.length
+            ? `Loaded ${draftPlans.length} of ${totalPlanCount} saved monthly billing draft plans${billingMonthLabel}.`
+            : `Loaded ${draftPlans.length} saved monthly billing draft plan${
+                draftPlans.length === 1 ? "" : "s"
+              }${billingMonthLabel}.`;
+
+        setAdminMonthlyBillingDraftPlanReadState({
+          draftPlans,
+          message: {
+            tone: draftPlans.length > 0 ? "success" : "info",
+            text:
+              draftPlans.length > 0
+                ? loadedPlansText
+                : `No saved monthly billing draft plans matched${billingMonthLabel}.`,
+          },
+          pagination,
+          status: "loaded",
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminMonthlyBillingDraftPlanReadState({
+          draftPlans: [],
+          message: {
+            tone: "error",
+            text: adminMonthlyBillingDraftPlanFailureMessage(error),
+          },
+          pagination: null,
+          status: "error",
         });
       }
     })();
@@ -12421,20 +12747,29 @@ export default function Home() {
   };
   const monthlyBillingSavedGroupingPrimaryGroup =
     adminMonthlyBillingGroupingReadState.groups[0] || null;
+  const monthlyBillingDraftPlanPrimaryPlan =
+    adminMonthlyBillingDraftPlanReadState.draftPlans[0] || null;
   const monthlyInvoiceDraftPrimaryDraft =
     adminMonthlyInvoiceDraftReadState.invoiceDrafts[0] || null;
   const monthlyBillingSavedGroupingHasGroup = Boolean(monthlyBillingSavedGroupingPrimaryGroup);
+  const monthlyBillingDraftPlanHasPlan = Boolean(monthlyBillingDraftPlanPrimaryPlan);
   const monthlyInvoiceDraftHasDraft = Boolean(monthlyInvoiceDraftPrimaryDraft);
   const monthlyBillingSavedGroupingLoaded =
     adminMonthlyBillingGroupingReadState.status === "loaded";
+  const monthlyBillingDraftPlanLoaded =
+    adminMonthlyBillingDraftPlanReadState.status === "loaded";
   const monthlyInvoiceDraftLoaded =
     adminMonthlyInvoiceDraftReadState.status === "loaded";
   const monthlyBillingSavedGroupingLoading =
     adminMonthlyBillingGroupingReadState.status === "loading";
+  const monthlyBillingDraftPlanLoading =
+    adminMonthlyBillingDraftPlanReadState.status === "loading";
   const monthlyInvoiceDraftLoading =
     adminMonthlyInvoiceDraftReadState.status === "loading";
   const monthlyBillingSavedGroupingError =
     adminMonthlyBillingGroupingReadState.status === "error";
+  const monthlyBillingDraftPlanError =
+    adminMonthlyBillingDraftPlanReadState.status === "error";
   const monthlyInvoiceDraftError =
     adminMonthlyInvoiceDraftReadState.status === "error";
   const monthlyBillingSavedGroupingPagination = adminMonthlyBillingGroupingReadState.pagination;
@@ -12518,6 +12853,17 @@ export default function Home() {
     monthlyBillingSavedGroupingPrimaryGroup?.safe_readiness_status || null;
   const monthlyBillingSavedGroupingReadinessLabel =
     adminMonthlyBillingGroupingReadinessLabel(monthlyBillingSavedGroupingReadinessStatus);
+  const monthlyBillingDraftPlanStatusLabel =
+    adminMonthlyBillingDraftPlanStatusLabel(monthlyBillingDraftPlanPrimaryPlan?.draft_status);
+  const monthlyBillingDraftPlanReadyTripsCount = monthlyBillingDraftPlanPrimaryPlan
+    ? adminMonthlyBillingGroupingCount(monthlyBillingDraftPlanPrimaryPlan.ready_count)
+    : 0;
+  const monthlyBillingDraftPlanBlockedTripsCount = monthlyBillingDraftPlanPrimaryPlan
+    ? adminMonthlyBillingGroupingCount(monthlyBillingDraftPlanPrimaryPlan.blocked_count)
+    : 0;
+  const monthlyBillingDraftPlanTotalTripsCount = monthlyBillingDraftPlanPrimaryPlan
+    ? adminMonthlyBillingGroupingCount(monthlyBillingDraftPlanPrimaryPlan.total_count)
+    : 0;
   const monthlyInvoiceDraftReadinessLabel =
     adminMonthlyBillingGroupingReadinessLabel(monthlyInvoiceDraftPrimaryDraft?.readiness_status);
   const monthlyInvoiceDraftStatusLabel =
@@ -12574,6 +12920,18 @@ export default function Home() {
   const monthlyBillingMonthGroupingNextAction = (() => {
     if (monthlyBillingMonthGroupingGroupedLocally) {
       return "Saved month group ready for future monthly billing review; keep grouping note current.";
+    }
+
+    if (monthlyBillingDraftPlanLoading) {
+      return "Wait for the saved monthly billing draft plan read to finish.";
+    }
+
+    if (monthlyBillingDraftPlanError) {
+      return "Review the saved monthly billing draft plan API access before invoice draft preparation.";
+    }
+
+    if (monthlyBillingDraftPlanLoaded && monthlyBillingSavedGroupingHasGroup && !monthlyBillingDraftPlanHasPlan) {
+      return "No saved monthly billing draft plan returned for this group yet; save draft planning through the approved API when ready.";
     }
 
     if (monthlyInvoiceDraftLoading) {
@@ -12691,12 +13049,22 @@ export default function Home() {
             : "Not grouped for future monthly billing review locally.";
   const monthlyBillingMonthGroupingAdminReviewDetail = (() => {
     if (monthlyBillingSavedGroupingHasGroup) {
+      const billingDraftPlanText = monthlyBillingDraftPlanLoading
+        ? "Loading saved monthly billing draft plan status."
+        : monthlyBillingDraftPlanError
+          ? "Saved monthly billing draft plan status unavailable."
+          : monthlyBillingDraftPlanHasPlan
+            ? `Saved monthly billing draft plan: ${monthlyBillingDraftPlanStatusLabel}. ${monthlyBillingDraftPlanReadyTripsCount} ready, ${monthlyBillingDraftPlanBlockedTripsCount} blocked, ${monthlyBillingDraftPlanTotalTripsCount} total trip${monthlyBillingDraftPlanTotalTripsCount === 1 ? "" : "s"}.`
+            : monthlyBillingDraftPlanLoaded
+              ? "No saved monthly billing draft plan returned for this saved month group."
+              : "Saved monthly billing draft plan status pending read.";
+
       if (monthlyInvoiceDraftLoading) {
-        return "Loading saved monthly invoice draft status...";
+        return `${billingDraftPlanText} Loading saved monthly invoice draft status...`;
       }
 
       if (monthlyInvoiceDraftError) {
-        return "Saved monthly invoice draft status unavailable.";
+        return `${billingDraftPlanText} Saved monthly invoice draft status unavailable.`;
       }
 
       if (monthlyInvoiceDraftHasDraft) {
@@ -12707,11 +13075,11 @@ export default function Home() {
               }.`
             : "";
 
-        return `Saved monthly invoice draft status: ${monthlyInvoiceDraftStatusLabel}. ${monthlyInvoiceDraftReadyTripsCount} ready, ${monthlyInvoiceDraftBlockedTripsCount} blocked, ${monthlyInvoiceDraftTotalTripsCount} total trip${monthlyInvoiceDraftTotalTripsCount === 1 ? "" : "s"}. Readiness: ${monthlyInvoiceDraftReadinessLabel}.${draftPageText}`;
+        return `${billingDraftPlanText} Saved monthly invoice draft status: ${monthlyInvoiceDraftStatusLabel}. ${monthlyInvoiceDraftReadyTripsCount} ready, ${monthlyInvoiceDraftBlockedTripsCount} blocked, ${monthlyInvoiceDraftTotalTripsCount} total trip${monthlyInvoiceDraftTotalTripsCount === 1 ? "" : "s"}. Readiness: ${monthlyInvoiceDraftReadinessLabel}.${draftPageText}`;
       }
 
       if (monthlyInvoiceDraftLoaded) {
-        return "No saved monthly invoice draft returned for this saved month group.";
+        return `${billingDraftPlanText} No saved monthly invoice draft returned for this saved month group.`;
       }
 
       if (monthlyBillingSavedGroupingTotalGroupCount > adminMonthlyBillingGroupingReadState.groups.length) {
@@ -12722,13 +13090,89 @@ export default function Home() {
         return `Showing first of ${adminMonthlyBillingGroupingReadState.groups.length} saved monthly billing groups on this read.`;
       }
 
-      return "Saved monthly billing group ready for admin review.";
+      return `${billingDraftPlanText} Saved monthly billing group ready for admin review.`;
     }
 
     return monthlyBillingMonthGroupingAdminReviewed
       ? "Admin month grouping review completed locally."
       : "Admin month grouping review not completed locally.";
   })();
+  const monthlyBillingDraftPlanSaving =
+    adminMonthlyBillingDraftPlanAction === "save-draft-plan";
+  const monthlyBillingDraftPlanSaveDisabled =
+    !monthlyBillingSavedGroupingPrimaryGroup ||
+    monthlyBillingSavedGroupingTotalTrips < 1 ||
+    monthlyBillingSavedGroupingLoading ||
+    monthlyBillingDraftPlanLoading ||
+    monthlyBillingDraftPlanSaving;
+  const monthlyBillingDraftPlanSaveButtonLabel = monthlyBillingDraftPlanSaving
+    ? "Saving draft plan..."
+    : monthlyBillingDraftPlanHasPlan
+      ? "Refresh draft plan"
+      : "Save draft plan";
+  const saveMonthlyBillingDraftPlanFromGrouping = async () => {
+    if (!monthlyBillingSavedGroupingPrimaryGroup || monthlyBillingDraftPlanSaveDisabled) {
+      setAdminMonthlyBillingDraftPlanReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Load a saved monthly billing group before saving draft planning.",
+        },
+      }));
+      return;
+    }
+
+    setAdminMonthlyBillingDraftPlanAction("save-draft-plan");
+    setAdminMonthlyBillingDraftPlanReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Saving monthly billing draft plan through the guarded admin API...",
+      },
+    }));
+
+    try {
+      const savedPlan = await saveAdminMonthlyBillingDraftPlanFromGroup(
+        monthlyBillingSavedGroupingPrimaryGroup,
+      );
+
+      setAdminMonthlyBillingDraftPlanReadState((current) => {
+        const savedId = clean(savedPlan.id);
+        const savedAccount = clean(savedPlan.customer_account);
+        const savedMonth = clean(savedPlan.billing_month);
+        const savedMonthLabel = adminMonthlyBillingGroupingMonthLabel(savedMonth);
+        const savedStatusLabel = adminMonthlyBillingDraftPlanStatusLabel(savedPlan.draft_status);
+        const otherPlans = current.draftPlans.filter((plan) => {
+          if (savedId && clean(plan.id) === savedId) {
+            return false;
+          }
+
+          return clean(plan.customer_account) !== savedAccount || clean(plan.billing_month) !== savedMonth;
+        });
+
+        return {
+          ...current,
+          draftPlans: [savedPlan, ...otherPlans],
+          message: {
+            tone: "success",
+            text: `Saved monthly billing draft plan for ${savedAccount} / ${savedMonthLabel}: ${savedStatusLabel}.`,
+          },
+          status: "loaded",
+        };
+      });
+    } catch (error) {
+      setAdminMonthlyBillingDraftPlanReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminMonthlyBillingDraftPlanSaveFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminMonthlyBillingDraftPlanAction(null);
+    }
+  };
   const monthlyInvoiceDraftSaving = adminMonthlyInvoiceDraftAction === "save-draft-prep";
   const monthlyInvoiceDraftSaveDisabled =
     !monthlyBillingSavedGroupingPrimaryGroup ||
@@ -23162,7 +23606,8 @@ export default function Home() {
                     {dispatchReleaseContextLabel}
                   </p>
                   <p className="mt-0.5 text-xs leading-4 text-teal-900">
-                    Read-only saved grouping by customer/account and billing month before any future monthly billing work.
+                    Saved grouping read and guarded draft planning by customer/account and billing month before
+                    any future monthly billing work.
                   </p>
                   {adminMonthlyBillingGroupingReadState.message ? (
                     <p
@@ -23172,6 +23617,16 @@ export default function Home() {
                       data-admin-monthly-billing-month-grouping-read-feedback="true"
                     >
                       {adminMonthlyBillingGroupingReadState.message.text}
+                    </p>
+                  ) : null}
+                  {adminMonthlyBillingDraftPlanReadState.message ? (
+                    <p
+                      className={`mt-1 rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(
+                        adminMonthlyBillingDraftPlanReadState.message.tone,
+                      )}`}
+                      data-admin-monthly-billing-draft-plan-read-feedback="true"
+                    >
+                      {adminMonthlyBillingDraftPlanReadState.message.text}
                     </p>
                   ) : null}
                   {adminMonthlyInvoiceDraftReadState.message ? (
@@ -23302,6 +23757,30 @@ export default function Home() {
               {monthlyBillingSavedGroupingHasGroup ? (
                 <div
                   className="mt-2 flex min-w-0 flex-col gap-1 rounded-md border border-teal-200 bg-white p-1.5 sm:flex-row sm:items-center sm:justify-between"
+                  data-admin-monthly-billing-draft-plan-action-row="true"
+                >
+                  <p
+                    className="min-w-0 break-words text-xs font-semibold text-teal-950"
+                    data-admin-monthly-billing-draft-plan-action-summary="true"
+                  >
+                    {monthlyBillingDraftPlanHasPlan
+                      ? `Saved billing draft plan: ${monthlyBillingDraftPlanStatusLabel}`
+                      : "No saved billing draft plan for this group yet."}
+                  </p>
+                  <button
+                    className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-teal-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
+                    data-admin-monthly-billing-draft-plan-save-action="true"
+                    disabled={monthlyBillingDraftPlanSaveDisabled}
+                    onClick={saveMonthlyBillingDraftPlanFromGrouping}
+                    type="button"
+                  >
+                    {monthlyBillingDraftPlanSaveButtonLabel}
+                  </button>
+                </div>
+              ) : null}
+              {monthlyBillingSavedGroupingHasGroup ? (
+                <div
+                  className="mt-2 flex min-w-0 flex-col gap-1 rounded-md border border-teal-200 bg-white p-1.5 sm:flex-row sm:items-center sm:justify-between"
                   data-admin-monthly-invoice-draft-prep-action-row="true"
                 >
                   <p
@@ -23380,9 +23859,9 @@ export default function Home() {
                 className="mt-1.5 border-t border-teal-200 pt-1.5 text-[11px] leading-4 text-teal-900 md:text-[10px] md:leading-3"
                 data-admin-monthly-billing-month-grouping-review-boundary="true"
               >
-                Read-only admin API GET only. No Supabase write, live database write, invoice creation, PDF,
-                payment, payout, notification sending, auth change, parser change, billing activation, customer
-                message, or driver notification behavior.
+                Guarded admin API read plus monthly billing draft-plan save only. No direct Supabase write outside
+                approved API routes, invoice creation, PDF, payment, payout, notification sending, auth change,
+                parser change, billing activation, customer message, or driver notification behavior.
               </p>
             </section>
           </div>

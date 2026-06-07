@@ -43,6 +43,15 @@ export async function PATCH(request: Request, context: DriverJobStatusRouteConte
   if (isProductionDriverJobLinkMode()) {
     const result = await applyProductionDriverJobStatusUpdate({ token, status });
 
+    if (result.ok) {
+      return Response.json({
+        ok: true,
+        mode: "production",
+        payload: result.payload,
+        status: result.status,
+      });
+    }
+
     return Response.json(result, { status: blockedStatusByReason[result.reason] });
   }
 

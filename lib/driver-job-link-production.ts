@@ -1,29 +1,90 @@
 import {
+  productionDriverJobLinksConfigured,
   productionDriverJobLinksDisabledResult,
   type DriverJobLinkDisabledResult,
 } from "./driver-job-link-mode.ts";
+import {
+  getDriverJobStatusPersistenceClientForProduction,
+  loadDriverJobPayloadThroughStatusPersistence,
+  saveDriverJobStatusThroughStatusPersistence,
+  type DriverJobProductionPayloadResult,
+  type DriverJobProductionStatusUpdateResult,
+  type DriverJobStatusPersistenceClient,
+} from "./driver-job-status-persistence.ts";
 
 export type ProductionDriverJobStatusUpdateInput = {
   status: string;
   token: string;
 };
 
-// Production driver job links stay disabled until William approves the Supabase
-// migration and the server-only token verification/API write path is implemented.
-export async function getProductionDriverJobPayloadForToken(token: string): Promise<DriverJobLinkDisabledResult> {
-  void token;
+let driverJobProductionClientForTests: DriverJobStatusPersistenceClient | null = null;
 
-  return productionDriverJobLinksDisabledResult();
+export function setDriverJobProductionSupabaseClientForTests(
+  client: DriverJobStatusPersistenceClient | null,
+) {
+  driverJobProductionClientForTests = client;
 }
 
-// Future implementation must verify the token against driver_job_links server-side
-// before updating exactly one linked booking status. No Driver Database access here.
+function resolveProductionClient():
+  | {
+      client: DriverJobStatusPersistenceClient;
+      ok: true;
+    }
+  | DriverJobLinkDisabledResult {
+  if (!productionDriverJobLinksConfigured()) {
+    return productionDriverJobLinksDisabledResult();
+  }
+
+  if (driverJobProductionClientForTests) {
+    return {
+      client: driverJobProductionClientForTests,
+      ok: true,
+    };
+  }
+
+  const clientResult = getDriverJobStatusPersistenceClientForProduction();
+
+  if (!clientResult.ok) {
+    return productionDriverJobLinksDisabledResult();
+  }
+
+  return clientResult;
+}
+
+// Production driver job links remain default-off. When explicitly enabled, this
+// verifies the hashed token server-side and returns only the driver-safe payload.
+export async function getProductionDriverJobPayloadForToken(
+  token: string,
+): Promise<DriverJobProductionPayloadResult | DriverJobLinkDisabledResult> {
+  const clientResult = resolveProductionClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  return loadDriverJobPayloadThroughStatusPersistence({
+    client: clientResult.client,
+    token,
+  });
+}
+
+// Status updates insert one event for the verified token/link only. No Driver
+// Database access, pricing, payout, notification, proof, or live-location path.
 export async function applyProductionDriverJobStatusUpdate({
   status,
   token,
-}: ProductionDriverJobStatusUpdateInput): Promise<DriverJobLinkDisabledResult> {
-  void status;
-  void token;
+}: ProductionDriverJobStatusUpdateInput): Promise<
+  DriverJobProductionStatusUpdateResult | DriverJobLinkDisabledResult
+> {
+  const clientResult = resolveProductionClient();
 
-  return productionDriverJobLinksDisabledResult();
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  return saveDriverJobStatusThroughStatusPersistence({
+    client: clientResult.client,
+    status,
+    token,
+  });
 }

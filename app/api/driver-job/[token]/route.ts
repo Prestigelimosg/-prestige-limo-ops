@@ -28,6 +28,14 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
   if (isProductionDriverJobLinkMode()) {
     const result = await getProductionDriverJobPayloadForToken(token);
 
+    if (result.ok) {
+      return Response.json({
+        ok: true,
+        mode: "production",
+        payload: result.payload,
+      });
+    }
+
     return Response.json(result, { status: blockedStatusByReason[result.reason] });
   }
 

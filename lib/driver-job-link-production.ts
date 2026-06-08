@@ -13,6 +13,10 @@ import {
 } from "./driver-job-status-persistence.ts";
 
 export type ProductionDriverJobStatusUpdateInput = {
+  completionNote?: unknown;
+  exceptionReason?: unknown;
+  safeStatusContext?: unknown;
+  safeStatusNote?: unknown;
   status: string;
   token: string;
 };
@@ -71,6 +75,10 @@ export async function getProductionDriverJobPayloadForToken(
 // Status updates insert one event for the verified token/link only. No Driver
 // Database access, pricing, payout, notification, proof, or live-location path.
 export async function applyProductionDriverJobStatusUpdate({
+  completionNote,
+  exceptionReason,
+  safeStatusContext,
+  safeStatusNote,
   status,
   token,
 }: ProductionDriverJobStatusUpdateInput): Promise<
@@ -84,6 +92,10 @@ export async function applyProductionDriverJobStatusUpdate({
 
   return saveDriverJobStatusThroughStatusPersistence({
     client: clientResult.client,
+    completionNote,
+    exceptionReason,
+    safeStatusContext,
+    safeStatusNote,
     status,
     token,
   });

@@ -28,6 +28,7 @@ export type SafeDriverJobPayload = {
   flightNumber: string;
   passengerName: string;
   status: string;
+  statusHistory: SafeDriverJobStatusHistoryItem[];
   statusLabel: string;
   assignedDriver: {
     name: string;
@@ -35,6 +36,13 @@ export type SafeDriverJobPayload = {
     plate: string;
     vehicleModel: string;
   };
+};
+
+export type SafeDriverJobStatusHistoryItem = {
+  occurredAt: string;
+  safeNote: string | null;
+  status: string;
+  statusLabel: string;
 };
 
 const bookingTypeLabels: Record<string, string> = {
@@ -49,6 +57,33 @@ const statusLabels: Record<string, string> = {
   confirmed: "Confirmed",
   ...driverJobStatusDisplayLabels,
 };
+const unsafeStatusHistoryFragments = [
+  "amount_due",
+  "billing",
+  "customer_charge",
+  "customer_price",
+  "debug",
+  "driver_payout",
+  "fare_amount",
+  "finance",
+  "internal_admin_note",
+  "internal_note",
+  "invoice",
+  "live_location",
+  "mock_archive",
+  "payment",
+  "pay_now",
+  "paynow",
+  "pdf",
+  "photo",
+  "payout",
+  "proof",
+  "quoted_price",
+  "rate_amount",
+  "secret",
+  "service_role",
+  "token",
+];
 
 export function generateDriverJobLinkToken(byteLength = defaultDriverJobLinkTokenByteLength) {
   if (!Number.isInteger(byteLength) || byteLength < 16) {
@@ -157,6 +192,7 @@ export function mapBookingToSafeDriverJobPayload(booking: DriverJobBookingLike):
     flightNumber: stringField(booking, "flight_no", "flightNumber", "flight"),
     passengerName: getPassengerName(booking, jobCard),
     status,
+    statusHistory: safeStatusHistory(booking.statusHistory),
     statusLabel: statusLabels[status.toLowerCase()] || status,
     assignedDriver: {
       name: stringField(booking, "driver_name", "driverName"),
@@ -165,6 +201,50 @@ export function mapBookingToSafeDriverJobPayload(booking: DriverJobBookingLike):
       vehicleModel: stringField(booking, "driver_vehicle_model", "driverVehicleModel"),
     },
   };
+}
+
+function safeStatusHistory(value: unknown): SafeDriverJobStatusHistoryItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const status = safeStatusHistoryText(item.status, 80).toLowerCase();
+      const statusLabel =
+        safeStatusHistoryText(item.statusLabel, 80) ||
+        statusLabels[status] ||
+        "";
+
+      return {
+        occurredAt: safeStatusHistoryText(item.occurredAt, 80),
+        safeNote: safeStatusHistoryText(item.safeNote, 500) || null,
+        status,
+        statusLabel,
+      };
+    })
+    .filter((item) => item.status && item.statusLabel && item.occurredAt)
+    .slice(0, 10);
+}
+
+function safeStatusHistoryText(value: unknown, maxLength: number) {
+  const cleaned = clean(value);
+  const normalized = cleaned
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[^a-z0-9]+/gi, "_")
+    .toLowerCase();
+
+  if (
+    !cleaned ||
+    cleaned.length > maxLength ||
+    unsafeStatusHistoryFragments.some((fragment) => normalized.includes(fragment))
+  ) {
+    return "";
+  }
+
+  return cleaned;
 }
 
 function clean(value: unknown) {

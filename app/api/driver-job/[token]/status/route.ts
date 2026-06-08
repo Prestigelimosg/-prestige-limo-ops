@@ -15,9 +15,11 @@ type DriverJobStatusRouteContext = {
 };
 
 const blockedStatusByReason = {
+  already_completed: 409,
   expired: 410,
   invalid_status: 400,
   not_configured: 503,
+  out_of_order: 409,
   revoked: 403,
   unauthorized: 401,
 } as const;
@@ -39,9 +41,20 @@ async function readJsonBody(request: Request) {
 export async function PATCH(request: Request, context: DriverJobStatusRouteContext) {
   const [{ token }, body] = await Promise.all([context.params, readJsonBody(request)]);
   const status = typeof body.status === "string" ? body.status : "";
+  const completionNote = body.completion_note;
+  const exceptionReason = body.exception_reason;
+  const safeStatusContext = body.safe_status_context;
+  const safeStatusNote = body.safe_status_note;
 
   if (isProductionDriverJobLinkMode()) {
-    const result = await applyProductionDriverJobStatusUpdate({ token, status });
+    const result = await applyProductionDriverJobStatusUpdate({
+      completionNote,
+      exceptionReason,
+      safeStatusContext,
+      safeStatusNote,
+      token,
+      status,
+    });
 
     if (result.ok) {
       return Response.json({

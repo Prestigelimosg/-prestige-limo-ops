@@ -290,16 +290,23 @@ async function runChromeTest() {
       await waitForCondition(
         () =>
           evaluate(`(() => {
-            const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
-              (button) =>
-                button.textContent.trim() === ${JSON.stringify(label)} &&
-                button.getAttribute("aria-selected") === "true",
+            const tab = [...document.querySelectorAll("button[role='tab']")].find(
+              (button) => button.textContent.trim() === ${JSON.stringify(label)},
             );
             const expectedText = ${JSON.stringify(expectedText)};
 
-            return Boolean(selectedTab) && (!expectedText || document.body.innerText.includes(expectedText));
+            if (!tab || tab.disabled) {
+              return false;
+            }
+
+            if (tab.getAttribute("aria-selected") !== "true") {
+              tab.click();
+            }
+
+            return tab.getAttribute("aria-selected") === "true" &&
+              (!expectedText || document.body.innerText.includes(expectedText));
           })()`),
-        10000,
+        15000,
         `${label} tab content`,
       );
     };

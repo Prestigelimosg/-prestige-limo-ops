@@ -36207,7 +36207,7 @@ async function runChromeTest() {
         [],
         `${viewport.label}: expected dispatcher cancel/replacement workflow to remain absent and future staff-controlled`,
       );
-      assert.equal(initialState.payNowFieldPresent, true, `${viewport.label}: expected local PayNow number field`);
+      assert.equal(initialState.payNowFieldPresent, false, `${viewport.label}: expected no PayNow field on public driver job link`);
       assert.deepEqual(
         [
           "Prestige Limo Driver Job",
@@ -36224,12 +36224,14 @@ async function runChromeTest() {
           "Mock Live Location",
           "Mock Driver Reminder",
           "Job Status",
+          "Status History",
+          "Completion / Exception Notes",
         ].filter((value) => !initialState.text.includes(value)),
         [],
         `${viewport.label}: expected readable driver job card details and workflow sections`,
       );
       assert.deepEqual(
-        ["Driver name", "Contact", "Car plate", "Vehicle model", "PayNow number"].filter(
+        ["Driver name", "Contact", "Car plate", "Vehicle model"].filter(
           (label) => !initialState.inputs.some((input) => input.label.includes(label)),
         ),
         [],
@@ -36237,7 +36239,7 @@ async function runChromeTest() {
       );
       assert.deepEqual(
         initialState.inputs.map((input) => input.type),
-        ["text", "tel", "text", "text", "tel"],
+        ["text", "tel", "text", "text"],
         `${viewport.label}: expected current driver detail input types`,
       );
       assert.equal(
@@ -36365,7 +36367,6 @@ async function runChromeTest() {
       await setDriverJobField("[data-driver-job-detail-contact]", "+65 9000 2222");
       await setDriverJobField("[data-driver-job-detail-plate]", "SMK1234Z");
       await setDriverJobField("[data-driver-job-detail-vehicle-model]", "Mercedes V Class");
-      await setDriverJobField("[data-driver-job-detail-paynow]", "8123 4567");
       const beforeSaveNetwork = await readDriverJobNetworkState();
       await clickDriverJobButton("[data-driver-job-save-details]", `${viewport.label} Save driver details`);
       const savedDetailsState = await waitForCondition(
@@ -36379,7 +36380,7 @@ async function runChromeTest() {
               savedDetails?.innerText.includes("+65 9000 2222") &&
               savedDetails?.innerText.includes("SMK1234Z") &&
               savedDetails?.innerText.includes("Mercedes V Class") &&
-              savedDetails?.innerText.includes("8123 4567")
+              !savedDetails?.innerText.toLowerCase().includes("paynow")
               ? {
                   fetchCalls: window.__driverJobFetchCalls || [],
                   messageText: message.textContent.trim(),

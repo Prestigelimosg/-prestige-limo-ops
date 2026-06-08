@@ -9,7 +9,14 @@ import {
   validateDriverJobStatusUpdate,
 } from "../../../lib/driver-job-status-workflow";
 
-type DriverJobApiBlockedReason = "expired" | "revoked" | "unauthorized" | "invalid_status" | "unavailable";
+type DriverJobApiBlockedReason =
+  | "already_completed"
+  | "expired"
+  | "invalid_status"
+  | "out_of_order"
+  | "revoked"
+  | "unauthorized"
+  | "unavailable";
 
 type DriverJobApiResponse =
   | {
@@ -77,7 +84,6 @@ type DriverAppUpdateState = {
 type DriverDetails = {
   contact: string;
   name: string;
-  payNowNumber: string;
   plate: string;
   vehicleModel: string;
 };
@@ -99,7 +105,6 @@ const statusActions = [
 const emptyDriverDetails: DriverDetails = {
   contact: "",
   name: "",
-  payNowNumber: "",
   plate: "",
   vehicleModel: "",
 };
@@ -113,8 +118,10 @@ const emptyDriverAppUpdateState: DriverAppUpdateState = {
 const mockLatestFlightEta = "15:45";
 
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
+  already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
   invalid_status: "This status update was not accepted. Please try again or contact dispatch.",
+  out_of_order: "Update the previous job status before this one.",
   revoked: "This driver job link is no longer active. Please contact dispatch.",
   unauthorized: "This driver job link is unavailable. Please check the link or contact dispatch.",
   unavailable: "This driver job link is unavailable right now. Please contact dispatch.",
@@ -128,7 +135,12 @@ const statusLabels: Record<string, string> = {
 };
 
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
-  return value === "expired" || value === "revoked" || value === "unauthorized" || value === "invalid_status"
+  return value === "already_completed" ||
+    value === "expired" ||
+    value === "revoked" ||
+    value === "unauthorized" ||
+    value === "invalid_status" ||
+    value === "out_of_order"
     ? value
     : "unavailable";
 }
@@ -141,7 +153,6 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
   return {
     contact: details.contact.trim().replace(/\s+/g, " "),
     name: details.name.trim().replace(/\s+/g, " "),
-    payNowNumber: details.payNowNumber.trim().replace(/\s+/g, " "),
     plate: details.plate.trim().replace(/\s+/g, " "),
     vehicleModel: details.vehicleModel.trim().replace(/\s+/g, " "),
   };
@@ -191,6 +202,10 @@ function safeDisplayText(value: unknown, fallback: string) {
   const cleaned = String(value).replace(/\s+/g, " ").trim();
 
   return cleaned || fallback;
+}
+
+function safeStatusNoteText(value: string) {
+  return value.trim().replace(/\s+/g, " ").slice(0, 1000);
 }
 
 function formatDriverAppUpdateTime(value: unknown) {
@@ -301,12 +316,15 @@ export default function DriverJobPage() {
   const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
   const [mockOtsPhotoProofFeedback, setMockOtsPhotoProofFeedback] = useState<ControlFeedback | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
+  const [completionNote, setCompletionNote] = useState("");
+  const [exceptionReason, setExceptionReason] = useState("");
   const [driverAppUpdates, setDriverAppUpdates] =
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
   const readyJob = pageState.kind === "ready" ? pageState.job : null;
+  const savedStatusHistory = readyJob?.statusHistory || [];
   const requiresMockLatestEtaAcknowledgement = readyJob ? isArrivalStyleJob(readyJob) : false;
   const requiresMockOtsPhotoProof = readyJob ? isArrivalStyleJob(readyJob) : false;
   const showMockLatestFlightEta = requiresMockLatestEtaAcknowledgement;
@@ -415,6 +433,8 @@ export default function DriverJobPage() {
       setMockOtsPhotoProofAdded(false);
       setMockOtsPhotoProofFeedback(null);
       setActivityLog([]);
+      setCompletionNote("");
+      setExceptionReason("");
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
       setSavedDriverDetails(null);
       setStatusFeedback(null);
@@ -444,7 +464,6 @@ export default function DriverJobPage() {
         setDriverDetails({
           contact: result.payload.assignedDriver.contact,
           name: result.payload.assignedDriver.name,
-          payNowNumber: "",
           plate: result.payload.assignedDriver.plate,
           vehicleModel: result.payload.assignedDriver.vehicleModel,
         });
@@ -600,10 +619,10 @@ export default function DriverJobPage() {
 
     setDriverDetails(nextDetails);
 
-    if (!nextDetails.name && !nextDetails.contact && !nextDetails.plate && !nextDetails.payNowNumber) {
+    if (!nextDetails.name && !nextDetails.contact && !nextDetails.plate && !nextDetails.vehicleModel) {
       setDetailsFeedback({
         tone: "error",
-        text: "Enter driver name, contact, car plate, or PayNow number before saving.",
+        text: "Enter driver name, contact, car plate, or vehicle model before saving.",
       });
       setSavedDriverDetails(null);
       return;
@@ -623,7 +642,7 @@ export default function DriverJobPage() {
       tone: "success",
       text: "Driver details saved locally for this mock driver page.",
     });
-    addActivity("Mock driver details saved", "Driver name/contact/vehicle/PayNow details were saved locally.");
+    addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
   }
 
   function acknowledgeLatestEta() {
@@ -701,9 +720,30 @@ export default function DriverJobPage() {
     setStatusFeedback(null);
 
     try {
+      const requestBody: Record<string, unknown> = {
+        status: transitionGuard.status,
+      };
+      const cleanedCompletionNote = safeStatusNoteText(completionNote);
+      const cleanedExceptionReason = safeStatusNoteText(exceptionReason);
+
+      if (transitionGuard.status === "completed" && cleanedCompletionNote) {
+        requestBody.completion_note = cleanedCompletionNote;
+      }
+
+      if (cleanedExceptionReason) {
+        requestBody.exception_reason = cleanedExceptionReason;
+      }
+
+      if (requestBody.completion_note || requestBody.exception_reason) {
+        requestBody.safe_status_context = {
+          completion_note_status: requestBody.completion_note ? "provided" : "not_provided",
+          exception_reason_status: requestBody.exception_reason ? "provided" : "not_provided",
+        };
+      }
+
       // Mock-backed status update only. Production must verify the secure token before any Supabase write.
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/status`, {
-        body: JSON.stringify({ status: transitionGuard.status }),
+        body: JSON.stringify(requestBody),
         cache: "no-store",
         headers: { "content-type": "application/json" },
         method: "PATCH",
@@ -752,6 +792,12 @@ export default function DriverJobPage() {
       }
       if (transitionGuard.status === "pob" && mockLiveLocationActive) {
         addActivity("Mock live location auto-ended at POB", "Local mock live location state ended after POB.");
+      }
+      if (transitionGuard.status === "completed" && (cleanedCompletionNote || cleanedExceptionReason)) {
+        addActivity(
+          "Completion note prepared",
+          "Safe completion or exception text was included with the guarded status update.",
+        );
       }
       setStatusFeedback({
         target: label,
@@ -1336,17 +1382,6 @@ export default function DriverJobPage() {
                     value={driverDetails.vehicleModel}
                   />
                 </label>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>PayNow number</span>
-                  <input
-                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-detail-paynow="true"
-                    inputMode="tel"
-                    onChange={(event) => updateDriverDetail("payNowNumber", event.target.value)}
-                    type="tel"
-                    value={driverDetails.payNowNumber}
-                  />
-                </label>
                 <div className="space-y-2">
                   <button
                     className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
@@ -1388,10 +1423,6 @@ export default function DriverJobPage() {
                       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
                         <dt className="font-semibold">Vehicle</dt>
                         <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.vehicleModel)}</dd>
-                      </div>
-                      <div className="grid grid-cols-[6.5rem_1fr] gap-2">
-                        <dt className="font-semibold">PayNow</dt>
-                        <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.payNowNumber)}</dd>
                       </div>
                     </dl>
                   </div>
@@ -1450,13 +1481,13 @@ export default function DriverJobPage() {
                     Current flow: OTW, OTS, POB, then Job Completed.
                   </li>
                   <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Status buttons are local/demo boundary controls for this driver page.
+                    Status updates are accepted only through this guarded job link.
                   </li>
                   <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Job Completed does not send a customer notification yet.
+                    Job Completed can include safe completion or exception text for dispatch review.
                   </li>
                   <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    No billing, driver compensation, proof/photo, live-location, or accounting action is created here.
+                    No private account, file upload, or location-tracking action is created here.
                   </li>
                   <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
                     For urgent issues, contact the dispatcher directly.
@@ -1468,6 +1499,84 @@ export default function DriverJobPage() {
                 >
                   Feedback appears under the status button you tap.
                 </p>
+              </div>
+              <div
+                className="space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                data-driver-job-saved-status-history="true"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900">Status History</p>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                    {savedStatusHistory.length} saved
+                  </span>
+                </div>
+                {savedStatusHistory.length > 0 ? (
+                  <ol className="space-y-2" data-driver-job-saved-status-history-list="true">
+                    {savedStatusHistory.map((event, index) => (
+                      <li
+                        className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+                        data-driver-job-saved-status-history-row="true"
+                        key={`${event.status}-${event.occurredAt}-${index}`}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="font-semibold" data-driver-job-saved-status-history-label="true">
+                            {statusDisplay(event.status, event.statusLabel)}
+                          </span>
+                          <span
+                            className="text-xs font-semibold text-slate-500"
+                            data-driver-job-saved-status-history-time="true"
+                          >
+                            {safeDisplayText(event.occurredAt, "Time not provided")}
+                          </span>
+                        </div>
+                        {event.safeNote ? (
+                          <p
+                            className="mt-1 break-words text-slate-600"
+                            data-driver-job-saved-status-history-note="true"
+                          >
+                            {event.safeNote}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p
+                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 ring-1 ring-slate-200"
+                    data-driver-job-saved-status-history-empty="true"
+                  >
+                    No saved status history for this link yet.
+                  </p>
+                )}
+              </div>
+              <div
+                className="space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                data-driver-job-completion-notes="true"
+              >
+                <p className="text-sm font-semibold text-slate-900">Completion / Exception Notes</p>
+                <p className="text-sm font-medium leading-6 text-slate-600">
+                  Optional safe operational text included only with an accepted status update.
+                </p>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Completion note</span>
+                  <textarea
+                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-completion-note="true"
+                    maxLength={1000}
+                    onChange={(event) => setCompletionNote(event.target.value)}
+                    value={completionNote}
+                  />
+                </label>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Exception reason</span>
+                  <textarea
+                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-exception-reason="true"
+                    maxLength={1000}
+                    onChange={(event) => setExceptionReason(event.target.value)}
+                    value={exceptionReason}
+                  />
+                </label>
               </div>
               <div className="grid gap-3 md:grid-cols-4">
                 {statusActions.map((statusAction) => (

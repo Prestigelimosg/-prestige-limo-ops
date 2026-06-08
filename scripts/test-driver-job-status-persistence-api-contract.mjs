@@ -22,7 +22,11 @@ const validToken = "driver-status-contract-token-a";
 const expiredToken = "driver-status-contract-token-expired";
 const farFutureToken = "driver-status-contract-token-far-future";
 const revokedToken = "driver-status-contract-token-revoked";
-const now = "2026-06-07T09:30:00.000Z";
+const nowDate = new Date();
+const now = nowDate.toISOString();
+const validExpiresAt = new Date(nowDate.getTime() + 6 * 60 * 60 * 1000).toISOString();
+const expiredExpiresAt = new Date(nowDate.getTime() - 60 * 60 * 1000).toISOString();
+const farFutureExpiresAt = new Date(nowDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 const originalEnv = {
   DRIVER_JOB_LINK_MODE: process.env.DRIVER_JOB_LINK_MODE,
   NEXT_PUBLIC_DRIVER_JOB_LINK_MODE: process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE,
@@ -264,12 +268,17 @@ class MockSupabaseClient {
   }
 }
 
-function createSeededClient() {
+function createSeededClient({
+  latestOccurredAt = "2026-06-07T09:00:00.000Z",
+  latestSafeStatusNote = null,
+  latestStatus = "ots",
+  priorStatusEvents = [],
+} = {}) {
   return new MockSupabaseClient({
     driver_job_links: [
       {
         booking_reference: "DRV-JOB-API-001",
-        expires_at: "2026-06-08T09:30:00.000Z",
+        expires_at: validExpiresAt,
         id: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
         link_status: "active",
         revoked_at: null,
@@ -299,7 +308,7 @@ function createSeededClient() {
       },
       {
         booking_reference: "DRV-JOB-API-EXPIRED",
-        expires_at: "2026-06-06T09:30:00.000Z",
+        expires_at: expiredExpiresAt,
         id: "7bc159e4-4f96-4963-9a29-36743fa1647f",
         link_status: "active",
         revoked_at: null,
@@ -308,7 +317,7 @@ function createSeededClient() {
       },
       {
         booking_reference: "DRV-JOB-API-FAR-FUTURE",
-        expires_at: "2026-06-20T09:30:00.000Z",
+        expires_at: farFutureExpiresAt,
         id: "b63a81ec-005e-4f89-9622-3256b470d4f2",
         link_status: "active",
         revoked_at: null,
@@ -317,7 +326,7 @@ function createSeededClient() {
       },
       {
         booking_reference: "DRV-JOB-API-REVOKED",
-        expires_at: "2026-06-08T09:30:00.000Z",
+        expires_at: validExpiresAt,
         id: "5e42b861-2815-490b-9513-32f6b96e8f7b",
         link_status: "revoked",
         revoked_at: "2026-06-07T08:00:00.000Z",
@@ -326,18 +335,23 @@ function createSeededClient() {
       },
     ],
     driver_job_status_events: [
-      {
-        actor_label: "verified_driver_job_link",
-        actor_role: "driver",
-        booking_reference: "DRV-JOB-API-001",
-        driver_job_link_id: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
-        occurred_at: "2026-06-07T09:00:00.000Z",
-        safe_status_context: {},
-        safe_status_note: null,
-        source_surface: "driver_job_api",
-        status_source: "driver_job_api",
-        status_value: "ots",
-      },
+      ...(latestStatus
+        ? [
+            {
+              actor_label: "verified_driver_job_link",
+              actor_role: "driver",
+              booking_reference: "DRV-JOB-API-001",
+              driver_job_link_id: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
+              occurred_at: latestOccurredAt,
+              safe_status_context: {},
+              safe_status_note: latestSafeStatusNote,
+              source_surface: "driver_job_api",
+              status_source: "driver_job_api",
+              status_value: latestStatus,
+            },
+          ]
+        : []),
+      ...priorStatusEvents,
     ],
   });
 }
@@ -360,10 +374,10 @@ async function getDriverJob(token) {
   };
 }
 
-async function patchDriverJobStatus(token, status) {
+async function patchDriverJobStatus(token, status, body = {}) {
   const response = await PATCH(
     new Request(`http://localhost/api/driver-job/${encodeURIComponent(token)}/status`, {
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ ...body, status }),
       headers: { "content-type": "application/json" },
       method: "PATCH",
     }),
@@ -400,7 +414,7 @@ function assertNoDriverJobLeaks(value) {
   assert.doesNotMatch(text, /\b160\b/, "Driver route must not expose customer price.");
 }
 
-function assertInsertedStatusEvent(client, expectedStatus) {
+function assertInsertedStatusEvent(client, expectedStatus, expected = {}) {
   assert.equal(client.operations.length, 1);
   const [operation] = client.operations;
 
@@ -413,8 +427,8 @@ function assertInsertedStatusEvent(client, expectedStatus) {
   assert.equal(operation.payload.source_surface, "driver_job_api");
   assert.equal(operation.payload.actor_role, "driver");
   assert.equal(operation.payload.actor_label, "verified_driver_job_link");
-  assert.equal(operation.payload.safe_status_note, null);
-  assert.deepEqual(operation.payload.safe_status_context, {});
+  assert.equal(operation.payload.safe_status_note, expected.safeStatusNote ?? null);
+  assert.deepEqual(operation.payload.safe_status_context, expected.safeStatusContext ?? {});
   assertNoDriverJobLeaks(operation.payload);
 }
 
@@ -478,7 +492,22 @@ try {
   process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED = "true";
 
   {
-    const client = createSeededClient();
+    const client = createSeededClient({
+      priorStatusEvents: [
+        {
+          actor_label: "verified_driver_job_link",
+          actor_role: "driver",
+          booking_reference: "DRV-JOB-API-001",
+          driver_job_link_id: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
+          occurred_at: "2026-06-07T08:00:00.000Z",
+          safe_status_context: {},
+          safe_status_note: "Driver left base safely.",
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "driver_otw",
+        },
+      ],
+    });
     const result = await loadDriverJobPayloadThroughStatusPersistence({
       client,
       now,
@@ -491,6 +520,30 @@ try {
     assert.equal(result.payload.pickupLocation, "Raffles Hotel Singapore");
     assert.equal(result.payload.dropoffLocation, "Changi Airport Terminal 3");
     assert.equal(result.payload.status, "ots");
+    assert.deepEqual(
+      result.payload.statusHistory.map((event) => ({
+        note: event.safeNote,
+        status: event.status,
+        time: event.occurredAt,
+      })),
+      [
+        {
+          note: null,
+          status: "ots",
+          time: "2026-06-07T09:00:00.000Z",
+        },
+        {
+          note: "Driver left base safely.",
+          status: "driver_otw",
+          time: "2026-06-07T08:00:00.000Z",
+        },
+      ],
+    );
+    assert.equal(
+      client.selectHistory.find((query) => query.table === "driver_job_status_events")?.limit,
+      10,
+      "Driver token payload should read a compact status history, not only one latest row.",
+    );
     assert.equal(result.payload.assignedDriver.name, "Safe Driver One");
     assert.equal(client.operations.length, 0);
     assertNoDriverJobLeaks(result);
@@ -537,6 +590,22 @@ try {
     const result = await saveDriverJobStatusThroughStatusPersistence({
       client,
       now,
+      status: "OTW",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "out_of_order");
+    assert.equal(result.payload, null);
+    assert.equal(client.operations.length, 0);
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient();
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
       status: "POB",
       token: validToken,
     });
@@ -546,7 +615,78 @@ try {
     assert.equal(result.status, "pob");
     assert.equal(result.payload.reference, "DRV-JOB-API-001");
     assert.equal(result.payload.status, "pob");
+    assert.deepEqual(
+      result.payload.statusHistory.map((event) => event.status),
+      ["pob", "ots"],
+    );
     assertInsertedStatusEvent(client, "pob");
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({ latestStatus: "pob" });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      completionNote: "Passenger dropped at hotel lobby.",
+      exceptionReason: "No exception.",
+      now,
+      safeStatusContext: {
+        dispatcher_visible: true,
+      },
+      status: "Job Completed",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.reason, "updated");
+    assert.equal(result.status, "completed");
+    assert.equal(result.payload.status, "completed");
+    assert.equal(result.payload.statusHistory[0].safeNote, "Passenger dropped at hotel lobby.");
+    assertInsertedStatusEvent(client, "completed", {
+      safeStatusContext: {
+        completion_note_status: "provided",
+        dispatcher_visible: true,
+        exception_reason_status: "provided",
+      },
+      safeStatusNote: "Passenger dropped at hotel lobby.",
+    });
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({ latestStatus: "pob" });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      completionNote: "Passenger dropped at hotel lobby.",
+      now,
+      safeStatusContext: {
+        amount: 10,
+      },
+      status: "Job Completed",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "invalid_status");
+    assert.equal(result.payload, null);
+    assert.equal(client.operations.length, 0);
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({ latestStatus: "pob" });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      completionNote: "Contains driver payout details and must be blocked.",
+      now,
+      status: "Job Completed",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "invalid_status");
+    assert.equal(result.payload, null);
+    assert.equal(client.operations.length, 0);
     assertNoDriverJobLeaks(result);
   }
 
@@ -590,16 +730,63 @@ try {
     const result = await patchDriverJobStatus(validToken, "OTW");
     const reloaded = await getDriverJob(validToken);
 
+    assert.equal(result.status, 409);
+    assert.equal(result.body.ok, false);
+    assert.equal(result.body.reason, "out_of_order");
+    assert.equal(result.body.payload, null);
+    assert.equal(reloaded.status, 200);
+    assert.equal(reloaded.body.payload.status, "ots");
+    assert.equal(client.operations.length, 0);
+    assertNoDriverJobLeaks(result);
+    assertNoDriverJobLeaks(reloaded);
+  }
+
+  {
+    const client = createSeededClient();
+    setDriverJobProductionSupabaseClientForTests(client);
+
+    const result = await patchDriverJobStatus(validToken, "POB");
+    const reloaded = await getDriverJob(validToken);
+
     assert.equal(result.status, 200);
     assert.equal(result.body.ok, true);
     assert.equal(result.body.mode, "production");
-    assert.equal(result.body.status, "driver_otw");
-    assert.equal(result.body.payload.status, "driver_otw");
+    assert.equal(result.body.status, "pob");
+    assert.equal(result.body.payload.status, "pob");
     assert.equal(reloaded.status, 200);
-    assert.equal(reloaded.body.payload.status, "driver_otw");
-    assertInsertedStatusEvent(client, "driver_otw");
+    assert.equal(reloaded.body.payload.status, "pob");
+    assertInsertedStatusEvent(client, "pob");
     assertNoDriverJobLeaks(result);
     assertNoDriverJobLeaks(reloaded);
+  }
+
+  {
+    const client = createSeededClient({ latestStatus: "pob" });
+    setDriverJobProductionSupabaseClientForTests(client);
+
+    const result = await patchDriverJobStatus(validToken, "Job Completed", {
+      completion_note: "Passenger dropped safely at lobby.",
+      exception_reason: "No exception.",
+      safe_status_context: {
+        driver_visible: true,
+      },
+    });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(result.body.mode, "production");
+    assert.equal(result.body.status, "completed");
+    assert.equal(result.body.payload.status, "completed");
+    assert.equal(result.body.payload.statusHistory[0].safeNote, "Passenger dropped safely at lobby.");
+    assertInsertedStatusEvent(client, "completed", {
+      safeStatusContext: {
+        completion_note_status: "provided",
+        driver_visible: true,
+        exception_reason_status: "provided",
+      },
+      safeStatusNote: "Passenger dropped safely at lobby.",
+    });
+    assertNoDriverJobLeaks(result);
   }
 
   {

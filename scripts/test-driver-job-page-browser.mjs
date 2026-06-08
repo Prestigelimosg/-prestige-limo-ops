@@ -62,6 +62,12 @@ function assertNoSensitiveText(state) {
   assert.doesNotMatch(text, /\b99\b/, "Driver job page should not expose workflow driver payout.");
   assert.doesNotMatch(text, /\b160\b/, "Driver job page should not expose customer price.");
   assert.doesNotMatch(text, /\b95\b/, "Driver job page should not expose driver payout.");
+  assert.doesNotMatch(text, /\bpay\s*now\b|paynow/i, "Driver job page should not expose PayNow details.");
+  assert.doesNotMatch(text, /\bbilling\b/i, "Driver job page should not expose billing details.");
+  assert.doesNotMatch(text, /\binvoice\b/i, "Driver job page should not expose invoice details.");
+  assert.doesNotMatch(text, /\bpayment\b/i, "Driver job page should not expose payment details.");
+  assert.doesNotMatch(text, /\bpayout\b/i, "Driver job page should not expose payout details.");
+  assert.doesNotMatch(text, /\bfinance\b/i, "Driver job page should not expose finance details.");
   assert.doesNotMatch(
     text,
     nativeAppOnlyLanguagePattern,
@@ -388,7 +394,6 @@ async function runChromeTest() {
           ["[data-driver-job-detail-contact]", "+65 9123 4567"],
           ["[data-driver-job-detail-plate]", "SLM1234A"],
           ["[data-driver-job-detail-vehicle-model]", "Toyota Alphard"],
-          ["[data-driver-job-detail-paynow]", "8123 4567"],
         ];
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 
@@ -434,7 +439,7 @@ async function runChromeTest() {
               savedDetails?.innerText.includes("+65 9123 4567") &&
               savedDetails?.innerText.includes("SLM1234A") &&
               savedDetails?.innerText.includes("Toyota Alphard") &&
-              savedDetails?.innerText.includes("8123 4567")
+              !savedDetails?.innerText.toLowerCase().includes("paynow")
               ? {
                   distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
                   messageText: message.textContent.trim(),
@@ -455,6 +460,36 @@ async function runChromeTest() {
       );
       assertNoSensitiveText(afterSaveState);
       return afterSaveState;
+    };
+
+    const fillCompletionNotes = async () => {
+      const filled = await evaluate(`(() => {
+        const values = [
+          ["[data-driver-job-completion-note]", "Passenger dropped safely at hotel lobby."],
+          ["[data-driver-job-exception-reason]", "No exception."],
+        ];
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+
+        for (const [selector, value] of values) {
+          const input = document.querySelector(selector);
+
+          if (!input) {
+            return false;
+          }
+
+          setter?.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        return true;
+      })()`);
+
+      assert.equal(filled, true, "Expected driver completion/exception note fields to be editable.");
+      const state = await pageState();
+
+      assertNoSensitiveText(state);
+      return state;
     };
 
     const clickBlockedLiveLocation = async (
@@ -1203,9 +1238,9 @@ async function runChromeTest() {
       validState.statusBoundary.items,
       [
         "Current flow: OTW, OTS, POB, then Job Completed.",
-        "Status buttons are local/demo boundary controls for this driver page.",
-        "Job Completed does not send a customer notification yet.",
-        "No billing, driver compensation, proof/photo, live-location, or accounting action is created here.",
+        "Status updates are accepted only through this guarded job link.",
+        "Job Completed can include safe completion or exception text for dispatch review.",
+        "No private account, file upload, or location-tracking action is created here.",
         "For urgent issues, contact the dispatcher directly.",
       ],
       "Expected compact driver completion/status boundary guidance.",
@@ -1293,7 +1328,9 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Contact"));
     assert.ok(validState.visibleText.includes("Car plate"));
     assert.ok(validState.visibleText.includes("Vehicle model"));
-    assert.ok(validState.visibleText.includes("PayNow number"));
+    assert.equal(validState.visibleText.includes("PayNow number"), false);
+    assert.equal(validState.visibleText.includes("Completion / Exception Notes"), true);
+    assert.equal(validState.visibleText.includes("Status History"), true);
     assert.deepEqual(
       validState.buttonLabels.filter((buttonLabel) =>
         ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
@@ -1364,6 +1401,7 @@ async function runChromeTest() {
     assert.equal(endedLiveLocationState.workflowSummaryRows["live-location"], "Inactive");
     await clickBlockedMockDriverReminder("POB");
     await clickBlockedLiveLocation("Mock live location has ended for this job.");
+    await fillCompletionNotes();
     await clickStatus("Job Completed", "Job Completed");
     const completedLiveLocationState = await pageState();
     assert.ok(
@@ -1383,6 +1421,7 @@ async function runChromeTest() {
         "Mock live location auto-ended at POB",
         "Mock reminder blocked",
         "Job Completed marked",
+        "Completion note prepared",
       ],
       "Expected public driver activity log to preserve reminder and successful workflow event order.",
     );
@@ -1417,9 +1456,9 @@ async function runChromeTest() {
       arrivalState.statusBoundary.items,
       [
         "Current flow: OTW, OTS, POB, then Job Completed.",
-        "Status buttons are local/demo boundary controls for this driver page.",
-        "Job Completed does not send a customer notification yet.",
-        "No billing, driver compensation, proof/photo, live-location, or accounting action is created here.",
+        "Status updates are accepted only through this guarded job link.",
+        "Job Completed can include safe completion or exception text for dispatch review.",
+        "No private account, file upload, or location-tracking action is created here.",
         "For urgent issues, contact the dispatcher directly.",
       ],
       "Expected Arrival job to keep driver status boundary guidance.",

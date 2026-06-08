@@ -10,14 +10,20 @@ import {
   type SafeDriverJobPayload,
 } from "./driver-job-link.ts";
 import { productionDriverJobLinksConfigured } from "./driver-job-link-mode.ts";
+import {
+  driverJobStatusDisplayLabels,
+  guardDriverJobStatusTransition,
+} from "./driver-job-status-workflow.ts";
 
 export const driverJobStatusPersistenceVersion =
   "stage-driver-job-status-production-adapter-v1";
 
 export type DriverJobPersistenceBlockedReason =
+  | "already_completed"
   | "expired"
   | "invalid_status"
   | "not_configured"
+  | "out_of_order"
   | "revoked"
   | "unauthorized";
 
@@ -30,7 +36,10 @@ export type DriverJobProductionPayloadResult =
   | {
       ok: false;
       payload: null;
-      reason: Exclude<DriverJobPersistenceBlockedReason, "invalid_status">;
+      reason: Exclude<
+        DriverJobPersistenceBlockedReason,
+        "already_completed" | "invalid_status" | "out_of_order"
+      >;
     };
 
 export type DriverJobProductionStatusUpdateResult =
@@ -62,6 +71,8 @@ type DriverJobLinkPersistenceRow = {
 type DriverJobStatusEventRow = {
   booking_reference: string;
   driver_job_link_id: string | null;
+  occurred_at: string;
+  safe_status_note: string | null;
   status_value: DriverJobStatusUpdate;
 };
 
@@ -72,6 +83,10 @@ type LoadDriverJobPersistenceInput = {
 };
 
 type SaveDriverJobStatusPersistenceInput = LoadDriverJobPersistenceInput & {
+  completionNote?: unknown;
+  exceptionReason?: unknown;
+  safeStatusContext?: unknown;
+  safeStatusNote?: unknown;
   status: string;
 };
 
@@ -82,13 +97,16 @@ type LinkResolveResult =
     }
   | {
       ok: false;
-      reason: Exclude<DriverJobPersistenceBlockedReason, "invalid_status">;
+      reason: Exclude<
+        DriverJobPersistenceBlockedReason,
+        "already_completed" | "invalid_status" | "out_of_order"
+      >;
     };
 
-type LatestStatusResult =
+type StatusHistoryResult =
   | {
       ok: true;
-      status: DriverJobStatusUpdate | null;
+      statuses: DriverJobStatusEventRow[];
     }
   | {
       ok: false;
@@ -110,6 +128,7 @@ const driverJobLinkSelect =
 const driverJobStatusEventSelect =
   "id, booking_reference, driver_job_link_id, status_value, status_source, safe_status_note, safe_status_context, occurred_at, source_surface, actor_role, actor_label, created_at";
 const maxSafeTextLength = 500;
+const maxSafeStatusNoteLength = 1000;
 const safeOutputFragments = [
   "amount_due",
   "auth_link",
@@ -183,6 +202,153 @@ function safeTextFromDb(value: unknown, maxLength = maxSafeTextLength) {
   return cleaned;
 }
 
+function hasProvidedValue(value: unknown) {
+  return value !== undefined && value !== null && cleanText(value).length > 0;
+}
+
+function safeStatusNoteFromInput(value: unknown) {
+  const cleaned = cleanText(value);
+
+  if (!cleaned) {
+    return {
+      ok: true as const,
+      value: null,
+    };
+  }
+
+  if (cleaned.length > maxSafeStatusNoteLength || includesUnsafeFragment(cleaned)) {
+    return {
+      ok: false as const,
+    };
+  }
+
+  return {
+    ok: true as const,
+    value: cleaned,
+  };
+}
+
+function safeStatusContextFromInput(value: unknown) {
+  if (value === undefined || value === null) {
+    return {
+      ok: true as const,
+      value: {} as UnknownRecord,
+    };
+  }
+
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      ok: false as const,
+    };
+  }
+
+  const rawContext = value as UnknownRecord;
+  const safeContext: UnknownRecord = {};
+
+  for (const [key, rawValue] of Object.entries(rawContext)) {
+    const safeKey = safeIdentifierFromDb(key);
+
+    if (!safeKey || safeKey.length > 80 || safeKey.toLowerCase().includes("token")) {
+      return {
+        ok: false as const,
+      };
+    }
+
+    if (typeof rawValue === "boolean") {
+      safeContext[safeKey] = rawValue;
+      continue;
+    }
+
+    if (typeof rawValue === "number") {
+      return {
+        ok: false as const,
+      };
+    }
+
+    if (typeof rawValue !== "string") {
+      return {
+        ok: false as const,
+      };
+    }
+
+    const cleaned = safeTextFromDb(rawValue, 220);
+
+    if (hasProvidedValue(rawValue) && !cleaned) {
+      return {
+        ok: false as const,
+      };
+    }
+
+    if (cleaned) {
+      safeContext[safeKey] = cleaned;
+    }
+  }
+
+  return {
+    ok: true as const,
+    value: safeContext,
+  };
+}
+
+function safeStatusNoteAndContextFromInput(input: SaveDriverJobStatusPersistenceInput) {
+  const primaryNote = hasProvidedValue(input.safeStatusNote)
+    ? input.safeStatusNote
+    : hasProvidedValue(input.completionNote)
+      ? input.completionNote
+      : input.exceptionReason;
+  const note = safeStatusNoteFromInput(primaryNote);
+
+  if (!note.ok) {
+    return {
+      ok: false as const,
+    };
+  }
+
+  const context = safeStatusContextFromInput(input.safeStatusContext);
+
+  if (!context.ok) {
+    return {
+      ok: false as const,
+    };
+  }
+
+  const nextContext = { ...context.value };
+
+  if (hasProvidedValue(input.completionNote)) {
+    const completionNote = safeStatusNoteFromInput(input.completionNote);
+
+    if (!completionNote.ok) {
+      return {
+        ok: false as const,
+      };
+    }
+
+    if (completionNote.value) {
+      nextContext.completion_note_status = "provided";
+    }
+  }
+
+  if (hasProvidedValue(input.exceptionReason)) {
+    const exceptionReason = safeStatusNoteFromInput(input.exceptionReason);
+
+    if (!exceptionReason.ok) {
+      return {
+        ok: false as const,
+      };
+    }
+
+    if (exceptionReason.value) {
+      nextContext.exception_reason_status = "provided";
+    }
+  }
+
+  return {
+    ok: true as const,
+    safeStatusContext: nextContext,
+    safeStatusNote: note.value,
+  };
+}
+
 function safeDateTextFromDb(value: unknown) {
   const cleaned = cleanText(value);
 
@@ -223,7 +389,10 @@ function safeWaypointList(value: unknown) {
 }
 
 function linkBlockedResult(
-  reason: Exclude<DriverJobPersistenceBlockedReason, "invalid_status">,
+  reason: Exclude<
+    DriverJobPersistenceBlockedReason,
+    "already_completed" | "invalid_status" | "out_of_order"
+  >,
 ): DriverJobProductionPayloadResult {
   return {
     ok: false,
@@ -286,6 +455,8 @@ function toStatusEventRow(row: UnknownRecord): DriverJobStatusEventRow | null {
   return {
     booking_reference: bookingReference,
     driver_job_link_id: safeIdentifierFromDb(row.driver_job_link_id) || null,
+    occurred_at: safeDateTextFromDb(row.occurred_at),
+    safe_status_note: safeTextFromDb(row.safe_status_note, maxSafeStatusNoteLength) || null,
     status_value: status,
   };
 }
@@ -345,12 +516,19 @@ function safePayloadRecordFromLink(link: DriverJobLinkPersistenceRow) {
 function payloadForLink(
   link: DriverJobLinkPersistenceRow,
   statusOverride: DriverJobStatusUpdate | null,
+  statusHistory: DriverJobStatusEventRow[] = [],
 ) {
   const safePayloadRecord = safePayloadRecordFromLink(link);
 
   return mapBookingToSafeDriverJobPayload({
     ...safePayloadRecord,
     status: statusOverride || safePayloadRecord.status,
+    statusHistory: statusHistory.map((event) => ({
+      occurredAt: event.occurred_at,
+      safeNote: event.safe_status_note,
+      status: event.status_value,
+      statusLabel: driverJobStatusDisplayLabels[event.status_value],
+    })),
   });
 }
 
@@ -459,16 +637,16 @@ async function resolveLinkForToken({
   };
 }
 
-async function loadLatestStatusForLink(
+async function loadStatusHistoryForLink(
   client: DriverJobStatusPersistenceClient,
   bookingReference: string,
-): Promise<LatestStatusResult> {
+): Promise<StatusHistoryResult> {
   const { data, error } = await client
     .from("driver_job_status_events")
     .select(driverJobStatusEventSelect)
     .eq("booking_reference", bookingReference)
     .order("occurred_at", { ascending: false })
-    .limit(1);
+    .limit(10);
 
   if (error) {
     return {
@@ -477,14 +655,15 @@ async function loadLatestStatusForLink(
     };
   }
 
-  const latestStatus = asArray(data)
+  const statusHistory = asArray(data)
     .map(asRecord)
     .map(toStatusEventRow)
-    .find((record): record is DriverJobStatusEventRow => Boolean(record));
+    .filter((record): record is DriverJobStatusEventRow => Boolean(record))
+    .slice(0, 10);
 
   return {
     ok: true,
-    status: latestStatus?.status_value || null,
+    statuses: statusHistory,
   };
 }
 
@@ -497,18 +676,22 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
     return linkBlockedResult(resolvedLink.reason);
   }
 
-  const latestStatus = await loadLatestStatusForLink(
+  const statusHistory = await loadStatusHistoryForLink(
     input.client,
     resolvedLink.link.booking_reference,
   );
 
-  if (!latestStatus.ok) {
-    return linkBlockedResult(latestStatus.reason);
+  if (!statusHistory.ok) {
+    return linkBlockedResult(statusHistory.reason);
   }
 
   return {
     ok: true,
-    payload: payloadForLink(resolvedLink.link, latestStatus.status),
+    payload: payloadForLink(
+      resolvedLink.link,
+      statusHistory.statuses[0]?.status_value || null,
+      statusHistory.statuses,
+    ),
     reason: "ok",
   };
 }
@@ -528,13 +711,43 @@ export async function saveDriverJobStatusThroughStatusPersistence(
     return statusBlockedResult(resolvedLink.reason);
   }
 
+  const statusHistory = await loadStatusHistoryForLink(
+    input.client,
+    resolvedLink.link.booking_reference,
+  );
+
+  if (!statusHistory.ok) {
+    return statusBlockedResult(statusHistory.reason);
+  }
+
+  const transitionGuard = guardDriverJobStatusTransition({
+    acknowledged: true,
+    currentStatus: statusHistory.statuses[0]?.status_value || "",
+    nextStatus,
+  });
+
+  if (!transitionGuard.ok) {
+    return statusBlockedResult(
+      transitionGuard.reason === "already_completed" ||
+        transitionGuard.reason === "out_of_order"
+        ? transitionGuard.reason
+        : "invalid_status",
+    );
+  }
+
+  const safeStatusDetails = safeStatusNoteAndContextFromInput(input);
+
+  if (!safeStatusDetails.ok) {
+    return statusBlockedResult("invalid_status");
+  }
+
   const eventRow = {
     actor_label: "verified_driver_job_link",
     actor_role: "driver",
     booking_reference: resolvedLink.link.booking_reference,
     driver_job_link_id: resolvedLink.link.id,
-    safe_status_context: {},
-    safe_status_note: null,
+    safe_status_context: safeStatusDetails.safeStatusContext,
+    safe_status_note: safeStatusDetails.safeStatusNote,
     source_surface: "driver_job_api",
     status_source: "driver_job_api",
     status_value: nextStatus,
@@ -552,7 +765,10 @@ export async function saveDriverJobStatusThroughStatusPersistence(
 
   return {
     ok: true,
-    payload: payloadForLink(resolvedLink.link, nextStatus),
+    payload: payloadForLink(resolvedLink.link, nextStatus, [
+      persistedEvent,
+      ...statusHistory.statuses,
+    ]),
     reason: "updated",
     status: nextStatus,
   };

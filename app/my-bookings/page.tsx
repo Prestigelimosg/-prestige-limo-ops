@@ -61,9 +61,9 @@ type CustomerCancellationRequestFeedback = {
   text: string;
 };
 
-type CustomerRequestLookupResult = {
+type CustomerSavedStatusLookupResult = {
   detail: string;
-  status: "Cancelled" | "Completed" | "Confirmed" | "Not confirmed yet" | "Pending review" | "Request received";
+  status: string;
   title: string;
 };
 
@@ -580,43 +580,84 @@ function splitPickupTime(value: string) {
   };
 }
 
-function getCustomerRequestLookupResult(booking: CustomerPortalBooking): CustomerRequestLookupResult {
-  if (booking.status === "Requested") {
-    return {
-      detail: "We have received this request. Our team will review availability before confirming.",
-      status: "Request received",
-      title: "Request received",
-    };
+function customerFacingStatusLabel(value: string | null | undefined) {
+  const normalized = (value || "").replace(/_/g, " ").trim().toLowerCase();
+
+  if (normalized === "confirmed") {
+    return "Confirmed";
   }
 
-  if (booking.status === "Pending Staff Review") {
-    return {
-      detail: "Pending review means our team has received your request but has not confirmed availability yet.",
-      status: "Pending review",
-      title: "Pending review",
-    };
+  if (normalized === "completed") {
+    return "Completed";
   }
 
-  if (booking.status === "Confirmed") {
-    return {
-      detail: "This booking is confirmed. Please contact our team if any details need to change.",
-      status: "Confirmed",
-      title: "Confirmed",
-    };
+  if (normalized === "cancelled") {
+    return "Cancelled";
   }
 
-  if (booking.status === "Completed") {
-    return {
-      detail: "This booking has been completed.",
-      status: "Completed",
-      title: "Completed",
-    };
+  if (normalized === "received") {
+    return "Request received";
   }
+
+  if (normalized === "driver assigned") {
+    return "Driver assigned";
+  }
+
+  if (normalized === "driver pending") {
+    return "Driver pending";
+  }
+
+  if (normalized === "declined") {
+    return "Declined";
+  }
+
+  return "Pending review";
+}
+
+function statusLookupDetail(status: string) {
+  if (status === "Confirmed") {
+    return "This booking is confirmed. Please contact our team if any details need to change.";
+  }
+
+  if (status === "Completed") {
+    return "This booking has been completed.";
+  }
+
+  if (status === "Cancelled") {
+    return "This booking has been cancelled. Please contact our team if you need a new request.";
+  }
+
+  if (status === "Request received") {
+    return "We have received this request. Our team will review availability before confirming.";
+  }
+
+  if (status === "Driver assigned") {
+    return "This booking is confirmed and driver details will be shared according to our dispatch timing.";
+  }
+
+  if (status === "Driver pending") {
+    return "This booking is confirmed and driver assignment is pending.";
+  }
+
+  if (status === "Declined") {
+    return "This request was not confirmed. Please contact our team if you need help with a new request.";
+  }
+
+  return "Pending review means our team has received your request but has not confirmed availability yet.";
+}
+
+function toSavedStatusLookupResult(value: unknown): CustomerSavedStatusLookupResult | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as { customer_facing_status?: string | null };
+  const status = customerFacingStatusLabel(record.customer_facing_status);
 
   return {
-    detail: "This booking has been cancelled. Please contact our team if you need a new request.",
-    status: "Cancelled",
-    title: "Cancelled",
+    detail: statusLookupDetail(status),
+    status,
+    title: status,
   };
 }
 
@@ -681,7 +722,9 @@ export default function CustomerPortalPage() {
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [requestStatusLookupQuery, setRequestStatusLookupQuery] = useState("");
-  const [submittedRequestStatusLookupQuery, setSubmittedRequestStatusLookupQuery] = useState("");
+  const [requestStatusLookupFeedback, setRequestStatusLookupFeedback] =
+    useState<CustomerSavedStatusLookupResult | null>(null);
+  const [requestStatusLookupLoading, setRequestStatusLookupLoading] = useState(false);
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
@@ -793,23 +836,6 @@ export default function CustomerPortalPage() {
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
   const changeRequestPickupTimeParts = splitPickupTime(changeRequestForm.newPickupTime);
-  const requestStatusLookupMatch = useMemo(() => {
-    const query = normalize(submittedRequestStatusLookupQuery);
-
-    if (!query) {
-      return undefined;
-    }
-
-    return bookings.find((booking) =>
-      [booking.id, booking.passengerName, booking.pickupDateTime, booking.pickupLocation, booking.dropoffLocation]
-        .filter(Boolean)
-        .some((value) => normalize(String(value)).includes(query)),
-    );
-  }, [submittedRequestStatusLookupQuery]);
-  const requestStatusLookupResult = requestStatusLookupMatch
-    ? getCustomerRequestLookupResult(requestStatusLookupMatch)
-    : undefined;
-
   function resetCustomerChangeRequestIntake() {
     setChangeRequestForm(initialCustomerChangeRequestForm);
     setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
@@ -844,9 +870,64 @@ export default function CustomerPortalPage() {
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
   }
 
-  function handleRequestStatusLookupSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleRequestStatusLookupSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmittedRequestStatusLookupQuery(requestStatusLookupQuery);
+
+    const bookingReference = requestStatusLookupQuery.trim();
+
+    if (!bookingReference) {
+      setRequestStatusLookupFeedback(null);
+      return;
+    }
+
+    setRequestStatusLookupLoading(true);
+    setRequestStatusLookupFeedback({
+      detail: "Checking saved booking status...",
+      status: "Checking",
+      title: "Checking status",
+    });
+
+    try {
+      const response = await fetch(
+        `/api/customer-booking-statuses?booking_reference=${encodeURIComponent(bookingReference)}`,
+        {
+          headers: {
+            "x-prestige-customer-purpose": "customer-booking-status-read",
+          },
+          method: "GET",
+        },
+      );
+      const result = await response.json().catch(() => null);
+      const firstStatus = Array.isArray(result?.statuses) ? result.statuses[0] : null;
+      const savedStatus = toSavedStatusLookupResult(firstStatus);
+
+      if (response.ok && savedStatus) {
+        setRequestStatusLookupFeedback(savedStatus);
+      } else if (response.ok) {
+        setRequestStatusLookupFeedback({
+          detail: "No saved booking status was found for that reference. Please contact our team with your request details.",
+          status: "Not found",
+          title: "No saved status found",
+        });
+      } else {
+        setRequestStatusLookupFeedback({
+          detail:
+            typeof result?.error === "string"
+              ? result.error
+              : "Secure saved booking status lookup is not available yet. Please contact our team with your request details.",
+          status: "Secure access required",
+          title: "Secure lookup required",
+        });
+      }
+    } catch {
+      setRequestStatusLookupFeedback({
+        detail: "Secure saved booking status lookup is not available right now. Please contact our team with your request details.",
+        status: "Secure access required",
+        title: "Secure lookup required",
+      });
+    } finally {
+      setRequestStatusLookupLoading(false);
+    }
   }
 
   function handleMonthSelect(monthKey: string) {
@@ -1080,7 +1161,7 @@ export default function CustomerPortalPage() {
                 Request Status Lookup
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-request-status-helper="true">
-                Have a booking request? Check its current status here.
+                Have a booking reference? Check its saved status here after secure customer access is enabled.
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 Pending review means our team has received your request but has not confirmed availability yet. For
@@ -1090,7 +1171,7 @@ export default function CustomerPortalPage() {
 
             <form className="flex flex-col gap-3" onSubmit={handleRequestStatusLookupSubmit}>
               <label className="text-sm font-semibold text-slate-800" htmlFor="request-status-lookup">
-                Request reference or passenger name
+                Booking reference
               </label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
@@ -1098,16 +1179,17 @@ export default function CustomerPortalPage() {
                   data-customer-request-status-lookup-input="true"
                   id="request-status-lookup"
                   onChange={(event) => setRequestStatusLookupQuery(event.target.value)}
-                  placeholder="Enter request reference or passenger name"
+                  placeholder="Enter booking reference"
                   type="search"
                   value={requestStatusLookupQuery}
                 />
                 <button
                   className="min-h-11 rounded-md border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                   data-customer-request-status-lookup-submit="true"
+                  disabled={requestStatusLookupLoading}
                   type="submit"
                 >
-                  Check status
+                  {requestStatusLookupLoading ? "Checking..." : "Check status"}
                 </button>
               </div>
 
@@ -1115,27 +1197,27 @@ export default function CustomerPortalPage() {
                 className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
                 data-customer-request-status-lookup-result="true"
               >
-                {submittedRequestStatusLookupQuery.trim() ? (
-                  requestStatusLookupResult ? (
+                {requestStatusLookupQuery.trim() || requestStatusLookupFeedback ? (
+                  requestStatusLookupFeedback ? (
                     <>
                       <p className="font-semibold text-slate-950" data-customer-request-status-lookup-title="true">
-                        {requestStatusLookupResult.title}
+                        {requestStatusLookupFeedback.title}
                       </p>
                       <p className="mt-1" data-customer-request-status-lookup-status="true">
-                        {requestStatusLookupResult.status}
+                        {requestStatusLookupFeedback.status}
                       </p>
                       <p className="mt-1" data-customer-request-status-lookup-detail="true">
-                        {requestStatusLookupResult.detail}
+                        {requestStatusLookupFeedback.detail}
                       </p>
                     </>
                   ) : (
                     <p data-customer-request-status-lookup-detail="true">
-                      Status lookup is not connected yet. Please contact our team with your request details.
+                      Enter a booking reference, then check saved status.
                     </p>
                   )
                 ) : (
                   <p data-customer-request-status-lookup-detail="true">
-                    Enter your request reference or passenger name to check status.
+                    Enter your booking reference to check status.
                   </p>
                 )}
               </div>

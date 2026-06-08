@@ -390,6 +390,7 @@ const adminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const publicRouteRuntimeResourcePattern =
   /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)|supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
 const customerBookingRequestApiPattern = /\/api\/customer-booking-requests(?:[/?#]|$)/i;
+const customerBookingStatusApiPattern = /\/api\/customer-booking-statuses(?:[/?#]|$)/i;
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
@@ -33917,7 +33918,7 @@ async function runChromeTest() {
       assert.equal(initialState.requestStatusLookup.visible, true, "Expected /my-bookings request status lookup");
       assert.equal(
         initialState.requestStatusLookup.helper,
-        "Have a booking request? Check its current status here.",
+        "Have a booking reference? Check its saved status here after secure customer access is enabled.",
         "Expected /my-bookings customer request status lookup helper",
       );
       assert.equal(
@@ -33937,7 +33938,7 @@ async function runChromeTest() {
       assert.equal(initialState.requestStatusLookup.submitVisible, true, "Expected /my-bookings status lookup submit");
       assert.equal(
         initialState.requestStatusLookup.detail,
-        "Enter your request reference or passenger name to check status.",
+        "Enter your booking reference to check status.",
         "Expected /my-bookings status lookup to start without a fake request reference",
       );
       assert.equal(initialState.requestNextSteps.visible, true, "Expected /my-bookings request next-steps timeline");
@@ -34173,95 +34174,49 @@ async function runChromeTest() {
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
       await checkTelegramBoundary("/my-bookings desktop");
 
-      await setCustomerPortalRequestStatusLookup("Daniel Lim");
+      await setCustomerPortalRequestStatusLookup("CUST-STATUS-001");
       await submitCustomerPortalRequestStatusLookup();
-      const pendingLookupState = await waitForCondition(
+      const secureLookupState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.requestStatusLookup.status === "Pending review" ? candidateState : false;
+          return candidateState.requestStatusLookup.status === "Secure access required" ? candidateState : false;
         },
         10000,
-        "customer portal pending request status lookup",
+        "customer portal secure saved status lookup",
       );
       assert.equal(
-        pendingLookupState.requestStatusLookup.detail,
-        "Pending review means our team has received your request but has not confirmed availability yet.",
-        "Expected pending lookup to say not confirmed yet",
+        secureLookupState.requestStatusLookup.detail,
+        "Customer booking status lookup requires secure customer account access before saved booking statuses can be read.",
+        "Expected saved lookup to stay blocked until customer auth is enabled",
       );
       assert.equal(
-        pendingLookupState.requestStatusLookup.status === "Confirmed",
+        secureLookupState.requestStatusLookup.status === "Confirmed",
         false,
-        "Expected pending lookup not to imply confirmation",
+        "Expected blocked saved lookup not to imply confirmation",
       );
       assert.deepEqual(
-        pendingLookupState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        secureLookupState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
-        "Expected pending /my-bookings status lookup not to call Supabase, payment, bank, notification, or calendar APIs",
+        "Expected /my-bookings saved status lookup not to call Supabase, payment, bank, notification, or calendar APIs",
       );
-      assertNoCustomerFacingPriceVisibilityLeaks(pendingLookupState.text, "/my-bookings pending status lookup");
-      assertNoAdminBookingPersistenceLeaks(pendingLookupState.text, "/my-bookings pending status lookup");
+      assert.equal(
+        secureLookupState.integrationCalls.filter((call) => customerBookingStatusApiPattern.test(call)).length,
+        1,
+        "Expected /my-bookings saved status lookup to call only the customer booking status API once",
+      );
+      assertNoCustomerFacingPriceVisibilityLeaks(secureLookupState.text, "/my-bookings secure status lookup");
+      assertNoAdminBookingPersistenceLeaks(secureLookupState.text, "/my-bookings secure status lookup");
       assertNoPublicRouteRuntimeCalls(
-        pendingLookupState.integrationCalls,
-        pendingLookupState.resourceCalls,
-        "/my-bookings pending status lookup",
+        secureLookupState.integrationCalls,
+        secureLookupState.resourceCalls,
+        "/my-bookings secure status lookup",
+        customerBookingStatusApiPattern,
       );
       assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings pending status lookup"),
-        "/my-bookings pending status lookup",
+        await readBrowserPersistenceState("/my-bookings secure status lookup"),
+        "/my-bookings secure status lookup",
       );
-
-      await setCustomerPortalRequestStatusLookup("Priya Shah");
-      await submitCustomerPortalRequestStatusLookup();
-      const receivedLookupState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.requestStatusLookup.status === "Request received" ? candidateState : false;
-        },
-        10000,
-        "customer portal received request status lookup",
-      );
-      assert.equal(
-        receivedLookupState.requestStatusLookup.detail.includes("review availability before confirming"),
-        true,
-        "Expected received request lookup to remain review-before-confirmation",
-      );
-
-      await setCustomerPortalRequestStatusLookup("Alicia Tan");
-      await submitCustomerPortalRequestStatusLookup();
-      const confirmedLookupState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.requestStatusLookup.status === "Confirmed" ? candidateState : false;
-        },
-        10000,
-        "customer portal confirmed request status lookup",
-      );
-      assert.equal(confirmedLookupState.requestStatusLookup.title, "Confirmed", "Expected confirmed lookup safe status");
-
-      await setCustomerPortalRequestStatusLookup("No Such Passenger");
-      await submitCustomerPortalRequestStatusLookup();
-      const disconnectedLookupState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.requestStatusLookup.detail.includes("Status lookup is not connected yet")
-            ? candidateState
-            : false;
-        },
-        10000,
-        "customer portal disconnected request status lookup",
-      );
-      assert.equal(
-        disconnectedLookupState.requestStatusLookup.detail,
-        "Status lookup is not connected yet. Please contact our team with your request details.",
-        "Expected disconnected /my-bookings lookup safe fallback",
-      );
-      assert.deepEqual(
-        disconnectedLookupState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
-        [],
-        "Expected disconnected /my-bookings status lookup not to call Supabase, payment, bank, notification, or calendar APIs",
-      );
-      assertNoCustomerFacingPriceVisibilityLeaks(disconnectedLookupState.text, "/my-bookings disconnected status lookup");
-      assertNoAdminBookingPersistenceLeaks(disconnectedLookupState.text, "/my-bookings disconnected status lookup");
+      await setCustomerPortalViewportAndLoad(desktopViewport);
 
       await setCustomerChangeRequestField("bookingId", "booking-002");
       await setCustomerChangeRequestField("changeType", "Pickup date/time");

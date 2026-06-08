@@ -5897,6 +5897,29 @@ async function runChromeTest() {
       window.__prestigeCompletedCloseouts = {};
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
+      window.__prestigeAdminAppNotificationRequests = [];
+      window.__prestigeAdminAppNotifications = [
+        {
+          created_at: "2026-06-08T02:00:00.000Z",
+          id: "browser-admin-app-notification-one",
+          notification_status: "queued",
+          notification_type: "monthly_billing",
+          priority: "normal",
+          safe_message: "Admin monthly billing draft prep was saved from grouped completed trip data.",
+          safe_title: "Monthly billing draft prep saved",
+          updated_at: "2026-06-08T02:00:00.000Z",
+        },
+        {
+          created_at: "2026-06-08T01:00:00.000Z",
+          id: "browser-admin-app-notification-read",
+          notification_status: "read",
+          notification_type: "system_notice",
+          priority: "low",
+          safe_message: "Read notification should stay filtered out.",
+          safe_title: "Read notification",
+          updated_at: "2026-06-08T01:00:00.000Z",
+        },
+      ];
       window.__prestigeMonthlyBillingDraftPlanRequests = [];
       window.__prestigeMonthlyBillingDraftPlans = [];
       window.__prestigeMonthlyBillingGroupingRequests = [];
@@ -5926,6 +5949,62 @@ async function runChromeTest() {
         })();
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+        if (String(target).includes("/api/admin-app-notifications")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeAdminAppNotificationRequests.push({
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const notificationStatus = url.searchParams.get("notification_status") || "";
+            const notificationType = url.searchParams.get("notification_type") || "";
+            const priority = url.searchParams.get("priority") || "";
+            const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
+            const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+            const filteredNotifications = (window.__prestigeAdminAppNotifications || []).filter((notification) => {
+              if (notificationStatus && notification.notification_status !== notificationStatus) {
+                return false;
+              }
+
+              if (notificationType && notification.notification_type !== notificationType) {
+                return false;
+              }
+
+              return !priority || notification.priority === priority;
+            });
+            const pageCount = filteredNotifications.length
+              ? Math.ceil(filteredNotifications.length / limit)
+              : 0;
+            const notifications = filteredNotifications.slice((page - 1) * limit, page * limit);
+
+            return new Response(
+              JSON.stringify({
+                notifications,
+                ok: true,
+                pagination: {
+                  has_next_page: pageCount > 0 && page < pageCount,
+                  has_previous_page: pageCount > 0 && page > 1,
+                  page,
+                  page_count: pageCount,
+                  page_size: limit,
+                  total_notification_count: filteredNotifications.length,
+                },
+                version: "browser-admin-app-notification-feed-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(JSON.stringify({ ok: false, error: "Admin app notification method not mocked." }), {
+            status: 405,
+            headers: { "content-type": "application/json" },
+          });
+        }
 
         if (String(target).includes("/api/admin-booking-workflow-statuses")) {
           const url = new URL(String(target), window.location.origin);
@@ -6524,6 +6603,101 @@ async function runChromeTest() {
         })()`),
       10000,
       "mock loaded dashboard booking",
+    );
+
+    const adminAppNotificationFeedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const feed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const rows = [...(feed?.querySelectorAll("[data-admin-app-notification-feed-row='true']") || [])].map((row) => ({
+            message:
+              row.querySelector("[data-admin-app-notification-feed-message='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            title:
+              row.querySelector("[data-admin-app-notification-feed-title='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            text: row.textContent.replace(/\\s+/g, " ").trim(),
+          }));
+
+          if (!feed || rows.length !== 1) {
+            return false;
+          }
+
+          return {
+            boundary:
+              feed.querySelector("[data-admin-app-notification-feed-boundary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            feedback:
+              feed.querySelector("[data-admin-app-notification-feed-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            requests: window.__prestigeAdminAppNotificationRequests || [],
+            rows,
+            state:
+              feed.querySelector("[data-admin-app-notification-feed-state='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            visible: Boolean(feed),
+          };
+        })()`),
+      10000,
+      "admin app notification feed",
+    );
+    assert.equal(adminAppNotificationFeedState.visible, true, "Expected admin app notification feed on Dashboard");
+    assert.equal(adminAppNotificationFeedState.state, "Queued");
+    assert.equal(
+      adminAppNotificationFeedState.feedback,
+      "Loaded 1 saved admin app notification.",
+      "Expected admin app notification feed to load one queued notification",
+    );
+    assert.deepEqual(
+      adminAppNotificationFeedState.rows.map((row) => ({
+        message: row.message,
+        title: row.title,
+      })),
+      [
+        {
+          message: "Admin monthly billing draft prep was saved from grouped completed trip data.",
+          title: "Monthly billing draft prep saved",
+        },
+      ],
+      "Expected admin app notification feed to render safe title/message only",
+    );
+    assert.deepEqual(
+      adminAppNotificationFeedState.requests.map((request) => ({
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        search: request.search,
+      })),
+      [
+        {
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          search: "?limit=5&notification_status=queued&page=1",
+        },
+      ],
+      "Expected Dashboard notification feed to GET queued admin app notifications through the guarded read API path",
+    );
+    assert.equal(
+      /customer_price|driver_payout|paynow|token_hash|raw_token|service_role|parser|safe_context/i.test(
+        JSON.stringify(adminAppNotificationFeedState.rows),
+      ),
+      false,
+      "Expected notification feed rows not to expose finance, parser, secret, token, or context internals",
+    );
+    assert.equal(
+      adminAppNotificationFeedState.boundary.includes("No external delivery") &&
+        adminAppNotificationFeedState.boundary.includes("invoice creation") &&
+        adminAppNotificationFeedState.boundary.includes("payment") &&
+        adminAppNotificationFeedState.boundary.includes("customer auth") &&
+        adminAppNotificationFeedState.boundary.includes("driver auth"),
+      true,
+      "Expected admin notification feed boundary to stay internal and non-sending",
     );
 
     const hiddenLegacyMrLeeDashboardState = await evaluate(`(() => {

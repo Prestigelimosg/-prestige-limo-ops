@@ -356,6 +356,51 @@ async function runChromeTest() {
           const blockedAdminPersistenceApiPattern =
             /\\/api\\/(?:admin-bookings?|bookings\\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)/i;
 
+          if (url.includes("/api/admin-app-notifications")) {
+            window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
+
+            if (method === "GET") {
+              return Promise.resolve(
+                new Response(JSON.stringify({
+                  notifications: [
+                    {
+                      created_at: "2026-06-08T02:00:00.000Z",
+                      id: "mobile-admin-app-notification-one",
+                      notification_status: "queued",
+                      notification_type: "monthly_billing",
+                      priority: "normal",
+                      safe_message: "Mobile monthly billing draft prep was saved from grouped completed trip data.",
+                      safe_title: "Mobile billing draft prep saved",
+                      updated_at: "2026-06-08T02:00:00.000Z",
+                    },
+                  ],
+                  ok: true,
+                  pagination: {
+                    has_next_page: false,
+                    has_previous_page: false,
+                    page: 1,
+                    page_count: 1,
+                    page_size: 5,
+                    total_notification_count: 1,
+                  },
+                  version: "mobile-admin-app-notification-feed-read-mock",
+                }), {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                }),
+              );
+            }
+
+            return Promise.resolve(
+              new Response(JSON.stringify({
+                message: "Blocked admin app notification mutation in mobile usability browser test.",
+              }), {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
           if (blockedAdminPersistenceApiPattern.test(url)) {
             window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
 
@@ -1083,6 +1128,103 @@ async function runChromeTest() {
         state.docScrollWidth <= state.docClientWidth + 2,
         true,
         `${viewport.label}: expected Day-of-Trip Dispatch Monitor not to create horizontal overflow`,
+      );
+    };
+
+    const checkAdminAppNotificationFeed = async (viewport) => {
+      const state = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const section = document.querySelector("[data-admin-app-notification-feed='true']");
+            const sectionRect = section?.getBoundingClientRect();
+            const rows = [...(section?.querySelectorAll("[data-admin-app-notification-feed-row='true']") || [])].map((row) => {
+              const rowRect = row.getBoundingClientRect();
+
+              return {
+                height: Math.round(rowRect.height),
+                message:
+                  row.querySelector("[data-admin-app-notification-feed-message='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                title:
+                  row.querySelector("[data-admin-app-notification-feed-title='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                width: Math.round(rowRect.width),
+              };
+            });
+
+            if (!section || rows.length === 0) {
+              return false;
+            }
+
+            return {
+              boundary:
+                section.querySelector("[data-admin-app-notification-feed-boundary='true']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              feedback:
+                section.querySelector("[data-admin-app-notification-feed-feedback='true']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              height: Math.round(sectionRect?.height || 0),
+              rows,
+              state:
+                section.querySelector("[data-admin-app-notification-feed-state='true']")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              visible: Boolean(sectionRect && sectionRect.width > 0 && sectionRect.height > 0),
+            };
+          })()`),
+        10000,
+        `${viewport.label} admin app notification feed`,
+      );
+
+      assert.equal(state.visible, true, `${viewport.label}: expected admin app notification feed`);
+      assert.equal(state.state, "Queued", `${viewport.label}: expected queued notification state`);
+      assert.equal(
+        state.feedback.includes("Loaded 1 saved admin app notification"),
+        true,
+        `${viewport.label}: expected admin app notification feed read feedback`,
+      );
+      assert.equal(
+        state.rows[0].title === "Mobile billing draft prep saved" &&
+          state.rows[0].message === "Mobile monthly billing draft prep was saved from grouped completed trip data.",
+        true,
+        `${viewport.label}: expected safe mobile notification title/message`,
+      );
+      assert.equal(
+        /customer_price|driver_payout|paynow|token_hash|raw_token|service_role|parser|safe_context/i.test(
+          JSON.stringify(state.rows),
+        ),
+        false,
+        `${viewport.label}: expected mobile notification feed rows not to expose private internals`,
+      );
+      assert.equal(
+        state.rows.every((row) => row.height >= 48 && row.width >= (viewport.width < 360 ? 180 : 240)),
+        true,
+        `${viewport.label}: expected admin app notification rows to stay readable`,
+      );
+      assert.equal(
+        state.height <= (viewport.width < 640 ? 520 : 360),
+        true,
+        `${viewport.label}: expected compact admin app notification feed, got ${state.height}px`,
+      );
+      assert.equal(
+        state.docScrollWidth <= state.docClientWidth + 2,
+        true,
+        `${viewport.label}: expected admin app notification feed not to create horizontal overflow`,
+      );
+      assert.equal(
+        state.boundary.includes("No external delivery") &&
+          state.boundary.includes("invoice creation") &&
+          state.boundary.includes("payment") &&
+          state.boundary.includes("customer auth") &&
+          state.boundary.includes("driver auth"),
+        true,
+        `${viewport.label}: expected admin app notification feed safe boundary`,
       );
     };
 
@@ -2793,6 +2935,9 @@ async function runChromeTest() {
       const adminMonthlyBillingMonthGroupingReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-monthly-billing-month-grouping-review]"))`,
       );
+      const adminAppNotificationFeedVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-app-notification-feed]"))`,
+      );
       const customerIntakeHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-intake-handoff]"))`,
       );
@@ -3434,6 +3579,11 @@ async function runChromeTest() {
         adminMonthlyBillingMonthGroupingReviewVisible,
         false,
         `${viewport.label} ${route.label}: expected no admin monthly billing month grouping review`,
+      );
+      assert.equal(
+        adminAppNotificationFeedVisible,
+        false,
+        `${viewport.label} ${route.label}: expected no admin app notification feed`,
       );
       assert.equal(
         internalQaMockArchiveVisible,
@@ -11628,6 +11778,8 @@ async function runChromeTest() {
           await checkMonthlyBillingQueueExceptionReview(viewport);
           await checkMonthlyBillingMonthGroupingReview(viewport);
           await checkManualExtraChargesBookingFields(viewport);
+        } else if (tabLabel === "Dashboard") {
+          await checkAdminAppNotificationFeed(viewport);
         }
       }
     };
@@ -11669,6 +11821,9 @@ async function runChromeTest() {
       );
       const adminMonthlyBillingMonthGroupingReviewVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-monthly-billing-month-grouping-review]"))`,
+      );
+      const adminAppNotificationFeedVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-app-notification-feed]"))`,
       );
       const driverAssignmentReadinessVisible = await evaluate(
         `Boolean(document.querySelector("[data-driver-assignment-readiness]"))`,
@@ -12325,6 +12480,11 @@ async function runChromeTest() {
         adminMonthlyBillingMonthGroupingReviewVisible,
         false,
         `${viewport.label} ${context}: expected no admin monthly billing month grouping review`,
+      );
+      assert.equal(
+        adminAppNotificationFeedVisible,
+        false,
+        `${viewport.label} ${context}: expected no admin app notification feed`,
       );
       assert.equal(
         internalQaMockArchiveVisible,

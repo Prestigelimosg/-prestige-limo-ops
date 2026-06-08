@@ -40,6 +40,7 @@ const adminMonthlyBillingDraftPlansApiPath = "/api/admin-monthly-billing-draft-p
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
 const adminMonthlyInvoiceDraftTripCandidatesApiPath =
   "/api/admin-monthly-invoice-draft-trip-candidates";
+const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
@@ -621,6 +622,49 @@ type AdminDriverJobStatusReadState = {
   message: Message | null;
   status: "idle" | "loading" | "loaded" | "error";
   statuses: AdminDriverJobStatusEvent[];
+};
+
+type AdminAppNotificationType =
+  | "booking_workflow"
+  | "driver_status"
+  | "completed_closeout"
+  | "monthly_billing"
+  | "system_notice";
+
+type AdminAppNotificationStatus =
+  | "queued"
+  | "read"
+  | "dismissed"
+  | "archived"
+  | "blocked";
+
+type AdminAppNotificationPriority = "low" | "normal" | "high" | "urgent";
+
+type AdminAppNotificationRecord = {
+  created_at?: string | null;
+  id?: string | null;
+  notification_status?: AdminAppNotificationStatus | string | null;
+  notification_type?: AdminAppNotificationType | string | null;
+  priority?: AdminAppNotificationPriority | string | null;
+  safe_message?: string | null;
+  safe_title?: string | null;
+  updated_at?: string | null;
+};
+
+type AdminAppNotificationPagination = {
+  has_next_page?: boolean | null;
+  has_previous_page?: boolean | null;
+  page?: number | null;
+  page_count?: number | null;
+  page_size?: number | null;
+  total_notification_count?: number | null;
+};
+
+type AdminAppNotificationReadState = {
+  message: Message | null;
+  notifications: AdminAppNotificationRecord[];
+  pagination: AdminAppNotificationPagination | null;
+  status: "idle" | "loading" | "loaded" | "error";
 };
 
 type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
@@ -4016,6 +4060,76 @@ function adminDriverJobStatusTimeLabel(value: string | null | undefined) {
   ).padStart(2, "0")} UTC`;
 }
 
+function adminAppNotificationFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Saved admin app notifications are not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Saved admin app notifications require the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Saved admin app notification read details need review.";
+  }
+
+  return "Saved admin app notification read failed safely.";
+}
+
+function adminAppNotificationDisplayLabel(value: string | null | undefined) {
+  const cleaned = clean(value);
+
+  if (!cleaned) {
+    return "System notice";
+  }
+
+  return cleaned
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function adminAppNotificationPriorityLabel(value: string | null | undefined) {
+  const cleaned = clean(value).toLowerCase();
+
+  if (cleaned === "urgent") {
+    return "Urgent";
+  }
+
+  if (cleaned === "high") {
+    return "High";
+  }
+
+  if (cleaned === "low") {
+    return "Low";
+  }
+
+  return "Normal";
+}
+
+function adminAppNotificationTimeLabel(value: string | null | undefined) {
+  const cleaned = clean(value);
+
+  if (!cleaned) {
+    return "Created time not recorded";
+  }
+
+  const parsedDate = new Date(cleaned);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return cleaned.slice(0, 80);
+  }
+
+  return `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    parsedDate.getUTCDate(),
+  ).padStart(2, "0")} ${String(parsedDate.getUTCHours()).padStart(2, "0")}:${String(
+    parsedDate.getUTCMinutes(),
+  ).padStart(2, "0")} UTC`;
+}
+
 function adminMapRouteAssistFailureMessage(rawError: unknown, label = "OneMap route assist") {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -4157,6 +4271,33 @@ async function loadAdminDriverJobStatusRead(bookingReference: string) {
     bookingReference,
     latestStatus,
     statuses: matchingStatuses.slice(0, 4),
+  };
+}
+
+async function loadAdminAppNotificationsRead() {
+  const params = new URLSearchParams({
+    limit: "5",
+    notification_status: "queued",
+    page: "1",
+  });
+
+  const response = await fetch(`${adminAppNotificationsApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Admin app notification read failed.");
+  }
+
+  return {
+    notifications: Array.isArray(result.notifications)
+      ? (result.notifications as AdminAppNotificationRecord[])
+      : [],
+    pagination: (result.pagination || null) as AdminAppNotificationPagination | null,
   };
 }
 
@@ -5210,6 +5351,14 @@ export default function Home() {
       status: "idle",
       statuses: [],
     });
+  const [adminAppNotificationReadState, setAdminAppNotificationReadState] =
+    useState<AdminAppNotificationReadState>({
+      message: null,
+      notifications: [],
+      pagination: null,
+      status: "idle",
+    });
+  const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
   const [completedTripCloseoutReviewMessage, setCompletedTripCloseoutReviewMessage] =
     useState<Message | null>(null);
   const [adminMonthlyBillingGroupingReadState, setAdminMonthlyBillingGroupingReadState] =
@@ -5320,6 +5469,76 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (activeTab !== "dashboard") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Loading saved admin app notifications through the guarded API...",
+      },
+      status: "loading",
+    }));
+
+    void (async () => {
+      try {
+        const { notifications, pagination } = await loadAdminAppNotificationsRead();
+
+        if (cancelled) {
+          return;
+        }
+
+        const totalNotificationCount = adminMonthlyBillingGroupingCount(
+          pagination?.total_notification_count,
+        );
+        const loadedNotificationText =
+          totalNotificationCount > notifications.length
+            ? `Loaded ${notifications.length} of ${totalNotificationCount} saved admin app notifications.`
+            : `Loaded ${notifications.length} saved admin app notification${
+                notifications.length === 1 ? "" : "s"
+              }.`;
+
+        setAdminAppNotificationReadState({
+          message: {
+            tone: notifications.length > 0 ? "success" : "info",
+            text:
+              notifications.length > 0
+                ? loadedNotificationText
+                : "No queued saved admin app notifications.",
+          },
+          notifications,
+          pagination,
+          status: "loaded",
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminAppNotificationReadState({
+          message: {
+            tone: "error",
+            text: adminAppNotificationFailureMessage(error),
+          },
+          notifications: [],
+          pagination: null,
+          status: "error",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, adminAppNotificationReadRevision]);
 
   const dispatchReleaseWorkflowBookingReference =
     clean(appliedAdminBookingSnapshotReference) || clean(loadedBookingId);
@@ -24968,6 +25187,117 @@ export default function Home() {
             </div>
           </div>
           {statusPanel}
+
+          <section
+            aria-label="Admin App Notifications"
+            className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2 sm:p-3"
+            data-admin-app-notification-feed="true"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-slate-950">Admin App Notifications</h3>
+                <p className="text-xs text-slate-600 sm:text-sm">
+                  Saved internal app alerts from the guarded admin API.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:items-end">
+                <span
+                  className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800"
+                  data-admin-app-notification-feed-state="true"
+                >
+                  {adminAppNotificationReadState.status === "loading"
+                    ? "Loading"
+                    : adminAppNotificationReadState.status === "error"
+                      ? "Review needed"
+                      : adminAppNotificationReadState.notifications.length > 0
+                        ? "Queued"
+                        : "Clear"}
+                </span>
+                <button
+                  className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-800 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:text-sky-300"
+                  data-admin-app-notification-feed-refresh="true"
+                  disabled={adminAppNotificationReadState.status === "loading"}
+                  onClick={() => setAdminAppNotificationReadRevision((revision) => revision + 1)}
+                  type="button"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {adminAppNotificationReadState.message ? (
+              <div
+                className={`mt-3 rounded-md border px-3 py-2 text-sm ${statusClass(
+                  adminAppNotificationReadState.message.tone,
+                )}`}
+                data-admin-app-notification-feed-feedback="true"
+              >
+                {adminAppNotificationReadState.message.text}
+              </div>
+            ) : null}
+
+            {adminAppNotificationReadState.notifications.length > 0 ? (
+              <div
+                className="mt-3 grid gap-2"
+                data-admin-app-notification-feed-rows="true"
+              >
+                {adminAppNotificationReadState.notifications.slice(0, 5).map((notification, index) => {
+                  const title = clean(notification.safe_title) || "Admin app notification";
+                  const message = clean(notification.safe_message) || "No safe notification message recorded.";
+                  const notificationType = adminAppNotificationDisplayLabel(notification.notification_type);
+                  const notificationPriority = adminAppNotificationPriorityLabel(notification.priority);
+                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
+                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
+
+                  return (
+                    <div
+                      className="rounded-md border border-sky-100 bg-white p-2 text-sm sm:p-3"
+                      data-admin-app-notification-feed-row="true"
+                      key={clean(notification.id) || `${title}-${index}`}
+                    >
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <h4
+                            className="break-words font-semibold text-slate-950"
+                            data-admin-app-notification-feed-title="true"
+                          >
+                            {title}
+                          </h4>
+                          <p
+                            className="mt-1 break-words text-slate-700"
+                            data-admin-app-notification-feed-message="true"
+                          >
+                            {message}
+                          </p>
+                        </div>
+                        <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
+                          {notificationPriority}
+                        </span>
+                      </div>
+                      <p className="mt-2 break-words text-xs text-slate-600">
+                        {notificationType} / {notificationStatus} / {createdTime}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : adminAppNotificationReadState.status === "loaded" ? (
+              <p
+                className="mt-3 rounded-md border border-sky-100 bg-white px-3 py-2 text-sm text-slate-600"
+                data-admin-app-notification-feed-empty="true"
+              >
+                No queued admin app notifications.
+              </p>
+            ) : null}
+
+            <p
+              className="mt-3 text-xs text-slate-500"
+              data-admin-app-notification-feed-boundary="true"
+            >
+              Admin-only read. No external delivery, invoice creation, payment, payout, customer auth,
+              or driver auth.
+            </p>
+          </section>
 
           <div className="grid gap-3 border-y border-stone-200 py-4 text-center sm:grid-cols-3">
             <div>

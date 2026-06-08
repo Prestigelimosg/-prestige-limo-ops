@@ -851,6 +851,19 @@ async function runChromeTest() {
             total_count: 1,
           },
         ];
+        window.__adminAppNotificationCalls = [];
+        window.__adminAppNotifications = [
+          {
+            created_at: "2026-06-08T02:00:00.000Z",
+            id: "app-smoke-admin-app-notification-one",
+            notification_status: "queued",
+            notification_type: "monthly_billing",
+            priority: "normal",
+            safe_message: "Smoke monthly billing draft prep was saved from grouped completed trip data.",
+            safe_title: "Smoke billing draft prep saved",
+            updated_at: "2026-06-08T02:00:00.000Z",
+          },
+        ];
         window.__adminDriverJobStatusCalls = [];
         window.__adminDriverJobStatusRows = {
           "LOADED-OPS-001": [
@@ -895,6 +908,57 @@ async function runChromeTest() {
           const [target, options = {}] = args;
           const url = typeof target === "string" ? target : target?.url || "";
           const method = options?.method || target?.method || "GET";
+
+          if (String(url).includes("/api/admin-app-notifications")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const allNotifications = window.__adminAppNotifications || [];
+
+            window.__adminAppNotificationCalls.push({
+              method,
+              search: parsedUrl.search,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              const notificationStatus = parsedUrl.searchParams.get("notification_status") || "";
+              const notificationType = parsedUrl.searchParams.get("notification_type") || "";
+              const priority = parsedUrl.searchParams.get("priority") || "";
+              const limit = Math.max(1, Number(parsedUrl.searchParams.get("limit") || 25));
+              const page = Math.max(1, Number(parsedUrl.searchParams.get("page") || 1));
+              const filteredNotifications = allNotifications.filter((notification) => {
+                if (notificationStatus && notification.notification_status !== notificationStatus) {
+                  return false;
+                }
+
+                if (notificationType && notification.notification_type !== notificationType) {
+                  return false;
+                }
+
+                return !priority || notification.priority === priority;
+              });
+              const pageCount = filteredNotifications.length
+                ? Math.ceil(filteredNotifications.length / limit)
+                : 0;
+              const notifications = filteredNotifications.slice((page - 1) * limit, page * limit);
+
+              return new Response(
+                JSON.stringify({
+                  notifications,
+                  ok: true,
+                  pagination: {
+                    has_next_page: pageCount > 0 && page < pageCount,
+                    has_previous_page: pageCount > 0 && page > 1,
+                    page,
+                    page_count: pageCount,
+                    page_size: limit,
+                    total_notification_count: filteredNotifications.length,
+                  },
+                  version: "app-smoke-admin-app-notification-feed-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
 
           if (String(url).includes("/api/admin-booking-workflow-statuses")) {
             const parsedUrl = new URL(String(url), window.location.origin);
@@ -38541,6 +38605,7 @@ async function runChromeTest() {
     state.adminMonthlyBillingQueueReadinessReviewRouteBoundaries = [];
     state.adminMonthlyBillingQueueExceptionReviewRouteBoundaries = [];
     state.adminMonthlyBillingMonthGroupingReviewRouteBoundaries = [];
+    state.adminAppNotificationFeedRouteBoundaries = [];
     state.adminConfirmedDriverAssignmentHandoffRouteBoundaries = [];
     state.adminDspCompletionBillingPrepHandoffRouteBoundaries = [];
     state.customerAccountServiceHistoryHandoffRouteBoundaries = [];
@@ -39008,6 +39073,34 @@ async function runChromeTest() {
         adminMonthlyBillingMonthGroupingReviewTextLeaks,
         [],
         `Expected no admin monthly billing month grouping review wording leak for ${route.context}`,
+      );
+      const adminAppNotificationFeedVisible = await evaluate(
+        `Boolean(document.querySelector("[data-admin-app-notification-feed]"))`,
+      );
+      const adminAppNotificationFeedTextLeaks = await evaluate(
+        `(() => {
+          const bodyText = document.body?.innerText || "";
+          return [
+            "Admin App Notifications",
+            "Saved internal app alerts",
+            "Saved admin app notification",
+          ].filter((text) => bodyText.includes(text));
+        })()`,
+      );
+      state.adminAppNotificationFeedRouteBoundaries.push({
+        context: route.context,
+        textLeaks: adminAppNotificationFeedTextLeaks,
+        visible: adminAppNotificationFeedVisible,
+      });
+      assert.equal(
+        adminAppNotificationFeedVisible,
+        false,
+        `Expected admin app notification feed boundary for ${route.context}`,
+      );
+      assert.deepEqual(
+        adminAppNotificationFeedTextLeaks,
+        [],
+        `Expected no admin app notification feed wording leak for ${route.context}`,
       );
       const adminConfirmedDriverAssignmentHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-admin-confirmed-driver-assignment-handoff]"))`,
@@ -39544,6 +39637,34 @@ async function runChromeTest() {
       customerDetailAdminMonthlyBillingMonthGroupingReviewTextLeaks,
       [],
       "Expected no admin monthly billing month grouping review wording leak for /customers/[customerId]",
+    );
+    const customerDetailAdminAppNotificationFeedVisible = await evaluate(
+      `Boolean(document.querySelector("[data-admin-app-notification-feed]"))`,
+    );
+    const customerDetailAdminAppNotificationFeedTextLeaks = await evaluate(
+      `(() => {
+        const bodyText = document.body?.innerText || "";
+        return [
+          "Admin App Notifications",
+          "Saved internal app alerts",
+          "Saved admin app notification",
+        ].filter((text) => bodyText.includes(text));
+      })()`,
+    );
+    state.adminAppNotificationFeedRouteBoundaries.push({
+      context: "/customers/[customerId]",
+      textLeaks: customerDetailAdminAppNotificationFeedTextLeaks,
+      visible: customerDetailAdminAppNotificationFeedVisible,
+    });
+    assert.equal(
+      customerDetailAdminAppNotificationFeedVisible,
+      false,
+      "Expected admin app notification feed boundary for /customers/[customerId]",
+    );
+    assert.deepEqual(
+      customerDetailAdminAppNotificationFeedTextLeaks,
+      [],
+      "Expected no admin app notification feed wording leak for /customers/[customerId]",
     );
     const customerDetailAdminDspCompletionBillingPrepHandoffVisible = await evaluate(
       `Boolean(document.querySelector("[data-admin-dsp-completion-billing-prep-handoff]"))`,

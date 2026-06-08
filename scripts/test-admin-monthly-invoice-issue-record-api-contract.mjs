@@ -473,6 +473,14 @@ const validPaidPayload = {
   payment_record_status: "paid",
   pdf_generation_status: "generated_not_sent",
 };
+const validBlockedUpdatePayload = {
+  ...validCreatePayload,
+  draft_lock_status: "lock_blocked",
+  issue_record_status: "blocked",
+  lock_status: "Issue record blocked for invoice sequence review",
+  next_action: "Resolve the invoice issue record before reservation.",
+  safe_issue_record_note: "Safe blocked issue record note.",
+};
 
 const sourceText = await Promise.all(
   sourceFiles.map((relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8")),
@@ -525,8 +533,8 @@ try {
   );
   assert.equal(
     harness.persistence.parseAdminMonthlyInvoiceIssueRecordCreatePayload(validPaidPayload).ok,
-    true,
-    "Expected manual paid issue record payload to parse.",
+    false,
+    "Expected manual invoice number payload to be rejected by sequence-only guard.",
   );
 
   for (const [label, params] of [
@@ -570,7 +578,7 @@ try {
       },
     ],
     [
-      "invoice number without reserved status",
+      "manual invoice number without reserved status",
       {
         ...validCreatePayload,
         invoice_number: "PLO-202607-0003",
@@ -719,7 +727,7 @@ try {
     harness.route.PATCH,
     new Request("http://localhost/api/admin-monthly-invoice-issue-records", {
       body: JSON.stringify({
-        ...validPaidPayload,
+        ...validBlockedUpdatePayload,
         issue_record_id: issueRecordId,
       }),
       headers: validHeaders({ "content-type": "application/json" }),
@@ -727,7 +735,7 @@ try {
     }),
   );
   assert.equal(updateResult.response.status, 200);
-  assert.equal(updateResult.body.issue_record.issue_record_status, "paid");
+  assert.equal(updateResult.body.issue_record.issue_record_status, "blocked");
   assert.equal(updateMock.client.operations[0].operation, "update");
   assert.deepEqual(updateMock.client.operations[0].filters, [
     {

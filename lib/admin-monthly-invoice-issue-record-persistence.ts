@@ -1210,6 +1210,14 @@ function parseIssueRecordPayload(
     source_issue_review_summary: sourceIssueReviewSummary,
   };
 
+  if (invoiceNumber) {
+    return {
+      error: "Admin monthly invoice numbers must be reserved through the approved sequence API.",
+      ok: false,
+      status: 400,
+    };
+  }
+
   if (!validateIssueRecordState(parsed)) {
     return {
       error: "Admin monthly invoice issue record status combination is not allowed.",

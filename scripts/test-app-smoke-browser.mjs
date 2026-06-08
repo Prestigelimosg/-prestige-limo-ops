@@ -1364,6 +1364,30 @@ async function runChromeTest() {
                     created_at: "2026-06-02T00:00:00.000Z",
                     updated_at: "2026-06-02T01:00:00.000Z",
                   },
+                  customer_notification:
+                    body.booking?.source_channel === "customer-booking-request" &&
+                    ["approved", "declined", "needs_review"].includes(body.booking?.request_review_status)
+                      ? {
+                          ok: true,
+                          notification: {
+                            booking_reference: body.target_booking_reference,
+                            delivery_surface: "customer_app",
+                            id: "mock-customer-request-notification",
+                            notification_status: "queued",
+                            notification_type: "booking_status",
+                            priority:
+                              body.booking.request_review_status === "needs_review" ? "high" : "normal",
+                            safe_context: {
+                              customer_facing_status: body.booking.customer_facing_status,
+                              request_review_status: body.booking.request_review_status,
+                              source: "customer_request_review",
+                            },
+                            safe_message: "Your booking request has been confirmed by Prestige Limo.",
+                            safe_title: "Booking request confirmed",
+                            workflow_area: "customer_request_review",
+                          },
+                        }
+                      : null,
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -1468,6 +1492,7 @@ async function runChromeTest() {
                       customer_facing_status: "Received",
                       admin_internal_status: "Admin Review Required",
                       short_notice_review_status: "Admin Review Required",
+                      request_review_status: "pending_review",
                       parser_source_reference: "Flight SQ001",
                       created_at: "2026-06-02T00:00:00.000Z",
                       updated_at: "2026-06-02T00:00:00.000Z",
@@ -1554,6 +1579,7 @@ async function runChromeTest() {
                     customer_facing_status: "Received",
                     admin_internal_status: "Draft",
                     short_notice_review_status: "Not Required",
+                    request_review_status: "pending_review",
                     parser_source_reference: "Flight SQ003",
                     created_at: "2026-06-02T00:20:00.000Z",
                     updated_at: "2026-06-02T00:20:00.000Z",
@@ -1590,6 +1616,7 @@ async function runChromeTest() {
                     customer_facing_status: "Received",
                     admin_internal_status: "Admin Review Required",
                     short_notice_review_status: "Admin Review Required",
+                    request_review_status: "pending_review",
                     parser_source_reference: "Flight SQ001",
                     customer_price: "9999-SHOULD-NOT-APPLY",
                     driver_payout: "8888-SHOULD-NOT-APPLY",
@@ -1647,6 +1674,7 @@ async function runChromeTest() {
                     customer_facing_status: "Confirmed",
                     admin_internal_status: "Confirmed",
                     short_notice_review_status: "Not Required",
+                    request_review_status: "approved",
                     parser_source_reference: "Flight SQ002",
                     created_at: "2026-06-02T00:10:00.000Z",
                     updated_at: "2026-06-02T00:10:00.000Z",
@@ -1936,7 +1964,8 @@ async function runChromeTest() {
       assert.equal(
         loadState.reviewStateText.includes("Admin internal status Admin Review Required") &&
           loadState.reviewStateText.includes("Customer-facing status Received") &&
-          loadState.reviewStateText.includes("Short-notice review status Admin Review Required"),
+          loadState.reviewStateText.includes("Short-notice review status Admin Review Required") &&
+          loadState.reviewStateText.includes("Request review status pending_review"),
         true,
         "Expected loaded customer request to show current safe review/status fields before decision change",
       );
@@ -2337,9 +2366,10 @@ async function runChromeTest() {
         "Expected admin review decision body to include only approved operational/status field names",
       );
       assert.equal(decisionState.body.booking.source_channel, "customer-booking-request");
-      assert.equal(decisionState.body.booking.customer_facing_status, "Received");
-      assert.equal(decisionState.body.booking.admin_internal_status, "Admin Review Required");
-      assert.equal(decisionState.body.booking.short_notice_review_status, "Admin Review Required");
+      assert.equal(decisionState.body.booking.customer_facing_status, "confirmed");
+      assert.equal(decisionState.body.booking.admin_internal_status, "Ready for Confirmation");
+      assert.equal(decisionState.body.booking.request_review_status, "approved");
+      assert.equal(decisionState.body.booking.short_notice_review_status, "reviewed");
       assert.equal(decisionState.body.booking.contact_phone, "+65 8000 1000");
       assert.equal(decisionState.body.booking.contact_email, "loaded-ops@example.com");
       assert.deepEqual(
@@ -2354,19 +2384,20 @@ async function runChromeTest() {
       );
       assert.equal(
         decisionState.feedback.includes("Approved Internally") &&
-          decisionState.feedback.includes("No customer notification sent"),
+          decisionState.feedback.includes("Customer in-app notification queued"),
         true,
-        "Expected internal decision feedback to avoid customer notification behavior",
+        "Expected internal decision feedback to confirm safe customer in-app notification queueing",
       );
       assert.equal(
-        decisionState.feedback.includes("Short-notice review remains Admin Review Required"),
+        decisionState.feedback.includes("Short-notice review was handled by this decision"),
         true,
-        "Expected short-notice customer request to remain Admin Review Required after decision update",
+        "Expected short-notice customer request review to be closed by the admin decision",
       );
       assert.equal(
-        decisionState.reviewStateText.includes("Admin internal status Admin Review Required") &&
-          decisionState.reviewStateText.includes("Customer-facing status Received") &&
-          decisionState.reviewStateText.includes("Short-notice review status Admin Review Required"),
+        decisionState.reviewStateText.includes("Admin internal status Ready for Confirmation") &&
+          decisionState.reviewStateText.includes("Customer-facing status confirmed") &&
+          decisionState.reviewStateText.includes("Short-notice review status reviewed") &&
+          decisionState.reviewStateText.includes("Request review status approved"),
         true,
         "Expected review state readout to remain visible after internal decision update",
       );
@@ -2571,14 +2602,14 @@ async function runChromeTest() {
         "Expected applied snapshot identity to show the safe pickup/drop-off summary",
       );
       assert.equal(
-        appliedSnapshotState.identityText.includes("Admin Review Required"),
+        appliedSnapshotState.identityText.includes("Ready for Confirmation"),
         true,
         "Expected applied snapshot identity to show the safe review/admin status",
       );
       assert.equal(
         appliedSnapshotState.feedback.includes("Admin Review Required"),
-        true,
-        "Expected short-notice loaded snapshot status to remain Admin Review Required",
+        false,
+        "Expected approved customer request snapshot not to revert to Admin Review Required",
       );
       assert.match(
         appliedSnapshotState.dispatchReleaseFeedback,
@@ -2852,8 +2883,11 @@ async function runChromeTest() {
       assert.equal(updateState.body.booking.contact_phone, "+65 8000 2000");
       assert.equal(updateState.body.booking.contact_email, "updated-ops@example.com");
       assert.equal(updateState.body.booking.pax_count, 3);
-      assert.equal(updateState.body.booking.admin_internal_status, "Admin Review Required");
-      assert.equal(updateState.body.booking.short_notice_review_status, "Admin Review Required");
+      assert.equal(updateState.body.booking.source_channel, "customer-booking-request");
+      assert.equal(updateState.body.booking.customer_facing_status, "confirmed");
+      assert.equal(updateState.body.booking.admin_internal_status, "Ready for Confirmation");
+      assert.equal(updateState.body.booking.request_review_status, "approved");
+      assert.equal(updateState.body.booking.short_notice_review_status, "reviewed");
       assert.deepEqual(
         updateState.body.route_points.map((routePoint) => routePoint.location_text),
         ["Updated Ops Pickup", "Updated Ops Stop", "Updated Ops Dropoff"],
@@ -2872,8 +2906,8 @@ async function runChromeTest() {
       );
       assert.equal(
         updateState.feedback.includes("Admin Review Required"),
-        true,
-        "Expected updated short-notice snapshot status to remain Admin Review Required",
+        false,
+        "Expected updated approved customer request snapshot not to revert to Admin Review Required",
       );
       assert.equal(
         updateState.appliedReference.includes("LOADED-OPS-001"),

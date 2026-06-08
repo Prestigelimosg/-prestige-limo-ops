@@ -1017,6 +1017,7 @@ type AdminBookingPersistenceRecord = {
   customer_facing_status?: string | null;
   admin_internal_status?: string | null;
   short_notice_review_status?: string | null;
+  request_review_status?: string | null;
   parser_source_reference?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -1051,6 +1052,7 @@ type AdminBookingPersistenceRequestBody = {
     customer_facing_status: string;
     admin_internal_status: string;
     short_notice_review_status: string | null;
+    request_review_status: string | null;
     parser_source_reference: string | null;
   };
   route_points: NonNullable<AdminBookingPersistenceRecord["route_points"]>;
@@ -1072,26 +1074,34 @@ const adminBookingPersistenceAllStatusFilter = "all";
 const adminCustomerRequestAllStatusFilter: AdminCustomerRequestStatusFilter = "all";
 const adminCustomerRequestReviewDecisions: Array<{
   adminInternalStatus: string;
+  customerFacingStatus: string;
   key: AdminCustomerRequestReviewDecisionKey;
   label: string;
+  requestReviewStatus: string;
   successLabel: string;
 }> = [
   {
     adminInternalStatus: "Admin Review Required",
+    customerFacingStatus: "pending_review",
     key: "needs-review",
     label: "Needs Review",
+    requestReviewStatus: "needs_review",
     successLabel: "Needs Review",
   },
   {
     adminInternalStatus: "Ready for Confirmation",
+    customerFacingStatus: "confirmed",
     key: "approve-internally",
     label: "Approve Internally",
+    requestReviewStatus: "approved",
     successLabel: "Approved Internally",
   },
   {
     adminInternalStatus: "Declined Internally",
+    customerFacingStatus: "declined",
     key: "decline-internally",
     label: "Decline Internally",
+    requestReviewStatus: "declined",
     successLabel: "Declined Internally",
   },
 ];
@@ -3493,6 +3503,7 @@ function buildAdminBookingPersistencePayload(
       customer_facing_status: "Received",
       admin_internal_status: shortNoticeReviewRequired ? "Admin Review Required" : "Draft",
       short_notice_review_status: shortNoticeReviewRequired ? "Admin Review Required" : "Not Required",
+      request_review_status: "pending_review",
       parser_source_reference: parsedSourceReference(bookingValue),
     },
     route_points: routePoints,
@@ -3529,12 +3540,15 @@ function adminCustomerRequestDecisionStatuses(
   const shortNoticeReviewRequired = adminBookingPersistenceRecordIsShortNotice(record, currentTimeMs);
 
   return {
-    admin_internal_status:
-      decision.key === "approve-internally" && shortNoticeReviewRequired
+    admin_internal_status: decision.adminInternalStatus,
+    customer_facing_status: decision.customerFacingStatus,
+    request_review_status: decision.requestReviewStatus,
+    short_notice_review_status:
+      shortNoticeReviewRequired && decision.key === "needs-review"
         ? "Admin Review Required"
-        : decision.adminInternalStatus,
-    customer_facing_status: clean(record.customer_facing_status) || "Request Received",
-    short_notice_review_status: shortNoticeReviewRequired ? "Admin Review Required" : "Not Required",
+        : shortNoticeReviewRequired
+          ? "reviewed"
+          : "Not Required",
     shortNoticeReviewRequired,
   };
 }
@@ -3622,6 +3636,7 @@ function buildAdminCustomerRequestDecisionPayload(
       customer_facing_status: statuses.customer_facing_status,
       admin_internal_status: statuses.admin_internal_status,
       short_notice_review_status: statuses.short_notice_review_status,
+      request_review_status: statuses.request_review_status,
       parser_source_reference: clean(record.parser_source_reference) || null,
     },
     route_points: routePoints,
@@ -3642,6 +3657,7 @@ function adminBookingPersistenceStatusValues(record: AdminBookingPersistenceReco
   return [
     clean(record.admin_internal_status),
     clean(record.short_notice_review_status),
+    clean(record.request_review_status),
     clean(record.customer_facing_status),
   ].filter(Boolean);
 }
@@ -9937,6 +9953,19 @@ export default function Home() {
       currentTimeMs,
       targetBookingReference,
     );
+    const appliedSnapshot = appliedAdminBookingSnapshot;
+
+    if (appliedSnapshot) {
+      payload.booking.source_channel = clean(appliedSnapshot.source_channel) || payload.booking.source_channel;
+      payload.booking.customer_facing_status =
+        clean(appliedSnapshot.customer_facing_status) || payload.booking.customer_facing_status;
+      payload.booking.admin_internal_status =
+        clean(appliedSnapshot.admin_internal_status) || payload.booking.admin_internal_status;
+      payload.booking.short_notice_review_status =
+        clean(appliedSnapshot.short_notice_review_status) || payload.booking.short_notice_review_status;
+      payload.booking.request_review_status =
+        clean(appliedSnapshot.request_review_status) || payload.booking.request_review_status;
+    }
 
     setAdminBookingPersistenceAction("update");
     setAdminBookingPersistenceMessage({
@@ -10041,6 +10070,10 @@ export default function Home() {
       }
 
       const updatedBooking = result.booking as AdminBookingPersistenceRecord;
+      const customerNotificationResult = result.customer_notification as
+        | { ok?: boolean; error?: string }
+        | null
+        | undefined;
       const updatedBookingReference = clean(updatedBooking.booking_reference) || targetBookingReference;
       setAdminBookingPersistenceRecords((current) => [
         updatedBooking,
@@ -10055,9 +10088,15 @@ export default function Home() {
 
       setAdminBookingPersistenceMessage({
         tone: "success",
-        text: `Internal review decision saved for ${updatedBookingReference}: ${decision.successLabel}. No customer notification sent.${
+        text: `Internal review decision saved for ${updatedBookingReference}: ${decision.successLabel}.${
+          customerNotificationResult?.ok
+            ? " Customer in-app notification queued."
+            : customerNotificationResult
+              ? " Customer in-app notification queue failed safely."
+              : " Customer notification not queued for this update."
+        }${
           statuses.shortNoticeReviewRequired
-            ? " Short-notice review remains Admin Review Required."
+            ? " Short-notice review was handled by this decision."
             : ""
         }`,
       });
@@ -22494,7 +22533,7 @@ export default function Home() {
                             <p className="text-[11px] font-semibold uppercase text-amber-900">
                               Current review state
                             </p>
-                            <dl className="grid gap-2 sm:grid-cols-3">
+                            <dl className="grid gap-2 sm:grid-cols-4">
                               {[
                                 {
                                   label: "Admin internal status",
@@ -22507,6 +22546,10 @@ export default function Home() {
                                 {
                                   label: "Short-notice review status",
                                   value: clean(record.short_notice_review_status) || "Not Required",
+                                },
+                                {
+                                  label: "Request review status",
+                                  value: clean(record.request_review_status) || "Pending Review",
                                 },
                               ].map(({ label, value }) => (
                                 <div className="min-w-0" key={label}>

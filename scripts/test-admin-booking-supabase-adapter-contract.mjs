@@ -37,6 +37,10 @@ const sourceFiles = [
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
+  "lib/customer-driver-app-notification-persistence.ts",
+  "lib/driver-job-link.ts",
+  "lib/driver-job-link-mode.ts",
+  "lib/driver-job-status-workflow.ts",
   "app/api/admin-bookings/route.ts",
   "app/api/customer-booking-requests/route.ts",
 ];
@@ -75,7 +79,7 @@ function transpileTypescript(source, filename) {
       target: ts.ScriptTarget.ES2022,
     },
     fileName: filename,
-  }).outputText;
+  }).outputText.replace(/require\("([^"]+)\.ts"\)/g, 'require("$1.js")');
 }
 
 async function writeHarnessFile(tempDir, relativePath) {
@@ -250,16 +254,20 @@ class MockSupabaseClient {
       booking_route_points: [],
       booking_service_items: [],
       bookings: [],
+      customer_driver_app_notification_outbox: [],
       customer_contacts: [],
       customers: [],
+      driver_job_links: [],
     };
     this.nextIds = {
       audit_logs: 1,
       booking_route_points: 1,
       booking_service_items: 1,
       bookings: 1,
+      customer_driver_app_notification_outbox: 1,
       customer_contacts: 1,
       customers: 1,
+      driver_job_links: 1,
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -564,7 +572,7 @@ function canonicalAdminPayload(overrides = {}) {
       dropoff_location: "Safe Canonical Dropoff",
       passenger_name: "Safe Passenger",
       passenger_phone: "+65 9000 0002",
-      pickup_at: "2026-06-08T10:30:00+08:00",
+      pickup_at: "2030-06-08T10:30:00+08:00",
       pickup_location: "Safe Canonical Pickup",
       request_review_status: "pending_review",
       route_summary: "Safe Canonical Pickup > Safe Canonical Stop > Safe Canonical Dropoff",
@@ -748,7 +756,7 @@ function assertSixTableCreateMapping(mock) {
     dropoff_location: "Safe Canonical Dropoff",
     passenger_name: "Safe Passenger",
     passenger_phone: "+65 9000 0002",
-    pickup_at: "2026-06-08T10:30:00+08:00",
+    pickup_at: "2030-06-08T10:30:00+08:00",
     pickup_location: "Safe Canonical Pickup",
     request_review_status: "pending_review",
     route_summary: "Safe Canonical Pickup > Safe Canonical Stop > Safe Canonical Dropoff",
@@ -954,6 +962,106 @@ try {
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
   assertNoUnsafeKeys(updateOperation, "mocked update operation");
 
+  const customerRequestDecisionPayload = canonicalAdminPayload({
+    booking: {
+      admin_internal_status: "Ready for Confirmation",
+      booking_reference: "SAFE-ADM-001",
+      customer_facing_status: "confirmed",
+      pickup_at: "2026-06-01T10:30:00+08:00",
+      pickup_location: "Customer Request Decision Pickup",
+      request_review_status: "approved",
+      route_summary: "Customer Request Decision Pickup > Customer Request Decision Dropoff",
+      short_notice_review_status: "reviewed",
+      source_channel: "customer-booking-request",
+      source_surface: "customer-booking-request",
+    },
+    route_points: [],
+    service_items: [
+      {
+        notes: "Safe customer request decision service note",
+        quantity: 1,
+        service_item_type: "extra_stop",
+      },
+    ],
+  });
+  customerRequestDecisionPayload.booking.dropoff_location = "Customer Request Decision Dropoff";
+  customerRequestDecisionPayload.route_points = [
+    {
+      location_text: "Customer Request Decision Pickup",
+      point_type: "pickup",
+      sequence_number: 1,
+    },
+    {
+      location_text: "Customer Request Decision Dropoff",
+      point_type: "dropoff",
+      sequence_number: 2,
+    },
+  ];
+
+  const parsedCustomerRequestDecision = persistence.parseAdminBookingUpdatePayload({
+    ...customerRequestDecisionPayload,
+    target_booking_reference: "SAFE-ADM-001",
+  });
+
+  assert.equal(parsedCustomerRequestDecision.ok, true);
+  assert.equal(parsedCustomerRequestDecision.data.booking.admin_internal_status, "Ready for Confirmation");
+  assert.equal(parsedCustomerRequestDecision.data.booking.customer_facing_status, "confirmed");
+  assert.equal(parsedCustomerRequestDecision.data.booking.request_review_status, "approved");
+  assert.equal(parsedCustomerRequestDecision.data.booking.short_notice_review_status, "reviewed");
+
+  const customerRequestDecisionRoute = await readRouteResponse(
+    await adminRoute.PATCH(
+      jsonRequest(
+        "http://localhost/api/admin-bookings",
+        {
+          ...customerRequestDecisionPayload,
+          target_booking_reference: "SAFE-ADM-001",
+        },
+        {
+          headers: adminHeaders({
+            "x-prestige-admin-session-token": serverSessionToken,
+          }),
+          method: "PATCH",
+        },
+      ),
+    ),
+  );
+  const customerNotificationInsert = insertedOperation(
+    createMock.client,
+    "customer_driver_app_notification_outbox",
+  );
+
+  assert.equal(customerRequestDecisionRoute.status, 200);
+  assert.equal(customerRequestDecisionRoute.body.ok, true);
+  assert.equal(customerRequestDecisionRoute.body.booking.admin_internal_status, "Ready for Confirmation");
+  assert.equal(customerRequestDecisionRoute.body.booking.customer_facing_status, "confirmed");
+  assert.equal(customerRequestDecisionRoute.body.booking.request_review_status, "approved");
+  assert.equal(customerRequestDecisionRoute.body.booking.short_notice_review_status, "reviewed");
+  assert.equal(customerRequestDecisionRoute.body.customer_notification.ok, true);
+  assert.equal(
+    customerRequestDecisionRoute.body.customer_notification.notification.safe_title,
+    "Booking request confirmed",
+  );
+  assert.equal(
+    customerRequestDecisionRoute.body.customer_notification.notification.safe_message,
+    "Your booking request has been confirmed by Prestige Limo.",
+  );
+  assert.equal(customerNotificationInsert.payload.booking_reference, "SAFE-ADM-001");
+  assert.equal(customerNotificationInsert.payload.delivery_surface, "customer_app");
+  assert.equal(customerNotificationInsert.payload.notification_status, "queued");
+  assert.equal(customerNotificationInsert.payload.notification_type, "booking_status");
+  assert.equal(customerNotificationInsert.payload.workflow_area, "customer_request_review");
+  assert.deepEqual(customerNotificationInsert.payload.safe_context, {
+    customer_facing_status: "confirmed",
+    request_review_status: "approved",
+    source: "customer_request_review",
+  });
+  assert.doesNotMatch(
+    JSON.stringify(customerNotificationInsert.payload),
+    /contact_phone|contact_email|customer_price|driver_payout|paynow|invoice|payment|pdf|billing|finance|telegram|whatsapp|sms|email|raw_token|token_hash|internal_note|admin_note|mock_qa|archive/i,
+    "Expected customer request decision notification insert to stay customer-safe.",
+  );
+
   const currentSchemaPayload = canonicalAdminPayload({
     booking: {
       booking_reference: "SAFE-CURRENT-001",
@@ -1021,7 +1129,7 @@ try {
 
   assert.equal(foundationSchemaResult.ok, true);
   assert.equal(foundationSchemaResult.data.booking_reference, "SAFE-FOUNDATION-CREATE-001");
-  assert.equal(foundationSchemaResult.data.pickup_at, "2026-06-08T10:30:00+08:00");
+  assert.equal(foundationSchemaResult.data.pickup_at, "2030-06-08T10:30:00+08:00");
   assert.equal(foundationSchemaResult.data.service_type, "MNG");
   assert.deepEqual(foundationBookingInsert.payload, {
     admin_internal_status: "needs_review",
@@ -1035,7 +1143,7 @@ try {
     luggage_count: null,
     parser_source_reference: null,
     pax_count: null,
-    pickup_datetime: "2026-06-08T10:30:00+08:00",
+    pickup_datetime: "2030-06-08T10:30:00+08:00",
     pickup_location: "Safe Canonical Pickup",
     route_type: "MNG",
     short_notice_review_status: "not_required",

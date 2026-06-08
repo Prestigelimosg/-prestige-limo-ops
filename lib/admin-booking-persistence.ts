@@ -738,6 +738,28 @@ export function parseAdminBookingUpdatePayload(
     return parsed;
   }
 
+  const bookingRecord = asRecord(body.booking);
+  const explicitAdminStatus = textOrNull(bookingRecord.admin_internal_status);
+  const explicitCustomerStatus = textOrNull(bookingRecord.customer_facing_status);
+  const explicitShortNoticeReviewStatus = textOrNull(bookingRecord.short_notice_review_status);
+  const explicitRequestReviewStatus = textOrNull(bookingRecord.request_review_status);
+
+  if (explicitAdminStatus) {
+    parsed.data.booking.admin_internal_status = explicitAdminStatus;
+  }
+
+  if (explicitCustomerStatus) {
+    parsed.data.booking.customer_facing_status = explicitCustomerStatus;
+  }
+
+  if (explicitShortNoticeReviewStatus) {
+    parsed.data.booking.short_notice_review_status = explicitShortNoticeReviewStatus;
+  }
+
+  if (explicitRequestReviewStatus) {
+    parsed.data.booking.request_review_status = explicitRequestReviewStatus;
+  }
+
   const targetBookingReference = validTargetBookingReference(body.target_booking_reference as string | null);
 
   if (!targetBookingReference) {

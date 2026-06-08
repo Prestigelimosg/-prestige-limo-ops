@@ -1,5 +1,6 @@
 import {
   createAdminBooking,
+  type AdminBookingPersistenceUpdateInput,
   listAdminBookings,
   parseAdminBookingPersistencePayload,
   parseAdminBookingUpdatePayload,
@@ -11,6 +12,10 @@ import {
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
+import {
+  createCustomerDriverAppNotification,
+  type CustomerDriverAppNotificationSafeRecord,
+} from "../../../lib/customer-driver-app-notification-persistence";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +69,102 @@ function safeFailureResponse() {
     },
     { status: 500 },
   );
+}
+
+type CustomerRequestDecisionNotificationResult =
+  | {
+      notification: CustomerDriverAppNotificationSafeRecord;
+      ok: true;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: number;
+    };
+
+function clean(value: unknown) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function normalizedToken(value: unknown) {
+  return clean(value).replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+}
+
+function customerRequestDecisionNotificationCopy(requestReviewStatus: string) {
+  if (requestReviewStatus === "approved") {
+    return {
+      priority: "normal" as const,
+      safe_message: "Your booking request has been confirmed by Prestige Limo.",
+      safe_title: "Booking request confirmed",
+    };
+  }
+
+  if (requestReviewStatus === "declined") {
+    return {
+      priority: "normal" as const,
+      safe_message:
+        "Your booking request could not be confirmed. Prestige Limo can help review another option.",
+      safe_title: "Booking request update",
+    };
+  }
+
+  return {
+    priority: "high" as const,
+    safe_message:
+      "Your booking request is still under review. Prestige Limo may contact you for more details.",
+    safe_title: "Booking request needs review",
+  };
+}
+
+async function maybeQueueCustomerRequestDecisionNotification(
+  input: AdminBookingPersistenceUpdateInput,
+  actor: ReturnType<typeof adminDispatcherBoundaryToPersistenceAdapterActor>,
+): Promise<CustomerRequestDecisionNotificationResult | null> {
+  const bookingReference = clean(input.booking.booking_reference);
+  const sourceChannel = normalizedToken(input.booking.source_channel);
+  const requestReviewStatus = normalizedToken(input.booking.request_review_status);
+  const customerFacingStatus = normalizedToken(input.booking.customer_facing_status);
+
+  if (
+    sourceChannel !== "customer_booking_request" ||
+    !bookingReference ||
+    !["approved", "declined", "needs_review"].includes(requestReviewStatus)
+  ) {
+    return null;
+  }
+
+  const copy = customerRequestDecisionNotificationCopy(requestReviewStatus);
+  const result = await createCustomerDriverAppNotification(
+    {
+      booking_reference: bookingReference,
+      delivery_surface: "customer_app",
+      driver_job_link_id: null,
+      event_key: `${bookingReference}:customer_request_review:${requestReviewStatus}`,
+      notification_status: "queued",
+      notification_type: "booking_status",
+      priority: copy.priority,
+      safe_context: {
+        customer_facing_status: customerFacingStatus || "pending_review",
+        request_review_status: requestReviewStatus,
+        source: "customer_request_review",
+      },
+      safe_message: copy.safe_message,
+      safe_title: copy.safe_title,
+      workflow_area: "customer_request_review",
+    },
+    actor,
+  );
+
+  return result.ok
+    ? {
+        notification: result.data,
+        ok: true,
+      }
+    : {
+        error: result.error,
+        ok: false,
+        status: result.status,
+      };
 }
 
 export async function GET(request: Request) {
@@ -181,9 +282,12 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const customerNotification = await maybeQueueCustomerRequestDecisionNotification(parsed.data, actor);
+
     return Response.json({
       ok: true,
       booking: result.data,
+      customer_notification: customerNotification,
     });
   } catch {
     return safeFailureResponse();

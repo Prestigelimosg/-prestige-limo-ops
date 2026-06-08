@@ -2757,7 +2757,9 @@ async function runChromeTest() {
         `${viewport.label}: expected Monthly Billing Month Grouping Review page summary`,
       );
       assert.equal(
-        state.boundary.includes("Guarded admin API read plus monthly billing draft-plan save only.") &&
+        state.boundary.includes("Guarded admin API read plus monthly billing draft-plan") &&
+          state.boundary.includes("invoice draft-prep") &&
+          state.boundary.includes("issue-review save only.") &&
           state.boundary.includes("No direct Supabase write outside approved API routes") &&
           state.boundary.includes("invoice creation") &&
           state.boundary.includes("PDF") &&

@@ -852,6 +852,21 @@ async function runChromeTest() {
             total_count: 1,
           },
         ];
+        window.__adminMonthlyInvoiceIssueReviewCalls = [];
+        window.__adminMonthlyInvoiceIssueReviews = [
+          {
+            billing_month: "2026-06",
+            blocked_count: 0,
+            customer_account: "Loaded Ops Customer",
+            draft_id: "app-smoke-monthly-invoice-draft-one",
+            draft_status_snapshot: "pending_admin_review",
+            id: "app-smoke-monthly-invoice-issue-review-one",
+            issue_review_status: "issue_review_pending",
+            readiness_status: "ready",
+            ready_count: 1,
+            total_count: 1,
+          },
+        ];
         window.__adminAppNotificationCalls = [];
         window.__adminAppNotifications = [
           {
@@ -1218,6 +1233,59 @@ async function runChromeTest() {
                     total_draft_count: filteredDrafts.length,
                   },
                   version: "app-smoke-monthly-invoice-draft-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
+
+          if (String(url).includes("/api/admin-monthly-invoice-issue-reviews")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const allReviews = window.__adminMonthlyInvoiceIssueReviews || [];
+
+            window.__adminMonthlyInvoiceIssueReviewCalls.push({
+              body: options?.body ? JSON.parse(String(options.body)) : null,
+              method,
+              search: parsedUrl.search,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              const billingMonth = parsedUrl.searchParams.get("billing_month") || "";
+              const customerSearch = (parsedUrl.searchParams.get("customer_account_search") || "").toLowerCase();
+              const readinessStatus = parsedUrl.searchParams.get("readiness_status") || "";
+              const limit = Math.max(1, Number(parsedUrl.searchParams.get("limit") || 25));
+              const page = Math.max(1, Number(parsedUrl.searchParams.get("page") || 1));
+              const filteredReviews = allReviews.filter((review) => {
+                if (billingMonth && review.billing_month !== billingMonth) {
+                  return false;
+                }
+
+                if (
+                  customerSearch &&
+                  !String(review.customer_account || "").toLowerCase().includes(customerSearch)
+                ) {
+                  return false;
+                }
+
+                return !readinessStatus || review.readiness_status === readinessStatus;
+              });
+              const pageCount = filteredReviews.length ? Math.ceil(filteredReviews.length / limit) : 0;
+              const issueReviews = filteredReviews.slice((page - 1) * limit, page * limit);
+
+              return new Response(
+                JSON.stringify({
+                  issue_reviews: issueReviews,
+                  ok: true,
+                  pagination: {
+                    has_next_page: pageCount > 0 && page < pageCount,
+                    has_previous_page: pageCount > 0 && page > 1,
+                    page,
+                    page_count: pageCount,
+                    page_size: limit,
+                    total_review_count: filteredReviews.length,
+                  },
+                  version: "app-smoke-monthly-invoice-issue-review-read-mock",
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -2412,6 +2480,10 @@ async function runChromeTest() {
               .querySelector("[data-admin-monthly-invoice-draft-read-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const monthlyInvoiceIssueReviewFeedback = document
+              .querySelector("[data-admin-monthly-invoice-issue-review-read-feedback]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
             const baitPattern =
               /9999-SHOULD-NOT-APPLY|8888-SHOULD-NOT-APPLY|DO-NOT-LEAK-OPS-NOTE|payments\\.example\\.invalid/i;
 
@@ -2423,7 +2495,8 @@ async function runChromeTest() {
               savedDriverStatusReadout.time === "2026-06-07 10:45 UTC" &&
               monthlyBillingGroupingFeedback.includes("Loaded 1 saved monthly billing group for June 2026") &&
               monthlyBillingDraftPlanFeedback.includes("Loaded 1 saved monthly billing draft plan for June 2026") &&
-              monthlyInvoiceDraftFeedback.includes("Loaded 1 saved monthly invoice draft for June 2026")
+              monthlyInvoiceDraftFeedback.includes("Loaded 1 saved monthly invoice draft for June 2026") &&
+              monthlyInvoiceIssueReviewFeedback.includes("Loaded 1 saved monthly invoice issue review for June 2026")
               ? {
                   bodyBaitLeaked: baitPattern.test(bodyText),
                   clearAppliedVisible: Boolean(
@@ -2445,6 +2518,8 @@ async function runChromeTest() {
                   monthlyBillingGroupingFeedback,
                   monthlyInvoiceDraftCalls: window.__adminMonthlyInvoiceDraftCalls || [],
                   monthlyInvoiceDraftFeedback,
+                  monthlyInvoiceIssueReviewCalls: window.__adminMonthlyInvoiceIssueReviewCalls || [],
+                  monthlyInvoiceIssueReviewFeedback,
                   savedDriverStatusReadout,
                   workflowStatusCalls: window.__adminWorkflowStatusCalls || [],
                 }
@@ -2541,6 +2616,11 @@ async function runChromeTest() {
         /Loaded 1 saved monthly invoice draft for June 2026\./,
         "Expected applied snapshot load to show saved monthly invoice draft read feedback in existing UI",
       );
+      assert.match(
+        appliedSnapshotState.monthlyInvoiceIssueReviewFeedback,
+        /Loaded 1 saved monthly invoice issue review for June 2026\./,
+        "Expected applied snapshot load to show saved monthly invoice issue review read feedback in existing UI",
+      );
       assert.deepEqual(
         appliedSnapshotState.workflowStatusCalls.map((call) => ({
           bookingReference: call.bookingReference,
@@ -2616,6 +2696,19 @@ async function runChromeTest() {
           },
         ],
         "Expected applied snapshot load to GET monthly invoice drafts through the guarded read API path",
+      );
+      assert.deepEqual(
+        appliedSnapshotState.monthlyInvoiceIssueReviewCalls.map((call) => ({
+          method: call.method,
+          search: call.search,
+        })),
+        [
+          {
+            method: "GET",
+            search: "?limit=1&page=1&billing_month=2026-06",
+          },
+        ],
+        "Expected applied snapshot load to GET monthly invoice issue reviews through the guarded read API path",
       );
       assert.equal(
         appliedSnapshotState.fieldBaitLeaked ||
@@ -8689,7 +8782,9 @@ async function runChromeTest() {
           `${viewport.label}: expected local grouping note status to start blank`,
         );
         for (const expectedBoundaryText of [
-          "Guarded admin API read plus monthly billing draft-plan save only.",
+          "Guarded admin API read plus monthly billing draft-plan",
+          "invoice draft-prep",
+          "issue-review save only.",
           "No direct Supabase write outside approved API routes",
           "invoice creation",
           "PDF",
@@ -32802,7 +32897,12 @@ async function runChromeTest() {
       );
       await evaluate(`(() => {
         window.__customerPortalIntegrationCalls = [];
-        const originalFetch = window.__customerPortalOriginalFetch || window.fetch.bind(window);
+        const originalFetch =
+          window.__customerPortalOriginalFetch ||
+          window.__customerBookingOriginalFetch ||
+          window.__customerPaymentOriginalFetch ||
+          window.__adminBookingPersistenceOriginalFetch ||
+          window.fetch.bind(window);
         window.__customerPortalOriginalFetch = originalFetch;
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
@@ -32811,7 +32911,12 @@ async function runChromeTest() {
           return originalFetch(...args);
         };
 
-        const originalOpen = window.__customerPortalOriginalXHROpen || window.XMLHttpRequest.prototype.open;
+        const originalOpen =
+          window.__customerPortalOriginalXHROpen ||
+          window.__customerBookingOriginalXHROpen ||
+          window.__customerPaymentOriginalXHROpen ||
+          window.__adminBookingPersistenceOriginalXHROpen ||
+          window.XMLHttpRequest.prototype.open;
         window.__customerPortalOriginalXHROpen = originalOpen;
         window.XMLHttpRequest.prototype.open = function patchedCustomerPortalOpen(method, url, ...rest) {
           window.__customerPortalIntegrationCalls.push(\`\${method} \${String(url)}\`);

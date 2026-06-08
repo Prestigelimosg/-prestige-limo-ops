@@ -6,8 +6,15 @@ const migrationPath = path.join(
   process.cwd(),
   "supabase/migrations/202606080006_monthly_invoice_number_sequence_foundation.sql",
 );
+const fixMigrationPath = path.join(
+  process.cwd(),
+  "supabase/migrations/202606090001_fix_monthly_invoice_number_reservation_function.sql",
+);
 const migration = await readFile(migrationPath, "utf8");
+const fixMigration = await readFile(fixMigrationPath, "utf8");
 const normalized = migration.replace(/\s+/g, " ").toLowerCase();
+const normalizedFix = fixMigration.replace(/\s+/g, " ").toLowerCase();
+const combinedNormalized = `${normalized} ${normalizedFix}`;
 const forbiddenColumnsOrBehaviors = [
   "amount_due",
   "balance_due",
@@ -111,10 +118,40 @@ assert.equal(
   true,
   "Expected four-digit minimum running number format",
 );
+assert.equal(
+  normalizedFix.includes("create or replace function public.reserve_monthly_invoice_number_for_issue_record"),
+  true,
+  "Expected repair migration to replace the reservation RPC",
+);
+assert.equal(
+  normalizedFix.includes("from public.customer_invoice_sequences as cis"),
+  true,
+  "Expected repair migration to qualify sequence table references",
+);
+assert.equal(
+  normalizedFix.includes("update public.monthly_invoice_issue_records as mir"),
+  true,
+  "Expected repair migration to alias the issue-record update target",
+);
+assert.equal(
+  normalizedFix.includes("mir.invoice_number is null"),
+  true,
+  "Expected repair migration to qualify invoice_number in the reservation guard",
+);
+assert.equal(
+  normalizedFix.includes("mir.invoice_number_status in ('not_reserved', 'ready_to_reserve')"),
+  true,
+  "Expected repair migration to qualify invoice_number_status in the reservation guard",
+);
+assert.equal(
+  normalizedFix.includes("update public.customer_invoice_sequences as cis"),
+  true,
+  "Expected repair migration to qualify sequence updates",
+);
 
 for (const forbidden of forbiddenColumnsOrBehaviors) {
   assert.equal(
-    normalized.includes(forbidden),
+    combinedNormalized.includes(forbidden),
     false,
     `Unexpected forbidden invoice/PDF/payment/payout/auth behavior: ${forbidden}`,
   );

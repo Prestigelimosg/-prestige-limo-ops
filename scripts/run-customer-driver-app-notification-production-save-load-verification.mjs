@@ -44,6 +44,7 @@ const sourceFiles = [
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
   "lib/driver-job-link.ts",
+  "lib/driver-job-status-workflow.ts",
   "lib/driver-job-link-mode.ts",
   "app/api/admin-customer-driver-app-notifications/route.ts",
   "app/api/customer-app-notifications/route.ts",
@@ -61,6 +62,18 @@ class SafeFailure extends Error {
 
 function emitEvidence(payload) {
   console.log(JSON.stringify(payload, null, 2));
+}
+
+function sanitizedUnexpectedDiagnostic(error) {
+  const message = String(error?.message || error || "unknown").replace(
+    /https:\/\/[a-z0-9.-]+\.supabase\.co|eyJ[A-Za-z0-9._-]+|[A-Za-z0-9+/=]{32,}/g,
+    "[redacted]",
+  );
+
+  return {
+    message: message.slice(0, 240),
+    name: String(error?.name || "Error").slice(0, 80),
+  };
 }
 
 function failSafely(code, extra = {}) {
@@ -276,9 +289,17 @@ async function writeHarnessFile(tempDir, relativePath) {
   const sourcePath = path.join(process.cwd(), relativePath);
   const outputPath = path.join(tempDir, relativePath.replace(/\.ts$/, ".js"));
   const source = await readFile(sourcePath, "utf8");
+  const output = transpileTypescript(source, sourcePath);
 
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, transpileTypescript(source, sourcePath));
+  await writeFile(outputPath, output);
+
+  if (relativePath.endsWith(".ts")) {
+    const tsOutputPath = path.join(tempDir, relativePath);
+
+    await mkdir(path.dirname(tsOutputPath), { recursive: true });
+    await writeFile(tsOutputPath, output);
+  }
 }
 
 async function writeRuntimeModules(tempDir) {
@@ -893,6 +914,7 @@ main().catch((error) => {
   }
 
   emitEvidence({
+    diagnostic: sanitizedUnexpectedDiagnostic(error),
     error: "unexpected_customer_driver_app_notification_production_save_load_runner_failure_sanitized",
     ok: false,
     persistenceDefaultAfter: "off",

@@ -37,6 +37,14 @@ assertIncludes(
   "runner must verify one driver-app safe notification row",
 );
 assertIncludes(
+  "lib/driver-job-status-workflow.ts",
+  "runner harness must include the driver token helper dependency",
+);
+assertIncludes(
+  "sanitizedUnexpectedDiagnostic",
+  "runner must keep unexpected diagnostics sanitized",
+);
+assertIncludes(
   "/api/admin-customer-driver-app-notifications",
   "runner must verify through the guarded admin customer/driver app notification API route",
 );

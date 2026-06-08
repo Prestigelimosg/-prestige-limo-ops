@@ -840,7 +840,7 @@ async function runChromeTest() {
             blocked_count: 0,
             customer_account: "Loaded Ops Customer",
             draft_status: "pending_admin_review",
-            id: "app-smoke-monthly-invoice-draft-one",
+            id: "77777777-7777-4777-8777-777777777777",
             linked_trips: [
               {
                 booking_reference: "LOADED-OPS-001",
@@ -858,13 +858,30 @@ async function runChromeTest() {
             billing_month: "2026-06",
             blocked_count: 0,
             customer_account: "Loaded Ops Customer",
-            draft_id: "app-smoke-monthly-invoice-draft-one",
+            draft_id: "77777777-7777-4777-8777-777777777777",
             draft_status_snapshot: "pending_admin_review",
-            id: "app-smoke-monthly-invoice-issue-review-one",
+            id: "88888888-8888-4888-8888-888888888888",
             issue_review_status: "issue_review_pending",
             readiness_status: "ready",
             ready_count: 1,
             total_count: 1,
+          },
+        ];
+        window.__adminMonthlyInvoiceIssueRecordCalls = [];
+        window.__adminMonthlyInvoiceIssueRecords = [
+          {
+            billing_month: "2026-06",
+            customer_account: "Loaded Ops Customer",
+            draft_id: "77777777-7777-4777-8777-777777777777",
+            draft_lock_status: "locked_for_issue",
+            id: "99999999-9999-4999-8999-999999999999",
+            invoice_delivery_status: "not_sent",
+            invoice_number: null,
+            invoice_number_status: "not_reserved",
+            issue_record_status: "draft_locked",
+            issue_review_id: "88888888-8888-4888-8888-888888888888",
+            payment_record_status: "not_recorded",
+            pdf_generation_status: "not_requested",
           },
         ];
         window.__adminAppNotificationCalls = [];
@@ -1286,6 +1303,68 @@ async function runChromeTest() {
                     total_review_count: filteredReviews.length,
                   },
                   version: "app-smoke-monthly-invoice-issue-review-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
+
+          if (String(url).includes("/api/admin-monthly-invoice-issue-records")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const allRecords = window.__adminMonthlyInvoiceIssueRecords || [];
+
+            window.__adminMonthlyInvoiceIssueRecordCalls.push({
+              body: options?.body ? JSON.parse(String(options.body)) : null,
+              method,
+              search: parsedUrl.search,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              const billingMonth = parsedUrl.searchParams.get("billing_month") || "";
+              const customerSearch = (parsedUrl.searchParams.get("customer_account_search") || "").toLowerCase();
+              const draftId = parsedUrl.searchParams.get("draft_id") || "";
+              const issueReviewId = parsedUrl.searchParams.get("issue_review_id") || "";
+              const limit = Math.max(1, Number(parsedUrl.searchParams.get("limit") || 25));
+              const page = Math.max(1, Number(parsedUrl.searchParams.get("page") || 1));
+              const filteredRecords = allRecords.filter((record) => {
+                if (billingMonth && record.billing_month !== billingMonth) {
+                  return false;
+                }
+
+                if (draftId && record.draft_id !== draftId) {
+                  return false;
+                }
+
+                if (issueReviewId && record.issue_review_id !== issueReviewId) {
+                  return false;
+                }
+
+                if (
+                  customerSearch &&
+                  !String(record.customer_account || "").toLowerCase().includes(customerSearch)
+                ) {
+                  return false;
+                }
+
+                return true;
+              });
+              const pageCount = filteredRecords.length ? Math.ceil(filteredRecords.length / limit) : 0;
+              const issueRecords = filteredRecords.slice((page - 1) * limit, page * limit);
+
+              return new Response(
+                JSON.stringify({
+                  issue_records: issueRecords,
+                  ok: true,
+                  pagination: {
+                    has_next_page: pageCount > 0 && page < pageCount,
+                    has_previous_page: pageCount > 0 && page > 1,
+                    page,
+                    page_count: pageCount,
+                    page_size: limit,
+                    total_record_count: filteredRecords.length,
+                  },
+                  version: "app-smoke-monthly-invoice-issue-record-read-mock",
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -8818,7 +8897,8 @@ async function runChromeTest() {
         for (const expectedBoundaryText of [
           "Guarded admin API read plus monthly billing draft-plan",
           "invoice draft-prep",
-          "issue-review save only.",
+          "issue-review",
+          "issue-record save only.",
           "No direct Supabase write outside approved API routes",
           "invoice creation",
           "PDF",

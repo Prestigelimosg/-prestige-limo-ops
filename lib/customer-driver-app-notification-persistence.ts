@@ -10,7 +10,11 @@ import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
-import { hashDriverJobLinkToken, isDriverJobLinkExpired } from "./driver-job-link";
+import {
+  hashDriverJobLinkToken,
+  isDriverJobLinkExpiryOutsideAllowedWindow,
+  isDriverJobLinkExpired,
+} from "./driver-job-link";
 import {
   isProductionDriverJobLinkMode,
   productionDriverJobLinksConfigured,
@@ -985,7 +989,11 @@ async function resolveDriverLinkScope(
     };
   }
 
-  if (linkStatus === "expired" || isDriverJobLinkExpired(String(row.expires_at || ""))) {
+  if (
+    linkStatus === "expired" ||
+    isDriverJobLinkExpired(String(row.expires_at || "")) ||
+    isDriverJobLinkExpiryOutsideAllowedWindow(String(row.expires_at || ""))
+  ) {
     return {
       error: "Driver app notification link has expired.",
       ok: false,

@@ -20,6 +20,7 @@ const sourceFiles = [
 
 const validToken = "driver-status-contract-token-a";
 const expiredToken = "driver-status-contract-token-expired";
+const farFutureToken = "driver-status-contract-token-far-future";
 const revokedToken = "driver-status-contract-token-revoked";
 const now = "2026-06-07T09:30:00.000Z";
 const originalEnv = {
@@ -306,6 +307,15 @@ function createSeededClient() {
         token_hash: hashDriverJobLinkToken(expiredToken),
       },
       {
+        booking_reference: "DRV-JOB-API-FAR-FUTURE",
+        expires_at: "2026-06-20T09:30:00.000Z",
+        id: "b63a81ec-005e-4f89-9622-3256b470d4f2",
+        link_status: "active",
+        revoked_at: null,
+        safe_link_context: {},
+        token_hash: hashDriverJobLinkToken(farFutureToken),
+      },
+      {
         booking_reference: "DRV-JOB-API-REVOKED",
         expires_at: "2026-06-08T09:30:00.000Z",
         id: "5e42b861-2815-490b-9513-32f6b96e8f7b",
@@ -489,6 +499,7 @@ try {
   for (const [token, reason] of [
     ["not-a-real-driver-token", "unauthorized"],
     [expiredToken, "expired"],
+    [farFutureToken, "expired"],
     [revokedToken, "revoked"],
   ]) {
     const client = createSeededClient();
@@ -500,6 +511,22 @@ try {
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, reason);
+    assert.equal(result.payload, null);
+    assert.equal(client.operations.length, 0);
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient();
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
+      status: "POB",
+      token: farFutureToken,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "expired");
     assert.equal(result.payload, null);
     assert.equal(client.operations.length, 0);
     assertNoDriverJobLeaks(result);

@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   hashDriverJobLinkToken,
+  isDriverJobLinkExpiryOutsideAllowedWindow,
   isDriverJobLinkExpired,
   mapBookingToSafeDriverJobPayload,
   validateDriverJobStatusUpdate,
@@ -441,7 +442,11 @@ async function resolveLinkForToken({
     };
   }
 
-  if (link.link_status === "expired" || isDriverJobLinkExpired(link.expires_at, now)) {
+  if (
+    link.link_status === "expired" ||
+    isDriverJobLinkExpired(link.expires_at, now) ||
+    isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at, now)
+  ) {
     return {
       ok: false,
       reason: "expired",

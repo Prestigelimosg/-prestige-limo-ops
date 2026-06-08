@@ -10,6 +10,7 @@ export {
 
 export const defaultDriverJobLinkTokenByteLength = 32;
 export const defaultDriverJobLinkTtlHours = 48;
+export const defaultDriverJobLinkMaxFutureHours = defaultDriverJobLinkTtlHours;
 
 export type DriverJobBookingLike = Record<string, unknown>;
 
@@ -96,6 +97,26 @@ export function isDriverJobLinkExpired(
   }
 
   return nowTime >= expiresTime;
+}
+
+export function isDriverJobLinkExpiryOutsideAllowedWindow(
+  expiresAt: Date | string | number,
+  now: Date | string | number = new Date(),
+  maxFutureHours = defaultDriverJobLinkMaxFutureHours,
+) {
+  const expiresTime = new Date(expiresAt).getTime();
+  const nowTime = new Date(now).getTime();
+
+  if (
+    !Number.isFinite(expiresTime) ||
+    !Number.isFinite(nowTime) ||
+    !Number.isFinite(maxFutureHours) ||
+    maxFutureHours <= 0
+  ) {
+    return true;
+  }
+
+  return expiresTime - nowTime > maxFutureHours * 60 * 60 * 1000;
 }
 
 export function mapBookingToSafeDriverJobPayload(booking: DriverJobBookingLike): SafeDriverJobPayload {

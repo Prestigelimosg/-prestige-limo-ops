@@ -4,6 +4,7 @@ import {
   getDriverJobLinkExpiresAt,
   guardDriverJobStatusTransition,
   hashDriverJobLinkToken,
+  isDriverJobLinkExpiryOutsideAllowedWindow,
   isDriverJobLinkExpired,
   mapBookingToSafeDriverJobPayload,
   validateDriverJobStatusUpdate,
@@ -26,6 +27,16 @@ const expiresAt = getDriverJobLinkExpiresAt(createdAt, 2);
 assert.equal(expiresAt.toISOString(), "2026-05-22T10:00:00.000Z");
 assert.equal(isDriverJobLinkExpired(expiresAt, "2026-05-22T09:59:59.000Z"), false);
 assert.equal(isDriverJobLinkExpired(expiresAt, "2026-05-22T10:00:00.000Z"), true);
+assert.equal(
+  isDriverJobLinkExpiryOutsideAllowedWindow("2026-05-24T08:00:00.000Z", createdAt),
+  false,
+  "Driver job links can use the approved default future window.",
+);
+assert.equal(
+  isDriverJobLinkExpiryOutsideAllowedWindow("2026-05-24T08:00:01.000Z", createdAt),
+  true,
+  "Driver job links must not stay valid beyond the approved future window.",
+);
 
 const bookingFixture = {
   id: 123456,

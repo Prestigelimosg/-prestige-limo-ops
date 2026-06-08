@@ -897,6 +897,67 @@ try {
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(driverPatch.body)), false);
 
     setEnv(validEnv());
+    const farFutureDriverToken = "safe-driver-notification-far-future-token";
+    const farFutureDriverMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          delivery_surface: "driver_app",
+          driver_job_link_id: driverLinkId,
+          id: "notification-driver-far-future-hidden",
+        }),
+      ],
+      driver_job_links: [
+        {
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          expires_at: "2036-06-09T01:00:00.000Z",
+          id: driverLinkId,
+          link_status: "active",
+          revoked_at: null,
+          token_hash: tokenHash(farFutureDriverToken),
+        },
+      ],
+    });
+    const farFutureDriverGet = await responseJson(
+      await driverRoute.GET(
+        new Request(`http://localhost/api/driver-job/${farFutureDriverToken}/notifications`),
+        routeContext(farFutureDriverToken),
+      ),
+    );
+    const farFutureDriverPatch = await responseJson(
+      await driverRoute.PATCH(
+        new Request(`http://localhost/api/driver-job/${farFutureDriverToken}/notifications`, {
+          body: JSON.stringify({
+            notification_id: "notification-driver-far-future-hidden",
+            notification_status: "dismissed",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "PATCH",
+        }),
+        routeContext(farFutureDriverToken),
+      ),
+    );
+
+    assert.equal(farFutureDriverGet.status, 410);
+    assert.equal(farFutureDriverPatch.status, 410);
+    assert.equal(farFutureDriverGet.body.error, "Driver app notification link has expired.");
+    assert.equal(farFutureDriverPatch.body.error, "Driver app notification link has expired.");
+    assert.equal(
+      farFutureDriverMock.client.selectHistory.filter((entry) => entry.table === notificationTable).length,
+      0,
+      "Far-future driver notification links must stop before notification rows are read.",
+    );
+    assert.equal(
+      farFutureDriverMock.client.updateHistory.length,
+      0,
+      "Far-future driver notification links must stop before notification rows are updated.",
+    );
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(farFutureDriverGet.body)), false);
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(farFutureDriverPatch.body)), false);
+
+    setEnv(validEnv());
     const unsafeDriverPatchMock = installMockClient();
     const unsafeDriverPatch = await responseJson(
       await driverRoute.PATCH(

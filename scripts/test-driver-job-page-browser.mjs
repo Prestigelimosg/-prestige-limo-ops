@@ -169,7 +169,40 @@ async function runChromeTest() {
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
-          window.__driverJobFetchCalls.push(\`\${method} \${String(target)}\`);
+          const url = String(target);
+          window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
+
+          if (method === "GET" && url.includes("/api/driver-job/") && url.includes("/notifications")) {
+            return Promise.resolve(
+              new Response(JSON.stringify({
+                notifications: [
+                  {
+                    created_at: "2026-06-08T03:00:00.000Z",
+                    id: "driver-app-update-safe-one",
+                    notification_status: "queued",
+                    priority: "normal",
+                    safe_message: "Dispatch has a safe app update for this job.",
+                    safe_title: "Dispatch app update",
+                    updated_at: "2026-06-08T03:00:00.000Z",
+                  },
+                ],
+                ok: true,
+                pagination: {
+                  has_next_page: false,
+                  has_previous_page: false,
+                  page: 1,
+                  page_count: 1,
+                  page_size: 5,
+                  total_notification_count: 1,
+                },
+                version: "driver-app-update-browser-mock",
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
           return originalFetch(...args);
         };
       `,
@@ -237,6 +270,19 @@ async function runChromeTest() {
           "driver missed job",
           "late driver",
         ].filter((value) => (document.body?.innerText || "").toLowerCase().includes(value)),
+        appUpdates: {
+          feedback: document.querySelector("[data-driver-job-app-updates-feedback]")?.textContent.trim() || "",
+          rows: [...document.querySelectorAll("[data-driver-job-app-update-row]")].map((row) => ({
+            message: row.querySelector("[data-driver-job-app-update-message]")?.textContent.trim() || "",
+            priority: row.querySelector("[data-driver-job-app-update-priority]")?.textContent.trim() || "",
+            status: row.querySelector("[data-driver-job-app-update-status]")?.textContent.trim() || "",
+            time: row.querySelector("[data-driver-job-app-update-time]")?.textContent.trim() || "",
+            title: row.querySelector("[data-driver-job-app-update-title]")?.textContent.trim() || "",
+          })),
+          state: document.querySelector("[data-driver-job-app-updates-feedback]")?.getAttribute("data-driver-job-app-updates-state") || "",
+          text: document.querySelector("[data-driver-job-app-updates]")?.innerText || "",
+          visible: Boolean(document.querySelector("[data-driver-job-app-updates]")),
+        },
         workflowSummaryRows: Object.fromEntries(
           [...document.querySelectorAll("[data-driver-job-workflow-summary-row]")].map((row) => [
             row.getAttribute("data-driver-job-workflow-summary-row"),
@@ -1084,6 +1130,49 @@ async function runChromeTest() {
       "Expected driver handoff to avoid private/internal account detail exposure.",
     );
     assert.equal(validState.urgentIssueHandoff.visible, true, "Expected driver urgent issue handoff guidance.");
+    assert.equal(validState.appUpdates.visible, true, "Expected driver app updates feed on tokenized driver page.");
+    assert.equal(validState.appUpdates.state, "loaded", "Expected driver app updates to load through the token route.");
+    assert.equal(
+      validState.appUpdates.feedback,
+      "Loaded 1 saved app update.",
+      "Expected driver app updates read feedback.",
+    );
+    assert.deepEqual(
+      validState.appUpdates.rows.map((row) => ({
+        message: row.message,
+        priority: row.priority,
+        status: row.status,
+        title: row.title,
+      })),
+      [
+        {
+          message: "Dispatch has a safe app update for this job.",
+          priority: "Priority: Normal",
+          status: "Queued",
+          title: "Dispatch app update",
+        },
+      ],
+      "Expected driver app updates to show only safe title/message/status fields.",
+    );
+    assert.equal(
+      /driver_job_link_id|event_key|source_surface|actor_label|token|customer price|billing|invoice|payment|payout|paynow|telegram|whatsapp|sms|email/i.test(
+        validState.appUpdates.text,
+      ),
+      false,
+      "Driver app updates feed must not expose token internals, finance, or external channel data.",
+    );
+    assert.equal(
+      validState.fetchCalls.some((call) =>
+        call === `GET /api/driver-job/${mockDriverJobTokens.workflowOrder}/notifications?limit=5&page=1`,
+      ),
+      true,
+      "Expected driver page to GET saved app updates through the tokenized notifications route.",
+    );
+    assert.deepEqual(
+      validState.fetchCalls.filter((call) => /^PATCH .*\/notifications/.test(call)),
+      [],
+      "Driver app updates feed should stay read-only in this stage.",
+    );
     assert.equal(
       validState.urgentIssueHandoff.helper,
       "Contact dispatcher directly if you cannot proceed safely.",

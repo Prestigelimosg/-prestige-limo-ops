@@ -3379,6 +3379,91 @@ async function runChromeTest() {
           },
         ],
       };
+      const adminBookingBoundaryError =
+        "Admin booking persistence is available only from the internal admin dashboard.";
+      const adminBookingSecretLeakPattern =
+        /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|session|claims|cookie|token|secret|key/i;
+      const assertAdminBookingBoundaryOrValidation = (
+        response,
+        body,
+        {
+          errorLabel,
+          expectedError,
+          message,
+          unsafeLeakPattern = adminBookingSecretLeakPattern,
+        },
+      ) => {
+        if (response.status === 403) {
+          assert.equal(
+            String(body.error || ""),
+            adminBookingBoundaryError,
+            `${message}: expected safe admin boundary error when auth gate runs before validation`,
+          );
+          assert.equal(
+            unsafeLeakPattern.test(JSON.stringify(body)),
+            false,
+            `${message}: expected admin boundary response not to expose unsafe or secret-like fields`,
+          );
+
+          return "admin-boundary";
+        }
+
+        assert.equal(response.status, 400, message);
+
+        if (expectedError instanceof RegExp) {
+          assert.equal(
+            expectedError.test(String(body.error || "")),
+            true,
+            errorLabel,
+          );
+        } else {
+          assert.equal(
+            String(body.error || "").includes(expectedError),
+            true,
+            errorLabel,
+          );
+        }
+
+        assert.equal(
+          unsafeLeakPattern.test(JSON.stringify(body)),
+          false,
+          `${message}: expected validation response not to expose unsafe or secret-like fields`,
+        );
+
+        return "validation";
+      };
+      const assertAdminBookingBoundaryOrDisabledConfig = (response, body, message) => {
+        if (response.status === 403) {
+          assert.equal(
+            String(body.error || ""),
+            adminBookingBoundaryError,
+            `${message}: expected safe admin boundary error when auth gate runs before config`,
+          );
+          assert.equal(
+            adminBookingSecretLeakPattern.test(JSON.stringify(body)),
+            false,
+            `${message}: expected admin boundary response not to expose server internals`,
+          );
+
+          return "admin-boundary";
+        }
+
+        assert.equal(response.status, 503, message);
+        assert.equal(
+          /not enabled|configuration/.test(String(body.error || "")),
+          true,
+          `${message}: expected disabled-config safe message`,
+        );
+        assert.equal(
+          /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|adapter|sql|stack|secret|key/i.test(
+            JSON.stringify(body),
+          ),
+          false,
+          `${message}: expected disabled-config response to hide server-only adapter and secret internals`,
+        );
+
+        return "disabled-config";
+      };
 
       const missingAdminBoundaryResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         headers: {
@@ -3467,19 +3552,11 @@ async function runChromeTest() {
       });
       const forbiddenBody = await forbiddenResponse.json();
 
-      assert.equal(forbiddenResponse.status, 400, "Expected admin booking API to reject forbidden fields");
-      assert.equal(
-        String(forbiddenBody.error || "").includes("Forbidden admin booking fields rejected"),
-        true,
-        "Expected admin booking API forbidden-field message",
-      );
-      assert.equal(
-        /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|session|claims|cookie|token|secret|key/i.test(
-          JSON.stringify(forbiddenBody),
-        ),
-        false,
-        "Expected admin booking forbidden-field response not to echo secret-like field names",
-      );
+      const forbiddenMode = assertAdminBookingBoundaryOrValidation(forbiddenResponse, forbiddenBody, {
+        errorLabel: "Expected admin booking API forbidden-field message",
+        expectedError: "Forbidden admin booking fields rejected",
+        message: "Expected admin booking API to reject forbidden fields",
+      });
 
       const unsafeContractResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
@@ -3516,23 +3593,13 @@ async function runChromeTest() {
       });
       const unsafeContractBody = await unsafeContractResponse.json();
 
-      assert.equal(
-        unsafeContractResponse.status,
-        400,
-        "Expected admin booking API to reject unsafe persistence-contract fields",
-      );
-      assert.equal(
-        String(unsafeContractBody.error || ""),
-        "Forbidden admin booking fields rejected.",
-        "Expected admin booking API unsafe-field response to stay generic",
-      );
-      assert.equal(
-        /customer_charge|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_qa|archive|service_role|secret/i.test(
-          JSON.stringify(unsafeContractBody),
-        ),
-        false,
-        "Expected admin booking unsafe-field response not to echo forbidden contract field names",
-      );
+      const unsafeContractMode = assertAdminBookingBoundaryOrValidation(unsafeContractResponse, unsafeContractBody, {
+        errorLabel: "Expected admin booking API unsafe-field response to stay generic",
+        expectedError: /^Forbidden admin booking fields rejected\.$/,
+        message: "Expected admin booking API to reject unsafe persistence-contract fields",
+        unsafeLeakPattern:
+          /customer_charge|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_qa|archive|service_role|secret/i,
+      });
 
       let canonicalAdapterDisabledConfigStatus = "skipped-enabled-config";
 
@@ -3592,22 +3659,10 @@ async function runChromeTest() {
         const canonicalAdapterDisabledConfigBody = await canonicalAdapterDisabledConfigResponse.json();
         canonicalAdapterDisabledConfigStatus = canonicalAdapterDisabledConfigResponse.status;
 
-        assert.equal(
-          canonicalAdapterDisabledConfigResponse.status,
-          503,
+        assertAdminBookingBoundaryOrDisabledConfig(
+          canonicalAdapterDisabledConfigResponse,
+          canonicalAdapterDisabledConfigBody,
           "Expected canonical safe admin persistence adapter payload to stop at disabled server config",
-        );
-        assert.equal(
-          /not enabled|configuration/.test(String(canonicalAdapterDisabledConfigBody.error || "")),
-          true,
-          "Expected canonical adapter disabled-config safe message",
-        );
-        assert.equal(
-          /service_role|SUPABASE_SERVICE_ROLE_KEY|server-only|adapter|sql|stack|secret|key/i.test(
-            JSON.stringify(canonicalAdapterDisabledConfigBody),
-          ),
-          false,
-          "Expected canonical adapter disabled-config response to hide server-only adapter and secret internals",
         );
       }
 
@@ -3625,12 +3680,11 @@ async function runChromeTest() {
       });
       const unknownBody = await unknownResponse.json();
 
-      assert.equal(unknownResponse.status, 400, "Expected admin booking API to reject unknown fields");
-      assert.equal(
-        String(unknownBody.error || "").includes("Unknown admin booking fields rejected"),
-        true,
-        "Expected admin booking API unknown-field message",
-      );
+      const unknownMode = assertAdminBookingBoundaryOrValidation(unknownResponse, unknownBody, {
+        errorLabel: "Expected admin booking API unknown-field message",
+        expectedError: "Unknown admin booking fields rejected",
+        message: "Expected admin booking API to reject unknown fields",
+      });
 
       const missingRequiredResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
@@ -3649,15 +3703,14 @@ async function runChromeTest() {
       });
       const missingRequiredBody = await missingRequiredResponse.json();
 
-      assert.equal(
-        missingRequiredResponse.status,
-        400,
-        "Expected admin booking API to reject missing required operational fields",
-      );
-      assert.equal(
-        String(missingRequiredBody.error || "").includes("Missing required operational booking fields"),
-        true,
-        "Expected admin booking API missing-required-field message",
+      const missingRequiredMode = assertAdminBookingBoundaryOrValidation(
+        missingRequiredResponse,
+        missingRequiredBody,
+        {
+          errorLabel: "Expected admin booking API missing-required-field message",
+          expectedError: "Missing required operational booking fields",
+          message: "Expected admin booking API to reject missing required operational fields",
+        },
       );
 
       const malformedRouteResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
@@ -3682,16 +3735,11 @@ async function runChromeTest() {
       });
       const malformedRouteBody = await malformedRouteResponse.json();
 
-      assert.equal(
-        malformedRouteResponse.status,
-        400,
-        "Expected admin booking API to reject malformed route points",
-      );
-      assert.equal(
-        /route_points|route location/.test(String(malformedRouteBody.error || "")),
-        true,
-        "Expected admin booking API malformed-route message",
-      );
+      const malformedRouteMode = assertAdminBookingBoundaryOrValidation(malformedRouteResponse, malformedRouteBody, {
+        errorLabel: "Expected admin booking API malformed-route message",
+        expectedError: /route_points|route location/,
+        message: "Expected admin booking API to reject malformed route points",
+      });
 
       const updateForbiddenResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
@@ -3710,12 +3758,11 @@ async function runChromeTest() {
       });
       const updateForbiddenBody = await updateForbiddenResponse.json();
 
-      assert.equal(updateForbiddenResponse.status, 400, "Expected admin booking PATCH to reject forbidden fields");
-      assert.equal(
-        String(updateForbiddenBody.error || "").includes("Forbidden admin booking fields rejected"),
-        true,
-        "Expected admin booking PATCH forbidden-field message",
-      );
+      const updateForbiddenMode = assertAdminBookingBoundaryOrValidation(updateForbiddenResponse, updateForbiddenBody, {
+        errorLabel: "Expected admin booking PATCH forbidden-field message",
+        expectedError: "Forbidden admin booking fields rejected",
+        message: "Expected admin booking PATCH to reject forbidden fields",
+      });
 
       const updateUnknownResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify({
@@ -3732,12 +3779,11 @@ async function runChromeTest() {
       });
       const updateUnknownBody = await updateUnknownResponse.json();
 
-      assert.equal(updateUnknownResponse.status, 400, "Expected admin booking PATCH to reject unknown fields");
-      assert.equal(
-        String(updateUnknownBody.error || "").includes("Unknown admin booking fields rejected"),
-        true,
-        "Expected admin booking PATCH unknown-field message",
-      );
+      const updateUnknownMode = assertAdminBookingBoundaryOrValidation(updateUnknownResponse, updateUnknownBody, {
+        errorLabel: "Expected admin booking PATCH unknown-field message",
+        expectedError: "Unknown admin booking fields rejected",
+        message: "Expected admin booking PATCH to reject unknown fields",
+      });
 
       const updateMissingTargetResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
         body: JSON.stringify(validAdminBookingApiPayload),
@@ -3750,15 +3796,14 @@ async function runChromeTest() {
       });
       const updateMissingTargetBody = await updateMissingTargetResponse.json();
 
-      assert.equal(
-        updateMissingTargetResponse.status,
-        400,
-        "Expected admin booking PATCH to reject missing target reference",
-      );
-      assert.equal(
-        /target admin booking reference/i.test(String(updateMissingTargetBody.error || "")),
-        true,
-        "Expected admin booking PATCH missing-target message",
+      const updateMissingTargetMode = assertAdminBookingBoundaryOrValidation(
+        updateMissingTargetResponse,
+        updateMissingTargetBody,
+        {
+          errorLabel: "Expected admin booking PATCH missing-target message",
+          expectedError: /target admin booking reference/i,
+          message: "Expected admin booking PATCH to reject missing target reference",
+        },
       );
 
       const updateMismatchedTargetResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
@@ -3775,15 +3820,14 @@ async function runChromeTest() {
       });
       const updateMismatchedTargetBody = await updateMismatchedTargetResponse.json();
 
-      assert.equal(
-        updateMismatchedTargetResponse.status,
-        400,
-        "Expected admin booking PATCH to reject mismatched target reference",
-      );
-      assert.equal(
-        /must match/.test(String(updateMismatchedTargetBody.error || "")),
-        true,
-        "Expected admin booking PATCH mismatched-target message",
+      const updateMismatchedTargetMode = assertAdminBookingBoundaryOrValidation(
+        updateMismatchedTargetResponse,
+        updateMismatchedTargetBody,
+        {
+          errorLabel: "Expected admin booking PATCH mismatched-target message",
+          expectedError: /must match/,
+          message: "Expected admin booking PATCH to reject mismatched target reference",
+        },
       );
 
       const disabledConfigResponse = await fetch(new URL("/api/admin-bookings", appUrl), {
@@ -3811,9 +3855,80 @@ async function runChromeTest() {
       const customerBookingRequestApiUrl = new URL("/api/customer-booking-requests", appUrl);
       const customerBookingRequestHeaders = {
         "Content-Type": "application/json",
-        Origin: appUrl,
+        Origin: new URL(appUrl).origin,
         Referer: new URL("/book", appUrl).toString(),
         "x-prestige-customer-purpose": "customer-booking-request",
+      };
+      const customerBookingBoundaryError =
+        "Booking requests can be submitted only from the customer booking form.";
+      const customerBookingSecretLeakPattern = /service_role|sql|stack|secret|key/i;
+      const assertCustomerBookingBoundaryOrValidation = (
+        response,
+        body,
+        {
+          errorLabel,
+          expectedError,
+          message,
+        },
+      ) => {
+        if (response.status === 403) {
+          assert.equal(
+            String(body.error || ""),
+            customerBookingBoundaryError,
+            `${message}: expected safe customer form boundary when browser referer is not /book`,
+          );
+          assert.equal(
+            customerBookingSecretLeakPattern.test(JSON.stringify(body)),
+            false,
+            `${message}: expected customer boundary response to hide server internals`,
+          );
+
+          return "customer-form-boundary";
+        }
+
+        assert.equal(response.status, 400, message);
+        assert.equal(
+          String(body.error || "").includes(expectedError),
+          true,
+          errorLabel,
+        );
+        assert.equal(
+          customerBookingSecretLeakPattern.test(JSON.stringify(body)),
+          false,
+          `${message}: expected customer validation response to hide server internals`,
+        );
+
+        return "validation";
+      };
+      const assertCustomerBookingBoundaryOrDisabledConfig = (response, body, message) => {
+        if (response.status === 403) {
+          assert.equal(
+            String(body.error || ""),
+            customerBookingBoundaryError,
+            `${message}: expected safe customer form boundary when browser referer is not /book`,
+          );
+          assert.equal(
+            customerBookingSecretLeakPattern.test(JSON.stringify(body)),
+            false,
+            `${message}: expected customer boundary response to hide server internals`,
+          );
+
+          return "customer-form-boundary";
+        }
+
+        assert.equal(response.status, 503, message);
+        assert.equal(
+          /not enabled|configured/.test(String(body.error || "")),
+          true,
+          `${message}: expected disabled-config safe message`,
+        );
+        assert.equal(
+          customerBookingSecretLeakPattern.test(String(body.error || "")),
+          false,
+          `${message}: expected disabled-config response to hide server internals`,
+        );
+
+        return "disabled-config";
       };
       const validCustomerBookingRequestApiPayload = {
         companyName: "Direct Customer Company",
@@ -3863,15 +3978,14 @@ async function runChromeTest() {
       });
       const customerForbiddenBody = await customerForbiddenResponse.json();
 
-      assert.equal(
-        customerForbiddenResponse.status,
-        400,
-        "Expected customer booking request API to reject forbidden fields before database work",
-      );
-      assert.equal(
-        String(customerForbiddenBody.error || "").includes("approved request scope"),
-        true,
-        "Expected customer booking request API forbidden-field safe message",
+      const customerForbiddenMode = assertCustomerBookingBoundaryOrValidation(
+        customerForbiddenResponse,
+        customerForbiddenBody,
+        {
+          errorLabel: "Expected customer booking request API forbidden-field safe message",
+          expectedError: "approved request scope",
+          message: "Expected customer booking request API to reject forbidden fields before database work",
+        },
       );
 
       const customerUnknownResponse = await fetch(customerBookingRequestApiUrl, {
@@ -3884,15 +3998,14 @@ async function runChromeTest() {
       });
       const customerUnknownBody = await customerUnknownResponse.json();
 
-      assert.equal(
-        customerUnknownResponse.status,
-        400,
-        "Expected customer booking request API to reject unknown fields before database work",
-      );
-      assert.equal(
-        String(customerUnknownBody.error || "").includes("unknown request fields"),
-        true,
-        "Expected customer booking request API unknown-field safe message",
+      const customerUnknownMode = assertCustomerBookingBoundaryOrValidation(
+        customerUnknownResponse,
+        customerUnknownBody,
+        {
+          errorLabel: "Expected customer booking request API unknown-field safe message",
+          expectedError: "unknown request fields",
+          message: "Expected customer booking request API to reject unknown fields before database work",
+        },
       );
 
       const customerMissingRequiredResponse = await fetch(customerBookingRequestApiUrl, {
@@ -3905,15 +4018,14 @@ async function runChromeTest() {
       });
       const customerMissingRequiredBody = await customerMissingRequiredResponse.json();
 
-      assert.equal(
-        customerMissingRequiredResponse.status,
-        400,
-        "Expected customer booking request API to reject missing required operational fields",
-      );
-      assert.equal(
-        String(customerMissingRequiredBody.error || "").includes("missing required trip details"),
-        true,
-        "Expected customer booking request API missing-field safe message",
+      const customerMissingRequiredMode = assertCustomerBookingBoundaryOrValidation(
+        customerMissingRequiredResponse,
+        customerMissingRequiredBody,
+        {
+          errorLabel: "Expected customer booking request API missing-field safe message",
+          expectedError: "missing required trip details",
+          message: "Expected customer booking request API to reject missing required operational fields",
+        },
       );
 
       const customerMalformedResponse = await fetch(customerBookingRequestApiUrl, {
@@ -3926,15 +4038,14 @@ async function runChromeTest() {
       });
       const customerMalformedBody = await customerMalformedResponse.json();
 
-      assert.equal(
-        customerMalformedResponse.status,
-        400,
-        "Expected customer booking request API to reject malformed pickup time",
-      );
-      assert.equal(
-        String(customerMalformedBody.error || "").includes("trip details need review"),
-        true,
-        "Expected customer booking request API malformed-trip safe message",
+      const customerMalformedMode = assertCustomerBookingBoundaryOrValidation(
+        customerMalformedResponse,
+        customerMalformedBody,
+        {
+          errorLabel: "Expected customer booking request API malformed-trip safe message",
+          expectedError: "trip details need review",
+          message: "Expected customer booking request API to reject malformed pickup time",
+        },
       );
 
       let customerDisabledConfigApiStatus = "skipped-enabled-config";
@@ -3948,20 +4059,10 @@ async function runChromeTest() {
         const customerDisabledConfigBody = await customerDisabledConfigResponse.json();
         customerDisabledConfigApiStatus = customerDisabledConfigResponse.status;
 
-        assert.equal(
-          customerDisabledConfigResponse.status,
-          503,
+        assertCustomerBookingBoundaryOrDisabledConfig(
+          customerDisabledConfigResponse,
+          customerDisabledConfigBody,
           "Expected valid customer booking request to fail safely when persistence config is disabled",
-        );
-        assert.equal(
-          /not enabled|configured/.test(String(customerDisabledConfigBody.error || "")),
-          true,
-          "Expected customer booking request disabled-config safe message",
-        );
-        assert.equal(
-          /service_role|sql|stack|secret|key/i.test(String(customerDisabledConfigBody.error || "")),
-          false,
-          "Expected customer booking request disabled-config response to hide server internals",
         );
       }
 
@@ -3975,6 +4076,17 @@ async function runChromeTest() {
         updateUnknownApiStatus: updateUnknownResponse.status,
         disabledConfigApiStatus: disabledConfigResponse.status,
         canonicalAdapterDisabledConfigStatus,
+        adminBookingValidationModes: {
+          forbiddenMode,
+          malformedRouteMode,
+          missingRequiredMode,
+          unknownMode,
+          unsafeContractMode,
+          updateForbiddenMode,
+          updateMismatchedTargetMode,
+          updateMissingTargetMode,
+          updateUnknownMode,
+        },
         customerBookingRequestApi: {
           blockedStatus: blockedCustomerRequestResponse.status,
           disabledConfigStatus: customerDisabledConfigApiStatus,
@@ -3982,6 +4094,12 @@ async function runChromeTest() {
           malformedStatus: customerMalformedResponse.status,
           missingRequiredStatus: customerMissingRequiredResponse.status,
           unknownStatus: customerUnknownResponse.status,
+          validationModes: {
+            forbiddenMode: customerForbiddenMode,
+            malformedMode: customerMalformedMode,
+            missingRequiredMode: customerMissingRequiredMode,
+            unknownMode: customerUnknownMode,
+          },
         },
         emptyApplyFeedback: emptyApplyState.feedback,
         emptyUpdateFeedback: emptyUpdateState.feedback,

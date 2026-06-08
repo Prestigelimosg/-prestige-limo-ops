@@ -48,6 +48,32 @@ type ControlFeedback = {
   text: string;
 };
 
+type DriverAppUpdateRecord = {
+  created_at?: string | null;
+  id?: string | null;
+  notification_status?: string | null;
+  priority?: string | null;
+  safe_message?: string | null;
+  safe_title?: string | null;
+  updated_at?: string | null;
+};
+
+type DriverAppUpdateApiResponse =
+  | {
+      notifications?: DriverAppUpdateRecord[];
+      ok: true;
+    }
+  | {
+      error?: string;
+      ok: false;
+    };
+
+type DriverAppUpdateState = {
+  feedback: ControlFeedback | null;
+  kind: "idle" | "loading" | "loaded" | "empty" | "unavailable" | "error";
+  updates: DriverAppUpdateRecord[];
+};
+
 type DriverDetails = {
   contact: string;
   name: string;
@@ -76,6 +102,12 @@ const emptyDriverDetails: DriverDetails = {
   payNowNumber: "",
   plate: "",
   vehicleModel: "",
+};
+
+const emptyDriverAppUpdateState: DriverAppUpdateState = {
+  feedback: null,
+  kind: "idle",
+  updates: [],
 };
 
 const mockLatestFlightEta = "15:45";
@@ -123,6 +155,56 @@ function feedbackClassName(tone: StatusFeedback["tone"] | ControlFeedback["tone"
   return tone === "success"
     ? "border-emerald-200 bg-emerald-50 text-emerald-800"
     : "border-rose-200 bg-rose-50 text-rose-800";
+}
+
+function driverAppUpdateStateClassName(kind: DriverAppUpdateState["kind"]) {
+  if (kind === "loaded") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
+
+  if (kind === "error") {
+    return "border-rose-200 bg-rose-50 text-rose-900";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function driverAppUpdateStatusLabel(value: unknown) {
+  const status = String(value || "").replace(/[_-]+/g, " ").trim();
+
+  if (!status) {
+    return "Queued";
+  }
+
+  return status
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function safeDisplayText(value: unknown, fallback: string) {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return fallback;
+  }
+
+  const cleaned = String(value).replace(/\s+/g, " ").trim();
+
+  return cleaned || fallback;
+}
+
+function formatDriverAppUpdateTime(value: unknown) {
+  const text = safeDisplayText(value, "");
+  const date = text ? new Date(text) : null;
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return "Time not provided";
+  }
+
+  return date.toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 function detailRows(job: SafeDriverJobPayload) {
@@ -219,6 +301,8 @@ export default function DriverJobPage() {
   const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
   const [mockOtsPhotoProofFeedback, setMockOtsPhotoProofFeedback] = useState<ControlFeedback | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
+  const [driverAppUpdates, setDriverAppUpdates] =
+    useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
@@ -331,6 +415,7 @@ export default function DriverJobPage() {
       setMockOtsPhotoProofAdded(false);
       setMockOtsPhotoProofFeedback(null);
       setActivityLog([]);
+      setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -365,6 +450,62 @@ export default function DriverJobPage() {
         });
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
+
+        try {
+          const updateResponse = await fetch(
+            `/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`,
+            {
+              cache: "no-store",
+            },
+          );
+          const updateResult = await updateResponse.json() as DriverAppUpdateApiResponse;
+
+          if (!active) {
+            return;
+          }
+
+          if (!updateResponse.ok || !updateResult.ok) {
+            setDriverAppUpdates({
+              feedback: {
+                tone: updateResponse.status === 503 ? "success" : "error",
+                text:
+                  updateResponse.status === 503
+                    ? "Saved app updates are not enabled for this driver link yet."
+                    : "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
+              },
+              kind: updateResponse.status === 503 ? "unavailable" : "error",
+              updates: [],
+            });
+            return;
+          }
+
+          const updates = Array.isArray(updateResult.notifications)
+            ? updateResult.notifications.slice(0, 5)
+            : [];
+
+          setDriverAppUpdates({
+            feedback: {
+              tone: "success",
+              text:
+                updates.length > 0
+                  ? `Loaded ${updates.length} saved app update${updates.length === 1 ? "" : "s"}.`
+                  : "No saved app updates for this job.",
+            },
+            kind: updates.length > 0 ? "loaded" : "empty",
+            updates,
+          });
+        } catch {
+          if (active) {
+            setDriverAppUpdates({
+              feedback: {
+                tone: "error",
+                text: "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
+              },
+              kind: "error",
+              updates: [],
+            });
+          }
+        }
       } catch {
         if (active) {
           setPageState({ kind: "blocked", reason: "unavailable" });
@@ -768,6 +909,71 @@ export default function DriverJobPage() {
               >
                 Guidance only. This section does not send a message from this app yet.
               </p>
+            </section>
+
+            <section
+              className="space-y-3"
+              aria-labelledby="driver-app-updates-heading"
+              data-driver-job-app-updates="true"
+            >
+              <h2 id="driver-app-updates-heading" className="text-base font-semibold text-slate-900">
+                App Updates
+              </h2>
+              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+                <p className="text-sm font-medium leading-6 text-slate-600">
+                  Saved dispatch updates for this job link. External messages are not sent from this page.
+                </p>
+                <p
+                  aria-live="polite"
+                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${driverAppUpdateStateClassName(driverAppUpdates.kind)}`}
+                  data-driver-job-app-updates-feedback="true"
+                  data-driver-job-app-updates-state={driverAppUpdates.kind}
+                >
+                  {driverAppUpdates.kind === "loading"
+                    ? "Checking saved app updates..."
+                    : driverAppUpdates.feedback?.text || "Saved app updates are ready to check."}
+                </p>
+                {driverAppUpdates.updates.length > 0 ? (
+                  <ol className="space-y-2" data-driver-job-app-updates-list="true">
+                    {driverAppUpdates.updates.map((update, index) => (
+                      <li
+                        className="space-y-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+                        data-driver-job-app-update-row="true"
+                        key={update.id || `${update.safe_title || "driver-app-update"}-${index}`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p
+                            className="min-w-0 break-words font-semibold text-slate-900"
+                            data-driver-job-app-update-title="true"
+                          >
+                            {safeDisplayText(update.safe_title, "Dispatch update")}
+                          </p>
+                          <span
+                            className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
+                            data-driver-job-app-update-status="true"
+                          >
+                            {driverAppUpdateStatusLabel(update.notification_status)}
+                          </span>
+                        </div>
+                        <p
+                          className="break-words font-medium leading-6 text-slate-700"
+                          data-driver-job-app-update-message="true"
+                        >
+                          {safeDisplayText(update.safe_message, "Contact dispatch for the latest job update.")}
+                        </p>
+                        <div className="grid gap-1 text-xs font-semibold text-slate-500 sm:grid-cols-2">
+                          <span data-driver-job-app-update-priority="true">
+                            Priority: {driverAppUpdateStatusLabel(update.priority || "normal")}
+                          </span>
+                          <span data-driver-job-app-update-time="true">
+                            {formatDriverAppUpdateTime(update.created_at || update.updated_at)}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </div>
             </section>
 
             <section className="space-y-3" aria-labelledby="assigned-driver-heading">

@@ -10,6 +10,7 @@ import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
+import { assertAdminMonthlyInvoiceDraftUnlocked } from "./admin-monthly-invoice-draft-lock-enforcement";
 
 export const adminMonthlyInvoiceDraftPersistenceVersion =
   "stage-4a-monthly-invoice-draft-api-v1";
@@ -1195,6 +1196,15 @@ export async function createAdminMonthlyInvoiceDraftFromGroup(
     return clientResult;
   }
 
+  const lockResult = await assertAdminMonthlyInvoiceDraftUnlocked(clientResult.data, {
+    billing_month: input.billing_month,
+    customer_account: input.customer_account,
+  });
+
+  if (!lockResult.ok) {
+    return lockResult;
+  }
+
   const payload = {
     billing_month: input.billing_month,
     blocked_count: input.blocked_count,
@@ -1284,6 +1294,16 @@ export async function updateAdminMonthlyInvoiceDraftStatus(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  const lockResult = await assertAdminMonthlyInvoiceDraftUnlocked(clientResult.data, {
+    billing_month: input.billing_month,
+    customer_account: input.customer_account,
+    draft_id: input.draft_id,
+  });
+
+  if (!lockResult.ok) {
+    return lockResult;
   }
 
   const payload = {

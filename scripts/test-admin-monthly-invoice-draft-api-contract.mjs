@@ -19,6 +19,7 @@ const unsafeInvoiceDraftLeakPattern =
 const sourceFiles = [
   "lib/admin-app-notification-events.ts",
   "lib/admin-app-notification-persistence.ts",
+  "lib/admin-monthly-invoice-draft-lock-enforcement.ts",
   "lib/admin-monthly-invoice-draft-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
@@ -253,6 +254,7 @@ class MockSupabaseClient {
       admin_app_notification_outbox: [],
       monthly_invoice_draft_trip_links: [],
       monthly_invoice_drafts: [],
+      monthly_invoice_issue_records: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -644,6 +646,27 @@ const validCreatePayload = {
   },
   total_count: 4,
 };
+const lockedDraftId = "00000000-0000-4000-8000-000000000999";
+const lockedMonthlyInvoiceDraftError =
+  "Admin monthly invoice draft is locked for invoice issue and cannot be changed safely.";
+const lockedDraftSeed = {
+  monthly_invoice_drafts: [
+    {
+      billing_month: validCreatePayload.billing_month,
+      customer_account: validCreatePayload.customer_account,
+      id: lockedDraftId,
+    },
+  ],
+  monthly_invoice_issue_records: [
+    {
+      draft_id: lockedDraftId,
+      draft_lock_status: "locked_for_issue",
+      id: "00000000-0000-4000-8000-000000009999",
+      invoice_number_status: "not_generated",
+      issue_record_status: "draft_locked",
+    },
+  ],
+};
 
 const harness = await loadHarness();
 
@@ -923,6 +946,30 @@ try {
 
   setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
 
+  const lockedCreateMock = installMockClient(lockedDraftSeed);
+  const lockedCreateResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-drafts", {
+        body: JSON.stringify(validCreatePayload),
+        headers: sessionHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(lockedCreateResult.status, 409);
+  assert.deepEqual(lockedCreateResult.body, {
+    error: lockedMonthlyInvoiceDraftError,
+    ok: false,
+  });
+  assert.equal(lockedCreateMock.client.operations.length, 0);
+  assert.equal(lockedCreateMock.client.selectHistory.length, 2);
+  assert.equal(lockedCreateMock.client.selectHistory[0].table, "monthly_invoice_drafts");
+  assert.equal(lockedCreateMock.client.selectHistory[1].table, "monthly_invoice_issue_records");
+  assertNoLeaks(lockedCreateResult, "locked monthly invoice draft create response should stay safe");
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
+
   const failedOutboxMock = installMockClient(seed, {
     failures: {
       "insert:admin_app_notification_outbox": {
@@ -985,9 +1032,47 @@ try {
       value: draftId,
     },
   ]);
-  assert.equal(updateMock.client.selectHistory.length, 1);
-  assert.equal(updateMock.client.selectHistory[0].table, "monthly_invoice_draft_trip_links");
+  assert.equal(updateMock.client.selectHistory.length, 2);
+  assert.equal(updateMock.client.selectHistory[0].table, "monthly_invoice_issue_records");
+  assert.equal(updateMock.client.selectHistory[1].table, "monthly_invoice_draft_trip_links");
   assertNoLeaks(updateResult, "monthly invoice draft update response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const lockedUpdateMock = installMockClient({
+    monthly_invoice_issue_records: [
+      {
+        draft_id: draftId,
+        draft_lock_status: "locked_for_issue",
+        id: "00000000-0000-4000-8000-000000009998",
+        invoice_number_status: "not_generated",
+        issue_record_status: "draft_locked",
+      },
+    ],
+  });
+  const lockedUpdateResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-monthly-invoice-drafts", {
+        body: JSON.stringify({
+          draft_id: draftId,
+          draft_status: "admin_reviewed",
+          review_status: "Admin reviewed.",
+        }),
+        headers: sessionHeaders(),
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(lockedUpdateResult.status, 409);
+  assert.deepEqual(lockedUpdateResult.body, {
+    error: lockedMonthlyInvoiceDraftError,
+    ok: false,
+  });
+  assert.equal(lockedUpdateMock.client.operations.length, 0);
+  assert.equal(lockedUpdateMock.client.selectHistory.length, 1);
+  assert.equal(lockedUpdateMock.client.selectHistory[0].table, "monthly_invoice_issue_records");
+  assertNoLeaks(lockedUpdateResult, "locked monthly invoice draft update response should stay safe");
 
   setEnv(enabledEnv());
 

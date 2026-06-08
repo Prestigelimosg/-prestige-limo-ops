@@ -10,6 +10,7 @@ import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
+import { assertAdminMonthlyInvoiceDraftUnlocked } from "./admin-monthly-invoice-draft-lock-enforcement";
 
 export const adminMonthlyInvoiceDraftItemReviewPersistenceVersion =
   "stage-monthly-invoice-draft-item-review-api-v1";
@@ -1041,6 +1042,14 @@ export async function saveAdminMonthlyInvoiceDraftItemReview(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  const lockResult = await assertAdminMonthlyInvoiceDraftUnlocked(clientResult.data, {
+    draft_id: input.draft_id,
+  });
+
+  if (!lockResult.ok) {
+    return lockResult;
   }
 
   const payload = {

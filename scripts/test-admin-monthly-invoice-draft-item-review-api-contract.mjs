@@ -18,6 +18,7 @@ const safeApiLeakPattern =
 const unsafeItemReviewLeakPattern =
   /contact_phone|contact_email|passenger|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice_number|final_invoice|issued_invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|driver_job_link|token/i;
 const sourceFiles = [
+  "lib/admin-monthly-invoice-draft-lock-enforcement.ts",
   "lib/admin-monthly-invoice-draft-item-review-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
@@ -224,6 +225,7 @@ class MockSupabaseClient {
     this.selectHistory = [];
     this.tables = {
       monthly_invoice_draft_item_reviews: [],
+      monthly_invoice_issue_records: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -441,6 +443,8 @@ function assertNoSupabaseTouched(mock, label) {
 const draftId = "00000000-0000-4000-8000-000000000001";
 const draftTripLinkId = "00000000-0000-4000-8000-000000000101";
 const itemReviewId = "00000000-0000-4000-8000-000000000201";
+const lockedMonthlyInvoiceDraftError =
+  "Admin monthly invoice draft is locked for invoice issue and cannot be changed safely.";
 const seed = {
   monthly_invoice_draft_item_reviews: [
     {
@@ -677,6 +681,68 @@ try {
     "draft_id,booking_reference",
   );
   assertNoLeaks(saveResult.body, "enabled save response should stay safe");
+
+  const lockedSaveMock = installMockClient({
+    monthly_invoice_issue_records: [
+      {
+        draft_id: draftId,
+        draft_lock_status: "locked_for_issue",
+        id: "00000000-0000-4000-8000-000000009997",
+        invoice_number_status: "not_generated",
+        issue_record_status: "draft_locked",
+      },
+    ],
+  });
+  const lockedSaveResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-draft-item-reviews", {
+        body: JSON.stringify(validSavePayload),
+        headers: sessionHeaders({
+          "Content-Type": "application/json",
+        }),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(lockedSaveResult.status, 409);
+  assert.deepEqual(lockedSaveResult.body, {
+    error: lockedMonthlyInvoiceDraftError,
+    ok: false,
+  });
+  assert.equal(lockedSaveMock.client.operations.length, 0);
+  assert.equal(lockedSaveMock.client.selectHistory.length, 1);
+  assert.equal(lockedSaveMock.client.selectHistory[0].table, "monthly_invoice_issue_records");
+  assertNoLeaks(lockedSaveResult.body, "locked item review save response should stay safe");
+
+  mock = installMockClient({
+    ...seed,
+    monthly_invoice_issue_records: [
+      {
+        draft_id: draftId,
+        draft_lock_status: "released_for_review",
+        id: "00000000-0000-4000-8000-000000009996",
+        invoice_number_status: "not_generated",
+        issue_record_status: "released_for_review",
+      },
+    ],
+  });
+  const releasedSaveResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-draft-item-reviews", {
+        body: JSON.stringify(validSavePayload),
+        headers: sessionHeaders({
+          "Content-Type": "application/json",
+        }),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(releasedSaveResult.status, 200);
+  assert.equal(releasedSaveResult.body.ok, true);
+  assert.equal(mock.client.operations.at(-1).action, "upsert");
+  assertNoLeaks(releasedSaveResult.body, "released item review save response should stay safe");
 
   const patchResult = await readRouteResponse(
     await route.PATCH(

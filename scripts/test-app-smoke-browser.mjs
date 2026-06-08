@@ -843,13 +843,40 @@ async function runChromeTest() {
             id: "77777777-7777-4777-8777-777777777777",
             linked_trips: [
               {
+                billing_prep_readiness: "ready",
                 booking_reference: "LOADED-OPS-001",
+                closeout_status: "closed",
+                draft_id: "77777777-7777-4777-8777-777777777777",
+                id: "77777777-7777-4777-8777-777777777701",
                 trip_readiness_status: "ready",
               },
             ],
             readiness_status: "ready",
             ready_count: 1,
             total_count: 1,
+          },
+        ];
+        window.__adminMonthlyInvoiceDraftItemReviewCalls = [];
+        window.__adminMonthlyInvoiceDraftItemReviews = [
+          {
+            billing_item_decision: "include_in_draft",
+            booking_reference: "LOADED-OPS-001",
+            draft_id: "77777777-7777-4777-8777-777777777777",
+            draft_trip_link_id: "77777777-7777-4777-8777-777777777701",
+            extra_charge_review_status: "none",
+            id: "77777777-7777-4777-8777-777777777702",
+            item_review_status: "reviewed",
+            safe_item_review_context: {
+              item_review_summary: "Smoke item review saved.",
+              next_action: "Continue issue review.",
+              review_status: "Reviewed.",
+            },
+            safe_item_review_note: "Safe smoke item review note.",
+            source_trip_summary: {
+              booking_reference: "LOADED-OPS-001",
+              source: "smoke_invoice_draft_trip_link",
+            },
+            trip_detail_review_status: "reviewed",
           },
         ];
         window.__adminMonthlyInvoiceIssueReviewCalls = [];
@@ -1250,6 +1277,48 @@ async function runChromeTest() {
                     total_draft_count: filteredDrafts.length,
                   },
                   version: "app-smoke-monthly-invoice-draft-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
+
+          if (String(url).includes("/api/admin-monthly-invoice-draft-item-reviews")) {
+            const parsedUrl = new URL(String(url), window.location.origin);
+            const allItemReviews = window.__adminMonthlyInvoiceDraftItemReviews || [];
+
+            window.__adminMonthlyInvoiceDraftItemReviewCalls.push({
+              body: options?.body ? JSON.parse(String(options.body)) : null,
+              method,
+              search: parsedUrl.search,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              const draftId = parsedUrl.searchParams.get("draft_id") || "";
+              const limit = Math.max(1, Number(parsedUrl.searchParams.get("limit") || 25));
+              const page = Math.max(1, Number(parsedUrl.searchParams.get("page") || 1));
+              const filteredItemReviews = allItemReviews.filter((review) =>
+                draftId ? review.draft_id === draftId : true,
+              );
+              const pageCount = filteredItemReviews.length
+                ? Math.ceil(filteredItemReviews.length / limit)
+                : 0;
+              const itemReviews = filteredItemReviews.slice((page - 1) * limit, page * limit);
+
+              return new Response(
+                JSON.stringify({
+                  item_reviews: itemReviews,
+                  ok: true,
+                  pagination: {
+                    has_next_page: pageCount > 0 && page < pageCount,
+                    has_previous_page: pageCount > 0 && page > 1,
+                    page,
+                    page_count: pageCount,
+                    page_size: limit,
+                    total_item_review_count: filteredItemReviews.length,
+                  },
+                  version: "app-smoke-monthly-invoice-draft-item-review-read-mock",
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -2590,6 +2659,10 @@ async function runChromeTest() {
               .querySelector("[data-admin-monthly-invoice-draft-read-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const monthlyInvoiceDraftItemReviewFeedback = document
+              .querySelector("[data-admin-monthly-invoice-draft-item-review-read-feedback]")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
             const monthlyInvoiceIssueReviewFeedback = document
               .querySelector("[data-admin-monthly-invoice-issue-review-read-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
@@ -2606,6 +2679,7 @@ async function runChromeTest() {
               monthlyBillingGroupingFeedback.includes("Loaded 1 saved monthly billing group for June 2026") &&
               monthlyBillingDraftPlanFeedback.includes("Loaded 1 saved monthly billing draft plan for June 2026") &&
               monthlyInvoiceDraftFeedback.includes("Loaded 1 saved monthly invoice draft for June 2026") &&
+              monthlyInvoiceDraftItemReviewFeedback.includes("Loaded 1 saved monthly invoice draft item review") &&
               monthlyInvoiceIssueReviewFeedback.includes("Loaded 1 saved monthly invoice issue review for June 2026")
               ? {
                   bodyBaitLeaked: baitPattern.test(bodyText),
@@ -2626,6 +2700,9 @@ async function runChromeTest() {
                   monthlyBillingDraftPlanFeedback,
                   monthlyBillingGroupingCalls: window.__adminMonthlyBillingGroupingCalls || [],
                   monthlyBillingGroupingFeedback,
+                  monthlyInvoiceDraftItemReviewCalls:
+                    window.__adminMonthlyInvoiceDraftItemReviewCalls || [],
+                  monthlyInvoiceDraftItemReviewFeedback,
                   monthlyInvoiceDraftCalls: window.__adminMonthlyInvoiceDraftCalls || [],
                   monthlyInvoiceDraftFeedback,
                   monthlyInvoiceIssueReviewCalls: window.__adminMonthlyInvoiceIssueReviewCalls || [],
@@ -2727,6 +2804,11 @@ async function runChromeTest() {
         "Expected applied snapshot load to show saved monthly invoice draft read feedback in existing UI",
       );
       assert.match(
+        appliedSnapshotState.monthlyInvoiceDraftItemReviewFeedback,
+        /Loaded 1 saved monthly invoice draft item review\./,
+        "Expected applied snapshot load to show saved monthly invoice draft item-review read feedback in existing UI",
+      );
+      assert.match(
         appliedSnapshotState.monthlyInvoiceIssueReviewFeedback,
         /Loaded 1 saved monthly invoice issue review for June 2026\./,
         "Expected applied snapshot load to show saved monthly invoice issue review read feedback in existing UI",
@@ -2806,6 +2888,19 @@ async function runChromeTest() {
           },
         ],
         "Expected applied snapshot load to GET monthly invoice drafts through the guarded read API path",
+      );
+      assert.deepEqual(
+        appliedSnapshotState.monthlyInvoiceDraftItemReviewCalls.map((call) => ({
+          method: call.method,
+          search: call.search,
+        })),
+        [
+          {
+            method: "GET",
+            search: "?limit=1&page=1&draft_id=77777777-7777-4777-8777-777777777777",
+          },
+        ],
+        "Expected applied snapshot load to GET monthly invoice draft item reviews through the guarded read API path",
       );
       assert.deepEqual(
         appliedSnapshotState.monthlyInvoiceIssueReviewCalls.map((call) => ({
@@ -8897,6 +8992,7 @@ async function runChromeTest() {
         for (const expectedBoundaryText of [
           "Guarded admin API read plus monthly billing draft-plan",
           "invoice draft-prep",
+          "item-review",
           "issue-review",
           "issue-record save only.",
           "No direct Supabase write outside approved API routes",

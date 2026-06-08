@@ -40,6 +40,8 @@ const adminMonthlyBillingDraftPlansApiPath = "/api/admin-monthly-billing-draft-p
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
 const adminMonthlyInvoiceDraftTripCandidatesApiPath =
   "/api/admin-monthly-invoice-draft-trip-candidates";
+const adminMonthlyInvoiceDraftItemReviewsApiPath =
+  "/api/admin-monthly-invoice-draft-item-reviews";
 const adminMonthlyInvoiceIssueReviewsApiPath = "/api/admin-monthly-invoice-issue-reviews";
 const adminMonthlyInvoiceIssueRecordsApiPath = "/api/admin-monthly-invoice-issue-records";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
@@ -788,6 +790,8 @@ type AdminMonthlyInvoiceDraftRecord = {
     booking_reference?: string | null;
     closeout_id?: string | null;
     closeout_status?: string | null;
+    draft_id?: string | null;
+    id?: string | null;
     safe_trip_context?: Record<string, unknown> | null;
     trip_readiness_status?: AdminMonthlyInvoiceDraftTripReadinessStatus | null;
   }> | null;
@@ -819,6 +823,69 @@ type AdminMonthlyInvoiceDraftReadState = {
 };
 
 type AdminMonthlyInvoiceDraftAction = "save-draft-prep";
+
+type AdminMonthlyInvoiceDraftItemReviewStatus =
+  | "pending_review"
+  | "reviewed"
+  | "needs_correction"
+  | "blocked"
+  | "archived";
+
+type AdminMonthlyInvoiceDraftTripDetailReviewStatus =
+  | "pending_review"
+  | "reviewed"
+  | "needs_correction"
+  | "blocked";
+
+type AdminMonthlyInvoiceDraftExtraChargeReviewStatus =
+  | "pending_review"
+  | "reviewed"
+  | "none"
+  | "needs_correction"
+  | "blocked";
+
+type AdminMonthlyInvoiceDraftBillingItemDecision =
+  | "hold_for_review"
+  | "include_in_draft"
+  | "exclude_from_draft"
+  | "needs_manager_review"
+  | "blocked";
+
+type AdminMonthlyInvoiceDraftItemReviewRecord = {
+  billing_item_decision?: AdminMonthlyInvoiceDraftBillingItemDecision | null;
+  booking_reference?: string | null;
+  draft_id?: string | null;
+  draft_trip_link_id?: string | null;
+  extra_charge_review_status?: AdminMonthlyInvoiceDraftExtraChargeReviewStatus | null;
+  id?: string | null;
+  item_review_status?: AdminMonthlyInvoiceDraftItemReviewStatus | null;
+  safe_item_review_context?: {
+    item_review_summary?: string | null;
+    next_action?: string | null;
+    review_status?: string | null;
+  } | null;
+  safe_item_review_note?: string | null;
+  source_trip_summary?: Record<string, unknown> | null;
+  trip_detail_review_status?: AdminMonthlyInvoiceDraftTripDetailReviewStatus | null;
+};
+
+type AdminMonthlyInvoiceDraftItemReviewPagination = {
+  has_next_page?: boolean | null;
+  has_previous_page?: boolean | null;
+  page?: number | null;
+  page_count?: number | null;
+  page_size?: number | null;
+  total_item_review_count?: number | null;
+};
+
+type AdminMonthlyInvoiceDraftItemReviewReadState = {
+  itemReviews: AdminMonthlyInvoiceDraftItemReviewRecord[];
+  message: Message | null;
+  pagination: AdminMonthlyInvoiceDraftItemReviewPagination | null;
+  status: "idle" | "loading" | "loaded" | "error";
+};
+
+type AdminMonthlyInvoiceDraftItemReviewAction = "save-item-review";
 
 type AdminMonthlyInvoiceIssueReviewStatus =
   | "issue_review_pending"
@@ -4782,6 +4849,45 @@ async function loadAdminMonthlyInvoiceIssueReviewsRead({
   };
 }
 
+async function loadAdminMonthlyInvoiceDraftItemReviewsRead({
+  draftId,
+  limit,
+  page,
+}: {
+  draftId: string | null;
+  limit: number;
+  page: number;
+}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    page: String(page),
+  });
+  const cleanedDraftId = clean(draftId);
+
+  if (cleanedDraftId) {
+    params.set("draft_id", cleanedDraftId);
+  }
+
+  const response = await fetch(`${adminMonthlyInvoiceDraftItemReviewsApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly invoice draft item review read failed.");
+  }
+
+  return {
+    itemReviews: Array.isArray(result.item_reviews)
+      ? (result.item_reviews as AdminMonthlyInvoiceDraftItemReviewRecord[])
+      : [],
+    pagination: (result.pagination || null) as AdminMonthlyInvoiceDraftItemReviewPagination | null,
+  };
+}
+
 async function loadAdminMonthlyInvoiceIssueRecordsRead({
   billingMonth,
   customerAccountSearch,
@@ -5149,6 +5255,95 @@ async function saveAdminMonthlyInvoiceIssueReviewFromDraft({
   return issueReview;
 }
 
+async function saveAdminMonthlyInvoiceDraftItemReviewFromDraft({
+  existingItemReview,
+  invoiceDraft,
+}: {
+  existingItemReview: AdminMonthlyInvoiceDraftItemReviewRecord | null;
+  invoiceDraft: AdminMonthlyInvoiceDraftRecord;
+}) {
+  const draftId = clean(invoiceDraft.id);
+  const linkedTrips = Array.isArray(invoiceDraft.linked_trips)
+    ? invoiceDraft.linked_trips
+    : [];
+  const firstTrip = linkedTrips.find((trip) => clean(trip.booking_reference)) || null;
+  const bookingReference = clean(firstTrip?.booking_reference);
+  const draftTripLinkId = clean(firstTrip?.id) || null;
+  const tripReadinessStatus = firstTrip?.trip_readiness_status || "blocked";
+  const closeoutStatus = clean(firstTrip?.closeout_status) || null;
+  const billingPrepReadiness = clean(firstTrip?.billing_prep_readiness) || null;
+  const tripReady =
+    tripReadinessStatus === "ready" &&
+    (closeoutStatus === "closed" || closeoutStatus === "ready_for_billing_prep") &&
+    billingPrepReadiness === "ready";
+
+  if (!draftId || !bookingReference) {
+    throw new Error("Monthly invoice draft item review requires a saved invoice draft trip.");
+  }
+
+  const itemReviewStatus: AdminMonthlyInvoiceDraftItemReviewStatus = tripReady
+    ? "reviewed"
+    : "blocked";
+  const tripDetailReviewStatus: AdminMonthlyInvoiceDraftTripDetailReviewStatus = tripReady
+    ? "reviewed"
+    : "blocked";
+  const extraChargeReviewStatus: AdminMonthlyInvoiceDraftExtraChargeReviewStatus = tripReady
+    ? "none"
+    : "blocked";
+  const billingItemDecision: AdminMonthlyInvoiceDraftBillingItemDecision = tripReady
+    ? "include_in_draft"
+    : "blocked";
+  const response = await fetch(adminMonthlyInvoiceDraftItemReviewsApiPath, {
+    body: JSON.stringify({
+      billing_item_decision: billingItemDecision,
+      booking_reference: bookingReference,
+      draft_id: draftId,
+      ...(draftTripLinkId ? { draft_trip_link_id: draftTripLinkId } : {}),
+      extra_charge_review_status: extraChargeReviewStatus,
+      ...(clean(existingItemReview?.id) ? { item_review_id: clean(existingItemReview?.id) } : {}),
+      item_review_status: itemReviewStatus,
+      safe_item_review_context: {
+        item_review_summary: tripReady
+          ? "Saved draft trip item reviewed for invoice draft preparation."
+          : "Saved draft trip item blocked until trip details are corrected.",
+        next_action: tripReady
+          ? "Continue reviewing remaining draft items before issue review."
+          : "Resolve the blocked saved draft trip before issue review.",
+        review_status: existingItemReview
+          ? "Saved item review refreshed from invoice draft trip link."
+          : "Saved item review created from invoice draft trip link.",
+      },
+      safe_item_review_note: "Saved from admin monthly invoice draft trip review.",
+      source_trip_summary: {
+        billing_prep_readiness: billingPrepReadiness,
+        booking_reference: bookingReference,
+        closeout_status: closeoutStatus,
+        source: "monthly_invoice_draft_trip_link",
+        trip_readiness_status: tripReadinessStatus,
+      },
+      trip_detail_review_status: tripDetailReviewStatus,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: existingItemReview ? "PATCH" : "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly invoice draft item review save failed.");
+  }
+
+  const itemReview = result.item_review as AdminMonthlyInvoiceDraftItemReviewRecord | null;
+
+  if (!itemReview) {
+    throw new Error("Monthly invoice draft item review response was empty.");
+  }
+
+  return itemReview;
+}
+
 async function saveAdminMonthlyInvoiceIssueRecordFromReview({
   existingRecord,
   issueReview,
@@ -5405,6 +5600,44 @@ function adminMonthlyInvoiceDraftSaveFailureMessage(rawError: unknown) {
   return "Saved monthly invoice draft preparation failed safely.";
 }
 
+function adminMonthlyInvoiceDraftItemReviewFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Saved monthly invoice draft item review read is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Saved monthly invoice draft item review read requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Saved monthly invoice draft item review details need review.";
+  }
+
+  return "Saved monthly invoice draft item review read failed safely.";
+}
+
+function adminMonthlyInvoiceDraftItemReviewSaveFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Saved monthly invoice draft item review is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Saved monthly invoice draft item review requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Saved monthly invoice draft item review details need review.";
+  }
+
+  return "Saved monthly invoice draft item review failed safely.";
+}
+
 function adminMonthlyInvoiceIssueReviewFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -5593,6 +5826,58 @@ function adminMonthlyInvoiceDraftStatusLabel(status: AdminMonthlyInvoiceDraftSta
   }
 
   return "Draft status unavailable";
+}
+
+function adminMonthlyInvoiceDraftItemReviewStatusLabel(
+  status: AdminMonthlyInvoiceDraftItemReviewStatus | null | undefined,
+) {
+  if (status === "pending_review") {
+    return "Item review pending";
+  }
+
+  if (status === "reviewed") {
+    return "Item reviewed";
+  }
+
+  if (status === "needs_correction") {
+    return "Needs correction";
+  }
+
+  if (status === "blocked") {
+    return "Blocked";
+  }
+
+  if (status === "archived") {
+    return "Archived";
+  }
+
+  return "Item review unavailable";
+}
+
+function adminMonthlyInvoiceDraftBillingItemDecisionLabel(
+  decision: AdminMonthlyInvoiceDraftBillingItemDecision | null | undefined,
+) {
+  if (decision === "hold_for_review") {
+    return "Hold for review";
+  }
+
+  if (decision === "include_in_draft") {
+    return "Include in draft";
+  }
+
+  if (decision === "exclude_from_draft") {
+    return "Exclude from draft";
+  }
+
+  if (decision === "needs_manager_review") {
+    return "Needs manager review";
+  }
+
+  if (decision === "blocked") {
+    return "Blocked";
+  }
+
+  return "Decision unavailable";
 }
 
 function adminMonthlyInvoiceIssueReviewStatusLabel(
@@ -6194,6 +6479,15 @@ export default function Home() {
     });
   const [adminMonthlyInvoiceDraftAction, setAdminMonthlyInvoiceDraftAction] =
     useState<AdminMonthlyInvoiceDraftAction | null>(null);
+  const [adminMonthlyInvoiceDraftItemReviewReadState, setAdminMonthlyInvoiceDraftItemReviewReadState] =
+    useState<AdminMonthlyInvoiceDraftItemReviewReadState>({
+      itemReviews: [],
+      message: null,
+      pagination: null,
+      status: "idle",
+    });
+  const [adminMonthlyInvoiceDraftItemReviewAction, setAdminMonthlyInvoiceDraftItemReviewAction] =
+    useState<AdminMonthlyInvoiceDraftItemReviewAction | null>(null);
   const [adminMonthlyInvoiceIssueReviewReadState, setAdminMonthlyInvoiceIssueReviewReadState] =
     useState<AdminMonthlyInvoiceIssueReviewReadState>({
       issueReviews: [],
@@ -6755,6 +7049,117 @@ export default function Home() {
     adminMonthlyBillingGroupingLimit,
     adminMonthlyBillingGroupingPage,
     adminMonthlyBillingGroupingReadinessFilter,
+    dispatchReleaseWorkflowBookingReference,
+  ]);
+
+  useEffect(() => {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    let cancelled = false;
+
+    void (async () => {
+      await Promise.resolve();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!bookingReference) {
+        setAdminMonthlyInvoiceDraftItemReviewReadState({
+          itemReviews: [],
+          message: null,
+          pagination: null,
+          status: "idle",
+        });
+        return;
+      }
+
+      const invoiceDraft = adminMonthlyInvoiceDraftReadState.invoiceDrafts[0] || null;
+      const draftId = clean(invoiceDraft?.id);
+
+      if (!draftId) {
+        setAdminMonthlyInvoiceDraftItemReviewReadState((current) => ({
+          ...current,
+          itemReviews: [],
+          message:
+            adminMonthlyInvoiceDraftReadState.status === "loaded"
+              ? {
+                  tone: "info",
+                  text: "No saved monthly invoice draft is available for item-review read yet.",
+                }
+              : null,
+          pagination: null,
+          status: adminMonthlyInvoiceDraftReadState.status === "loaded" ? "loaded" : "idle",
+        }));
+        return;
+      }
+
+      setAdminMonthlyInvoiceDraftItemReviewReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Loading saved monthly invoice draft item reviews through the guarded admin API...",
+        },
+        status: "loading",
+      }));
+
+      try {
+        const { itemReviews, pagination } = await loadAdminMonthlyInvoiceDraftItemReviewsRead({
+          draftId,
+          limit: adminMonthlyBillingGroupingLimit,
+          page: adminMonthlyBillingGroupingPage,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const totalItemReviewCount = adminMonthlyBillingGroupingCount(
+          pagination?.total_item_review_count,
+        );
+        const loadedItemReviewsText =
+          totalItemReviewCount > itemReviews.length
+            ? `Loaded ${itemReviews.length} of ${totalItemReviewCount} saved monthly invoice draft item reviews.`
+            : `Loaded ${itemReviews.length} saved monthly invoice draft item review${
+                itemReviews.length === 1 ? "" : "s"
+              }.`;
+
+        setAdminMonthlyInvoiceDraftItemReviewReadState({
+          itemReviews,
+          message: {
+            tone: itemReviews.length > 0 ? "success" : "info",
+            text:
+              itemReviews.length > 0
+                ? loadedItemReviewsText
+                : "No saved monthly invoice draft item reviews matched this draft yet.",
+          },
+          pagination,
+          status: "loaded",
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminMonthlyInvoiceDraftItemReviewReadState({
+          itemReviews: [],
+          message: {
+            tone: "error",
+            text: adminMonthlyInvoiceDraftItemReviewFailureMessage(error),
+          },
+          pagination: null,
+          status: "error",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    adminMonthlyBillingGroupingLimit,
+    adminMonthlyBillingGroupingPage,
+    adminMonthlyInvoiceDraftReadState.invoiceDrafts,
+    adminMonthlyInvoiceDraftReadState.status,
     dispatchReleaseWorkflowBookingReference,
   ]);
 
@@ -14115,6 +14520,11 @@ export default function Home() {
     adminMonthlyBillingDraftPlanReadState.draftPlans[0] || null;
   const monthlyInvoiceDraftPrimaryDraft =
     adminMonthlyInvoiceDraftReadState.invoiceDrafts[0] || null;
+  const monthlyInvoiceDraftItemReviewPrimaryReview = monthlyInvoiceDraftPrimaryDraft
+    ? adminMonthlyInvoiceDraftItemReviewReadState.itemReviews.find(
+        (review) => clean(review.draft_id) === clean(monthlyInvoiceDraftPrimaryDraft.id),
+      ) || null
+    : adminMonthlyInvoiceDraftItemReviewReadState.itemReviews[0] || null;
   const monthlyInvoiceIssueReviewPrimaryReview = monthlyInvoiceDraftPrimaryDraft
     ? adminMonthlyInvoiceIssueReviewReadState.issueReviews.find(
         (review) => clean(review.draft_id) === clean(monthlyInvoiceDraftPrimaryDraft.id),
@@ -14129,6 +14539,7 @@ export default function Home() {
   const monthlyBillingSavedGroupingHasGroup = Boolean(monthlyBillingSavedGroupingPrimaryGroup);
   const monthlyBillingDraftPlanHasPlan = Boolean(monthlyBillingDraftPlanPrimaryPlan);
   const monthlyInvoiceDraftHasDraft = Boolean(monthlyInvoiceDraftPrimaryDraft);
+  const monthlyInvoiceDraftItemReviewHasReview = Boolean(monthlyInvoiceDraftItemReviewPrimaryReview);
   const monthlyInvoiceIssueReviewHasReview = Boolean(monthlyInvoiceIssueReviewPrimaryReview);
   const monthlyInvoiceIssueRecordHasRecord = Boolean(monthlyInvoiceIssueRecordPrimaryRecord);
   const monthlyBillingSavedGroupingLoaded =
@@ -14137,6 +14548,8 @@ export default function Home() {
     adminMonthlyBillingDraftPlanReadState.status === "loaded";
   const monthlyInvoiceDraftLoaded =
     adminMonthlyInvoiceDraftReadState.status === "loaded";
+  const monthlyInvoiceDraftItemReviewLoaded =
+    adminMonthlyInvoiceDraftItemReviewReadState.status === "loaded";
   const monthlyInvoiceIssueReviewLoaded =
     adminMonthlyInvoiceIssueReviewReadState.status === "loaded";
   const monthlyInvoiceIssueRecordLoaded =
@@ -14147,6 +14560,8 @@ export default function Home() {
     adminMonthlyBillingDraftPlanReadState.status === "loading";
   const monthlyInvoiceDraftLoading =
     adminMonthlyInvoiceDraftReadState.status === "loading";
+  const monthlyInvoiceDraftItemReviewLoading =
+    adminMonthlyInvoiceDraftItemReviewReadState.status === "loading";
   const monthlyInvoiceIssueReviewLoading =
     adminMonthlyInvoiceIssueReviewReadState.status === "loading";
   const monthlyInvoiceIssueRecordLoading =
@@ -14157,12 +14572,16 @@ export default function Home() {
     adminMonthlyBillingDraftPlanReadState.status === "error";
   const monthlyInvoiceDraftError =
     adminMonthlyInvoiceDraftReadState.status === "error";
+  const monthlyInvoiceDraftItemReviewError =
+    adminMonthlyInvoiceDraftItemReviewReadState.status === "error";
   const monthlyInvoiceIssueReviewError =
     adminMonthlyInvoiceIssueReviewReadState.status === "error";
   const monthlyInvoiceIssueRecordError =
     adminMonthlyInvoiceIssueRecordReadState.status === "error";
   const monthlyBillingSavedGroupingPagination = adminMonthlyBillingGroupingReadState.pagination;
   const monthlyInvoiceDraftPagination = adminMonthlyInvoiceDraftReadState.pagination;
+  const monthlyInvoiceDraftItemReviewPagination =
+    adminMonthlyInvoiceDraftItemReviewReadState.pagination;
   const monthlyInvoiceIssueReviewPagination =
     adminMonthlyInvoiceIssueReviewReadState.pagination;
   const monthlyInvoiceIssueRecordPagination =
@@ -14172,6 +14591,9 @@ export default function Home() {
   );
   const monthlyInvoiceDraftPageCount = adminMonthlyBillingGroupingCount(
     monthlyInvoiceDraftPagination?.page_count,
+  );
+  const monthlyInvoiceDraftItemReviewPageCount = adminMonthlyBillingGroupingCount(
+    monthlyInvoiceDraftItemReviewPagination?.page_count,
   );
   const monthlyInvoiceIssueReviewPageCount = adminMonthlyBillingGroupingCount(
     monthlyInvoiceIssueReviewPagination?.page_count,
@@ -14185,6 +14607,9 @@ export default function Home() {
   const monthlyInvoiceDraftPage = adminMonthlyBillingGroupingCount(
     monthlyInvoiceDraftPagination?.page,
   ) || adminMonthlyBillingGroupingPage;
+  const monthlyInvoiceDraftItemReviewPage = adminMonthlyBillingGroupingCount(
+    monthlyInvoiceDraftItemReviewPagination?.page,
+  ) || adminMonthlyBillingGroupingPage;
   const monthlyInvoiceIssueReviewPage = adminMonthlyBillingGroupingCount(
     monthlyInvoiceIssueReviewPagination?.page,
   ) || adminMonthlyBillingGroupingPage;
@@ -14197,6 +14622,10 @@ export default function Home() {
   const monthlyInvoiceDraftTotalDraftCount =
     adminMonthlyBillingGroupingCount(monthlyInvoiceDraftPagination?.total_draft_count) ||
     adminMonthlyInvoiceDraftReadState.invoiceDrafts.length;
+  const monthlyInvoiceDraftItemReviewTotalCount =
+    adminMonthlyBillingGroupingCount(
+      monthlyInvoiceDraftItemReviewPagination?.total_item_review_count,
+    ) || adminMonthlyInvoiceDraftItemReviewReadState.itemReviews.length;
   const monthlyInvoiceIssueReviewTotalReviewCount =
     adminMonthlyBillingGroupingCount(monthlyInvoiceIssueReviewPagination?.total_review_count) ||
     adminMonthlyInvoiceIssueReviewReadState.issueReviews.length;
@@ -14279,6 +14708,14 @@ export default function Home() {
     adminMonthlyBillingGroupingReadinessLabel(monthlyInvoiceDraftPrimaryDraft?.readiness_status);
   const monthlyInvoiceDraftStatusLabel =
     adminMonthlyInvoiceDraftStatusLabel(monthlyInvoiceDraftPrimaryDraft?.draft_status);
+  const monthlyInvoiceDraftItemReviewStatusLabel =
+    adminMonthlyInvoiceDraftItemReviewStatusLabel(
+      monthlyInvoiceDraftItemReviewPrimaryReview?.item_review_status,
+    );
+  const monthlyInvoiceDraftItemReviewDecisionLabel =
+    adminMonthlyInvoiceDraftBillingItemDecisionLabel(
+      monthlyInvoiceDraftItemReviewPrimaryReview?.billing_item_decision,
+    );
   const monthlyInvoiceIssueReviewReadinessLabel =
     adminMonthlyBillingGroupingReadinessLabel(
       monthlyInvoiceIssueReviewPrimaryReview?.readiness_status,
@@ -14396,6 +14833,22 @@ export default function Home() {
 
     if (monthlyInvoiceDraftLoaded && monthlyBillingSavedGroupingHasGroup && !monthlyInvoiceDraftHasDraft) {
       return "No saved monthly invoice draft returned for this group yet; continue draft preparation through the approved API when ready.";
+    }
+
+    if (monthlyInvoiceDraftItemReviewLoading) {
+      return "Wait for the saved monthly invoice draft item review read to finish.";
+    }
+
+    if (monthlyInvoiceDraftItemReviewError) {
+      return "Review the saved monthly invoice draft item review API access before issue review.";
+    }
+
+    if (
+      monthlyInvoiceDraftItemReviewLoaded &&
+      monthlyInvoiceDraftHasDraft &&
+      !monthlyInvoiceDraftItemReviewHasReview
+    ) {
+      return "No saved monthly invoice draft item review returned for this draft yet; save item review through the approved API when ready.";
     }
 
     if (monthlyInvoiceIssueReviewLoading) {
@@ -14564,6 +15017,15 @@ export default function Home() {
                 monthlyInvoiceDraftPageCount ? ` of ${monthlyInvoiceDraftPageCount}` : ""
               }.`
             : "";
+        const itemReviewPageText =
+          monthlyInvoiceDraftItemReviewTotalCount >
+          adminMonthlyInvoiceDraftItemReviewReadState.itemReviews.length
+            ? ` Showing saved item review page ${monthlyInvoiceDraftItemReviewPage}${
+                monthlyInvoiceDraftItemReviewPageCount
+                  ? ` of ${monthlyInvoiceDraftItemReviewPageCount}`
+                  : ""
+              }.`
+            : "";
         const issueReviewPageText =
           monthlyInvoiceIssueReviewTotalReviewCount >
           adminMonthlyInvoiceIssueReviewReadState.issueReviews.length
@@ -14591,6 +15053,15 @@ export default function Home() {
               : monthlyInvoiceIssueRecordLoaded
                 ? " No saved monthly invoice issue record returned for this saved review yet."
                 : " Saved monthly invoice issue record status pending read.";
+        const itemReviewText = monthlyInvoiceDraftItemReviewLoading
+          ? " Loading saved monthly invoice draft item review status..."
+          : monthlyInvoiceDraftItemReviewError
+            ? " Saved monthly invoice draft item review status unavailable."
+            : monthlyInvoiceDraftItemReviewHasReview
+              ? ` Saved monthly invoice draft item review: ${monthlyInvoiceDraftItemReviewStatusLabel}. Decision: ${monthlyInvoiceDraftItemReviewDecisionLabel}.${itemReviewPageText}`
+              : monthlyInvoiceDraftItemReviewLoaded
+                ? " No saved monthly invoice draft item review returned for this saved draft yet."
+                : " Saved monthly invoice draft item review status pending read.";
         const issueReviewText = monthlyInvoiceIssueReviewLoading
           ? " Loading saved monthly invoice issue review status..."
           : monthlyInvoiceIssueReviewError
@@ -14601,7 +15072,7 @@ export default function Home() {
                 ? " No saved monthly invoice issue review returned for this saved draft yet."
                 : " Saved monthly invoice issue review status pending read.";
 
-        return `${billingDraftPlanText} Saved monthly invoice draft status: ${monthlyInvoiceDraftStatusLabel}. ${monthlyInvoiceDraftReadyTripsCount} ready, ${monthlyInvoiceDraftBlockedTripsCount} blocked, ${monthlyInvoiceDraftTotalTripsCount} total trip${monthlyInvoiceDraftTotalTripsCount === 1 ? "" : "s"}. Readiness: ${monthlyInvoiceDraftReadinessLabel}.${draftPageText}${issueReviewText}`;
+        return `${billingDraftPlanText} Saved monthly invoice draft status: ${monthlyInvoiceDraftStatusLabel}. ${monthlyInvoiceDraftReadyTripsCount} ready, ${monthlyInvoiceDraftBlockedTripsCount} blocked, ${monthlyInvoiceDraftTotalTripsCount} total trip${monthlyInvoiceDraftTotalTripsCount === 1 ? "" : "s"}. Readiness: ${monthlyInvoiceDraftReadinessLabel}.${draftPageText}${itemReviewText}${issueReviewText}`;
       }
 
       if (monthlyInvoiceDraftLoaded) {
@@ -14776,13 +15247,106 @@ export default function Home() {
       setAdminMonthlyInvoiceDraftAction(null);
     }
   };
+  const monthlyInvoiceDraftItemReviewSaving =
+    adminMonthlyInvoiceDraftItemReviewAction === "save-item-review";
+  const monthlyInvoiceDraftItemReviewSaveDisabled =
+    !monthlyInvoiceDraftPrimaryDraft ||
+    !clean(monthlyInvoiceDraftPrimaryDraft.id) ||
+    !Array.isArray(monthlyInvoiceDraftPrimaryDraft.linked_trips) ||
+    monthlyInvoiceDraftPrimaryDraft.linked_trips.length < 1 ||
+    monthlyInvoiceDraftLoading ||
+    monthlyInvoiceDraftItemReviewLoading ||
+    monthlyInvoiceDraftItemReviewSaving;
+  const monthlyInvoiceDraftItemReviewSaveButtonLabel =
+    monthlyInvoiceDraftItemReviewSaving
+      ? "Saving item review..."
+      : monthlyInvoiceDraftItemReviewHasReview
+        ? "Refresh item review"
+        : "Save item review";
+  const saveMonthlyInvoiceDraftItemReviewFromCurrentDraft = async () => {
+    if (!monthlyInvoiceDraftPrimaryDraft || monthlyInvoiceDraftItemReviewSaveDisabled) {
+      setAdminMonthlyInvoiceDraftItemReviewReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Load a saved monthly invoice draft with trip links before saving item review.",
+        },
+      }));
+      return;
+    }
+
+    setAdminMonthlyInvoiceDraftItemReviewAction("save-item-review");
+    setAdminMonthlyInvoiceDraftItemReviewReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Saving monthly invoice draft item review through the guarded admin API...",
+      },
+    }));
+
+    try {
+      const savedItemReview = await saveAdminMonthlyInvoiceDraftItemReviewFromDraft({
+        existingItemReview: monthlyInvoiceDraftItemReviewPrimaryReview,
+        invoiceDraft: monthlyInvoiceDraftPrimaryDraft,
+      });
+
+      setAdminMonthlyInvoiceDraftItemReviewReadState((current) => {
+        const savedId = clean(savedItemReview.id);
+        const savedDraftId = clean(savedItemReview.draft_id);
+        const savedBookingReference = clean(savedItemReview.booking_reference);
+        const savedActionLabel = monthlyInvoiceDraftItemReviewPrimaryReview
+          ? "Refreshed"
+          : "Created";
+        const savedStatusLabel = adminMonthlyInvoiceDraftItemReviewStatusLabel(
+          savedItemReview.item_review_status,
+        );
+        const savedDecisionLabel = adminMonthlyInvoiceDraftBillingItemDecisionLabel(
+          savedItemReview.billing_item_decision,
+        );
+        const otherReviews = current.itemReviews.filter((review) => {
+          if (savedId && clean(review.id) === savedId) {
+            return false;
+          }
+
+          return (
+            clean(review.draft_id) !== savedDraftId ||
+            clean(review.booking_reference) !== savedBookingReference
+          );
+        });
+
+        return {
+          ...current,
+          itemReviews: [savedItemReview, ...otherReviews],
+          message: {
+            tone: "success",
+            text: `${savedActionLabel} monthly invoice draft item review for ${savedBookingReference}: ${savedStatusLabel} / ${savedDecisionLabel}.`,
+          },
+          status: "loaded",
+        };
+      });
+    } catch (error) {
+      setAdminMonthlyInvoiceDraftItemReviewReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminMonthlyInvoiceDraftItemReviewSaveFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminMonthlyInvoiceDraftItemReviewAction(null);
+    }
+  };
   const monthlyInvoiceIssueReviewSaving =
     adminMonthlyInvoiceIssueReviewAction === "save-issue-review";
   const monthlyInvoiceIssueReviewSaveDisabled =
     !monthlyInvoiceDraftPrimaryDraft ||
     !clean(monthlyInvoiceDraftPrimaryDraft.id) ||
+    !monthlyInvoiceDraftItemReviewHasReview ||
     monthlyInvoiceDraftTotalTripsCount < 1 ||
     monthlyInvoiceDraftLoading ||
+    monthlyInvoiceDraftItemReviewLoading ||
+    monthlyInvoiceDraftItemReviewSaving ||
     monthlyInvoiceIssueReviewLoading ||
     monthlyInvoiceIssueReviewSaving;
   const monthlyInvoiceIssueReviewSaveButtonLabel = monthlyInvoiceIssueReviewSaving
@@ -14796,7 +15360,9 @@ export default function Home() {
         ...current,
         message: {
           tone: "info",
-          text: "Load a saved monthly invoice draft before saving issue review.",
+          text: monthlyInvoiceDraftPrimaryDraft && !monthlyInvoiceDraftItemReviewHasReview
+            ? "Save a monthly invoice draft item review before saving issue review."
+            : "Load a saved monthly invoice draft before saving issue review.",
         },
       }));
       return;
@@ -25351,6 +25917,16 @@ export default function Home() {
                       {adminMonthlyInvoiceDraftReadState.message.text}
                     </p>
                   ) : null}
+                  {adminMonthlyInvoiceDraftItemReviewReadState.message ? (
+                    <p
+                      className={`mt-1 rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(
+                        adminMonthlyInvoiceDraftItemReviewReadState.message.tone,
+                      )}`}
+                      data-admin-monthly-invoice-draft-item-review-read-feedback="true"
+                    >
+                      {adminMonthlyInvoiceDraftItemReviewReadState.message.text}
+                    </p>
+                  ) : null}
                   {adminMonthlyInvoiceIssueReviewReadState.message ? (
                     <p
                       className={`mt-1 rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(
@@ -25537,6 +26113,30 @@ export default function Home() {
               {monthlyInvoiceDraftHasDraft ? (
                 <div
                   className="mt-2 flex min-w-0 flex-col gap-1 rounded-md border border-teal-200 bg-white p-1.5 sm:flex-row sm:items-center sm:justify-between"
+                  data-admin-monthly-invoice-draft-item-review-action-row="true"
+                >
+                  <p
+                    className="min-w-0 break-words text-xs font-semibold text-teal-950"
+                    data-admin-monthly-invoice-draft-item-review-action-summary="true"
+                  >
+                    {monthlyInvoiceDraftItemReviewHasReview
+                      ? `Saved item review: ${monthlyInvoiceDraftItemReviewStatusLabel} / ${monthlyInvoiceDraftItemReviewDecisionLabel}`
+                      : "No saved item review for this draft yet."}
+                  </p>
+                  <button
+                    className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-teal-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
+                    data-admin-monthly-invoice-draft-item-review-save-action="true"
+                    disabled={monthlyInvoiceDraftItemReviewSaveDisabled}
+                    onClick={saveMonthlyInvoiceDraftItemReviewFromCurrentDraft}
+                    type="button"
+                  >
+                    {monthlyInvoiceDraftItemReviewSaveButtonLabel}
+                  </button>
+                </div>
+              ) : null}
+              {monthlyInvoiceDraftHasDraft ? (
+                <div
+                  className="mt-2 flex min-w-0 flex-col gap-1 rounded-md border border-teal-200 bg-white p-1.5 sm:flex-row sm:items-center sm:justify-between"
                   data-admin-monthly-invoice-issue-review-action-row="true"
                 >
                   <p
@@ -25639,10 +26239,10 @@ export default function Home() {
                 className="mt-1.5 border-t border-teal-200 pt-1.5 text-[11px] leading-4 text-teal-900 md:text-[10px] md:leading-3"
                 data-admin-monthly-billing-month-grouping-review-boundary="true"
               >
-                Guarded admin API read plus monthly billing draft-plan, invoice draft-prep, issue-review,
-                and issue-record save only. No direct Supabase write outside approved API routes, invoice creation, PDF,
-                payment, payout, notification sending, auth change, parser change, billing activation,
-                customer message, or driver notification behavior.
+                Guarded admin API read plus monthly billing draft-plan, invoice draft-prep, item-review,
+                issue-review, and issue-record save only. No direct Supabase write outside approved API routes,
+                invoice creation, PDF, payment, payout, notification sending, auth change, parser change,
+                billing activation, customer message, or driver notification behavior.
               </p>
             </section>
           </div>

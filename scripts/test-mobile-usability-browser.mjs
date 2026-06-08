@@ -2759,6 +2759,7 @@ async function runChromeTest() {
       assert.equal(
         state.boundary.includes("Guarded admin API read plus monthly billing draft-plan") &&
           state.boundary.includes("invoice draft-prep") &&
+          state.boundary.includes("item-review") &&
           state.boundary.includes("issue-review") &&
           state.boundary.includes("issue-record save only.") &&
           state.boundary.includes("No direct Supabase write outside approved API routes") &&

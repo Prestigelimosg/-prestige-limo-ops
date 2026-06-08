@@ -8,6 +8,8 @@ import {
   createAdminAppNotification,
   loadAdminAppNotifications,
   parseAdminAppNotificationCreatePayload,
+  parseAdminAppNotificationUpdatePayload,
+  updateAdminAppNotificationStatus,
 } from "../../../lib/admin-app-notification-persistence";
 
 export const dynamic = "force-dynamic";
@@ -118,6 +120,48 @@ export async function POST(request: Request) {
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
     const result = await createAdminAppNotification(parsed.data, actor);
+
+    if (!result.ok) {
+      return Response.json(
+        {
+          error: result.error,
+          ok: false,
+        },
+        { status: result.status },
+      );
+    }
+
+    return Response.json({
+      notification: result.data,
+      ok: true,
+    });
+  } catch {
+    return safeFailureResponse();
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const boundary = requireAdminDispatcherBoundary(request);
+
+    if (!boundary.ok) {
+      return boundary.response;
+    }
+
+    const parsed = parseAdminAppNotificationUpdatePayload(await readJsonBody(request));
+
+    if (!parsed.ok) {
+      return Response.json(
+        {
+          error: parsed.error,
+          ok: false,
+        },
+        { status: parsed.status },
+      );
+    }
+
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const result = await updateAdminAppNotificationStatus(parsed.data, actor);
 
     if (!result.ok) {
       return Response.json(

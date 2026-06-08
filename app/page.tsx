@@ -639,6 +639,7 @@ type AdminAppNotificationStatus =
   | "blocked";
 
 type AdminAppNotificationPriority = "low" | "normal" | "high" | "urgent";
+type AdminAppNotificationUpdateStatus = "archived" | "dismissed" | "read";
 
 type AdminAppNotificationRecord = {
   created_at?: string | null;
@@ -666,6 +667,11 @@ type AdminAppNotificationReadState = {
   pagination: AdminAppNotificationPagination | null;
   status: "idle" | "loading" | "loaded" | "error";
 };
+
+type AdminAppNotificationAction = {
+  notificationId: string;
+  status: AdminAppNotificationUpdateStatus;
+} | null;
 
 type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
 type AdminMonthlyBillingGroupingReadinessFilter =
@@ -4110,6 +4116,18 @@ function adminAppNotificationPriorityLabel(value: string | null | undefined) {
   return "Normal";
 }
 
+function adminAppNotificationUpdateStatusLabel(status: AdminAppNotificationUpdateStatus) {
+  if (status === "archived") {
+    return "archived";
+  }
+
+  if (status === "dismissed") {
+    return "dismissed";
+  }
+
+  return "marked read";
+}
+
 function adminAppNotificationTimeLabel(value: string | null | undefined) {
   const cleaned = clean(value);
 
@@ -4299,6 +4317,30 @@ async function loadAdminAppNotificationsRead() {
       : [],
     pagination: (result.pagination || null) as AdminAppNotificationPagination | null,
   };
+}
+
+async function updateAdminAppNotificationStatus(
+  notificationId: string,
+  notificationStatus: AdminAppNotificationUpdateStatus,
+) {
+  const response = await fetch(adminAppNotificationsApiPath, {
+    body: JSON.stringify({
+      notification_id: notificationId,
+      notification_status: notificationStatus,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "PATCH",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Admin app notification status update failed.");
+  }
+
+  return result.notification as AdminAppNotificationRecord;
 }
 
 async function loadAdminMapLocationSearchFirstMatch(query: string) {
@@ -5359,6 +5401,8 @@ export default function Home() {
       status: "idle",
     });
   const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
+  const [adminAppNotificationAction, setAdminAppNotificationAction] =
+    useState<AdminAppNotificationAction>(null);
   const [completedTripCloseoutReviewMessage, setCompletedTripCloseoutReviewMessage] =
     useState<Message | null>(null);
   const [adminMonthlyBillingGroupingReadState, setAdminMonthlyBillingGroupingReadState] =
@@ -5539,6 +5583,79 @@ export default function Home() {
       cancelled = true;
     };
   }, [activeTab, adminAppNotificationReadRevision]);
+
+  const handleAdminAppNotificationStatusUpdate = async (
+    notificationId: string,
+    notificationStatus: AdminAppNotificationUpdateStatus,
+  ) => {
+    const cleanedNotificationId = clean(notificationId);
+
+    if (!cleanedNotificationId) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: "Saved admin app notification id is missing.",
+        },
+      }));
+      return;
+    }
+
+    setAdminAppNotificationAction({
+      notificationId: cleanedNotificationId,
+      status: notificationStatus,
+    });
+    setAdminAppNotificationReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: `Updating saved admin app notification to ${adminAppNotificationUpdateStatusLabel(
+          notificationStatus,
+        )}...`,
+      },
+    }));
+
+    try {
+      const updatedNotification = await updateAdminAppNotificationStatus(
+        cleanedNotificationId,
+        notificationStatus,
+      );
+      const updatedId = clean(updatedNotification.id) || cleanedNotificationId;
+      const updatedLabel = adminAppNotificationUpdateStatusLabel(notificationStatus);
+
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "success",
+          text: `Saved admin app notification ${updatedLabel}.`,
+        },
+        notifications: current.notifications.filter(
+          (notification) => clean(notification.id) !== updatedId,
+        ),
+        pagination: current.pagination
+          ? {
+              ...current.pagination,
+              total_notification_count: Math.max(
+                0,
+                adminMonthlyBillingGroupingCount(current.pagination.total_notification_count) - 1,
+              ),
+            }
+          : current.pagination,
+        status: "loaded",
+      }));
+    } catch (error) {
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminAppNotificationFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminAppNotificationAction(null);
+    }
+  };
 
   const dispatchReleaseWorkflowBookingReference =
     clean(appliedAdminBookingSnapshotReference) || clean(loadedBookingId);
@@ -25193,10 +25310,10 @@ export default function Home() {
             className="mb-4 rounded-md border border-sky-200 bg-sky-50/70 p-2 sm:p-3"
             data-admin-app-notification-feed="true"
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-950">Admin App Notifications</h3>
-                <p className="text-xs text-slate-600 sm:text-sm">
+                <p className="hidden text-xs text-slate-600 sm:block sm:text-sm">
                   Saved internal app alerts from the guarded admin API.
                 </p>
               </div>
@@ -25227,7 +25344,7 @@ export default function Home() {
 
             {adminAppNotificationReadState.message ? (
               <div
-                className={`mt-3 rounded-md border px-3 py-2 text-sm ${statusClass(
+                className={`mt-2 rounded-md border px-2 py-1.5 text-xs sm:text-sm ${statusClass(
                   adminAppNotificationReadState.message.tone,
                 )}`}
                 data-admin-app-notification-feed-feedback="true"
@@ -25238,22 +25355,30 @@ export default function Home() {
 
             {adminAppNotificationReadState.notifications.length > 0 ? (
               <div
-                className="mt-3 grid gap-2"
+                className="mt-2 grid gap-2"
                 data-admin-app-notification-feed-rows="true"
               >
                 {adminAppNotificationReadState.notifications.slice(0, 5).map((notification, index) => {
+                  const notificationId = clean(notification.id);
                   const title = clean(notification.safe_title) || "Admin app notification";
                   const message = clean(notification.safe_message) || "No safe notification message recorded.";
                   const notificationType = adminAppNotificationDisplayLabel(notification.notification_type);
                   const notificationPriority = adminAppNotificationPriorityLabel(notification.priority);
                   const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
                   const createdTime = adminAppNotificationTimeLabel(notification.created_at);
+                  const activeNotificationAction =
+                    notificationId &&
+                    adminAppNotificationAction?.notificationId === notificationId
+                      ? adminAppNotificationAction.status
+                      : null;
+                  const notificationActionDisabled =
+                    !notificationId || Boolean(adminAppNotificationAction);
 
                   return (
                     <div
-                      className="rounded-md border border-sky-100 bg-white p-2 text-sm sm:p-3"
+                      className="rounded-md border border-sky-100 bg-white p-2 text-xs sm:p-3 sm:text-sm"
                       data-admin-app-notification-feed-row="true"
-                      key={clean(notification.id) || `${title}-${index}`}
+                      key={notificationId || `${title}-${index}`}
                     >
                       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
@@ -25264,7 +25389,7 @@ export default function Home() {
                             {title}
                           </h4>
                           <p
-                            className="mt-1 break-words text-slate-700"
+                            className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
                             data-admin-app-notification-feed-message="true"
                           >
                             {message}
@@ -25277,6 +25402,35 @@ export default function Home() {
                       <p className="mt-2 break-words text-xs text-slate-600">
                         {notificationType} / {notificationStatus} / {createdTime}
                       </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {[
+                          {
+                            label: "Mark read",
+                            status: "read" as const,
+                          },
+                          {
+                            label: "Dismiss",
+                            status: "dismissed" as const,
+                          },
+                          {
+                            label: "Archive",
+                            status: "archived" as const,
+                          },
+                        ].map((action) => (
+                          <button
+                            className="h-7 rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                            data-admin-app-notification-action={action.status}
+                            disabled={notificationActionDisabled}
+                            key={action.status}
+                            onClick={() =>
+                              handleAdminAppNotificationStatusUpdate(notificationId, action.status)
+                            }
+                            type="button"
+                          >
+                            {activeNotificationAction === action.status ? "Updating..." : action.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   );
                 })}
@@ -25291,7 +25445,7 @@ export default function Home() {
             ) : null}
 
             <p
-              className="mt-3 text-xs text-slate-500"
+              className="mt-2 text-xs text-slate-500"
               data-admin-app-notification-feed-boundary="true"
             >
               Admin-only read. No external delivery, invoice creation, payment, payout, customer auth,

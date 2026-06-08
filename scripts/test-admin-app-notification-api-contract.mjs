@@ -128,12 +128,23 @@ async function loadHarness() {
 class MockSupabaseQuery {
   constructor(client, table) {
     this.client = client;
+    this.filters = [];
     this.operation = null;
     this.payload = null;
     this.resultLimit = null;
     this.resultMode = "many";
     this.selectedColumns = null;
     this.table = table;
+  }
+
+  eq(column, value) {
+    this.filters.push({
+      column,
+      type: "eq",
+      value,
+    });
+
+    return this;
   }
 
   insert(payload) {
@@ -169,11 +180,28 @@ class MockSupabaseQuery {
     return Promise.resolve(this.execute()).then(onFulfilled, onRejected);
   }
 
+  update(payload) {
+    this.operation = "update";
+    this.payload = payload;
+
+    return this;
+  }
+
   execute() {
     if (this.operation === "insert") {
       return this.client.insertRow(
         this.table,
         this.payload,
+        this.resultMode,
+        this.selectedColumns,
+      );
+    }
+
+    if (this.operation === "update") {
+      return this.client.updateRows(
+        this.table,
+        this.payload,
+        this.filters,
         this.resultMode,
         this.selectedColumns,
       );
@@ -189,6 +217,7 @@ class MockSupabaseClient {
     this.insertHistory = [];
     this.operations = [];
     this.selectHistory = [];
+    this.updateHistory = [];
     this.tables = {
       admin_app_notification_outbox: [],
     };
@@ -206,6 +235,12 @@ class MockSupabaseClient {
 
   failureFor(action, table) {
     return this.failures[`${action}:${table}`] || this.failures[table] || null;
+  }
+
+  filterRows(table, filters) {
+    return this.tables[table].filter((row) =>
+      filters.every((filter) => row[filter.column] === filter.value),
+    );
   }
 
   insertRow(table, payload, resultMode, selectedColumns) {
@@ -269,6 +304,55 @@ class MockSupabaseClient {
 
     return {
       data: this.tables[table].slice(0, resultLimit || undefined).map((row) => clone(row)),
+      error: null,
+    };
+  }
+
+  updateRows(table, payload, filters, resultMode, selectedColumns) {
+    const failure = this.failureFor("update", table);
+
+    this.updateHistory.push({
+      filters: clone(filters),
+      payload: clone(payload),
+      resultMode,
+      selectedColumns,
+      table,
+    });
+    this.operations.push({
+      action: "update",
+      filters: clone(filters),
+      payload: clone(payload),
+      table,
+    });
+
+    if (failure) {
+      return {
+        data: null,
+        error: failure,
+      };
+    }
+
+    const updatedRows = [];
+
+    this.tables[table] = this.tables[table].map((row) => {
+      const matches = filters.every((filter) => row[filter.column] === filter.value);
+
+      if (!matches) {
+        return row;
+      }
+
+      const updatedRow = {
+        ...row,
+        ...clone(payload),
+      };
+
+      updatedRows.push(updatedRow);
+
+      return updatedRow;
+    });
+
+    return {
+      data: resultMode === "single" ? clone(updatedRows[0] || null) : updatedRows.map((row) => clone(row)),
       error: null,
     };
   }
@@ -505,6 +589,189 @@ try {
       "Expected POST payload not to include external delivery, finance, auth, parser, or secret fields",
     );
 
+    setEnv(validProductionEnv());
+    const updateMock = installMockClient({
+      admin_app_notification_outbox: [
+        {
+          actor_label: "System",
+          actor_role: "system",
+          booking_reference: "APP-NOTIFY-REF-001",
+          created_at: "2026-06-07T03:00:00.000Z",
+          delivery_surface: "admin_app",
+          event_key: "APP-NOTIFY-REF-001:queued",
+          id: "queued-update-target",
+          notification_status: "queued",
+          notification_type: "driver_status",
+          priority: "high",
+          safe_context: {},
+          safe_message: "Saved driver status is ready for review.",
+          safe_title: "Saved driver status",
+          source_surface: "system",
+          updated_at: "2026-06-07T03:00:00.000Z",
+          workflow_area: "day_of_trip_dispatch_monitor",
+        },
+      ],
+    });
+    const patchResult = await responseJson(
+      await route.PATCH(
+        new Request("http://localhost/api/admin-app-notifications", {
+          body: JSON.stringify({
+            notification_id: "queued-update-target",
+            notification_status: "read",
+          }),
+          headers: validAdminHeaders({
+            "content-type": "application/json",
+          }),
+          method: "PATCH",
+        }),
+      ),
+    );
+
+    assert.equal(patchResult.status, 200);
+    assert.deepEqual(
+      {
+        actor_role: patchResult.body.notification.actor_role,
+        id: patchResult.body.notification.id,
+        notification_status: patchResult.body.notification.notification_status,
+        source_surface: patchResult.body.notification.source_surface,
+      },
+      {
+        actor_role: "admin",
+        id: "queued-update-target",
+        notification_status: "read",
+        source_surface: "admin_api",
+      },
+      "Expected PATCH to update one queued admin app notification status",
+    );
+    assert.deepEqual(
+      updateMock.client.updateHistory.map((entry) => ({
+        filters: entry.filters,
+        payloadKeys: Object.keys(entry.payload).sort(),
+        table: entry.table,
+      })),
+      [
+        {
+          filters: [
+            {
+              column: "id",
+              type: "eq",
+              value: "queued-update-target",
+            },
+            {
+              column: "notification_status",
+              type: "eq",
+              value: "queued",
+            },
+          ],
+          payloadKeys: [
+            "actor_label",
+            "actor_role",
+            "notification_status",
+            "source_surface",
+            "updated_at",
+          ],
+          table: "admin_app_notification_outbox",
+        },
+      ],
+      "Expected PATCH to update only the exact queued notification row",
+    );
+    assert.deepEqual(
+      {
+        actor_label: updateMock.client.updateHistory[0].payload.actor_label,
+        actor_role: updateMock.client.updateHistory[0].payload.actor_role,
+        notification_status: updateMock.client.updateHistory[0].payload.notification_status,
+        source_surface: updateMock.client.updateHistory[0].payload.source_surface,
+      },
+      {
+        actor_label: "Notification contract admin",
+        actor_role: "admin",
+        notification_status: "read",
+        source_surface: "admin_api",
+      },
+      "Expected PATCH payload to include only safe status and actor audit fields",
+    );
+    assert.equal(
+      unsafeNotificationLeakPattern.test(JSON.stringify(updateMock.client.updateHistory[0].payload)),
+      false,
+      "Expected PATCH payload not to include external delivery, finance, auth, parser, or secret fields",
+    );
+
+    for (const nextStatus of ["dismissed", "archived"]) {
+      setEnv(validProductionEnv());
+      const statusMock = installMockClient({
+        admin_app_notification_outbox: [
+          {
+            ...safeNotificationPayload({
+              notification_status: "queued",
+            }),
+            actor_label: "System",
+            actor_role: "system",
+            created_at: "2026-06-07T03:00:00.000Z",
+            delivery_surface: "admin_app",
+            id: `queued-${nextStatus}-target`,
+            source_surface: "system",
+            updated_at: "2026-06-07T03:00:00.000Z",
+          },
+        ],
+      });
+      const statusPatchResult = await responseJson(
+        await route.PATCH(
+          new Request("http://localhost/api/admin-app-notifications", {
+            body: JSON.stringify({
+              notification_id: `queued-${nextStatus}-target`,
+              notification_status: nextStatus,
+            }),
+            headers: validAdminHeaders({
+              "content-type": "application/json",
+            }),
+            method: "PATCH",
+          }),
+        ),
+      );
+
+      assert.equal(statusPatchResult.status, 200);
+      assert.equal(statusPatchResult.body.notification.notification_status, nextStatus);
+      assert.equal(statusMock.client.updateHistory[0].payload.notification_status, nextStatus);
+    }
+
+    setEnv(validProductionEnv());
+    const unsafePatchMock = installMockClient();
+    const unsafePatchResult = await responseJson(
+      await route.PATCH(
+        new Request("http://localhost/api/admin-app-notifications", {
+          body: JSON.stringify({
+            notification_id: "queued-update-target",
+            notification_status: "read",
+            telegram_chat_id: "should-not-be-accepted",
+          }),
+          headers: validAdminHeaders({
+            "content-type": "application/json",
+          }),
+          method: "PATCH",
+        }),
+      ),
+    );
+
+    assert.equal(unsafePatchResult.status, 400);
+    assert.equal(unsafePatchMock.client.operations.length, 0, "Unsafe PATCH must not reach Supabase");
+
+    const malformedPatchStatus = await responseJson(
+      await route.PATCH(
+        new Request("http://localhost/api/admin-app-notifications", {
+          body: JSON.stringify({
+            notification_id: "queued-update-target",
+            notification_status: "queued",
+          }),
+          headers: validAdminHeaders({
+            "content-type": "application/json",
+          }),
+          method: "PATCH",
+        }),
+      ),
+    );
+
+    assert.equal(malformedPatchStatus.status, 400);
+
     for (const [label, request] of [
       ["anonymous", new Request("http://localhost/api/admin-app-notifications")],
       [
@@ -537,6 +804,48 @@ try {
       assert.equal(blocked.status, 403, `Expected ${label} GET to be blocked`);
       assert.equal(blocked.body.error, routeBlockedMessage);
       assert.equal(safeApiLeakPattern.test(JSON.stringify(blocked.body)), false);
+    }
+
+    for (const [label, headers] of [
+      ["anonymous", { "content-type": "application/json" }],
+      [
+        "public-book",
+        validAdminHeaders({
+          referer: "http://localhost/book",
+          "content-type": "application/json",
+        }),
+      ],
+      [
+        "driver",
+        validAdminHeaders({
+          referer: "http://localhost/driver-job-demo",
+          "content-type": "application/json",
+        }),
+      ],
+      [
+        "wrong-purpose",
+        validAdminHeaders({
+          "content-type": "application/json",
+          "x-prestige-admin-purpose": "customer-surface",
+        }),
+      ],
+    ]) {
+      const blockedPatch = await responseJson(
+        await route.PATCH(
+          new Request("http://localhost/api/admin-app-notifications", {
+            body: JSON.stringify({
+              notification_id: "queued-update-target",
+              notification_status: "read",
+            }),
+            headers,
+            method: "PATCH",
+          }),
+        ),
+      );
+
+      assert.equal(blockedPatch.status, 403, `Expected ${label} PATCH to be blocked`);
+      assert.equal(blockedPatch.body.error, routeBlockedMessage);
+      assert.equal(safeApiLeakPattern.test(JSON.stringify(blockedPatch.body)), false);
     }
 
     setEnv(validProductionEnv());

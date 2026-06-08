@@ -57,6 +57,16 @@ export type AdminAppNotificationLoadParams = {
   priority: AdminAppNotificationPriority | null;
 };
 
+export type AdminAppNotificationUpdateStatus = Extract<
+  AdminAppNotificationStatus,
+  "archived" | "dismissed" | "read"
+>;
+
+export type AdminAppNotificationUpdateInput = {
+  notification_id: string;
+  notification_status: AdminAppNotificationUpdateStatus;
+};
+
 export type AdminAppNotificationRecord = AdminAppNotificationInput & {
   actor_label: string | null;
   actor_role: "admin" | "dispatcher" | "system";
@@ -90,6 +100,7 @@ const maxNotificationPage = 1000;
 const maxReadRows = 500;
 const maxBookingReferenceLength = 120;
 const maxEventKeyLength = 160;
+const maxNotificationIdLength = 120;
 const maxSafeContextJsonLength = 2000;
 const maxSafeMessageLength = 1000;
 const maxSafeTitleLength = 160;
@@ -106,8 +117,14 @@ const safeNotificationServerSessionActorError =
   "Admin app notification persistence requires a verified admin or dispatcher server session.";
 const safeNotificationCreateError = "Admin app notification create failed safely.";
 const safeNotificationLoadError = "Admin app notification load failed safely.";
+const safeNotificationUpdateError = "Admin app notification status update failed safely.";
 const allowedNotificationTypes = new Set<string>(adminAppNotificationTypes);
 const allowedNotificationStatuses = new Set<string>(adminAppNotificationStatuses);
+const allowedNotificationUpdateStatuses = new Set<string>([
+  "archived",
+  "dismissed",
+  "read",
+]);
 const allowedNotificationPriorities = new Set<string>(adminAppNotificationPriorities);
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSourceSurfaces = new Set(["admin_api", "admin_dashboard", "migration", "system"]);
@@ -121,6 +138,10 @@ const allowedTopLevelFields = new Set([
   "safe_message",
   "safe_title",
   "workflow_area",
+]);
+const allowedUpdateTopLevelFields = new Set([
+  "notification_id",
+  "notification_status",
 ]);
 const forbiddenNotificationFragments = [
   "amount_due",
@@ -278,6 +299,14 @@ function validNotificationStatus(value: unknown) {
 
   return cleaned && allowedNotificationStatuses.has(cleaned)
     ? (cleaned as AdminAppNotificationStatus)
+    : null;
+}
+
+function validNotificationUpdateStatus(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  return cleaned && allowedNotificationUpdateStatuses.has(cleaned)
+    ? (cleaned as AdminAppNotificationUpdateStatus)
     : null;
 }
 
@@ -741,6 +770,39 @@ export function parseAdminAppNotificationCreatePayload(
   };
 }
 
+export function parseAdminAppNotificationUpdatePayload(
+  value: unknown,
+): AdminBookingResult<AdminAppNotificationUpdateInput> {
+  const record = asRecord(value);
+
+  if (
+    unknownKeys(record, allowedUpdateTopLevelFields, "notification").length > 0 ||
+    findForbiddenFieldNames(record).length > 0 ||
+    findForbiddenTextValues(record).length > 0
+  ) {
+    return unsafeNotificationResult();
+  }
+
+  const notificationId = safeText(record.notification_id, maxNotificationIdLength);
+  const notificationStatus = validNotificationUpdateStatus(record.notification_status);
+
+  if (!notificationId || !notificationStatus) {
+    return {
+      error: "Admin app notification status update details are malformed.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return {
+    data: {
+      notification_id: notificationId,
+      notification_status: notificationStatus,
+    },
+    ok: true,
+  };
+}
+
 export async function loadAdminAppNotifications(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
@@ -815,6 +877,51 @@ export async function createAdminAppNotification(
 
   return {
     data: normalizeNotificationRecord(asRecord(data)),
+    ok: true,
+  };
+}
+
+export async function updateAdminAppNotificationStatus(
+  input: AdminAppNotificationUpdateInput,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminBookingResult<AdminAppNotificationRecord>> {
+  const clientResult = getServerOnlyNotificationSupabaseClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const payload = {
+    actor_label: actor.actor_label,
+    actor_role: actor.actor_role,
+    notification_status: input.notification_status,
+    source_surface: actor.source_surface,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await clientResult.data
+    .from("admin_app_notification_outbox")
+    .update(payload)
+    .eq("id", input.notification_id)
+    .eq("notification_status", "queued")
+    .select(notificationSelect)
+    .single();
+
+  if (error) {
+    return safeAdapterFailure(safeNotificationUpdateError, 500, error);
+  }
+
+  const notification = normalizeNotificationRecord(asRecord(data));
+
+  if (!notification.id) {
+    return {
+      error: safeNotificationUpdateError,
+      ok: false,
+      status: 404,
+    };
+  }
+
+  return {
+    data: notification,
     ok: true,
   };
 }

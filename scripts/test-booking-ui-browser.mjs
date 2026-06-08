@@ -5952,8 +5952,16 @@ async function runChromeTest() {
 
         if (String(target).includes("/api/admin-app-notifications")) {
           const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
 
           window.__prestigeAdminAppNotificationRequests.push({
+            body: parsedBody,
             headers,
             method,
             search: url.search,
@@ -5997,6 +6005,37 @@ async function runChromeTest() {
                 version: "browser-admin-app-notification-feed-read-mock",
               }),
               { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "PATCH") {
+            const notificationId = parsedBody?.notification_id || "";
+            const notificationStatus = parsedBody?.notification_status || "";
+            let updatedNotification = null;
+
+            window.__prestigeAdminAppNotifications = (window.__prestigeAdminAppNotifications || []).map((notification) => {
+              if (notification.id !== notificationId || notification.notification_status !== "queued") {
+                return notification;
+              }
+
+              updatedNotification = {
+                ...notification,
+                notification_status: notificationStatus,
+                updated_at: "2026-06-08T02:05:00.000Z",
+              };
+
+              return updatedNotification;
+            });
+
+            return new Response(
+              JSON.stringify({
+                notification: updatedNotification,
+                ok: Boolean(updatedNotification),
+              }),
+              {
+                status: updatedNotification ? 200 : 404,
+                headers: { "content-type": "application/json" },
+              },
             );
           }
 
@@ -6699,6 +6738,77 @@ async function runChromeTest() {
       true,
       "Expected admin notification feed boundary to stay internal and non-sending",
     );
+    const clickedAdminAppNotificationRead = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-app-notification-action='read']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedAdminAppNotificationRead, true, "Expected Mark read action to be clickable");
+    const adminAppNotificationPatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const feed = document.querySelector("[data-admin-app-notification-feed='true']");
+          const requests = window.__prestigeAdminAppNotificationRequests || [];
+          const patchRequest = requests.find((request) => request.method === "PATCH");
+
+          if (!patchRequest) {
+            return false;
+          }
+
+          const feedback =
+            feed?.querySelector("[data-admin-app-notification-feed-feedback='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+          const empty =
+            feed?.querySelector("[data-admin-app-notification-feed-empty='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+          const rowCount = feed?.querySelectorAll("[data-admin-app-notification-feed-row='true']").length || 0;
+
+          if (feedback !== "Saved admin app notification marked read." || empty !== "No queued admin app notifications." || rowCount !== 0) {
+            return false;
+          }
+
+          return {
+            empty,
+            feedback,
+            patchRequest,
+            rowCount,
+          };
+        })()`),
+      10000,
+      "admin app notification mark read",
+    );
+    assert.deepEqual(
+      {
+        body: adminAppNotificationPatchState.patchRequest.body,
+        hasSessionTokenHeader: Boolean(
+          adminAppNotificationPatchState.patchRequest.headers["x-prestige-admin-session-token"],
+        ),
+        method: adminAppNotificationPatchState.patchRequest.method,
+        purpose: adminAppNotificationPatchState.patchRequest.headers["x-prestige-admin-purpose"] || "",
+        search: adminAppNotificationPatchState.patchRequest.search,
+      },
+      {
+        body: {
+          notification_id: "browser-admin-app-notification-one",
+          notification_status: "read",
+        },
+        hasSessionTokenHeader: false,
+        method: "PATCH",
+        purpose: "admin-booking-persistence",
+        search: "",
+      },
+      "Expected Mark read to PATCH only the exact admin app notification status",
+    );
+    assert.equal(adminAppNotificationPatchState.feedback, "Saved admin app notification marked read.");
+    assert.equal(adminAppNotificationPatchState.empty, "No queued admin app notifications.");
+    assert.equal(adminAppNotificationPatchState.rowCount, 0);
 
     const hiddenLegacyMrLeeDashboardState = await evaluate(`(() => {
       const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);

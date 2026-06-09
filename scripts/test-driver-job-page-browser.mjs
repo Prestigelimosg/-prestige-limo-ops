@@ -257,7 +257,6 @@ async function runChromeTest() {
         layoutPositions: {
           reportIssue: Math.round(document.querySelector("[data-driver-job-report-issue]")?.getBoundingClientRect().top ?? -1),
           saveAcknowledge: Math.round(document.querySelector("[data-driver-job-save-acknowledge]")?.getBoundingClientRect().top ?? -1),
-          statusBoundary: Math.round(document.querySelector("[data-driver-job-status-boundary]")?.getBoundingClientRect().top ?? -1),
           statusButtons: Math.round(document.querySelector("[data-driver-primary-step='status-buttons']")?.getBoundingClientRect().top ?? -1),
           statusHistory: Math.round(document.querySelector("[data-driver-job-saved-status-history]")?.getBoundingClientRect().top ?? -1),
         },
@@ -797,11 +796,6 @@ async function runChromeTest() {
       true,
       "Expected status history below the frequent status buttons.",
     );
-    assert.equal(
-      validState.layoutPositions.statusBoundary > validState.layoutPositions.statusButtons,
-      true,
-      "Expected status boundary help below the frequent status buttons.",
-    );
     assert.equal(validState.appUpdates.visible, true, "Expected driver app updates feed on tokenized driver page.");
     assert.equal(validState.appUpdates.state, "loaded", "Expected driver app updates to load through the token route.");
     assert.equal(
@@ -845,24 +839,10 @@ async function runChromeTest() {
       [],
       "Driver app updates feed should stay read-only in this stage.",
     );
-    assert.equal(validState.statusBoundary.visible, true, "Expected driver status boundary guidance.");
-    assert.equal(validState.statusBoundary.title, "Status Boundary");
-    assert.deepEqual(
-      validState.statusBoundary.items,
-      [
-        "Current flow: OTW, OTS, POB, then Job Completed.",
-        "Status updates are accepted only through this guarded job link.",
-        "Job Completed closes the trip progress for dispatch review.",
-        "No private account, file upload, or location-tracking action is created here.",
-        "Use Report Issue for in-app admin alerts.",
-      ],
-      "Expected compact driver completion/status boundary guidance.",
-    );
-    assert.equal(
-      validState.statusBoundary.helper,
-      "Feedback appears under the status button you tap.",
-      "Expected status boundary to keep feedback near clicked controls.",
-    );
+    assert.equal(validState.statusBoundary.visible, false, "Expected bulky driver status boundary help to be removed.");
+    assert.equal(validState.visibleText.includes("Status Boundary"), false);
+    assert.equal(validState.visibleText.includes("Current flow: OTW, OTS, POB, then Job Completed."), false);
+    assert.equal(validState.visibleText.includes("Feedback appears under the status button you tap."), false);
     assert.equal(validState.statusTiming.visible, true, "Expected compact read-only driver status timing evidence.");
     assert.deepEqual(validState.statusTiming.controls, [], "Status timing evidence must not expose edit controls.");
     assert.equal(
@@ -1042,24 +1022,13 @@ async function runChromeTest() {
       ),
     );
     assert.equal(arrivalState.workflowHandoff.visible, true, "Expected Arrival job to show workflow handoff guidance.");
-    assert.equal(arrivalState.statusBoundary.visible, true, "Expected Arrival job to show status boundary guidance.");
+    assert.equal(arrivalState.statusBoundary.visible, false, "Expected Arrival job to keep status boundary guidance removed.");
     assert.equal(arrivalState.urgentIssueHandoffVisible, false, "Expected Arrival old urgent handoff to stay replaced.");
     assert.equal(arrivalState.reportIssue.visible, true, "Expected Arrival job to show Report Issue alert control.");
     assert.equal(
       arrivalState.reportIssue.choices.includes("Cannot find passenger"),
       true,
       "Expected Arrival Report Issue to cover passenger lookup issues.",
-    );
-    assert.deepEqual(
-      arrivalState.statusBoundary.items,
-      [
-        "Current flow: OTW, OTS, POB, then Job Completed.",
-        "Status updates are accepted only through this guarded job link.",
-        "Job Completed closes the trip progress for dispatch review.",
-        "No private account, file upload, or location-tracking action is created here.",
-        "Use Report Issue for in-app admin alerts.",
-      ],
-      "Expected Arrival job to keep driver status boundary guidance.",
     );
     assert.equal(
       arrivalState.workflowHandoff.items.includes("Use Report Issue when admin needs an in-app alert."),

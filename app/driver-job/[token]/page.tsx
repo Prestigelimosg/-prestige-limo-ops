@@ -1328,40 +1328,6 @@ export default function DriverJobPage() {
                   </p>
                 )}
               </div>
-              <div
-                className="order-5 space-y-2 rounded-md border border-slate-200 bg-white p-3"
-                data-driver-job-status-boundary="true"
-              >
-                <p className="text-sm font-semibold text-slate-900" data-driver-job-status-boundary-title="true">
-                  Status Boundary
-                </p>
-                <ul
-                  className="grid gap-2 text-sm font-medium leading-6 text-slate-700"
-                  data-driver-job-status-boundary-list="true"
-                >
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Current flow: OTW, OTS, POB, then Job Completed.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Status updates are accepted only through this guarded job link.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Job Completed closes the trip progress for dispatch review.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    No private account, file upload, or location-tracking action is created here.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Use Report Issue for in-app admin alerts.
-                  </li>
-                </ul>
-                <p
-                  className="text-sm font-semibold leading-6 text-slate-700"
-                  data-driver-job-status-boundary-helper="true"
-                >
-                  Feedback appears under the status button you tap.
-                </p>
-              </div>
             </section>
           </>
         ) : null}

@@ -13449,9 +13449,7 @@ async function runChromeTest() {
         "Job Completed",
       ], "driver job demo");
       await checkDriverRouteViewport(viewport, publicDriverJobUrl, "Mock Pickup A", [
-        "Acknowledge Job",
-        "Activate Mock Live Location",
-        "Save",
+        "Save & Acknowledge Job",
         "OTW",
         "OTS",
         "POB",

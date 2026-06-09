@@ -238,6 +238,19 @@ async function runChromeTest() {
           .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
+        confirmDetails: {
+          acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
+          saveAcknowledgeText: document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() || "",
+          saveAcknowledgeVisible: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")),
+          title: document.querySelector("#driver-details-heading")?.textContent.trim() || "",
+          visible: Boolean(document.querySelector("[data-driver-primary-step='confirm-details']")),
+        },
+        driverDetailValues: {
+          contact: document.querySelector("[data-driver-job-detail-contact]")?.value || "",
+          name: document.querySelector("[data-driver-job-detail-name]")?.value || "",
+          plate: document.querySelector("[data-driver-job-detail-plate]")?.value || "",
+          vehicleModel: document.querySelector("[data-driver-job-detail-vehicle-model]")?.value || "",
+        },
         statusBoundary: {
           helper: document.querySelector("[data-driver-job-status-boundary-helper]")?.textContent.trim() || "",
           items: [...document.querySelectorAll("[data-driver-job-status-boundary-list] li")].map((item) =>
@@ -280,6 +293,7 @@ async function runChromeTest() {
           items: [...document.querySelectorAll("[data-driver-job-workflow-handoff-list] li")].map((item) =>
             item.textContent.trim(),
           ),
+          summary: document.querySelector("[data-driver-job-workflow-handoff-summary]")?.textContent.trim() || "",
           text: document.querySelector("[data-driver-job-workflow-handoff]")?.innerText || "",
           visible: Boolean(document.querySelector("[data-driver-job-workflow-handoff]")),
         },
@@ -354,55 +368,6 @@ async function runChromeTest() {
       });
     };
 
-    const clickAcknowledge = async () => {
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-acknowledge]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected Acknowledge Job button to be clickable.");
-
-      const acknowledgementState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-acknowledge]");
-            const message = document.querySelector("[data-driver-job-acknowledge-message]");
-            const state = document.querySelector("[data-driver-job-acknowledged-state]");
-            const workflowSummary = document.querySelector("[data-driver-job-workflow-summary]");
-            const workflowAcknowledgement = document
-              .querySelector("[data-driver-job-workflow-summary-row='job-acknowledged'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-
-            return state?.textContent.trim() === "Acknowledged" &&
-              workflowSummary?.innerText.includes("Mock Dispatcher Driver Workflow Summary") &&
-              workflowAcknowledgement === "Acknowledged" &&
-              message?.textContent.trim() === "Job acknowledged locally for this mock driver page."
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                  stateText: state.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        "driver job acknowledgement",
-      );
-
-      assert.equal(acknowledgementState.distance <= 16, true, "Expected acknowledgement feedback near button.");
-      const state = await pageState();
-
-      assertNoSensitiveText(state);
-      return state;
-    };
-
     const clickReportIssue = async () => {
       const beforeState = await pageState();
       const selected = await evaluate(`(() => {
@@ -472,7 +437,7 @@ async function runChromeTest() {
       return afterState;
     };
 
-    const saveDriverDetails = async () => {
+    const saveAndAcknowledgeJob = async () => {
       const beforeSaveState = await pageState();
       const filled = await evaluate(`(() => {
         const values = [
@@ -500,7 +465,7 @@ async function runChromeTest() {
       assert.equal(filled, true, "Expected public driver details fields to be editable.");
 
       const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-save-details]");
+        const button = document.querySelector("[data-driver-job-save-acknowledge]");
 
         if (!button || button.disabled) {
           return false;
@@ -509,18 +474,20 @@ async function runChromeTest() {
         button.click();
         return true;
       })()`);
-      assert.equal(clicked, true, "Expected public driver details Save button to be clickable.");
+      assert.equal(clicked, true, "Expected public driver Save & Acknowledge Job button to be clickable.");
 
       const savedState = await waitForCondition(
         () =>
           evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-save-details]");
+            const button = document.querySelector("[data-driver-job-save-acknowledge]");
             const message = document.querySelector("[data-driver-job-details-message]");
             const savedDetails = document.querySelector("[data-driver-job-saved-details]");
+            const acknowledgedState = document.querySelector("[data-driver-job-acknowledged-state]");
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
-            return message?.textContent.trim() === "Driver details saved locally for this mock driver page." &&
+            return message?.textContent.trim() === "Driver details saved and job acknowledged." &&
+              acknowledgedState?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Mock Local Driver A") &&
               savedDetails?.innerText.includes("+65 9123 4567") &&
               savedDetails?.innerText.includes("SLM1234A") &&
@@ -534,15 +501,20 @@ async function runChromeTest() {
               : false;
           })()`),
         10000,
-        "public driver details local save",
+        "public driver details save and acknowledgement",
       );
 
       const afterSaveState = await pageState();
-      assert.equal(savedState.distance <= 16, true, "Expected driver details feedback near Save button.");
+      assert.equal(savedState.distance <= 16, true, "Expected driver details feedback near Save & Acknowledge button.");
       assert.equal(
         afterSaveState.fetchCalls.length,
         beforeSaveState.fetchCalls.length,
-        "Public driver details local Save should not make network requests.",
+        "Public driver details Save & Acknowledge should stay local and avoid network requests.",
+      );
+      assert.deepEqual(
+        afterSaveState.activityLogLabels.slice(-1),
+        ["Job acknowledged"],
+        "Expected Save & Acknowledge to create one acknowledgement activity.",
       );
       assertNoSensitiveText(afterSaveState);
       return afterSaveState;
@@ -578,277 +550,6 @@ async function runChromeTest() {
       return state;
     };
 
-    const clickBlockedLiveLocation = async (
-      expectedMessage = "Acknowledge this job before activating mock live location.",
-    ) => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-live-location]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected Activate Mock Live Location button to be clickable.");
-
-      const blockedState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-live-location]");
-            const message = document.querySelector("[data-driver-job-live-location-message]");
-            const state = document.querySelector("[data-driver-job-live-location-state]");
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-
-            return message?.textContent.trim() === ${JSON.stringify(expectedMessage)} &&
-              state?.textContent.trim() === "Mock live location inactive"
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                  stateText: state.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        "blocked mock live location activation",
-      );
-
-      assert.equal(blockedState.distance <= 16, true, "Expected blocked live location feedback near button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Blocked mock live location activation should not make a network request.",
-      );
-      assert.deepEqual(
-        afterState.activityLogLabels,
-        beforeState.activityLogLabels,
-        "Blocked mock live location activation should not create a success log entry.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
-    const clickActivateLiveLocation = async () => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-live-location]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected Activate Mock Live Location button to be clickable after acknowledgement.");
-
-      const activeState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-live-location]");
-            const message = document.querySelector("[data-driver-job-live-location-message]");
-            const state = document.querySelector("[data-driver-job-live-location-state]");
-            const workflowLiveLocation = document
-              .querySelector("[data-driver-job-workflow-summary-row='live-location'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-
-            return message?.textContent.trim() ===
-              "Mock live location active locally for this mock driver page. No phone location is captured or sent." &&
-              state?.textContent.trim() === "Mock live location active" &&
-              workflowLiveLocation === "Active"
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                  stateText: state.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        "mock live location activation",
-      );
-
-      assert.equal(activeState.distance <= 16, true, "Expected mock live location feedback near button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Mock live location activation should stay local and avoid network requests.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
-    const clickMockDriverReminder = async (expectedStatusText) => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-reminder]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected Trigger Mock 1-Hour Reminder button to be clickable.");
-
-      const reminderState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-reminder]");
-            const message = document.querySelector("[data-driver-job-reminder-message]");
-            const section = document.querySelector("[data-driver-job-reminder-section]");
-            const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
-            const summary = document.querySelector("[data-driver-job-reminder-summary]");
-            const summaryStatus = document.querySelector("[data-driver-job-reminder-summary-status]");
-            const summaryState = document.querySelector("[data-driver-job-reminder-summary-state]");
-            const summaryLog = document.querySelector("[data-driver-job-reminder-summary-log]");
-            const summaryMockOnly = document.querySelector("[data-driver-job-reminder-summary-mock-only]");
-            const workflowReminder = document
-              .querySelector("[data-driver-job-workflow-summary-row='reminder-status'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const workflowDispatcherLog = document
-              .querySelector("[data-driver-job-workflow-summary-row='dispatcher-log'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const workflowMockOnly = document.querySelector("[data-driver-job-workflow-summary-mock-only]");
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
-
-            return section?.innerText.includes("Mock Driver Reminder") &&
-              summary?.innerText.includes("Mock dispatcher reminder summary") &&
-              summaryStatus?.textContent.trim() === "Triggered locally" &&
-              summaryState?.textContent.trim() === "Triggered" &&
-              summaryLog?.textContent.includes("Mock dispatcher notification log: Driver reminder recorded locally.") &&
-              summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
-              workflowReminder === "Triggered locally (Triggered)" &&
-              workflowDispatcherLog?.includes("Mock dispatcher notification log: Driver reminder recorded locally.") &&
-              workflowMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
-              section?.innerText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent.") &&
-              section?.innerText.includes("Mock reminder: 1 hour before pickup") &&
-              section?.innerText.includes("Reminder tells the driver to activate mock live location and continue workflow.") &&
-              message?.textContent.trim() === "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent." &&
-              dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
-              dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
-              statusText === ${JSON.stringify(expectedStatusText)}
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  dispatcherText: dispatcherLog.textContent.trim(),
-                  messageText: message.textContent.trim(),
-                  statusText,
-                }
-              : false;
-          })()`),
-        10000,
-        "mock 1-hour driver reminder",
-      );
-
-      assert.equal(reminderState.distance <= 16, true, "Expected mock reminder feedback near reminder button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Mock driver reminder should stay local and avoid network requests.",
-      );
-      assert.deepEqual(
-        afterState.activityLogLabels.slice(-1),
-        ["Mock 1-hour reminder triggered"],
-        "Expected mock reminder trigger to create an activity log entry.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
-    const clickBlockedMockDriverReminder = async (expectedStatusText) => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-reminder]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected Trigger Mock 1-Hour Reminder button to be clickable after POB.");
-
-      const blockedReminderState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-reminder]");
-            const message = document.querySelector("[data-driver-job-reminder-message]");
-            const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
-            const summary = document.querySelector("[data-driver-job-reminder-summary]");
-            const summaryStatus = document.querySelector("[data-driver-job-reminder-summary-status]");
-            const summaryState = document.querySelector("[data-driver-job-reminder-summary-state]");
-            const summaryLog = document.querySelector("[data-driver-job-reminder-summary-log]");
-            const summaryMockOnly = document.querySelector("[data-driver-job-reminder-summary-mock-only]");
-            const workflowReminder = document
-              .querySelector("[data-driver-job-workflow-summary-row='reminder-status'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const workflowDispatcherLog = document
-              .querySelector("[data-driver-job-workflow-summary-row='dispatcher-log'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const workflowMockOnly = document.querySelector("[data-driver-job-workflow-summary-mock-only]");
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
-
-            return message?.textContent.trim() === "Mock reminder is blocked after POB or Job Completed." &&
-              summary?.innerText.includes("Mock dispatcher reminder summary") &&
-              summaryStatus?.textContent.trim() === "Blocked locally" &&
-              summaryState?.textContent.trim() === "Blocked" &&
-              summaryLog?.textContent.includes("Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed.") &&
-              summaryMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
-              workflowReminder === "Blocked locally (Blocked)" &&
-              workflowDispatcherLog?.includes("Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed.") &&
-              workflowMockOnly?.textContent.trim() === "Mock only. No real message was sent." &&
-              dispatcherLog?.textContent.includes("Mock dispatcher notification log") &&
-              dispatcherLog?.textContent.includes("Mock only. No message was sent.") &&
-              statusText === ${JSON.stringify(expectedStatusText)}
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  dispatcherText: dispatcherLog.textContent.trim(),
-                  messageText: message.textContent.trim(),
-                  statusText,
-                }
-              : false;
-          })()`),
-        10000,
-        "blocked mock 1-hour driver reminder",
-      );
-
-      assert.equal(blockedReminderState.distance <= 16, true, "Expected blocked reminder feedback near reminder button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Blocked mock driver reminder should stay local and avoid network requests.",
-      );
-      assert.deepEqual(
-        afterState.activityLogLabels.slice(-1),
-        ["Mock reminder blocked"],
-        "Expected blocked mock reminder to create an activity log entry.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
     const clickStatus = async (
       label,
       expectedStatus,
@@ -874,21 +575,9 @@ async function runChromeTest() {
           evaluate(`(() => {
             const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent || "";
             const messageText = document.querySelector(${JSON.stringify(`[data-driver-job-status-message="${label}"]`)})?.textContent || "";
-            const workflowKey = ${JSON.stringify({
-              "Job Completed": "completed",
-              OTS: "ots",
-              OTW: "otw",
-              POB: "pob",
-            }[label])};
-            const workflowValue = workflowKey
-              ? document
-                  .querySelector(\`[data-driver-job-workflow-summary-row="\${workflowKey}"] [data-driver-job-workflow-summary-value]\`)
-                  ?.textContent.trim()
-              : "";
 
             return statusText.includes(${JSON.stringify(expectedStatus)}) &&
-              messageText.includes(${JSON.stringify(expectedMessage)}) &&
-              (!workflowKey || workflowValue === "Done");
+              messageText.includes(${JSON.stringify(expectedMessage)});
           })()`),
         10000,
         `${label} status update`,
@@ -956,266 +645,6 @@ async function runChromeTest() {
       return afterState;
     };
 
-    const clickMissingEtaOtw = async () => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-status='OTW']");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected OTW status button to be clickable before ETA acknowledgement.");
-
-      const blockedState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-status='OTW']");
-            const message = document.querySelector("[data-driver-job-status-message='OTW']");
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
-            const activityLogText = document.querySelector("[data-driver-job-activity-log]")?.innerText || "";
-            const workflowOtw = document
-              .querySelector("[data-driver-job-workflow-summary-row='otw'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const workflowLatestEta = document
-              .querySelector("[data-driver-job-workflow-summary-row='latest-eta'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-
-            return message?.textContent.trim() === "Acknowledge latest mock flight ETA before OTW." &&
-              statusText === "Assigned" &&
-              workflowOtw === "Pending" &&
-              workflowLatestEta === "Pending acknowledgement" &&
-              activityLogText.includes("OTW blocked") &&
-              activityLogText.includes("OTW was blocked because latest ETA acknowledgement is missing.")
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                  statusText,
-                }
-              : false;
-          })()`),
-        10000,
-        "OTW blocked by missing latest mock flight ETA acknowledgement",
-      );
-
-      assert.equal(blockedState.distance <= 16, true, "Expected missing-ETA feedback near OTW button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Missing-ETA OTW block should not make a network request.",
-      );
-      assert.deepEqual(
-        afterState.activityLogLabels.slice(-1),
-        ["OTW blocked"],
-        "Expected missing-ETA OTW block to add a local activity log entry.",
-      );
-      assert.ok(
-        afterState.activityLogItems.at(-1)?.includes("OTW was blocked because latest ETA acknowledgement is missing."),
-        "Expected missing-ETA OTW log entry detail.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
-    const clickMissingProofPob = async () => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-status='POB']");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected POB status button to be clickable before proof.");
-
-      const blockedState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-status='POB']");
-            const message = document.querySelector("[data-driver-job-status-message='POB']");
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-            const statusText = document.querySelector("[data-driver-job-current-status='true']")?.textContent.trim() || "";
-            const activityLogText = document.querySelector("[data-driver-job-activity-log]")?.innerText || "";
-            const workflowPob = document
-              .querySelector("[data-driver-job-workflow-summary-row='pob'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const workflowProof = document
-              .querySelector("[data-driver-job-workflow-summary-row='ots-photo-proof'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-
-            return message?.textContent.trim() === "Add mock OTS photo proof before POB." &&
-              statusText === "OTS" &&
-              workflowPob === "Pending" &&
-              workflowProof === "Pending proof" &&
-              activityLogText.includes("POB blocked") &&
-              activityLogText.includes("POB was blocked because OTS photo proof is missing.")
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                  statusText,
-                }
-              : false;
-          })()`),
-        10000,
-        "POB blocked by missing mock OTS photo proof",
-      );
-
-      assert.equal(blockedState.distance <= 16, true, "Expected missing-proof feedback near POB button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Missing-proof POB block should not make a network request.",
-      );
-      assert.deepEqual(
-        afterState.activityLogLabels.slice(-1),
-        ["POB blocked"],
-        "Expected missing-proof POB block to add a local activity log entry.",
-      );
-      assert.ok(
-        afterState.activityLogItems.at(-1)?.includes("POB was blocked because OTS photo proof is missing."),
-        "Expected missing-proof POB log entry detail.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
-    const clickAcknowledgeLatestEta = async () => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-latest-eta]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected Acknowledge Latest ETA button to be clickable.");
-
-      const etaState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-latest-eta]");
-            const message = document.querySelector("[data-driver-job-latest-eta-message]");
-            const state = document.querySelector("[data-driver-job-latest-eta-state]");
-            const section = document.querySelector("[data-driver-job-latest-eta-section]");
-            const etaValue = document.querySelector("[data-driver-job-latest-eta-value]");
-            const workflowLatestEta = document
-              .querySelector("[data-driver-job-workflow-summary-row='latest-eta'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-
-            return section?.innerText.includes("Mock/local only. No real flight API is called and no notification is sent.") &&
-              etaValue?.textContent.trim() === "Latest mock flight ETA: 15:45" &&
-              message?.textContent.trim() === "Latest mock flight ETA acknowledged locally. No real flight API or notification was used." &&
-              state?.textContent.trim() === "Latest mock flight ETA acknowledged" &&
-              workflowLatestEta === "Acknowledged"
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                  stateText: state.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        "latest mock flight ETA acknowledged",
-      );
-
-      assert.equal(etaState.distance <= 16, true, "Expected ETA acknowledgement feedback near ETA button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Acknowledging latest mock flight ETA should stay local and avoid network requests.",
-      );
-      assert.deepEqual(
-        afterState.activityLogLabels.slice(-1),
-        ["Latest ETA acknowledged"],
-        "Expected latest ETA acknowledgement to create an activity log entry.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
-    const clickAddMockOtsPhotoProof = async () => {
-      const beforeState = await pageState();
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-ots-photo-proof]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-
-      assert.equal(clicked, true, "Expected Add Mock OTS Photo Proof button to be clickable.");
-
-      const proofState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-ots-photo-proof]");
-            const message = document.querySelector("[data-driver-job-ots-photo-proof-message]");
-            const state = document.querySelector("[data-driver-job-ots-photo-proof-state]");
-            const section = document.querySelector("[data-driver-job-ots-photo-proof-section]");
-            const workflowProof = document
-              .querySelector("[data-driver-job-workflow-summary-row='ots-photo-proof'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-
-            return section?.innerText.includes("Mock/local only. No real file upload, camera, or storage is used.") &&
-              message?.textContent.trim() === "Mock OTS photo proof added locally. No real file upload, camera, or storage was used." &&
-              state?.textContent.trim() === "Mock OTS photo proof added" &&
-              workflowProof === "Added"
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                  stateText: state.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        "mock OTS photo proof added",
-      );
-
-      assert.equal(proofState.distance <= 16, true, "Expected proof feedback near proof button.");
-
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length,
-        "Adding mock OTS photo proof should stay local and avoid network requests.",
-      );
-      assert.deepEqual(
-        afterState.activityLogLabels.slice(-1),
-        ["Mock OTS photo proof added"],
-        "Expected mock OTS photo proof addition to create an activity log entry.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
-
     await resetMockDriverJobData();
     const validState = await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");
     assert.ok(validState.visibleText.includes("Mock Workflow Dropoff"));
@@ -1223,13 +652,27 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Workflow Waypoint"));
     assert.ok(validState.visibleText.includes("SQ889"));
     assert.ok(validState.visibleText.includes("Mock Workflow Passenger"));
-    assert.ok(validState.visibleText.includes("Mock Workflow Driver"));
+    assert.deepEqual(
+      validState.driverDetailValues,
+      {
+        contact: "+65 8777 0000",
+        name: "Mock Workflow Driver",
+        plate: "SWA889X",
+        vehicleModel: "Toyota Alphard",
+      },
+      "Expected assigned driver details to load into the confirm driver and vehicle fields.",
+    );
     assert.ok(
       validState.visibleText.includes(
         "Mobile web driver card. Keep this link private and use it only for this assigned job.",
       ),
     );
     assert.equal(validState.workflowHandoff.visible, true, "Expected public driver job workflow handoff guidance.");
+    assert.equal(
+      validState.workflowHandoff.summary,
+      "How this page works",
+      "Expected driver handoff to be compact/collapsible.",
+    );
     assert.equal(
       validState.workflowHandoff.helper,
       "This is the driver page for this assigned job.",
@@ -1239,8 +682,7 @@ async function runChromeTest() {
       validState.workflowHandoff.items,
       [
         "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
-        "Use the job status buttons only when you are ready.",
-        "Helper actions here are local/demo steps unless the button feedback says a guarded status update was accepted.",
+        "Confirm driver and vehicle details once, then use the status buttons only when ready.",
         "Use Report Issue when admin needs an in-app alert.",
       ],
       "Expected compact driver workflow handoff guidance.",
@@ -1275,9 +717,17 @@ async function runChromeTest() {
       "Expected report issue boundary to block external sending and future-only features.",
     );
     assert.deepEqual(
-      validState.primaryStepOrder.slice(0, 5),
-      ["job-summary", "acknowledge", "status-workflow", "status-buttons", "report-issue"],
-      "Expected assigned job summary, acknowledgement, and status buttons to lead the driver page.",
+      validState.primaryStepOrder.slice(0, 6),
+      ["job-summary", "confirm-details", "save-acknowledge", "status-workflow", "status-buttons", "report-issue"],
+      "Expected job card, confirm-details, save acknowledgement, status, and issue controls to lead the driver page.",
+    );
+    assert.equal(validState.confirmDetails.visible, true, "Expected confirm driver and vehicle details card.");
+    assert.equal(validState.confirmDetails.title, "Confirm Driver & Vehicle Details");
+    assert.equal(validState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
+    assert.equal(
+      validState.confirmDetails.acknowledgedState,
+      "Confirm these details to acknowledge the job",
+      "Expected combined details card to own acknowledgement state.",
     );
     assert.equal(
       validState.primaryStepOrder.indexOf("report-issue") > validState.primaryStepOrder.indexOf("status-buttons"),
@@ -1361,64 +811,29 @@ async function runChromeTest() {
       "Driver status boundary must avoid invoice wording on the public driver page.",
     );
     const startingStatusText = validState.statusText || "Assigned";
-    assert.ok(validState.visibleText.includes("Acknowledge Job"));
-    assert.ok(validState.visibleText.includes("Mock Live Location"));
-    assert.ok(validState.visibleText.includes("Mock/local only. No phone location is captured or sent."));
-    assert.ok(validState.visibleText.includes("Activate Mock Live Location"));
+    assert.ok(validState.visibleText.includes("Driver Job Card"));
+    assert.ok(validState.visibleText.includes("Confirm Driver & Vehicle Details"));
+    assert.ok(validState.visibleText.includes("Save & Acknowledge Job"));
+    assert.equal(validState.visibleText.includes("Job Acknowledgement"), false);
+    assert.equal(validState.buttonLabels.includes("Acknowledge Job"), false);
+    assert.equal(validState.buttonLabels.includes("Save"), false);
+    assert.equal(validState.visibleText.includes("Mock Live Location"), false);
+    assert.equal(validState.visibleText.includes("Activate Mock Live Location"), false);
+    assert.equal(validState.visibleText.includes("Mock Driver Reminder"), false);
+    assert.equal(validState.visibleText.includes("Trigger Mock 1-Hour Reminder"), false);
+    assert.equal(validState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"), false);
+    assert.equal(validState.visibleText.includes("Mock Latest Flight ETA"), false);
+    assert.equal(validState.visibleText.includes("Acknowledge Latest ETA"), false);
+    assert.equal(validState.visibleText.includes("Mock OTS Photo Proof"), false);
+    assert.equal(validState.visibleText.includes("Add Mock OTS Photo Proof"), false);
     assert.deepEqual(validState.fileInputs, [], "Public driver job page must not expose real file/photo inputs.");
     assert.deepEqual(
       validState.dispatcherExceptionText,
       [],
       "Public driver job page must keep dispatcher cancel/replacement workflow absent and future/staff-controlled.",
     );
-    assert.ok(validState.visibleText.includes("Mock Driver Reminder"));
-    assert.ok(validState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"));
-    assert.ok(validState.visibleText.includes("Mock/local only. Dispatcher-facing workflow checklist for this mock driver page."));
-    assert.equal(validState.workflowSummaryRows["job-acknowledged"], "Waiting");
-    assert.equal(validState.workflowSummaryRows["reminder-status"], "Pending local trigger (Not triggered)");
-    assert.equal(validState.workflowSummaryRows.otw, "Pending");
-    assert.equal(validState.workflowSummaryRows.ots, "Pending");
-    assert.equal(validState.workflowSummaryRows.pob, "Pending");
-    assert.equal(validState.workflowSummaryRows.completed, "Pending");
-    assert.equal(validState.workflowSummaryRows["live-location"], "Inactive");
-    assert.equal(
-      validState.workflowSummaryRows["dispatcher-log"],
-      "No mock dispatcher notification recorded yet.",
-    );
-    assert.equal(
-      Object.hasOwn(validState.workflowSummaryRows, "latest-eta"),
-      false,
-      "DEP public mock job should not show latest ETA in workflow summary.",
-    );
-    assert.equal(
-      Object.hasOwn(validState.workflowSummaryRows, "ots-photo-proof"),
-      false,
-      "DEP public mock job should not show OTS proof in workflow summary.",
-    );
-    assert.ok(validState.visibleText.includes("Mock dispatcher reminder summary"));
-    assert.ok(validState.visibleText.includes("Mock driver reminder status"));
-    assert.ok(validState.visibleText.includes("Pending local trigger"));
-    assert.ok(validState.visibleText.includes("Reminder triggered / blocked state"));
-    assert.ok(validState.visibleText.includes("Not triggered"));
-    assert.ok(validState.visibleText.includes("Mock dispatcher notification log"));
-    assert.ok(validState.visibleText.includes("No mock dispatcher notification recorded yet."));
-    assert.ok(validState.visibleText.includes("Mock only. No real message was sent."));
-    assert.ok(validState.visibleText.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent."));
-    assert.ok(validState.visibleText.includes("Mock reminder: 1 hour before pickup"));
-    assert.ok(validState.visibleText.includes("Trigger Mock 1-Hour Reminder"));
-    assert.equal(
-      validState.visibleText.includes("Add Mock OTS Photo Proof"),
-      false,
-      "DEP public mock job should not show OTS photo proof at Assigned.",
-    );
-    assert.equal(
-      validState.visibleText.includes("Acknowledge Latest ETA"),
-      false,
-      "DEP public mock job should not show latest ETA acknowledgement.",
-    );
     assert.ok(validState.visibleText.includes("Driver Activity Log"));
-    assert.ok(validState.visibleText.includes("No mock driver activity recorded yet."));
-    assert.ok(validState.visibleText.includes("Driver Details"));
+    assert.ok(validState.visibleText.includes("No driver activity recorded yet."));
     assert.ok(validState.visibleText.includes("Driver name"));
     assert.ok(validState.visibleText.includes("Contact"));
     assert.ok(validState.visibleText.includes("Car plate"));
@@ -1428,18 +843,15 @@ async function runChromeTest() {
     assert.equal(validState.visibleText.includes("Status History"), true);
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
-        ["Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin", "Save"].includes(buttonLabel),
+        ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"].includes(buttonLabel),
       ),
-      ["Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin", "Save"],
-      "Expected public driver job page to show acknowledgement, status, issue alert, and details controls in order.",
+      ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"],
+      "Expected public driver job page to show one save/acknowledge action, status, and issue controls in order.",
     );
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
         [
-          "Acknowledge Job",
-          "Activate Mock Live Location",
-          "Trigger Mock 1-Hour Reminder",
-          "Save",
+          "Save & Acknowledge Job",
           "OTW",
           "OTS",
           "POB",
@@ -1450,26 +862,19 @@ async function runChromeTest() {
         ),
       ),
       [
-        "Acknowledge Job",
+        "Save & Acknowledge Job",
         "OTW",
         "OTS",
         "POB",
         "Job Completed",
         "Alert Admin",
-        "Activate Mock Live Location",
-        "Trigger Mock 1-Hour Reminder",
-        "Save",
       ],
-      "Expected public driver job page to show primary status and issue controls before lower-priority mock/details controls.",
+      "Expected public driver job page to show the human primary workflow order.",
     );
     assertNoSensitiveText(validState);
 
-    await clickMockDriverReminder(startingStatusText);
-    await clickBlockedLiveLocation();
-    await clickBlockedStatus("OTW", "Acknowledge this job before updating status.", startingStatusText);
-    await clickAcknowledge();
-    await clickActivateLiveLocation();
-    await saveDriverDetails();
+    await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
+    await saveAndAcknowledgeJob();
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
     await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);
@@ -1488,43 +893,24 @@ async function runChromeTest() {
       "DEP public mock job should not require latest ETA acknowledgement after OTS.",
     );
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
-    await clickStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
-    const endedLiveLocationState = await pageState();
-    assert.ok(
-      endedLiveLocationState.visibleText.includes("Mock live location inactive"),
-      "Expected POB to auto-end mock live location.",
-    );
-    assert.equal(endedLiveLocationState.workflowSummaryRows.pob, "Done");
-    assert.equal(endedLiveLocationState.workflowSummaryRows["live-location"], "Inactive");
-    await clickBlockedMockDriverReminder("POB");
-    await clickBlockedLiveLocation("Mock live location has ended for this job.");
+    await clickStatus("POB", "POB");
     await fillCompletionNotes();
     await clickStatus("Job Completed", "Job Completed");
     await clickReportIssue();
-    const completedLiveLocationState = await pageState();
-    assert.ok(
-      completedLiveLocationState.visibleText.includes("Mock live location inactive"),
-      "Expected Job Completed to leave mock live location ended.",
-    );
+    const completedState = await pageState();
     assert.deepEqual(
-      completedLiveLocationState.activityLogLabels,
+      completedState.activityLogLabels,
       [
-        "Mock 1-hour reminder triggered",
         "Job acknowledged",
-        "Mock live location activated",
-        "Mock driver details saved",
         "OTW marked",
         "OTS marked",
         "POB marked",
-        "Mock live location auto-ended at POB",
-        "Mock reminder blocked",
         "Job Completed marked",
         "Completion note prepared",
         "Admin alert prepared",
       ],
-      "Expected public driver activity log to preserve reminder and successful workflow event order.",
+      "Expected public driver activity log to preserve the single acknowledgement and status workflow order.",
     );
-    await clickBlockedLiveLocation("Mock live location has ended for this job.");
     await resetMockDriverJobData();
 
     const arrivalState = await navigateToDriverJob(mockDriverJobTokens.arrivalWorkflow, "Mock Arrival Pickup");
@@ -1532,7 +918,16 @@ async function runChromeTest() {
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Pickup > Mock Arrival Waypoint > Mock Arrival Dropoff"));
     assert.ok(arrivalState.visibleText.includes("SQ777"));
     assert.ok(arrivalState.visibleText.includes("Mock Arrival Passenger"));
-    assert.ok(arrivalState.visibleText.includes("Mock Arrival Driver"));
+    assert.deepEqual(
+      arrivalState.driverDetailValues,
+      {
+        contact: "+65 8666 0000",
+        name: "Mock Arrival Driver",
+        plate: "SMA777X",
+        vehicleModel: "Toyota Alphard",
+      },
+      "Expected arrival assigned driver details to load into the confirm driver and vehicle fields.",
+    );
     assert.ok(
       arrivalState.visibleText.includes(
         "Mobile web driver card. Keep this link private and use it only for this assigned job.",
@@ -1563,45 +958,20 @@ async function runChromeTest() {
       true,
       "Expected Arrival driver handoff to point to the internal report issue action.",
     );
-    assert.ok(arrivalState.visibleText.includes("Mock Driver Reminder"));
-    assert.ok(arrivalState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"));
-    assert.equal(arrivalState.workflowSummaryRows["job-acknowledged"], "Waiting");
-    assert.equal(arrivalState.workflowSummaryRows["latest-eta"], "Pending acknowledgement");
-    assert.equal(arrivalState.workflowSummaryRows["ots-photo-proof"], "Pending proof");
-    assert.ok(arrivalState.visibleText.includes("Mock dispatcher reminder summary"));
-    assert.ok(arrivalState.visibleText.includes("Mock only. No real message was sent."));
-    assert.ok(arrivalState.visibleText.includes("Trigger Mock 1-Hour Reminder"));
-    assert.ok(arrivalState.visibleText.includes("Mock Latest Flight ETA"));
-    assert.ok(arrivalState.visibleText.includes("Mock/local only. No real flight API is called and no notification is sent."));
-    assert.ok(arrivalState.visibleText.includes("Latest mock flight ETA: 15:45"));
-    assert.ok(arrivalState.visibleText.includes("Acknowledge Latest ETA"));
-    assert.equal(
-      arrivalState.visibleText.includes("Add Mock OTS Photo Proof"),
-      false,
-      "Arrival public mock job should show OTS photo proof only after OTS.",
-    );
+    assert.equal(arrivalState.visibleText.includes("Mock Driver Reminder"), false);
+    assert.equal(arrivalState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"), false);
+    assert.equal(arrivalState.visibleText.includes("Mock Latest Flight ETA"), false);
+    assert.equal(arrivalState.visibleText.includes("Acknowledge Latest ETA"), false);
+    assert.equal(arrivalState.visibleText.includes("Add Mock OTS Photo Proof"), false);
+    assert.equal(arrivalState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
     assertNoSensitiveText(arrivalState);
 
-    await clickAcknowledge();
-    await clickActivateLiveLocation();
-    await clickMissingEtaOtw();
-    await clickAcknowledgeLatestEta();
+    await saveAndAcknowledgeJob();
     await clickStatus("OTW", "OTW");
     await clickStatus("OTS", "OTS");
-    const arrivalOtsState = await waitForCondition(
-      async () => {
-        const state = await pageState();
-
-        return state.visibleText.includes("Mock OTS Photo Proof") &&
-          state.visibleText.includes("Mock/local only. No real file upload, camera, or storage is used.") &&
-          state.visibleText.includes("Add Mock OTS Photo Proof") &&
-          state.activityLogLabels.includes("OTS photo proof requested")
-          ? state
-          : false;
-      },
-      10000,
-      "Arrival mock OTS photo proof section",
-    );
+    const arrivalOtsState = await pageState();
+    assert.equal(arrivalOtsState.visibleText.includes("Mock OTS Photo Proof"), false);
+    assert.equal(arrivalOtsState.visibleText.includes("Add Mock OTS Photo Proof"), false);
     assert.deepEqual(arrivalOtsState.fileInputs, [], "Mock OTS proof must not expose real file/photo inputs.");
     assert.deepEqual(
       arrivalOtsState.dispatcherExceptionText,
@@ -1609,39 +979,19 @@ async function runChromeTest() {
       "Arrival public driver page must keep dispatcher exception workflow absent and future/staff-controlled.",
     );
     assertNoSensitiveText(arrivalOtsState);
-    await clickMissingProofPob();
-    await clickAddMockOtsPhotoProof();
-    await clickStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
-    const arrivalPobState = await pageState();
-    assert.ok(
-      arrivalPobState.visibleText.includes("Mock live location inactive"),
-      "Expected Arrival POB to auto-end mock live location after proof.",
-    );
-    assert.equal(arrivalPobState.workflowSummaryRows.pob, "Done");
-    assert.equal(arrivalPobState.workflowSummaryRows["ots-photo-proof"], "Added");
-    assert.equal(arrivalPobState.workflowSummaryRows["live-location"], "Inactive");
+    await clickStatus("POB", "POB");
     await clickStatus("Job Completed", "Job Completed");
     const arrivalCompletedState = await pageState();
-    assert.equal(arrivalCompletedState.workflowSummaryRows.completed, "Done");
-    assert.equal(arrivalCompletedState.workflowSummaryRows["latest-eta"], "Acknowledged");
-    assert.equal(arrivalCompletedState.workflowSummaryRows["ots-photo-proof"], "Added");
     assert.deepEqual(
       arrivalCompletedState.activityLogLabels,
       [
         "Job acknowledged",
-        "Mock live location activated",
-        "OTW blocked",
-        "Latest ETA acknowledged",
         "OTW marked",
         "OTS marked",
-        "OTS photo proof requested",
-        "POB blocked",
-        "Mock OTS photo proof added",
         "POB marked",
-        "Mock live location auto-ended at POB",
         "Job Completed marked",
       ],
-      "Expected Arrival public driver activity log to include proof request, blocked POB, proof, and successful completion.",
+      "Expected Arrival public driver activity log to keep the simple acknowledgement and status order.",
     );
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
@@ -1656,10 +1006,7 @@ async function runChromeTest() {
       assert.equal(
         blockedState.buttonLabels.some((buttonLabel) =>
           [
-            "Acknowledge Job",
-            "Activate Mock Live Location",
-            "Trigger Mock 1-Hour Reminder",
-            "Save",
+            "Save & Acknowledge Job",
             "OTW",
             "OTS",
             "POB",

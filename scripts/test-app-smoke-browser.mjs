@@ -35902,19 +35902,24 @@ async function runChromeTest() {
           text: button.textContent.trim(),
           width: Math.round(button.getBoundingClientRect().width),
         }));
-        const workflowSummaryRows = Object.fromEntries(
-          [...document.querySelectorAll("[data-driver-job-workflow-summary-row]")].map((row) => [
-            row.getAttribute("data-driver-job-workflow-summary-row"),
-            row.querySelector("[data-driver-job-workflow-summary-value]")?.textContent.trim() || "",
-          ]),
-        );
-
         return {
           adminTabsVisible: document.querySelectorAll("button[role='tab']").length,
           bodyScrollWidth: body.scrollWidth,
           buttonLabels: buttons.map((button) => button.text),
           buttons,
           currentStatus: document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "",
+          confirmDetails: {
+            acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
+            saveAcknowledgeText: document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() || "",
+            title: document.querySelector("#driver-details-heading")?.textContent.trim() || "",
+            visible: Boolean(document.querySelector("[data-driver-primary-step='confirm-details']")),
+          },
+          driverDetailValues: {
+            contact: document.querySelector("[data-driver-job-detail-contact]")?.value || "",
+            name: document.querySelector("[data-driver-job-detail-name]")?.value || "",
+            plate: document.querySelector("[data-driver-job-detail-plate]")?.value || "",
+            vehicleModel: document.querySelector("[data-driver-job-detail-vehicle-model]")?.value || "",
+          },
           reportIssue: {
             boundary: document.querySelector("[data-driver-job-report-issue-boundary]")?.textContent.trim() || "",
             choices: [...document.querySelectorAll("[data-driver-job-report-issue-choice]")].map((option) =>
@@ -35930,6 +35935,7 @@ async function runChromeTest() {
             items: [...document.querySelectorAll("[data-driver-job-workflow-handoff-list] li")].map((item) =>
               item.textContent.trim()
             ),
+            summary: document.querySelector("[data-driver-job-workflow-handoff-summary]")?.textContent.trim() || "",
             text: document.querySelector("[data-driver-job-workflow-handoff]")?.innerText || "",
             visible: Boolean(document.querySelector("[data-driver-job-workflow-handoff]")),
           },
@@ -36217,7 +36223,6 @@ async function runChromeTest() {
           payNowFieldPresent: inputs.some((input) => /pay\\s*now|paynow/i.test(input.label)),
           resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
           text,
-          workflowSummaryRows,
         };
       })()`);
 
@@ -36355,6 +36360,11 @@ async function runChromeTest() {
         `${viewport.label}: expected compact driver workflow handoff guidance`,
       );
       assert.equal(
+        initialState.driverWorkflowHandoff.summary,
+        "How this page works",
+        `${viewport.label}: expected compact/collapsible driver page help`,
+      );
+      assert.equal(
         initialState.driverWorkflowHandoff.helper,
         "This is the driver page for this assigned job.",
         `${viewport.label}: expected driver handoff to identify the assigned job page`,
@@ -36363,11 +36373,10 @@ async function runChromeTest() {
         initialState.driverWorkflowHandoff.items,
         [
           "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
-          "Use the job status buttons only when you are ready.",
-          "Helper actions here are local/demo steps unless the button feedback says a guarded status update was accepted.",
+          "Confirm driver and vehicle details once, then use the status buttons only when ready.",
           "Use Report Issue when admin needs an in-app alert.",
         ],
-        `${viewport.label}: expected driver handoff to explain review, status, local/demo, and urgent dispatcher steps`,
+        `${viewport.label}: expected driver handoff to explain review, confirm-details, status, and report issue steps`,
       );
       assert.equal(
         initialState.driverWorkflowHandoff.boundary,
@@ -36418,18 +36427,15 @@ async function runChromeTest() {
       assert.deepEqual(
         [
           "Prestige Limo Driver Job",
-          "Job Summary",
-          "Driver Job Handoff",
+          "Driver Job Card",
+          "How this page works",
           "Mock Workflow Pickup",
           "Mock Workflow Dropoff",
           "Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff",
           "SQ889",
           "Mock Workflow Passenger",
-          "Mock Workflow Driver",
-          "Driver Details",
-          "Job Acknowledgement",
-          "Mock Live Location",
-          "Mock Driver Reminder",
+          "Confirm Driver & Vehicle Details",
+          "Save & Acknowledge Job",
           "Job Status",
           "Report Issue",
           "Status History",
@@ -36437,6 +36443,40 @@ async function runChromeTest() {
         ].filter((value) => !initialState.text.includes(value)),
         [],
         `${viewport.label}: expected readable driver job card details and workflow sections`,
+      );
+      assert.deepEqual(
+        [
+          "Job Acknowledgement",
+          "Mock Live Location",
+          "Activate Mock Live Location",
+          "Mock Driver Reminder",
+          "Trigger Mock 1-Hour Reminder",
+          "Mock Dispatcher Driver Workflow Summary",
+          "Mock Latest Flight ETA",
+          "Acknowledge Latest ETA",
+          "Mock OTS Photo Proof",
+          "Add Mock OTS Photo Proof",
+        ].filter((value) => initialState.text.includes(value)),
+        [],
+        `${viewport.label}: expected no separate acknowledgement or mock-only driver-token sections`,
+      );
+      assert.equal(initialState.confirmDetails.visible, true, `${viewport.label}: expected confirm details card`);
+      assert.equal(initialState.confirmDetails.title, "Confirm Driver & Vehicle Details");
+      assert.equal(initialState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
+      assert.deepEqual(
+        initialState.driverDetailValues,
+        {
+          contact: "+65 8777 0000",
+          name: "Mock Workflow Driver",
+          plate: "SWA889X",
+          vehicleModel: "Toyota Alphard",
+        },
+        `${viewport.label}: expected assigned driver values in the confirm driver and vehicle fields`,
+      );
+      assert.equal(
+        initialState.confirmDetails.acknowledgedState,
+        "Confirm these details to acknowledge the job",
+        `${viewport.label}: expected acknowledgement state inside confirm details card`,
       );
       assert.deepEqual(
         ["Driver name", "Contact", "Car plate", "Vehicle model"].filter(
@@ -36459,10 +36499,7 @@ async function runChromeTest() {
       assert.deepEqual(smallButtons, [], `${viewport.label}: expected comfortable driver job buttons`);
       assert.deepEqual(
         [
-          "Acknowledge Job",
-          "Activate Mock Live Location",
-          "Trigger Mock 1-Hour Reminder",
-          "Save",
+          "Save & Acknowledge Job",
           "OTW",
           "OTS",
           "POB",
@@ -36470,21 +36507,6 @@ async function runChromeTest() {
         ].filter((label) => !initialState.buttonLabels.includes(label)),
         [],
         `${viewport.label}: expected current driver job workflow controls`,
-      );
-      assert.equal(
-        initialState.text.includes("Mock/local only. No phone location is captured or sent."),
-        true,
-        `${viewport.label}: expected mock live-location boundary text`,
-      );
-      assert.equal(
-        initialState.text.includes("Mock/local only. No real notification, WhatsApp, or SMS is sent."),
-        true,
-        `${viewport.label}: expected mock notification boundary text`,
-      );
-      assert.equal(
-        initialState.text.includes("Mock only. No real message was sent."),
-        true,
-        `${viewport.label}: expected no-real-message workflow summary`,
       );
       assertNoForbiddenDriverJobNetwork(
         {
@@ -36569,21 +36591,23 @@ async function runChromeTest() {
         assertNoForbiddenDriverJobNetwork(afterNetwork, `${viewport.label} ${label}`);
       };
 
-      await clickBlockedDriverJobStatus("OTW", "Acknowledge this job before updating status.", "Assigned");
+      await clickBlockedDriverJobStatus("OTW", "Save & Acknowledge Job before updating status.", "Assigned");
 
       await setDriverJobField("[data-driver-job-detail-name]", "Smoke Driver");
       await setDriverJobField("[data-driver-job-detail-contact]", "+65 9000 2222");
       await setDriverJobField("[data-driver-job-detail-plate]", "SMK1234Z");
       await setDriverJobField("[data-driver-job-detail-vehicle-model]", "Mercedes V Class");
       const beforeSaveNetwork = await readDriverJobNetworkState();
-      await clickDriverJobButton("[data-driver-job-save-details]", `${viewport.label} Save driver details`);
+      await clickDriverJobButton("[data-driver-job-save-acknowledge]", `${viewport.label} Save & Acknowledge Job`);
       const savedDetailsState = await waitForCondition(
         () =>
           evaluate(`(() => {
             const message = document.querySelector("[data-driver-job-details-message]");
             const savedDetails = document.querySelector("[data-driver-job-saved-details]");
+            const acknowledged = document.querySelector("[data-driver-job-acknowledged-state]");
 
-            return message?.textContent.trim() === "Driver details saved locally for this mock driver page." &&
+            return message?.textContent.trim() === "Driver details saved and job acknowledged." &&
+              acknowledged?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Smoke Driver") &&
               savedDetails?.innerText.includes("+65 9000 2222") &&
               savedDetails?.innerText.includes("SMK1234Z") &&
@@ -36597,142 +36621,19 @@ async function runChromeTest() {
               : false;
           })()`),
         10000,
-        `${viewport.label} local driver details save`,
+        `${viewport.label} local driver details save and acknowledgement`,
       );
       assert.deepEqual(
         savedDetailsState.fetchCalls,
         beforeSaveNetwork.fetchCalls,
-        `${viewport.label}: expected driver details save to stay mock/local`,
-      );
-
-      const beforeAcknowledgeNetwork = await readDriverJobNetworkState();
-      await clickDriverJobButton("[data-driver-job-acknowledge]", `${viewport.label} Acknowledge Job`);
-      const acknowledgedState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const message = document.querySelector("[data-driver-job-acknowledge-message]");
-            const acknowledged = document.querySelector("[data-driver-job-acknowledged-state]");
-            const workflowAcknowledgement = document
-              .querySelector("[data-driver-job-workflow-summary-row='job-acknowledged'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-
-            return message?.textContent.trim() === "Job acknowledged locally for this mock driver page." &&
-              acknowledged?.textContent.trim() === "Acknowledged" &&
-              workflowAcknowledgement === "Acknowledged"
-              ? {
-                  fetchCalls: window.__driverJobFetchCalls || [],
-                  messageText: message.textContent.trim(),
-                  stateText: acknowledged.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        `${viewport.label} local job acknowledgement`,
-      );
-      assert.deepEqual(
-        acknowledgedState.fetchCalls,
-        beforeAcknowledgeNetwork.fetchCalls,
-        `${viewport.label}: expected acknowledgement to stay mock/local`,
-      );
-
-      const beforeLiveLocationNetwork = await readDriverJobNetworkState();
-      await clickDriverJobButton("[data-driver-job-live-location]", `${viewport.label} Activate Mock Live Location`);
-      const liveLocationState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const message = document.querySelector("[data-driver-job-live-location-message]");
-            const state = document.querySelector("[data-driver-job-live-location-state]");
-            const workflowLiveLocation = document
-              .querySelector("[data-driver-job-workflow-summary-row='live-location'] [data-driver-job-workflow-summary-value]")
-              ?.textContent.trim();
-
-            return message?.textContent.trim() ===
-              "Mock live location active locally for this mock driver page. No phone location is captured or sent." &&
-              state?.textContent.trim() === "Mock live location active" &&
-              workflowLiveLocation === "Active"
-              ? {
-                  fetchCalls: window.__driverJobFetchCalls || [],
-                  messageText: message.textContent.trim(),
-                  stateText: state.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        `${viewport.label} mock live location local activation`,
-      );
-      assert.deepEqual(
-        liveLocationState.fetchCalls,
-        beforeLiveLocationNetwork.fetchCalls,
-        `${viewport.label}: expected mock live-location activation to stay local`,
-      );
-
-      const beforeReminderNetwork = await readDriverJobNetworkState();
-      await clickDriverJobButton("[data-driver-job-reminder]", `${viewport.label} Trigger Mock 1-Hour Reminder`);
-      const reminderState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const message = document.querySelector("[data-driver-job-reminder-message]");
-            const status = document.querySelector("[data-driver-job-reminder-summary-status]");
-            const dispatcherLog = document.querySelector("[data-driver-job-dispatcher-notification-log]");
-
-            return message?.textContent.trim() ===
-              "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent." &&
-              status?.textContent.trim() === "Triggered locally" &&
-              dispatcherLog?.innerText.includes("Mock only. No message was sent.")
-              ? {
-                  fetchCalls: window.__driverJobFetchCalls || [],
-                  messageText: message.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        `${viewport.label} mock reminder local trigger`,
-      );
-      assert.deepEqual(
-        reminderState.fetchCalls,
-        beforeReminderNetwork.fetchCalls,
-        `${viewport.label}: expected mock reminder to stay local`,
+        `${viewport.label}: expected driver details save and acknowledgement to stay local`,
       );
 
       await clickValidDriverJobStatus("OTW", "OTW", "Status updated to OTW.");
       await clickBlockedDriverJobStatus("POB", "Update OTS before POB.", "OTW");
       await clickValidDriverJobStatus("OTS", "OTS", "Status updated to OTS.");
       await clickBlockedDriverJobStatus("Job Completed", "Update POB before Job Completed.", "OTS");
-      await clickValidDriverJobStatus("POB", "POB", "Status updated to POB. Mock live location ended locally.");
-      await waitForCondition(
-        () =>
-          evaluate(`document.querySelector("[data-driver-job-live-location-state]")?.textContent.trim() === "Mock live location inactive" &&
-            document.querySelector("[data-driver-job-workflow-summary-row='pob'] [data-driver-job-workflow-summary-value]")?.textContent.trim() === "Done" &&
-            document.querySelector("[data-driver-job-workflow-summary-row='live-location'] [data-driver-job-workflow-summary-value]")?.textContent.trim() === "Inactive"`),
-        10000,
-        `${viewport.label} mock live location ended at POB`,
-      );
-
-      const beforeEndedLiveLocationNetwork = await readDriverJobNetworkState();
-      await clickDriverJobButton("[data-driver-job-live-location]", `${viewport.label} blocked mock live location after POB`);
-      const endedLiveLocationState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const message = document.querySelector("[data-driver-job-live-location-message]");
-            const state = document.querySelector("[data-driver-job-live-location-state]");
-
-            return message?.textContent.trim() === "Mock live location has ended for this job." &&
-              state?.textContent.trim() === "Mock live location inactive"
-              ? {
-                  fetchCalls: window.__driverJobFetchCalls || [],
-                  messageText: message.textContent.trim(),
-                }
-              : false;
-          })()`),
-        10000,
-        `${viewport.label} mock live location remains ended after POB`,
-      );
-      assert.deepEqual(
-        endedLiveLocationState.fetchCalls,
-        beforeEndedLiveLocationNetwork.fetchCalls,
-        `${viewport.label}: expected ended mock live-location action to stay local`,
-      );
-
+      await clickValidDriverJobStatus("POB", "POB", "Status updated to POB.");
       await clickValidDriverJobStatus("Job Completed", "Job Completed", "Status updated to Job Completed.");
 
       const finalNetwork = await readDriverJobNetworkState();

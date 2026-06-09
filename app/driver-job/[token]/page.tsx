@@ -10,7 +10,6 @@ import {
 import {
   driverJobStatusDisplayLabels,
   guardDriverJobStatusTransition,
-  validateDriverJobStatusUpdate,
 } from "../../../lib/driver-job-status-workflow";
 
 type DriverJobApiBlockedReason =
@@ -135,8 +134,6 @@ const emptyDriverAppUpdateState: DriverAppUpdateState = {
   updates: [],
 };
 
-const mockLatestFlightEta = "15:45";
-
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
@@ -255,56 +252,6 @@ function detailRows(job: SafeDriverJobPayload) {
   ].filter((row) => row.value);
 }
 
-function isArrivalStyleJob(job: SafeDriverJobPayload) {
-  return job.bookingType.trim().toUpperCase() === "MNG" || job.bookingTypeLabel.toLowerCase().includes("arrival");
-}
-
-function hasReachedOts(status: string) {
-  const normalizedStatus = validateDriverJobStatusUpdate(status);
-
-  return normalizedStatus === "ots" || normalizedStatus === "pob" || normalizedStatus === "completed";
-}
-
-function workflowStepIndex(status: string) {
-  const normalizedStatus = validateDriverJobStatusUpdate(status);
-
-  if (normalizedStatus === "driver_otw") {
-    return 0;
-  }
-
-  if (normalizedStatus === "ots") {
-    return 1;
-  }
-
-  if (normalizedStatus === "pob") {
-    return 2;
-  }
-
-  if (normalizedStatus === "completed") {
-    return 3;
-  }
-
-  return -1;
-}
-
-function hasReachedOtw(status: string) {
-  return workflowStepIndex(status) >= 0;
-}
-
-function hasReachedPassengerPickup(status: string) {
-  const normalizedStatus = validateDriverJobStatusUpdate(status);
-
-  return normalizedStatus === "pob" || normalizedStatus === "completed";
-}
-
-function hasReachedCompleted(status: string) {
-  return validateDriverJobStatusUpdate(status) === "completed";
-}
-
-function workflowChecklistState(done: boolean) {
-  return done ? "Done" : "Pending";
-}
-
 function activityTime() {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -321,20 +268,9 @@ export default function DriverJobPage() {
   }, [params]);
   const [pageState, setPageState] = useState<PageState>({ kind: "loading" });
   const [acknowledged, setAcknowledged] = useState(false);
-  const [acknowledgementFeedback, setAcknowledgementFeedback] = useState<ControlFeedback | null>(null);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
-  const [mockLiveLocationActive, setMockLiveLocationActive] = useState(false);
-  const [mockLiveLocationFeedback, setMockLiveLocationFeedback] = useState<ControlFeedback | null>(null);
-  const [mockReminderFeedback, setMockReminderFeedback] = useState<ControlFeedback | null>(null);
-  const [mockDriverReminderState, setMockDriverReminderState] = useState("Not triggered");
-  const [mockDriverReminderStatus, setMockDriverReminderStatus] = useState("Pending local trigger");
-  const [mockDispatcherNotificationLog, setMockDispatcherNotificationLog] = useState("");
-  const [mockLatestEtaAcknowledged, setMockLatestEtaAcknowledged] = useState(false);
-  const [mockLatestEtaFeedback, setMockLatestEtaFeedback] = useState<ControlFeedback | null>(null);
-  const [mockOtsPhotoProofAdded, setMockOtsPhotoProofAdded] = useState(false);
-  const [mockOtsPhotoProofFeedback, setMockOtsPhotoProofFeedback] = useState<ControlFeedback | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [completionNote, setCompletionNote] = useState("");
   const [exceptionReason, setExceptionReason] = useState("");
@@ -348,70 +284,6 @@ export default function DriverJobPage() {
   const [updatingStatus, setUpdatingStatus] = useState("");
   const readyJob = pageState.kind === "ready" ? pageState.job : null;
   const savedStatusHistory = readyJob?.statusHistory || [];
-  const requiresMockLatestEtaAcknowledgement = readyJob ? isArrivalStyleJob(readyJob) : false;
-  const requiresMockOtsPhotoProof = readyJob ? isArrivalStyleJob(readyJob) : false;
-  const showMockLatestFlightEta = requiresMockLatestEtaAcknowledgement;
-  const showMockOtsPhotoProof = requiresMockOtsPhotoProof && hasReachedOts(workflowStatus);
-  const mockDispatcherWorkflowChecklist = [
-    {
-      key: "job-acknowledged",
-      label: "Job acknowledged",
-      value: acknowledged ? "Acknowledged" : "Waiting",
-    },
-    {
-      key: "reminder-status",
-      label: "Mock 1-hour reminder status",
-      value: `${mockDriverReminderStatus} (${mockDriverReminderState})`,
-    },
-    ...(requiresMockLatestEtaAcknowledgement
-      ? [
-          {
-            key: "latest-eta",
-            label: "Arrival/MNG latest ETA acknowledged",
-            value: mockLatestEtaAcknowledged ? "Acknowledged" : "Pending acknowledgement",
-          },
-        ]
-      : []),
-    {
-      key: "otw",
-      label: "OTW",
-      value: workflowChecklistState(hasReachedOtw(workflowStatus)),
-    },
-    {
-      key: "ots",
-      label: "OTS",
-      value: workflowChecklistState(hasReachedOts(workflowStatus)),
-    },
-    ...(requiresMockOtsPhotoProof
-      ? [
-          {
-            key: "ots-photo-proof",
-            label: "Arrival/MNG mock OTS photo proof added",
-            value: mockOtsPhotoProofAdded ? "Added" : "Pending proof",
-          },
-        ]
-      : []),
-    {
-      key: "pob",
-      label: "POB",
-      value: workflowChecklistState(hasReachedPassengerPickup(workflowStatus)),
-    },
-    {
-      key: "completed",
-      label: "Job Completed",
-      value: workflowChecklistState(hasReachedCompleted(workflowStatus)),
-    },
-    {
-      key: "live-location",
-      label: "Mock live location state",
-      value: mockLiveLocationActive ? "Active" : "Inactive",
-    },
-    {
-      key: "dispatcher-log",
-      label: "Mock dispatcher notification log",
-      value: mockDispatcherNotificationLog || "No mock dispatcher notification recorded yet.",
-    },
-  ];
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -442,19 +314,8 @@ export default function DriverJobPage() {
 
       setPageState({ kind: "loading" });
       setAcknowledged(false);
-      setAcknowledgementFeedback(null);
       setDetailsFeedback(null);
       setDriverDetails(emptyDriverDetails);
-      setMockLiveLocationActive(false);
-      setMockLiveLocationFeedback(null);
-      setMockReminderFeedback(null);
-      setMockDriverReminderState("Not triggered");
-      setMockDriverReminderStatus("Pending local trigger");
-      setMockDispatcherNotificationLog("");
-      setMockLatestEtaAcknowledged(false);
-      setMockLatestEtaFeedback(null);
-      setMockOtsPhotoProofAdded(false);
-      setMockOtsPhotoProofFeedback(null);
       setActivityLog([]);
       setCompletionNote("");
       setExceptionReason("");
@@ -565,72 +426,6 @@ export default function DriverJobPage() {
     };
   }, [token]);
 
-  function acknowledgeJob() {
-    setAcknowledged(true);
-    setStatusFeedback(null);
-    setAcknowledgementFeedback({
-      tone: "success",
-      text: "Job acknowledged locally for this mock driver page.",
-    });
-    addActivity("Job acknowledged", "Driver acknowledged this mock job locally.");
-  }
-
-  function activateMockLiveLocation() {
-    if (!acknowledged) {
-      setMockLiveLocationFeedback({
-        tone: "error",
-        text: "Acknowledge this job before activating mock live location.",
-      });
-      return;
-    }
-
-    if (workflowStatus === "pob" || workflowStatus === "completed") {
-      setMockLiveLocationActive(false);
-      setMockLiveLocationFeedback({
-        tone: "error",
-        text: "Mock live location has ended for this job.",
-      });
-      return;
-    }
-
-    setMockLiveLocationActive(true);
-    setMockLiveLocationFeedback({
-      tone: "success",
-      text: "Mock live location active locally for this mock driver page. No phone location is captured or sent.",
-    });
-    addActivity("Mock live location activated", "Local mock live location state is active. No location was sent.");
-  }
-
-  function triggerMockDriverReminder() {
-    if (hasReachedPassengerPickup(workflowStatus)) {
-      setMockReminderFeedback({
-        tone: "error",
-        text: "Mock reminder is blocked after POB or Job Completed.",
-      });
-      setMockDriverReminderState("Blocked");
-      setMockDriverReminderStatus("Blocked locally");
-      setMockDispatcherNotificationLog(
-        "Mock dispatcher notification log: Reminder blocked locally after POB or Job Completed. Mock only. No message was sent.",
-      );
-      addActivity("Mock reminder blocked", "Mock reminder was blocked after POB or Job Completed. No message was sent.");
-      return;
-    }
-
-    setMockReminderFeedback({
-      tone: "success",
-      text: "Mock 1-hour reminder triggered locally. No real notification, WhatsApp, or SMS was sent.",
-    });
-    setMockDriverReminderState("Triggered");
-    setMockDriverReminderStatus("Triggered locally");
-    setMockDispatcherNotificationLog(
-      "Mock dispatcher notification log: Driver reminder recorded locally. Mock only. No message was sent.",
-    );
-    addActivity(
-      "Mock 1-hour reminder triggered",
-      "Mock reminder tells the driver to activate mock live location and continue the workflow.",
-    );
-  }
-
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
     setSavedDriverDetails(null);
@@ -640,7 +435,7 @@ export default function DriverJobPage() {
     }));
   }
 
-  function saveDriverDetails() {
+  function saveAndAcknowledgeJob() {
     const nextDetails = cleanDriverDetails(driverDetails);
 
     setDriverDetails(nextDetails);
@@ -648,7 +443,7 @@ export default function DriverJobPage() {
     if (!nextDetails.name && !nextDetails.contact && !nextDetails.plate && !nextDetails.vehicleModel) {
       setDetailsFeedback({
         tone: "error",
-        text: "Enter driver name, contact, car plate, or vehicle model before saving.",
+        text: "Confirm driver name, contact, car plate, or vehicle model before acknowledging.",
       });
       setSavedDriverDetails(null);
       return;
@@ -657,49 +452,20 @@ export default function DriverJobPage() {
     if (!nextDetails.name) {
       setDetailsFeedback({
         tone: "error",
-        text: "Driver name is required before saving.",
+        text: "Driver name is required before acknowledging.",
       });
       setSavedDriverDetails(null);
       return;
     }
 
     setSavedDriverDetails(nextDetails);
+    setAcknowledged(true);
+    setStatusFeedback(null);
     setDetailsFeedback({
       tone: "success",
-      text: "Driver details saved locally for this mock driver page.",
+      text: "Driver details saved and job acknowledged.",
     });
-    addActivity("Mock driver details saved", "Driver name/contact/vehicle details were saved locally.");
-  }
-
-  function acknowledgeLatestEta() {
-    if (!showMockLatestFlightEta || mockLatestEtaAcknowledged) {
-      return;
-    }
-
-    setMockLatestEtaAcknowledged(true);
-    setMockLatestEtaFeedback({
-      tone: "success",
-      text: "Latest mock flight ETA acknowledged locally. No real flight API or notification was used.",
-    });
-    setStatusFeedback(null);
-    addActivity("Latest ETA acknowledged", "Driver acknowledged the latest mock flight ETA locally.");
-  }
-
-  function addMockOtsPhotoProof() {
-    if (!showMockOtsPhotoProof) {
-      return;
-    }
-
-    setMockOtsPhotoProofAdded(true);
-    setMockOtsPhotoProofFeedback({
-      tone: "success",
-      text: "Mock OTS photo proof added locally. No real file upload, camera, or storage was used.",
-    });
-    setStatusFeedback(null);
-    addActivity(
-      "Mock OTS photo proof added",
-      "Mock/local OTS photo proof was added. No file upload, camera, or storage was used.",
-    );
+    addActivity("Job acknowledged", "Driver and vehicle details were confirmed for this assigned job.");
   }
 
   async function reportDriverIssue() {
@@ -757,6 +523,15 @@ export default function DriverJobPage() {
       return;
     }
 
+    if (!acknowledged) {
+      setStatusFeedback({
+        target: label,
+        tone: "error",
+        text: "Save & Acknowledge Job before updating status.",
+      });
+      return;
+    }
+
     const transitionGuard = guardDriverJobStatusTransition({
       acknowledged,
       currentStatus: workflowStatus,
@@ -769,26 +544,6 @@ export default function DriverJobPage() {
         tone: "error",
         text: transitionGuard.message,
       });
-      return;
-    }
-
-    if (transitionGuard.status === "driver_otw" && isArrivalStyleJob(pageState.job) && !mockLatestEtaAcknowledged) {
-      setStatusFeedback({
-        target: label,
-        tone: "error",
-        text: "Acknowledge latest mock flight ETA before OTW.",
-      });
-      addActivity("OTW blocked", "OTW was blocked because latest ETA acknowledgement is missing.");
-      return;
-    }
-
-    if (transitionGuard.status === "pob" && isArrivalStyleJob(pageState.job) && !mockOtsPhotoProofAdded) {
-      setStatusFeedback({
-        target: label,
-        tone: "error",
-        text: "Add mock OTS photo proof before POB.",
-      });
-      addActivity("POB blocked", "POB was blocked because OTS photo proof is missing.");
       return;
     }
 
@@ -846,29 +601,9 @@ export default function DriverJobPage() {
 
       const nextStatusText = statusDisplay(result.payload.status, result.payload.statusLabel);
 
-      if (transitionGuard.status === "pob") {
-        setMockLiveLocationActive(false);
-        if (mockLiveLocationActive) {
-          setMockLiveLocationFeedback({
-            tone: "success",
-            text: "Mock live location ended locally after POB.",
-          });
-        }
-      }
-
-      if (transitionGuard.status === "completed") {
-        setMockLiveLocationActive(false);
-      }
-
       setWorkflowStatus(result.payload.status);
       setPageState({ kind: "ready", job: result.payload });
       addActivity(`${label} marked`, `Driver status updated to ${nextStatusText}.`);
-      if (transitionGuard.status === "ots" && isArrivalStyleJob(result.payload)) {
-        addActivity("OTS photo proof requested", "Mock/local OTS photo proof is required before POB.");
-      }
-      if (transitionGuard.status === "pob" && mockLiveLocationActive) {
-        addActivity("Mock live location auto-ended at POB", "Local mock live location state ended after POB.");
-      }
       if (transitionGuard.status === "completed" && (cleanedCompletionNote || cleanedExceptionReason)) {
         addActivity(
           "Completion note prepared",
@@ -878,10 +613,7 @@ export default function DriverJobPage() {
       setStatusFeedback({
         target: label,
         tone: "success",
-        text:
-          transitionGuard.status === "pob" && mockLiveLocationActive
-            ? `Status updated to ${nextStatusText}. Mock live location ended locally.`
-            : `Status updated to ${nextStatusText}.`,
+        text: `Status updated to ${nextStatusText}.`,
       });
     } catch {
       setStatusFeedback({
@@ -937,7 +669,7 @@ export default function DriverJobPage() {
             >
               <div className="flex items-center justify-between gap-3">
                 <h2 id="driver-job-summary-heading" className="text-base font-semibold text-slate-900">
-                  Job Summary
+                  Driver Job Card
                 </h2>
                 <span
                   className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
@@ -957,47 +689,43 @@ export default function DriverJobPage() {
               </dl>
             </section>
 
-            <section
-              className="order-[80] space-y-3 rounded-md border border-stone-200 bg-white p-3"
-              aria-labelledby="driver-workflow-handoff-heading"
+            <details
+              className="order-[88] rounded-md border border-stone-200 bg-white p-3"
               data-driver-job-workflow-handoff="true"
             >
-              <div className="space-y-1">
-                <h2 id="driver-workflow-handoff-heading" className="text-base font-semibold text-slate-900">
-                  Driver Job Handoff
-                </h2>
-                <p
-                  className="text-sm font-medium leading-6 text-slate-600"
-                  data-driver-job-workflow-handoff-helper="true"
-                >
-                  This is the driver page for this assigned job.
-                </p>
-              </div>
+              <summary
+                className="cursor-pointer text-sm font-semibold text-slate-900"
+                data-driver-job-workflow-handoff-summary="true"
+              >
+                How this page works
+              </summary>
+              <p
+                className="mt-3 text-sm font-medium leading-6 text-slate-600"
+                data-driver-job-workflow-handoff-helper="true"
+              >
+                This is the driver page for this assigned job.
+              </p>
               <ul
-                className="grid gap-2 text-sm font-medium leading-6 text-slate-700"
+                className="mt-3 grid gap-2 text-sm font-medium leading-6 text-slate-700"
                 data-driver-job-workflow-handoff-list="true"
               >
                 <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
                   Review pickup time, pickup place, drop-off, route, and job notes before starting.
                 </li>
                 <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                  Use the job status buttons only when you are ready.
-                </li>
-                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                  Helper actions here are local/demo steps unless the button feedback says a guarded status update{" "}
-                  was accepted.
+                  Confirm driver and vehicle details once, then use the status buttons only when ready.
                 </li>
                 <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
                   Use Report Issue when admin needs an in-app alert.
                 </li>
               </ul>
               <p
-                className="text-sm font-semibold leading-6 text-slate-700"
+                className="mt-3 text-sm font-semibold leading-6 text-slate-700"
                 data-driver-job-workflow-handoff-boundary="true"
               >
                 Private account and internal compensation details are not shown here.
               </p>
-            </section>
+            </details>
 
             <section
               className="order-[90] space-y-3"
@@ -1064,328 +792,21 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="order-1 space-y-3" aria-labelledby="assigned-driver-heading">
-              <h2 id="assigned-driver-heading" className="text-base font-semibold text-slate-900">
-                Assigned Driver
-              </h2>
-              <dl className="divide-y divide-stone-200 rounded-md border border-stone-200 bg-white">
-                <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-3 text-sm">
-                  <dt className="font-semibold text-slate-500">Name</dt>
-                  <dd className="min-w-0 break-words text-slate-950">
-                    {displayValue(pageState.job.assignedDriver.name)}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-3 text-sm">
-                  <dt className="font-semibold text-slate-500">Contact</dt>
-                  <dd className="min-w-0 break-words text-slate-950">
-                    {displayValue(pageState.job.assignedDriver.contact)}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-3 text-sm">
-                  <dt className="font-semibold text-slate-500">Plate</dt>
-                  <dd className="min-w-0 break-words text-slate-950">
-                    {displayValue(pageState.job.assignedDriver.plate)}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-3 text-sm">
-                  <dt className="font-semibold text-slate-500">Vehicle</dt>
-                  <dd className="min-w-0 break-words text-slate-950">
-                    {displayValue(pageState.job.assignedDriver.vehicleModel)}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-
-            <section
-              className="order-[80] space-y-3"
-              aria-labelledby="driver-workflow-summary-heading"
-              data-driver-job-workflow-summary="true"
-            >
-              <h2 id="driver-workflow-summary-heading" className="text-base font-semibold text-slate-900">
-                Mock Dispatcher Driver Workflow Summary
-              </h2>
-              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
-                <p className="text-sm font-medium text-slate-600">
-                  Mock/local only. Dispatcher-facing workflow checklist for this mock driver page.
-                </p>
-                <dl className="grid gap-2">
-                  {mockDispatcherWorkflowChecklist.map((item) => (
-                    <div
-                      className="grid gap-1 rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200"
-                      data-driver-job-workflow-summary-row={item.key}
-                      key={item.key}
-                    >
-                      <dt
-                        className="font-semibold text-slate-500"
-                        data-driver-job-workflow-summary-label="true"
-                      >
-                        {item.label}
-                      </dt>
-                      <dd
-                        className="break-words font-semibold text-slate-800"
-                        data-driver-job-workflow-summary-value="true"
-                      >
-                        {item.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                <p className="font-semibold text-slate-800" data-driver-job-workflow-summary-mock-only="true">
-                  Mock only. No real message was sent.
-                </p>
-              </div>
-            </section>
-
             <section
               className="order-2 space-y-3"
-              aria-labelledby="driver-acknowledgement-heading"
-              data-driver-primary-step="acknowledge"
+              aria-labelledby="driver-details-heading"
+              data-driver-primary-step="confirm-details"
             >
-              <h2 id="driver-acknowledgement-heading" className="text-base font-semibold text-slate-900">
-                Job Acknowledgement
+              <h2 id="driver-details-heading" className="text-base font-semibold text-slate-900">
+                Confirm Driver & Vehicle Details
               </h2>
               <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
                 <p
                   className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-acknowledged-state="true"
                 >
-                  {acknowledged ? "Acknowledged" : "Waiting for driver acknowledgement"}
+                  {acknowledged ? "Acknowledged" : "Confirm these details to acknowledge the job"}
                 </p>
-                <div className="space-y-2">
-                  <button
-                    className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
-                    data-driver-job-acknowledge="true"
-                    onClick={acknowledgeJob}
-                    type="button"
-                  >
-                    Acknowledge Job
-                  </button>
-                  {acknowledgementFeedback ? (
-                    <p
-                      aria-live="polite"
-                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(acknowledgementFeedback.tone)}`}
-                      data-driver-job-acknowledge-message="true"
-                    >
-                      {acknowledgementFeedback.text}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-
-            <section className="order-[82] space-y-3" aria-labelledby="driver-live-location-heading">
-              <h2 id="driver-live-location-heading" className="text-base font-semibold text-slate-900">
-                Mock Live Location
-              </h2>
-              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
-                <p
-                  className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
-                  data-driver-job-live-location-state="true"
-                >
-                  {mockLiveLocationActive ? "Mock live location active" : "Mock live location inactive"}
-                </p>
-                <p className="text-sm font-medium text-slate-600">
-                  Mock/local only. No phone location is captured or sent.
-                </p>
-                <div className="space-y-2">
-                  <button
-                    className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
-                    data-driver-job-live-location="true"
-                    onClick={activateMockLiveLocation}
-                    type="button"
-                  >
-                    Activate Mock Live Location
-                  </button>
-                  {mockLiveLocationFeedback ? (
-                    <p
-                      aria-live="polite"
-                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockLiveLocationFeedback.tone)}`}
-                      data-driver-job-live-location-message="true"
-                    >
-                      {mockLiveLocationFeedback.text}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-
-            <section
-              className="order-[82] space-y-3"
-              aria-labelledby="driver-reminder-heading"
-              data-driver-job-reminder-section="true"
-            >
-              <h2 id="driver-reminder-heading" className="text-base font-semibold text-slate-900">
-                Mock Driver Reminder
-              </h2>
-              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
-                <p className="text-sm font-medium text-slate-600">
-                  Mock/local only. No real notification, WhatsApp, or SMS is sent.
-                </p>
-                <p
-                  className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
-                  data-driver-job-reminder-timing="true"
-                >
-                  Mock reminder: 1 hour before pickup
-                </p>
-                <p className="text-sm font-medium text-slate-600">
-                  Reminder tells the driver to activate mock live location and continue workflow.
-                </p>
-                <div
-                  className="space-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"
-                  data-driver-job-reminder-summary="true"
-                >
-                  <p className="font-semibold text-slate-900">Mock dispatcher reminder summary</p>
-                  <dl className="grid gap-2">
-                    <div className="grid gap-1">
-                      <dt className="font-semibold text-slate-500">Mock driver reminder status</dt>
-                      <dd data-driver-job-reminder-summary-status="true">{mockDriverReminderStatus}</dd>
-                    </div>
-                    <div className="grid gap-1">
-                      <dt className="font-semibold text-slate-500">Reminder triggered / blocked state</dt>
-                      <dd data-driver-job-reminder-summary-state="true">{mockDriverReminderState}</dd>
-                    </div>
-                    <div className="grid gap-1">
-                      <dt className="font-semibold text-slate-500">Mock dispatcher notification log</dt>
-                      <dd data-driver-job-reminder-summary-log="true">
-                        {mockDispatcherNotificationLog || "No mock dispatcher notification recorded yet."}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p className="font-semibold text-slate-800" data-driver-job-reminder-summary-mock-only="true">
-                    Mock only. No real message was sent.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <button
-                    className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
-                    data-driver-job-reminder="true"
-                    onClick={triggerMockDriverReminder}
-                    type="button"
-                  >
-                    Trigger Mock 1-Hour Reminder
-                  </button>
-                  {mockReminderFeedback ? (
-                    <p
-                      aria-live="polite"
-                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockReminderFeedback.tone)}`}
-                      data-driver-job-reminder-message="true"
-                    >
-                      {mockReminderFeedback.text}
-                    </p>
-                  ) : null}
-                  {mockDispatcherNotificationLog ? (
-                    <p
-                      className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
-                      data-driver-job-dispatcher-notification-log="true"
-                    >
-                      {mockDispatcherNotificationLog}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </section>
-
-            {showMockLatestFlightEta ? (
-              <section
-                className="order-[82] space-y-3"
-                aria-labelledby="driver-latest-eta-heading"
-                data-driver-job-latest-eta-section="true"
-              >
-                <h2 id="driver-latest-eta-heading" className="text-base font-semibold text-slate-900">
-                  Mock Latest Flight ETA
-                </h2>
-                <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
-                  <p
-                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
-                    data-driver-job-latest-eta-state="true"
-                  >
-                    {mockLatestEtaAcknowledged
-                      ? "Latest mock flight ETA acknowledged"
-                      : "Latest mock flight ETA acknowledgement required before OTW"}
-                  </p>
-                  <p className="text-sm font-medium text-slate-600">
-                    Mock/local only. No real flight API is called and no notification is sent.
-                  </p>
-                  <p
-                    className="text-sm font-semibold text-slate-800"
-                    data-driver-job-latest-eta-value="true"
-                  >
-                    Latest mock flight ETA: {mockLatestFlightEta}
-                  </p>
-                  <div className="space-y-2">
-                    <button
-                      className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      data-driver-job-latest-eta="true"
-                      disabled={mockLatestEtaAcknowledged}
-                      onClick={acknowledgeLatestEta}
-                      type="button"
-                    >
-                      Acknowledge Latest ETA
-                    </button>
-                    {mockLatestEtaFeedback ? (
-                      <p
-                        aria-live="polite"
-                        className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockLatestEtaFeedback.tone)}`}
-                        data-driver-job-latest-eta-message="true"
-                      >
-                        {mockLatestEtaFeedback.text}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-            ) : null}
-
-            {showMockOtsPhotoProof ? (
-              <section
-                className="order-[82] space-y-3"
-                aria-labelledby="driver-ots-photo-proof-heading"
-                data-driver-job-ots-photo-proof-section="true"
-              >
-                <h2 id="driver-ots-photo-proof-heading" className="text-base font-semibold text-slate-900">
-                  Mock OTS Photo Proof
-                </h2>
-                <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
-                  <p
-                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
-                    data-driver-job-ots-photo-proof-state="true"
-                  >
-                    {mockOtsPhotoProofAdded
-                      ? "Mock OTS photo proof added"
-                      : "Mock OTS photo proof required before POB"}
-                  </p>
-                  <p className="text-sm font-medium text-slate-600">
-                    Mock/local only. No real file upload, camera, or storage is used.
-                  </p>
-                  <div className="space-y-2">
-                    <button
-                      className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      data-driver-job-ots-photo-proof="true"
-                      disabled={mockOtsPhotoProofAdded}
-                      onClick={addMockOtsPhotoProof}
-                      type="button"
-                    >
-                      Add Mock OTS Photo Proof
-                    </button>
-                    {mockOtsPhotoProofFeedback ? (
-                      <p
-                        aria-live="polite"
-                        className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(mockOtsPhotoProofFeedback.tone)}`}
-                        data-driver-job-ots-photo-proof-message="true"
-                      >
-                        {mockOtsPhotoProofFeedback.text}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-            ) : null}
-
-            <section className="order-[84] space-y-3" aria-labelledby="driver-details-heading">
-              <h2 id="driver-details-heading" className="text-base font-semibold text-slate-900">
-                Driver Details
-              </h2>
-              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
                 <label className="block space-y-1 text-sm font-semibold text-slate-700">
                   <span>Driver name</span>
                   <input
@@ -1430,12 +851,13 @@ export default function DriverJobPage() {
                 </label>
                 <div className="space-y-2">
                   <button
-                    className="h-12 w-full rounded-md bg-slate-950 px-4 text-base font-semibold text-white transition active:bg-slate-700"
-                    data-driver-job-save-details="true"
-                    onClick={saveDriverDetails}
+                    className="h-12 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
+                    data-driver-job-save-acknowledge="true"
+                    data-driver-primary-step="save-acknowledge"
+                    onClick={saveAndAcknowledgeJob}
                     type="button"
                   >
-                    Save
+                    Save & Acknowledge Job
                   </button>
                   {detailsFeedback ? (
                     <p
@@ -1452,7 +874,7 @@ export default function DriverJobPage() {
                     className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900"
                     data-driver-job-saved-details="true"
                   >
-                    <p className="font-semibold">Saved driver details</p>
+                    <p className="font-semibold">Confirmed driver and vehicle details</p>
                     <dl className="grid gap-1">
                       <div className="grid grid-cols-[6.5rem_1fr] gap-2">
                         <dt className="font-semibold">Name</dt>
@@ -1503,7 +925,7 @@ export default function DriverJobPage() {
                     ))}
                   </ol>
                 ) : (
-                  <p className="text-sm font-medium text-slate-600">No mock driver activity recorded yet.</p>
+                  <p className="text-sm font-medium text-slate-600">No driver activity recorded yet.</p>
                 )}
               </div>
             </section>

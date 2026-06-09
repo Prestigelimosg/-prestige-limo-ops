@@ -221,10 +221,6 @@ function safeDisplayText(value: unknown, fallback: string) {
   return cleaned || fallback;
 }
 
-function safeStatusNoteText(value: string) {
-  return value.trim().replace(/\s+/g, " ").slice(0, 1000);
-}
-
 function formatDriverAppUpdateTime(value: unknown) {
   const text = safeDisplayText(value, "");
   const date = text ? new Date(text) : null;
@@ -272,8 +268,6 @@ export default function DriverJobPage() {
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
-  const [completionNote, setCompletionNote] = useState("");
-  const [exceptionReason, setExceptionReason] = useState("");
   const [driverIssueFeedback, setDriverIssueFeedback] = useState<ControlFeedback | null>(null);
   const [reportingDriverIssue, setReportingDriverIssue] = useState(false);
   const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
@@ -317,8 +311,6 @@ export default function DriverJobPage() {
       setDetailsFeedback(null);
       setDriverDetails(emptyDriverDetails);
       setActivityLog([]);
-      setCompletionNote("");
-      setExceptionReason("");
       setDriverIssueFeedback(null);
       setReportingDriverIssue(false);
       setSelectedDriverIssue("");
@@ -554,23 +546,6 @@ export default function DriverJobPage() {
       const requestBody: Record<string, unknown> = {
         status: transitionGuard.status,
       };
-      const cleanedCompletionNote = safeStatusNoteText(completionNote);
-      const cleanedExceptionReason = safeStatusNoteText(exceptionReason);
-
-      if (transitionGuard.status === "completed" && cleanedCompletionNote) {
-        requestBody.completion_note = cleanedCompletionNote;
-      }
-
-      if (cleanedExceptionReason) {
-        requestBody.exception_reason = cleanedExceptionReason;
-      }
-
-      if (requestBody.completion_note || requestBody.exception_reason) {
-        requestBody.safe_status_context = {
-          completion_note_status: requestBody.completion_note ? "provided" : "not_provided",
-          exception_reason_status: requestBody.exception_reason ? "provided" : "not_provided",
-        };
-      }
 
       // Mock-backed status update only. Production must verify the secure token before any Supabase write.
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/status`, {
@@ -604,12 +579,6 @@ export default function DriverJobPage() {
       setWorkflowStatus(result.payload.status);
       setPageState({ kind: "ready", job: result.payload });
       addActivity(`${label} marked`, `Driver status updated to ${nextStatusText}.`);
-      if (transitionGuard.status === "completed" && (cleanedCompletionNote || cleanedExceptionReason)) {
-        addActivity(
-          "Completion note prepared",
-          "Safe completion or exception text was included with the guarded status update.",
-        );
-      }
       setStatusFeedback({
         target: label,
         tone: "success",
@@ -1018,35 +987,6 @@ export default function DriverJobPage() {
               </div>
               <div
                 className="order-3 space-y-3 rounded-md border border-slate-200 bg-white p-3"
-                data-driver-job-completion-notes="true"
-              >
-                <p className="text-sm font-semibold text-slate-900">Completion / Exception Notes</p>
-                <p className="text-sm font-medium leading-6 text-slate-600">
-                  Optional safe operational text included only with an accepted status update.
-                </p>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Completion note</span>
-                  <textarea
-                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-completion-note="true"
-                    maxLength={1000}
-                    onChange={(event) => setCompletionNote(event.target.value)}
-                    value={completionNote}
-                  />
-                </label>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Exception reason</span>
-                  <textarea
-                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-exception-reason="true"
-                    maxLength={1000}
-                    onChange={(event) => setExceptionReason(event.target.value)}
-                    value={exceptionReason}
-                  />
-                </label>
-              </div>
-              <div
-                className="order-4 space-y-3 rounded-md border border-slate-200 bg-white p-3"
                 data-driver-job-saved-status-history="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1095,7 +1035,7 @@ export default function DriverJobPage() {
                 )}
               </div>
               <div
-                className="order-5 space-y-2 rounded-md border border-slate-200 bg-white p-3"
+                className="order-4 space-y-2 rounded-md border border-slate-200 bg-white p-3"
                 data-driver-job-status-boundary="true"
               >
                 <p className="text-sm font-semibold text-slate-900" data-driver-job-status-boundary-title="true">
@@ -1112,7 +1052,7 @@ export default function DriverJobPage() {
                     Status updates are accepted only through this guarded job link.
                   </li>
                   <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Job Completed can include safe completion or exception text for dispatch review.
+                    Job Completed closes the trip progress for dispatch review.
                   </li>
                   <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
                     No private account, file upload, or location-tracking action is created here.

@@ -252,7 +252,6 @@ async function runChromeTest() {
           vehicleModel: document.querySelector("[data-driver-job-detail-vehicle-model]")?.value || "",
         },
         layoutPositions: {
-          completionNotes: Math.round(document.querySelector("[data-driver-job-completion-notes]")?.getBoundingClientRect().top ?? -1),
           reportIssue: Math.round(document.querySelector("[data-driver-job-report-issue]")?.getBoundingClientRect().top ?? -1),
           saveAcknowledge: Math.round(document.querySelector("[data-driver-job-save-acknowledge]")?.getBoundingClientRect().top ?? -1),
           statusBoundary: Math.round(document.querySelector("[data-driver-job-status-boundary]")?.getBoundingClientRect().top ?? -1),
@@ -528,36 +527,6 @@ async function runChromeTest() {
       return afterSaveState;
     };
 
-    const fillCompletionNotes = async () => {
-      const filled = await evaluate(`(() => {
-        const values = [
-          ["[data-driver-job-completion-note]", "Passenger dropped safely at hotel lobby."],
-          ["[data-driver-job-exception-reason]", "No exception."],
-        ];
-        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-
-        for (const [selector, value] of values) {
-          const input = document.querySelector(selector);
-
-          if (!input) {
-            return false;
-          }
-
-          setter?.call(input, value);
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-          input.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-
-        return true;
-      })()`);
-
-      assert.equal(filled, true, "Expected driver completion/exception note fields to be editable.");
-      const state = await pageState();
-
-      assertNoSensitiveText(state);
-      return state;
-    };
-
     const clickStatus = async (
       label,
       expectedStatus,
@@ -753,11 +722,6 @@ async function runChromeTest() {
       "Expected Report Issue below the frequent status buttons.",
     );
     assert.equal(
-      validState.layoutPositions.completionNotes > validState.layoutPositions.statusButtons,
-      true,
-      "Expected optional completion notes below the frequent status buttons.",
-    );
-    assert.equal(
       validState.layoutPositions.statusHistory > validState.layoutPositions.statusButtons,
       true,
       "Expected status history below the frequent status buttons.",
@@ -817,7 +781,7 @@ async function runChromeTest() {
       [
         "Current flow: OTW, OTS, POB, then Job Completed.",
         "Status updates are accepted only through this guarded job link.",
-        "Job Completed can include safe completion or exception text for dispatch review.",
+        "Job Completed closes the trip progress for dispatch review.",
         "No private account, file upload, or location-tracking action is created here.",
         "Use Report Issue for in-app admin alerts.",
       ],
@@ -872,7 +836,9 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Car plate"));
     assert.ok(validState.visibleText.includes("Vehicle model"));
     assert.equal(validState.visibleText.includes("PayNow number"), false);
-    assert.equal(validState.visibleText.includes("Completion / Exception Notes"), true);
+    assert.equal(validState.visibleText.includes("Completion / Exception Notes"), false);
+    assert.equal(validState.visibleText.includes("Completion note"), false);
+    assert.equal(validState.visibleText.includes("Exception reason"), false);
     assert.equal(validState.visibleText.includes("Status History"), true);
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
@@ -927,7 +893,6 @@ async function runChromeTest() {
     );
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "OTS");
     await clickStatus("POB", "POB");
-    await fillCompletionNotes();
     await clickStatus("Job Completed", "Job Completed");
     await clickReportIssue();
     const completedState = await pageState();
@@ -939,7 +904,6 @@ async function runChromeTest() {
         "OTS marked",
         "POB marked",
         "Job Completed marked",
-        "Completion note prepared",
         "Admin alert prepared",
       ],
       "Expected public driver activity log to preserve the single acknowledgement and status workflow order.",
@@ -980,7 +944,7 @@ async function runChromeTest() {
       [
         "Current flow: OTW, OTS, POB, then Job Completed.",
         "Status updates are accepted only through this guarded job link.",
-        "Job Completed can include safe completion or exception text for dispatch review.",
+        "Job Completed closes the trip progress for dispatch review.",
         "No private account, file upload, or location-tracking action is created here.",
         "Use Report Issue for in-app admin alerts.",
       ],

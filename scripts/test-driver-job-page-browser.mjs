@@ -240,9 +240,12 @@ async function runChromeTest() {
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
         confirmDetails: {
           acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
+          parseButtonText: document.querySelector("[data-driver-job-parse-details]")?.textContent.trim() || "",
+          parseMessage: document.querySelector("[data-driver-job-parse-details-message]")?.textContent.trim() || "",
           saveAcknowledgeText: document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() || "",
           saveAcknowledgeVisible: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")),
           title: document.querySelector("#driver-details-heading")?.textContent.trim() || "",
+          rawDetailsVisible: Boolean(document.querySelector("[data-driver-job-details-raw]")),
           visible: Boolean(document.querySelector("[data-driver-primary-step='confirm-details']")),
         },
         driverDetailValues: {
@@ -446,6 +449,59 @@ async function runChromeTest() {
 
     const saveAndAcknowledgeJob = async () => {
       const beforeSaveState = await pageState();
+      const parsed = await evaluate(`(() => {
+        const textarea = document.querySelector("[data-driver-job-details-raw]");
+        const parseButton = document.querySelector("[data-driver-job-parse-details]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+
+        if (!textarea || !parseButton) {
+          return false;
+        }
+
+        setter?.call(
+          textarea,
+          [
+            "Driver name: Mock Local Driver A",
+            "Mobile: +65 9123 4567",
+            "Car plate: SLM1234A",
+            "Vehicle model: Toyota Alphard",
+            "PayNow: 81234567",
+            "Optional remarks: internal finance note should not appear",
+          ].join("\\n"),
+        );
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        textarea.dispatchEvent(new Event("change", { bubbles: true }));
+        parseButton.click();
+
+        return true;
+      })()`);
+      assert.equal(parsed, true, "Expected public driver details paste parser controls.");
+
+      const parsedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const message = document.querySelector("[data-driver-job-parse-details-message]");
+
+            return message?.textContent.trim() === "Driver details parsed. Review and save to acknowledge." &&
+              document.querySelector("[data-driver-job-detail-name]")?.value === "Mock Local Driver A" &&
+              document.querySelector("[data-driver-job-detail-contact]")?.value === "+65 9123 4567" &&
+              document.querySelector("[data-driver-job-detail-plate]")?.value === "SLM1234A" &&
+              document.querySelector("[data-driver-job-detail-vehicle-model]")?.value === "Toyota Alphard"
+              ? {
+                  messageText: message.textContent.trim(),
+                  visibleText: document.body?.innerText || "",
+                }
+              : false;
+          })()`),
+        10000,
+        "public driver details parse",
+      );
+      assert.equal(
+        /paynow|optional remarks|internal finance note/i.test(parsedState.visibleText),
+        false,
+        "Public driver details parser must not expose pasted payment or internal remark text.",
+      );
+
       const filled = await evaluate(`(() => {
         const values = [
           ["[data-driver-job-detail-name]", "Mock Local Driver A"],
@@ -699,11 +755,13 @@ async function runChromeTest() {
       "Expected job card, confirm-details, save acknowledgement, status, and issue controls to lead the driver page.",
     );
     assert.equal(validState.confirmDetails.visible, true, "Expected confirm driver and vehicle details card.");
-    assert.equal(validState.confirmDetails.title, "Confirm Driver & Vehicle Details");
+    assert.equal(validState.confirmDetails.title, "Driver Details");
+    assert.equal(validState.confirmDetails.rawDetailsVisible, true, "Expected compact paste driver details box.");
+    assert.equal(validState.confirmDetails.parseButtonText, "Parse Driver Details");
     assert.equal(validState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
     assert.equal(
       validState.confirmDetails.acknowledgedState,
-      "Confirm these details to acknowledge the job",
+      "Paste or confirm driver details once before starting the job.",
       "Expected combined details card to own acknowledgement state.",
     );
     assert.equal(
@@ -809,7 +867,9 @@ async function runChromeTest() {
     );
     const startingStatusText = validState.statusText || "Assigned";
     assert.ok(validState.visibleText.includes("Driver Job Card"));
-    assert.ok(validState.visibleText.includes("Confirm Driver & Vehicle Details"));
+    assert.ok(validState.visibleText.includes("Driver Details"));
+    assert.ok(validState.visibleText.includes("Paste Driver Details"));
+    assert.ok(validState.visibleText.includes("Parse Driver Details"));
     assert.ok(validState.visibleText.includes("Save & Acknowledge Job"));
     assert.equal(validState.visibleText.includes("Job Acknowledgement"), false);
     assert.equal(validState.buttonLabels.includes("Acknowledge Job"), false);
@@ -832,10 +892,11 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Driver Activity Log"));
     assert.ok(validState.visibleText.includes("No driver activity recorded yet."));
     assert.ok(validState.visibleText.includes("Driver name"));
-    assert.ok(validState.visibleText.includes("Contact"));
+    assert.ok(validState.visibleText.includes("Contact / Mobile number"));
     assert.ok(validState.visibleText.includes("Car plate"));
     assert.ok(validState.visibleText.includes("Vehicle model"));
     assert.equal(validState.visibleText.includes("PayNow number"), false);
+    assert.equal(validState.visibleText.includes("Optional remarks"), false);
     assert.equal(validState.visibleText.includes("Completion / Exception Notes"), false);
     assert.equal(validState.visibleText.includes("Completion note"), false);
     assert.equal(validState.visibleText.includes("Exception reason"), false);
@@ -960,6 +1021,9 @@ async function runChromeTest() {
     assert.equal(arrivalState.visibleText.includes("Mock Latest Flight ETA"), false);
     assert.equal(arrivalState.visibleText.includes("Acknowledge Latest ETA"), false);
     assert.equal(arrivalState.visibleText.includes("Add Mock OTS Photo Proof"), false);
+    assert.equal(arrivalState.confirmDetails.title, "Driver Details");
+    assert.equal(arrivalState.confirmDetails.rawDetailsVisible, true);
+    assert.equal(arrivalState.confirmDetails.parseButtonText, "Parse Driver Details");
     assert.equal(arrivalState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
     assertNoSensitiveText(arrivalState);
 

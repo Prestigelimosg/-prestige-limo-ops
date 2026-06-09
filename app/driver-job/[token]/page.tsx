@@ -107,6 +107,8 @@ type DriverDetails = {
   vehicleModel: string;
 };
 
+type ParsedDriverDetails = Partial<DriverDetails>;
+
 type ActivityLogEvent = {
   detail: string;
   id: number;
@@ -127,6 +129,10 @@ const emptyDriverDetails: DriverDetails = {
   plate: "",
   vehicleModel: "",
 };
+
+const driverPaymentDetailLinePattern = /\b(bank|account|acct|paynow|pay\s+now|payment|payout)\b/i;
+const vehicleModelPattern =
+  /\b(alphard|vellfire|hiace|mercedes|benz|bmw|audi|toyota|honda|hyundai|kia|lexus|estima|camry|viano|voxy|noah|prius|combi|maxi\s?cab|mpv|van|bus|e\s?class|s\s?class)\b/i;
 
 const emptyDriverAppUpdateState: DriverAppUpdateState = {
   feedback: null,
@@ -172,6 +178,106 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
     name: details.name.trim().replace(/\s+/g, " "),
     plate: details.plate.trim().replace(/\s+/g, " "),
     vehicleModel: details.vehicleModel.trim().replace(/\s+/g, " "),
+  };
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function cleanParsedValue(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function lineValue(text: string, labels: string[]) {
+  const labelPattern = labels.map(escapeRegExp).join("|");
+  const matcher = new RegExp(`^\\s*(?:${labelPattern})\\s*(?::|=|-)\\s*(.+?)\\s*$`, "i");
+
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(matcher);
+
+    if (match?.[1] && !driverPaymentDetailLinePattern.test(line)) {
+      return cleanParsedValue(match[1]);
+    }
+  }
+
+  return "";
+}
+
+function driverDetailLines(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map(cleanParsedValue)
+    .filter(Boolean)
+    .filter((line) => !driverPaymentDetailLinePattern.test(line));
+}
+
+function hasFieldLabel(line: string) {
+  return /^\s*[^:=\-]{1,32}\s*(?::|=|-)\s*\S/.test(line);
+}
+
+function phoneDigits(line: string) {
+  return line.replace(/\D/g, "");
+}
+
+function isPhoneLikeLine(line: string) {
+  if (!/^[+\d\s().-]+$/.test(line)) {
+    return false;
+  }
+
+  const digits = phoneDigits(line);
+
+  if (digits.length === 8) {
+    return /^[3689]/.test(digits);
+  }
+
+  return digits.length === 10 && digits.startsWith("65") && /^[3689]/.test(digits.slice(2));
+}
+
+function isSingaporePlateLine(line: string) {
+  const compactPlate = line.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  return /^[A-Z]{1,3}\d{1,4}[A-Z]$/.test(compactPlate);
+}
+
+function isVehicleModelLine(line: string) {
+  if (hasFieldLabel(line) || isPhoneLikeLine(line) || isSingaporePlateLine(line) || /\d{5,}/.test(line)) {
+    return false;
+  }
+
+  return vehicleModelPattern.test(line);
+}
+
+function isNameLikeLine(line: string) {
+  if (hasFieldLabel(line) || isPhoneLikeLine(line) || isSingaporePlateLine(line) || isVehicleModelLine(line)) {
+    return false;
+  }
+
+  return /^[A-Za-z][A-Za-z .'-]{1,59}$/.test(line);
+}
+
+function freeformLineValue(lines: string[], predicate: (line: string) => boolean) {
+  for (const line of lines) {
+    if (predicate(line)) {
+      return line;
+    }
+  }
+
+  return "";
+}
+
+function parseDriverDetailsText(text: string): ParsedDriverDetails {
+  const lines = driverDetailLines(text);
+  const contact = lineValue(text, ["contact", "mobile", "mobile number", "phone", "tel", "telephone", "hp", "handphone"]);
+  const name = lineValue(text, ["driver name", "name", "driver"]);
+  const plate = lineValue(text, ["car plate", "plate number", "plate", "vehicle no", "car no"]);
+  const vehicleModel = lineValue(text, ["brand", "vehicle", "vehicle model", "car model", "model"]);
+
+  return {
+    contact: contact || freeformLineValue(lines, isPhoneLikeLine),
+    name: name || freeformLineValue(lines, isNameLikeLine),
+    plate: plate || freeformLineValue(lines, isSingaporePlateLine),
+    vehicleModel: vehicleModel || freeformLineValue(lines, isVehicleModelLine),
   };
 }
 
@@ -265,7 +371,9 @@ export default function DriverJobPage() {
   const [pageState, setPageState] = useState<PageState>({ kind: "loading" });
   const [acknowledged, setAcknowledged] = useState(false);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
+  const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
+  const [parseDetailsFeedback, setParseDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [driverIssueFeedback, setDriverIssueFeedback] = useState<ControlFeedback | null>(null);
@@ -309,6 +417,8 @@ export default function DriverJobPage() {
       setPageState({ kind: "loading" });
       setAcknowledged(false);
       setDetailsFeedback(null);
+      setDriverDetailsRaw("");
+      setParseDetailsFeedback(null);
       setDriverDetails(emptyDriverDetails);
       setActivityLog([]);
       setDriverIssueFeedback(null);
@@ -420,11 +530,43 @@ export default function DriverJobPage() {
 
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
+    setParseDetailsFeedback(null);
     setSavedDriverDetails(null);
     setDriverDetails((currentDetails) => ({
       ...currentDetails,
       [field]: value,
     }));
+  }
+
+  function parsePastedDriverDetails() {
+    const parsedDetails = parseDriverDetailsText(driverDetailsRaw);
+    const detectedFieldCount = [
+      parsedDetails.contact,
+      parsedDetails.name,
+      parsedDetails.plate,
+      parsedDetails.vehicleModel,
+    ].filter(Boolean).length;
+
+    if (detectedFieldCount === 0) {
+      setParseDetailsFeedback({
+        tone: "error",
+        text: "Paste driver name, contact, car plate, or vehicle model before parsing.",
+      });
+      return;
+    }
+
+    setDriverDetails((currentDetails) => ({
+      contact: parsedDetails.contact || currentDetails.contact,
+      name: parsedDetails.name || currentDetails.name,
+      plate: parsedDetails.plate || currentDetails.plate,
+      vehicleModel: parsedDetails.vehicleModel || currentDetails.vehicleModel,
+    }));
+    setDetailsFeedback(null);
+    setSavedDriverDetails(null);
+    setParseDetailsFeedback({
+      tone: "success",
+      text: "Driver details parsed. Review and save to acknowledge.",
+    });
   }
 
   function saveAndAcknowledgeJob() {
@@ -767,60 +909,95 @@ export default function DriverJobPage() {
               data-driver-primary-step="confirm-details"
             >
               <h2 id="driver-details-heading" className="text-base font-semibold text-slate-900">
-                Confirm Driver & Vehicle Details
+                Driver Details
               </h2>
               <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
                 <p
                   className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-acknowledged-state="true"
                 >
-                  {acknowledged ? "Acknowledged" : "Confirm these details to acknowledge the job"}
+                  {acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
                 </p>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Driver name</span>
-                  <input
-                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-detail-name="true"
-                    onChange={(event) => updateDriverDetail("name", event.target.value)}
-                    type="text"
-                    value={driverDetails.name}
-                  />
-                </label>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Contact</span>
-                  <input
-                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-detail-contact="true"
-                    inputMode="tel"
-                    onChange={(event) => updateDriverDetail("contact", event.target.value)}
-                    type="tel"
-                    value={driverDetails.contact}
-                  />
-                </label>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Car plate</span>
-                  <input
-                    autoCapitalize="characters"
-                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-detail-plate="true"
-                    onChange={(event) => updateDriverDetail("plate", event.target.value)}
-                    type="text"
-                    value={driverDetails.plate}
-                  />
-                </label>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Vehicle model</span>
-                  <input
-                    className="h-12 w-full rounded-md border border-stone-300 bg-white px-3 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-detail-vehicle-model="true"
-                    onChange={(event) => updateDriverDetail("vehicleModel", event.target.value)}
-                    type="text"
-                    value={driverDetails.vehicleModel}
-                  />
-                </label>
+                <div className="grid gap-3">
+                  <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                    <span>Paste Driver Details</span>
+                    <textarea
+                      className="min-h-20 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-sm leading-6 text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      data-driver-job-details-raw="true"
+                      onChange={(event) => {
+                        setDriverDetailsRaw(event.target.value);
+                        setParseDetailsFeedback(null);
+                      }}
+                      value={driverDetailsRaw}
+                    />
+                  </label>
+                  <div className="space-y-2">
+                    <button
+                      className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
+                      data-driver-job-parse-details="true"
+                      onClick={parsePastedDriverDetails}
+                      type="button"
+                    >
+                      Parse Driver Details
+                    </button>
+                    {parseDetailsFeedback ? (
+                      <p
+                        aria-live="polite"
+                        className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(parseDetailsFeedback.tone)}`}
+                        data-driver-job-parse-details-message="true"
+                      >
+                        {parseDetailsFeedback.text}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                    <span>Driver name</span>
+                    <input
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      data-driver-job-detail-name="true"
+                      onChange={(event) => updateDriverDetail("name", event.target.value)}
+                      type="text"
+                      value={driverDetails.name}
+                    />
+                  </label>
+                  <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                    <span>Contact / Mobile number</span>
+                    <input
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      data-driver-job-detail-contact="true"
+                      inputMode="tel"
+                      onChange={(event) => updateDriverDetail("contact", event.target.value)}
+                      type="tel"
+                      value={driverDetails.contact}
+                    />
+                  </label>
+                  <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                    <span>Car plate</span>
+                    <input
+                      autoCapitalize="characters"
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      data-driver-job-detail-plate="true"
+                      onChange={(event) => updateDriverDetail("plate", event.target.value)}
+                      type="text"
+                      value={driverDetails.plate}
+                    />
+                  </label>
+                  <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                    <span>Vehicle model</span>
+                    <input
+                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      data-driver-job-detail-vehicle-model="true"
+                      onChange={(event) => updateDriverDetail("vehicleModel", event.target.value)}
+                      type="text"
+                      value={driverDetails.vehicleModel}
+                    />
+                  </label>
+                </div>
                 <div className="space-y-2">
                   <button
-                    className="h-12 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
+                    className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
                     data-driver-job-save-acknowledge="true"
                     data-driver-primary-step="save-acknowledge"
                     onClick={saveAndAcknowledgeJob}

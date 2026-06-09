@@ -35910,6 +35910,8 @@ async function runChromeTest() {
           currentStatus: document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "",
           confirmDetails: {
             acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
+            parseButtonText: document.querySelector("[data-driver-job-parse-details]")?.textContent.trim() || "",
+            rawDetailsVisible: Boolean(document.querySelector("[data-driver-job-details-raw]")),
             saveAcknowledgeText: document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() || "",
             title: document.querySelector("#driver-details-heading")?.textContent.trim() || "",
             visible: Boolean(document.querySelector("[data-driver-primary-step='confirm-details']")),
@@ -36434,7 +36436,9 @@ async function runChromeTest() {
           "Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff",
           "SQ889",
           "Mock Workflow Passenger",
-          "Confirm Driver & Vehicle Details",
+          "Driver Details",
+          "Paste Driver Details",
+          "Parse Driver Details",
           "Save & Acknowledge Job",
           "Job Status",
           "Report Issue",
@@ -36463,7 +36467,9 @@ async function runChromeTest() {
         `${viewport.label}: expected no separate acknowledgement or mock-only driver-token sections`,
       );
       assert.equal(initialState.confirmDetails.visible, true, `${viewport.label}: expected confirm details card`);
-      assert.equal(initialState.confirmDetails.title, "Confirm Driver & Vehicle Details");
+      assert.equal(initialState.confirmDetails.title, "Driver Details");
+      assert.equal(initialState.confirmDetails.rawDetailsVisible, true, `${viewport.label}: expected compact paste driver details field`);
+      assert.equal(initialState.confirmDetails.parseButtonText, "Parse Driver Details");
       assert.equal(initialState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
       assert.deepEqual(
         initialState.driverDetailValues,
@@ -36477,11 +36483,11 @@ async function runChromeTest() {
       );
       assert.equal(
         initialState.confirmDetails.acknowledgedState,
-        "Confirm these details to acknowledge the job",
+        "Paste or confirm driver details once before starting the job.",
         `${viewport.label}: expected acknowledgement state inside confirm details card`,
       );
       assert.deepEqual(
-        ["Driver name", "Contact", "Car plate", "Vehicle model"].filter(
+        ["Driver name", "Contact / Mobile number", "Car plate", "Vehicle model"].filter(
           (label) => !initialState.inputs.some((input) => input.label.includes(label)),
         ),
         [],

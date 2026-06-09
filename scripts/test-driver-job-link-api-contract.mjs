@@ -186,6 +186,14 @@ for (const [requestedStatus, expectedStatus] of [
   assert.equal(bookingsById["booking-b"].status, "assigned");
   assert.equal(result.payload.reference, "PL-A");
   assert.equal(result.payload.status, expectedStatus);
+  assert.deepEqual(result.payload.statusHistory, [
+    {
+      occurredAt: now,
+      safeNote: null,
+      status: expectedStatus,
+      statusLabel: result.payload.statusLabel,
+    },
+  ]);
   assertNoSensitiveData(result);
 }
 

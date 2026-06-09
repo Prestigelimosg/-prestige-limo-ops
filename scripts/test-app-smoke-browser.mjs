@@ -35930,6 +35930,17 @@ async function runChromeTest() {
             submitText: document.querySelector("[data-driver-job-report-issue-submit]")?.textContent.trim() || "",
             visible: Boolean(document.querySelector("[data-driver-job-report-issue]")),
           },
+          statusTiming: {
+            controls: [...document.querySelectorAll("[data-driver-job-status-timing-evidence] input, [data-driver-job-status-timing-evidence] textarea, [data-driver-job-status-timing-evidence] select, [data-driver-job-status-timing-evidence] button")]
+              .map((control) => control.textContent.trim() || control.tagName),
+            rows: [...document.querySelectorAll("[data-driver-job-status-timing-row]")].map((row) => ({
+              key: row.getAttribute("data-driver-job-status-timing-row") || "",
+              label: row.querySelector("[data-driver-job-status-timing-label]")?.textContent.trim() || "",
+              state: row.getAttribute("data-driver-job-status-timing-state") || "",
+              time: row.querySelector("[data-driver-job-status-timing-time]")?.textContent.trim() || "",
+            })),
+            visible: Boolean(document.querySelector("[data-driver-job-status-timing-evidence]")),
+          },
           driverWorkflowHandoff: {
             boundary:
               document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
@@ -36426,6 +36437,23 @@ async function runChromeTest() {
         "Internal app alert only. No external messages, live location, or photo upload.",
         `${viewport.label}: expected report issue to remain internal-app only`,
       );
+      assert.equal(initialState.statusTiming.visible, true, `${viewport.label}: expected compact status timing evidence`);
+      assert.deepEqual(initialState.statusTiming.controls, [], `${viewport.label}: expected status timing evidence to be read-only`);
+      assert.deepEqual(
+        initialState.statusTiming.rows.map((row) => ({
+          key: row.key,
+          label: row.label,
+          state: row.state,
+          time: row.time,
+        })),
+        [
+          { key: "otw", label: "OTW", state: "pending", time: "Not recorded" },
+          { key: "ots", label: "OTS", state: "pending", time: "Not recorded" },
+          { key: "pob", label: "POB", state: "pending", time: "Not recorded" },
+          { key: "jc", label: "JC", state: "pending", time: "Not recorded" },
+        ],
+        `${viewport.label}: expected status timing evidence to start unrecorded`,
+      );
       assert.deepEqual(
         [
           "Prestige Limo Driver Job",
@@ -36441,6 +36469,7 @@ async function runChromeTest() {
           "Parse Driver Details",
           "Save & Acknowledge Job",
           "Job Status",
+          "Status Timing",
           "Report Issue",
           "Status History",
         ].filter((value) => !initialState.text.includes(value)),
@@ -36652,6 +36681,26 @@ async function runChromeTest() {
         `${viewport.label}: expected exactly four protected mock status API calls for OTW, OTS, POB, and Job Completed`,
       );
       const finalDriverJobState = await readDriverJobState();
+      assert.deepEqual(
+        finalDriverJobState.statusTiming.rows.map((row) => ({
+          key: row.key,
+          label: row.label,
+          state: row.state,
+        })),
+        [
+          { key: "otw", label: "OTW", state: "recorded" },
+          { key: "ots", label: "OTS", state: "recorded" },
+          { key: "pob", label: "POB", state: "recorded" },
+          { key: "jc", label: "JC", state: "recorded" },
+        ],
+        `${viewport.label}: expected completed driver workflow to show all status timing evidence`,
+      );
+      assert.equal(
+        finalDriverJobState.statusTiming.rows.every((row) => row.time && row.time !== "Not recorded"),
+        true,
+        `${viewport.label}: expected status timing evidence to include recorded times`,
+      );
+      assert.deepEqual(finalDriverJobState.statusTiming.controls, [], `${viewport.label}: expected recorded timing evidence to remain read-only`);
       assertNoDriverPriceFinanceLeaks(
         finalDriverJobState.text,
         `${viewport.label} completed driver job link workflow`,

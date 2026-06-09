@@ -270,6 +270,19 @@ async function runChromeTest() {
           title: document.querySelector("[data-driver-job-status-boundary-title]")?.textContent.trim() || "",
           visible: Boolean(document.querySelector("[data-driver-job-status-boundary]")),
         },
+        statusTiming: {
+          boundary: document.querySelector("[data-driver-job-status-timing-boundary]")?.textContent.trim() || "",
+          controls: [...document.querySelectorAll("[data-driver-job-status-timing-evidence] input, [data-driver-job-status-timing-evidence] textarea, [data-driver-job-status-timing-evidence] select, [data-driver-job-status-timing-evidence] button")]
+            .map((control) => control.textContent.trim() || control.getAttribute("aria-label") || control.tagName),
+          rows: [...document.querySelectorAll("[data-driver-job-status-timing-row]")].map((row) => ({
+            key: row.getAttribute("data-driver-job-status-timing-row") || "",
+            label: row.querySelector("[data-driver-job-status-timing-label]")?.textContent.trim() || "",
+            state: row.getAttribute("data-driver-job-status-timing-state") || "",
+            time: row.querySelector("[data-driver-job-status-timing-time]")?.textContent.trim() || "",
+          })),
+          text: document.querySelector("[data-driver-job-status-timing-evidence]")?.innerText || "",
+          visible: Boolean(document.querySelector("[data-driver-job-status-timing-evidence]")),
+        },
         primaryStepOrder: [...document.querySelectorAll("[data-driver-primary-step]")]
           .map((element) => ({
             key: element.getAttribute("data-driver-primary-step") || "",
@@ -850,6 +863,23 @@ async function runChromeTest() {
       "Feedback appears under the status button you tap.",
       "Expected status boundary to keep feedback near clicked controls.",
     );
+    assert.equal(validState.statusTiming.visible, true, "Expected compact read-only driver status timing evidence.");
+    assert.deepEqual(validState.statusTiming.controls, [], "Status timing evidence must not expose edit controls.");
+    assert.equal(
+      validState.statusTiming.boundary,
+      "Times are recorded automatically after accepted status updates.",
+      "Expected timing evidence to explain automatic accepted-status recording.",
+    );
+    assert.deepEqual(
+      validState.statusTiming.rows,
+      [
+        { key: "otw", label: "OTW", state: "pending", time: "Not recorded" },
+        { key: "ots", label: "OTS", state: "pending", time: "Not recorded" },
+        { key: "pob", label: "POB", state: "pending", time: "Not recorded" },
+        { key: "jc", label: "JC", state: "pending", time: "Not recorded" },
+      ],
+      "Expected timing evidence to start empty until statuses are accepted.",
+    );
     assert.equal(
       validState.visibleText.includes("customer price"),
       false,
@@ -957,6 +987,26 @@ async function runChromeTest() {
     await clickStatus("Job Completed", "Job Completed");
     await clickReportIssue();
     const completedState = await pageState();
+    assert.deepEqual(
+      completedState.statusTiming.rows.map((row) => ({
+        key: row.key,
+        label: row.label,
+        state: row.state,
+      })),
+      [
+        { key: "otw", label: "OTW", state: "recorded" },
+        { key: "ots", label: "OTS", state: "recorded" },
+        { key: "pob", label: "POB", state: "recorded" },
+        { key: "jc", label: "JC", state: "recorded" },
+      ],
+      "Expected each accepted driver status to record timing evidence.",
+    );
+    assert.equal(
+      completedState.statusTiming.rows.every((row) => row.time && row.time !== "Not recorded"),
+      true,
+      "Expected recorded status timing evidence to show OTW, OTS, POB, and JC times.",
+    );
+    assert.deepEqual(completedState.statusTiming.controls, [], "Recorded timing evidence must remain read-only.");
     assert.deepEqual(
       completedState.activityLogLabels,
       [

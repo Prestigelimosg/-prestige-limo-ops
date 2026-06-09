@@ -109,9 +109,21 @@ export function applyDriverJobStatusUpdateContract(
   }
 
   const bookingKey = String(resolvedLink.link.bookingId);
+  const occurredAt = statusEventTime(input.now);
+  const statusHistory = Array.isArray(resolvedLink.booking.statusHistory)
+    ? resolvedLink.booking.statusHistory
+    : [];
   const updatedBooking = {
     ...resolvedLink.booking,
     status: nextStatus,
+    statusHistory: [
+      {
+        occurredAt,
+        safeNote: "",
+        status: nextStatus,
+      },
+      ...statusHistory,
+    ].slice(0, 10),
   };
 
   input.bookingsById[bookingKey] = updatedBooking;
@@ -181,6 +193,12 @@ function safeHashToken(token: string) {
   } catch {
     return "";
   }
+}
+
+function statusEventTime(value: Date | string | number | undefined) {
+  const date = value === undefined ? new Date() : new Date(value);
+
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
 function isRevoked(link: DriverJobLinkContractRecord) {

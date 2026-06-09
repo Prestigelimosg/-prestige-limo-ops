@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import type { SafeDriverJobPayload } from "../../../lib/driver-job-link";
+import type {
+  SafeDriverJobPayload,
+  SafeDriverJobStatusHistoryItem,
+} from "../../../lib/driver-job-link";
 import {
   driverJobIssueChoices,
   getDriverJobIssueChoice,
@@ -116,12 +119,32 @@ type ActivityLogEvent = {
   time: string;
 };
 
+type DriverStatusTimingStep = {
+  aliases: string[];
+  key: string;
+  label: string;
+};
+
+type DriverStatusTimingRow = {
+  key: string;
+  label: string;
+  occurredAt: string;
+  timeText: string;
+};
+
 const statusActions = [
   { label: "OTW", value: "OTW" },
   { label: "OTS", value: "OTS" },
   { label: "POB", value: "POB" },
   { label: "Job Completed", value: "Job Completed" },
 ] as const;
+
+const statusTimingSteps: DriverStatusTimingStep[] = [
+  { aliases: ["driver_otw", "otw"], key: "otw", label: "OTW" },
+  { aliases: ["ots"], key: "ots", label: "OTS" },
+  { aliases: ["pob"], key: "pob", label: "POB" },
+  { aliases: ["completed", "job_completed"], key: "jc", label: "JC" },
+];
 
 const emptyDriverDetails: DriverDetails = {
   contact: "",
@@ -341,6 +364,47 @@ function formatDriverAppUpdateTime(value: unknown) {
   });
 }
 
+function normalizeStatusKey(value: unknown) {
+  return String(value || "")
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+}
+
+function formatDriverStatusTiming(value: unknown) {
+  const text = safeDisplayText(value, "");
+  const date = text ? new Date(text) : null;
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return text || "Not recorded";
+  }
+
+  return date.toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function statusTimingRows(statusHistory: SafeDriverJobStatusHistoryItem[]): DriverStatusTimingRow[] {
+  return statusTimingSteps.map((step) => {
+    const event = statusHistory.find((historyItem) => {
+      const statusKey = normalizeStatusKey(historyItem.status);
+      const statusLabelKey = normalizeStatusKey(historyItem.statusLabel);
+
+      return step.aliases.includes(statusKey) || step.aliases.includes(statusLabelKey);
+    });
+    const occurredAt = event?.occurredAt || "";
+
+    return {
+      key: step.key,
+      label: step.label,
+      occurredAt,
+      timeText: occurredAt ? formatDriverStatusTiming(occurredAt) : "Not recorded",
+    };
+  });
+}
+
 function detailRows(job: SafeDriverJobPayload) {
   return [
     { label: "Date/time", value: job.pickupDateTime || [job.pickupDate, job.pickupTime].filter(Boolean).join(", ") },
@@ -384,8 +448,14 @@ export default function DriverJobPage() {
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
-  const readyJob = pageState.kind === "ready" ? pageState.job : null;
-  const savedStatusHistory = readyJob?.statusHistory || [];
+  const savedStatusHistory = useMemo(
+    () => (pageState.kind === "ready" ? pageState.job.statusHistory : []),
+    [pageState],
+  );
+  const driverStatusTimingRows = useMemo(
+    () => statusTimingRows(savedStatusHistory),
+    [savedStatusHistory],
+  );
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -1109,7 +1179,54 @@ export default function DriverJobPage() {
                 ))}
               </div>
               <div
-                className="order-2 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
+                className="order-2 space-y-2 rounded-md border border-slate-200 bg-white p-3"
+                data-driver-job-status-timing-evidence="true"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900">Status Timing</p>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                    Read-only
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                  {driverStatusTimingRows.map((timingRow) => (
+                    <div
+                      className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200"
+                      data-driver-job-status-timing-row={timingRow.key}
+                      data-driver-job-status-timing-state={timingRow.occurredAt ? "recorded" : "pending"}
+                      key={timingRow.key}
+                    >
+                      <p
+                        className="text-xs font-semibold uppercase text-slate-500"
+                        data-driver-job-status-timing-label="true"
+                      >
+                        {timingRow.label}
+                      </p>
+                      {timingRow.occurredAt ? (
+                        <time
+                          className="mt-1 block break-words text-sm font-semibold text-slate-900"
+                          data-driver-job-status-timing-time="true"
+                          dateTime={timingRow.occurredAt}
+                        >
+                          {timingRow.timeText}
+                        </time>
+                      ) : (
+                        <span
+                          className="mt-1 block text-sm font-semibold text-slate-500"
+                          data-driver-job-status-timing-time="true"
+                        >
+                          {timingRow.timeText}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs font-semibold leading-5 text-slate-600" data-driver-job-status-timing-boundary="true">
+                  Times are recorded automatically after accepted status updates.
+                </p>
+              </div>
+              <div
+                className="order-3 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
                 data-driver-job-report-issue="true"
                 data-driver-primary-step="report-issue"
               >
@@ -1163,7 +1280,7 @@ export default function DriverJobPage() {
                 </p>
               </div>
               <div
-                className="order-3 space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                className="order-4 space-y-3 rounded-md border border-slate-200 bg-white p-3"
                 data-driver-job-saved-status-history="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1212,7 +1329,7 @@ export default function DriverJobPage() {
                 )}
               </div>
               <div
-                className="order-4 space-y-2 rounded-md border border-slate-200 bg-white p-3"
+                className="order-5 space-y-2 rounded-md border border-slate-200 bg-white p-3"
                 data-driver-job-status-boundary="true"
               >
                 <p className="text-sm font-semibold text-slate-900" data-driver-job-status-boundary-title="true">

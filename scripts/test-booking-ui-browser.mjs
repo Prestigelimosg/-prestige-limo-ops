@@ -3185,7 +3185,7 @@ async function runChromeTest() {
         ?.textContent.trim() || "",
       tabLabels: [...document.querySelectorAll("button[role='tab']")].map((button) => button.textContent.trim()),
     }))()`);
-    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"]);
+    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Rates"]);
     assert.equal(initialTabState.selectedTab, "Dispatch");
 
     await evaluate(`window.__prestigeErrors = [];

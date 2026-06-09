@@ -35,7 +35,7 @@ const singaporeDateFormatter = new Intl.DateTimeFormat("en-SG", {
 });
 const browserErrors = [];
 const browserConsoleErrors = [];
-const tabLabels = ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"];
+const tabLabels = ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Rates"];
 const tabExpectedText = {
   Dispatch: "Create Job Card",
   Bookings: "Load Bookings",

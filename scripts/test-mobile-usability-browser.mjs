@@ -39,7 +39,7 @@ const viewports = [
   { height: 900, label: "desktop 1280px", mobile: false, scale: 1, width: 1280 },
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
-const appTabs = ["Dispatch", "Bookings", "Completed", "Dashboard", "Drivers", "Rates"];
+const appTabs = ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Rates"];
 const internalQaMockArchiveLabel = "Internal QA / Mock Workbench Archive — Mock Only";
 const internalQaMockArchiveGroupLabels = [
   "Customer Intake / Account / Booking Review",

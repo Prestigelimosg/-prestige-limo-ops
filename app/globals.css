@@ -27,3 +27,22 @@ button,
 input {
   font: inherit;
 }
+
+.admin-ops-shell button,
+.admin-ops-shell a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-ops-shell button:not([data-dispatcher-clear-message-button="true"]) {
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.admin-ops-shell button[data-dispatcher-clear-message-button="true"] {
+  white-space: nowrap;
+}
+
+.admin-ops-shell [role="tab"] {
+  line-height: 1.1;
+}

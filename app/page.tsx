@@ -1297,10 +1297,10 @@ type AppTab = "dispatch" | "bookings" | "completed" | "dashboard" | "drivers" | 
 
 const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "dispatch", label: "Dispatch" },
-  { id: "bookings", label: "Bookings" },
-  { id: "completed", label: "Completed" },
   { id: "dashboard", label: "Dashboard" },
+  { id: "bookings", label: "Bookings" },
   { id: "drivers", label: "Drivers" },
+  { id: "completed", label: "Completed" },
   { id: "rates", label: "Rates" },
 ];
 
@@ -12027,7 +12027,7 @@ export default function Home() {
 
           return (
             <article
-              className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm"
+              className="rounded-md border border-stone-200 bg-white p-3"
               data-dashboard-operational-card={bookingId}
               key={savedBooking.id}
             >
@@ -12424,8 +12424,8 @@ export default function Home() {
   }
 
   const pricingPanel = (
-    <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-      <h2 className="text-xl font-semibold">Pricing</h2>
+    <div className="rounded-md border border-stone-200 bg-white p-3">
+      <h2 className="text-lg font-semibold">Pricing</h2>
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-3">
           <p className="text-xs text-slate-500">Customer</p>
@@ -15989,34 +15989,34 @@ export default function Home() {
   const showLegacyExtraChargeQaSections = false;
 
   return (
-    <main className="min-h-screen bg-stone-50 text-slate-950">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-4 border-b border-stone-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+    <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-3 sm:px-4 lg:px-6">
+        <header className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Internal limousine operations
             </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal text-slate-950">
+            <h1 className="mt-0.5 text-2xl font-semibold tracking-normal text-slate-950">
               Prestige Limo Ops Dispatch
             </h1>
           </div>
-          <div className="flex flex-col gap-2 sm:min-w-80">
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
-                <p className="text-xs text-slate-500">Saved</p>
-                <p className="text-lg font-semibold">{operationalBookings.length}</p>
+          <div className="flex flex-col gap-1.5 sm:min-w-72">
+            <div className="grid grid-cols-3 gap-1.5 text-center">
+              <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
+                <p className="text-[11px] text-slate-500">Saved</p>
+                <p className="text-base font-semibold">{operationalBookings.length}</p>
               </div>
-              <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
-                <p className="text-xs text-slate-500">Status</p>
-                <p className="text-lg font-semibold">Live</p>
+              <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
+                <p className="text-[11px] text-slate-500">Status</p>
+                <p className="text-base font-semibold">Live</p>
               </div>
-              <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
-                <p className="text-xs text-slate-500">Mode</p>
-                <p className="text-lg font-semibold">Admin</p>
+              <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
+                <p className="text-[11px] text-slate-500">Mode</p>
+                <p className="text-base font-semibold">Admin</p>
               </div>
             </div>
             <Link
-              className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-900 bg-white px-4 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
+              className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-white px-3 text-xs font-semibold text-slate-950 transition hover:bg-slate-100"
               data-customers-payments-entry="true"
               href="/customers"
             >
@@ -16027,7 +16027,7 @@ export default function Home() {
 
         <nav
           aria-label="Primary operations tabs"
-          className="grid grid-cols-2 gap-2 rounded-lg border border-stone-200 bg-white p-2 shadow-sm sm:grid-cols-3 lg:grid-cols-6"
+          className="sticky top-0 z-10 grid grid-cols-3 gap-1 rounded-md border border-stone-200 bg-stone-100/95 p-1 shadow-sm backdrop-blur sm:grid-cols-6"
           role="tablist"
         >
           {appTabs.map((tab) => {
@@ -16036,7 +16036,7 @@ export default function Home() {
             return (
               <button
                 aria-selected={selected}
-                className={`h-10 w-full rounded-md px-3 text-sm font-semibold transition ${
+                className={`min-h-11 w-full rounded px-2 py-1 text-xs font-semibold transition ${
                   selected
                     ? "bg-slate-950 text-white"
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
@@ -16054,20 +16054,20 @@ export default function Home() {
 
         <section
           aria-label="Admin URL access hub"
-          className="rounded-lg border border-stone-200 bg-white px-3 py-2 shadow-sm"
+          className="rounded-md border border-stone-200 bg-white px-2.5 py-2"
           data-admin-access-hub="true"
         >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
             <div className="shrink-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
                 Admin Access
               </p>
-              <p className="text-xs text-slate-500">Useful routes</p>
+              <p className="text-[11px] text-slate-500">Routes</p>
             </div>
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6">
               {adminAccessLinks.map((link) => (
                 <Link
-                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-stone-200 bg-stone-50 px-2 text-center text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
+                  className="inline-flex min-h-8 items-center justify-center rounded border border-stone-200 bg-stone-50 px-2 text-center text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
                   data-admin-access-link={link.href}
                   href={link.href}
                   key={link.href}
@@ -16081,13 +16081,13 @@ export default function Home() {
 
         <section
           aria-label="Internal QA / Mock Workbench Archive — Mock Only"
-          className="order-last rounded-lg bg-white shadow-sm ring-1 ring-slate-200"
+          className="order-last rounded-md bg-white ring-1 ring-slate-200"
           data-internal-qa-mock-archive="true"
           data-mock-workflow-review-group="true"
         >
           <button
             aria-expanded={isInternalQaMockArchiveOpen}
-            className="m-2 flex min-h-12 w-[calc(100%-1rem)] cursor-pointer flex-col gap-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-white sm:flex-row sm:items-center sm:justify-between"
+            className="m-1.5 flex min-h-11 w-[calc(100%-0.75rem)] cursor-pointer flex-col gap-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1.5 text-left text-xs text-slate-700 transition hover:bg-white sm:flex-row sm:items-center sm:justify-between"
             data-internal-qa-mock-archive-toggle="true"
             onClick={() => setIsInternalQaMockArchiveOpen((current) => !current)}
             type="button"
@@ -16122,7 +16122,7 @@ export default function Home() {
           </div>
           <div
             aria-label="Frozen mock/local/static workbench sections"
-            className="mt-4 grid gap-6"
+            className="mt-3 grid gap-3"
             data-internal-qa-mock-archive-content="true"
           >
         <section
@@ -22862,15 +22862,15 @@ export default function Home() {
         </section>
 
         {activeTab === "dispatch" ? (
-        <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-          <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <section className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+          <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-xl font-semibold">Dispatcher Intake</h2>
-                <p className="text-sm text-slate-500">Paste, parse, assign, dispatch, then save.</p>
+                <h2 className="text-lg font-semibold">Dispatcher Intake</h2>
+                <p className="text-xs text-slate-500">Paste, parse, assign, dispatch, then save.</p>
               </div>
               <button
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                className="min-h-9 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                 type="button"
                 onClick={() => {
                   setBooking(() => createInitialBooking());
@@ -22882,7 +22882,7 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mb-5 rounded-lg border border-stone-200 bg-stone-50 p-3">
+            <div className="mb-3 rounded-md border border-stone-200 bg-stone-50 p-2.5">
               <label>
                 <span className="mb-1 block text-sm font-medium text-slate-700">
                   Paste Booking Message
@@ -22908,7 +22908,7 @@ export default function Home() {
                 >
                   <div className="flex w-full min-w-0 flex-col gap-2" data-ai-assist-gate="true">
                     <button
-                      className={`h-12 w-full rounded-md border px-3 py-2 text-sm font-semibold whitespace-nowrap transition ${
+                      className={`min-h-11 w-full rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
                         aiAssistSafetyAccepted
                           ? "border-indigo-200 bg-white text-indigo-800 hover:bg-indigo-50"
                           : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
@@ -22920,7 +22920,7 @@ export default function Home() {
                       AI Assist Parse (Mock)
                     </button>
                     <label
-                      className="flex h-12 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-3 py-2 text-xs font-medium leading-tight text-indigo-950"
+                      className="flex min-h-11 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-tight text-indigo-950"
                     >
                       <input
                         checked={aiAssistSafetyAccepted}
@@ -22949,14 +22949,14 @@ export default function Home() {
                     ) : null}
                   </div>
                   <button
-                    className="h-12 w-full rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold whitespace-nowrap text-white transition hover:bg-slate-800"
+                    className="min-h-11 w-full rounded-md bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800"
                     onClick={handleParseBookingMessage}
                     type="button"
                   >
                     Create Job Card
                   </button>
                   <button
-                    className="h-12 w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-w-36"
+                    className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-w-32"
                     data-dispatcher-clear-message-button="true"
                     onClick={clearBookingMessageInput}
                     type="button"
@@ -23919,9 +23919,9 @@ export default function Home() {
               </div>
             ) : null}
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <button
-                className="h-12 rounded-md bg-slate-950 px-5 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="min-h-10 rounded-md bg-slate-950 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                 disabled={saving}
                 onClick={saveBooking}
                 type="button"
@@ -23936,7 +23936,7 @@ export default function Home() {
             ) : null}
 
             <section
-              className="mt-5 rounded-md border border-emerald-200 bg-emerald-50/60 p-3"
+              className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
               data-admin-booking-persistence-panel="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -23954,9 +23954,9 @@ export default function Home() {
                     Customer booking requests loaded here require admin review before confirmation.
                   </p>
                 </div>
-                <div className="flex flex-col gap-2 sm:min-w-56">
+                <div className="flex flex-col gap-1.5 sm:min-w-52">
                   <button
-                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    className="min-h-9 rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                     data-admin-booking-persistence-save="true"
                     disabled={adminBookingPersistenceAction !== null}
                     onClick={saveAdminBookingOperationalSnapshot}
@@ -23965,7 +23965,7 @@ export default function Home() {
                     {adminBookingPersistenceAction === "save" ? "Saving..." : "Save Operational Snapshot"}
                   </button>
                   <button
-                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    className="min-h-9 rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                     data-admin-booking-persistence-load="true"
                     disabled={adminBookingPersistenceAction !== null}
                     onClick={loadAdminBookingOperationalSnapshots}
@@ -23974,7 +23974,7 @@ export default function Home() {
                     {adminBookingPersistenceAction === "load" ? "Loading..." : "Load Operational Snapshots"}
                   </button>
                   <button
-                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    className="min-h-9 rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                     data-admin-booking-persistence-apply-latest="true"
                     disabled={adminBookingPersistenceAction !== null}
                     onClick={applyLatestAdminBookingOperationalSnapshot}
@@ -23983,7 +23983,7 @@ export default function Home() {
                     Apply Latest Snapshot
                   </button>
                   <button
-                    className="min-h-10 rounded-md border border-emerald-300 bg-white px-3 py-2 text-left text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    className="min-h-9 rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                     data-admin-booking-persistence-update-applied="true"
                     disabled={adminBookingPersistenceAction !== null}
                     onClick={updateAppliedAdminBookingOperationalSnapshot}
@@ -26665,18 +26665,18 @@ export default function Home() {
             </section>
           </div>
 
-          <aside className="flex min-w-0 flex-col gap-5">
-            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <aside className="flex min-w-0 flex-col gap-3">
+            <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold">Job Card Preview</h2>
-                  <p className="text-sm text-slate-500">WhatsApp-ready driver message.</p>
+                  <h2 className="text-lg font-semibold">Job Card Preview</h2>
+                  <p className="text-xs text-slate-500">Driver message preview.</p>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {parsedDebugBooking ? (
                       <button
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         onClick={() => setShowParserDebug((current) => !current)}
                         type="button"
                       >
@@ -26686,7 +26686,7 @@ export default function Home() {
                     {jobCardCopyEditState.isEditing ? (
                       <>
                         <button
-                          className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                          className="min-h-9 rounded-md border border-emerald-300 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50"
                           data-copy-save-edit="jobCard"
                           onClick={() => saveCopyEdit("jobCard")}
                           type="button"
@@ -26694,7 +26694,7 @@ export default function Home() {
                           Save Edit
                         </button>
                         <button
-                          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                           data-copy-cancel-edit="jobCard"
                           onClick={() => cancelCopyEdit("jobCard")}
                           type="button"
@@ -26704,7 +26704,7 @@ export default function Home() {
                       </>
                     ) : (
                       <button
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         data-copy-edit-button="jobCard"
                         onClick={() => startCopyEdit("jobCard")}
                         type="button"
@@ -26713,7 +26713,7 @@ export default function Home() {
                       </button>
                     )}
                     <button
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                       data-copy-copy-button="jobCard"
                       onClick={copyJobCard}
                       type="button"
@@ -26769,14 +26769,14 @@ export default function Home() {
               {jobCardCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Job Card Copy"
-                  className="min-h-52 w-full rounded-lg border border-slate-300 bg-white p-4 text-sm leading-6 text-slate-900 shadow-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                  className="min-h-44 w-full rounded-md border border-slate-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   data-copy-edit-textarea="jobCard"
                   onChange={(event) => updateCopyEditDraft("jobCard", event.target.value)}
                   value={jobCardCopyEditState.draftText}
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-lg bg-[#dcf8c6] p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-md bg-[#dcf8c6] p-3 text-sm leading-6 text-slate-900"
                   data-copy-preview="jobCard"
                 >
                   {jobCardCopyText}
@@ -26784,18 +26784,18 @@ export default function Home() {
               )}
             </div>
 
-            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold">Customer Copy</h2>
-                  <p className="text-sm text-slate-500">Customer-facing booking and driver details.</p>
+                  <h2 className="text-lg font-semibold">Customer Copy</h2>
+                  <p className="text-xs text-slate-500">Customer booking details.</p>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {customerCopyEditState.isEditing ? (
                       <>
                         <button
-                          className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                          className="min-h-9 rounded-md border border-emerald-300 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50"
                           data-copy-save-edit="customerCopy"
                           onClick={() => saveCopyEdit("customerCopy")}
                           type="button"
@@ -26803,7 +26803,7 @@ export default function Home() {
                           Save Edit
                         </button>
                         <button
-                          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                           data-copy-cancel-edit="customerCopy"
                           onClick={() => cancelCopyEdit("customerCopy")}
                           type="button"
@@ -26813,7 +26813,7 @@ export default function Home() {
                       </>
                     ) : (
                       <button
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         data-copy-edit-button="customerCopy"
                         onClick={() => startCopyEdit("customerCopy")}
                         type="button"
@@ -26822,7 +26822,7 @@ export default function Home() {
                       </button>
                     )}
                     <button
-                      className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                      className="min-h-9 rounded-md border border-emerald-300 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50"
                       data-copy-copy-button="customerCopy"
                       onClick={copyCustomerCopy}
                       type="button"
@@ -26849,14 +26849,14 @@ export default function Home() {
               {customerCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Customer Copy"
-                  className="min-h-52 w-full rounded-lg border border-emerald-300 bg-white p-4 text-sm leading-6 text-slate-900 shadow-sm outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
+                  className="min-h-44 w-full rounded-md border border-emerald-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
                   data-copy-edit-textarea="customerCopy"
                   onChange={(event) => updateCopyEditDraft("customerCopy", event.target.value)}
                   value={customerCopyEditState.draftText}
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-lg bg-emerald-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-md bg-emerald-50 p-3 text-sm leading-6 text-slate-900"
                   data-copy-preview="customerCopy"
                 >
                   {customerCopyText}
@@ -26864,18 +26864,18 @@ export default function Home() {
               )}
             </div>
 
-            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold">Driver Dispatch</h2>
-                  <p className="text-sm text-slate-500">Internal WhatsApp copy for assigned driver.</p>
+                  <h2 className="text-lg font-semibold">Driver Dispatch</h2>
+                  <p className="text-xs text-slate-500">Assigned-driver copy.</p>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
                   <div className="flex flex-col gap-2 sm:flex-row">
                     {driverDispatchCopyEditState.isEditing ? (
                       <>
                         <button
-                          className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                          className="min-h-9 rounded-md border border-emerald-300 px-2.5 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50"
                           data-copy-save-edit="driverDispatch"
                           onClick={() => saveCopyEdit("driverDispatch")}
                           type="button"
@@ -26883,7 +26883,7 @@ export default function Home() {
                           Save Edit
                         </button>
                         <button
-                          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                           data-copy-cancel-edit="driverDispatch"
                           onClick={() => cancelCopyEdit("driverDispatch")}
                           type="button"
@@ -26893,7 +26893,7 @@ export default function Home() {
                       </>
                     ) : (
                       <button
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        className="min-h-9 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         data-copy-edit-button="driverDispatch"
                         onClick={() => startCopyEdit("driverDispatch")}
                         type="button"
@@ -26902,7 +26902,7 @@ export default function Home() {
                       </button>
                     )}
                     <button
-                      className="rounded-md border border-sky-300 px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-50"
+                      className="min-h-9 rounded-md border border-sky-300 px-2.5 py-1.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50"
                       data-copy-copy-button="driverDispatch"
                       onClick={copyDraftDriverDispatch}
                       type="button"
@@ -26923,14 +26923,14 @@ export default function Home() {
               {driverDispatchCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Driver Dispatch"
-                  className="min-h-52 w-full rounded-lg border border-sky-300 bg-white p-4 text-sm leading-6 text-slate-900 shadow-sm outline-none transition focus:border-sky-700 focus:ring-2 focus:ring-sky-700/10"
+                  className="min-h-44 w-full rounded-md border border-sky-300 bg-white p-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-sky-700 focus:ring-2 focus:ring-sky-700/10"
                   data-copy-edit-textarea="driverDispatch"
                   onChange={(event) => updateCopyEditDraft("driverDispatch", event.target.value)}
                   value={driverDispatchCopyEditState.draftText}
                 />
               ) : (
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-lg bg-sky-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-md bg-sky-50 p-3 text-sm leading-6 text-slate-900"
                   data-copy-preview="driverDispatch"
                 >
                   {driverDispatchCopyText}
@@ -26939,15 +26939,15 @@ export default function Home() {
             </div>
 
             {showDriverJobLinkCopy ? (
-              <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+                <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-xl font-semibold">Driver Job Link</h2>
-                    <p className="text-sm text-slate-500">Temporary driver link message for status updates.</p>
+                    <h2 className="text-lg font-semibold">Driver Job Link</h2>
+                    <p className="text-xs text-slate-500">Status update link.</p>
                   </div>
                   <div className="flex flex-col items-start gap-2 sm:items-end">
                     <button
-                      className="rounded-md border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-900 transition hover:bg-indigo-50"
+                      className="min-h-9 rounded-md border border-indigo-300 px-2.5 py-1.5 text-xs font-semibold text-indigo-900 transition hover:bg-indigo-50"
                       data-copy-driver-job-link-button="true"
                       onClick={copyDriverJobLink}
                       type="button"
@@ -26967,7 +26967,7 @@ export default function Home() {
                   </div>
                 </div>
                 <pre
-                  className="whitespace-pre-wrap break-words rounded-lg bg-indigo-50 p-4 text-sm leading-6 text-slate-900 shadow-sm"
+                  className="whitespace-pre-wrap break-words rounded-md bg-indigo-50 p-3 text-sm leading-6 text-slate-900"
                   data-copy-preview="driverJobLink"
                 >
                   {driverJobLinkMessage}
@@ -26981,14 +26981,14 @@ export default function Home() {
         ) : null}
 
         {activeTab === "bookings" ? (
-        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <section className="rounded-md border border-stone-200 bg-white p-3">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-xl font-semibold">Bookings</h2>
-              <p className="text-sm text-slate-500">Load saved bookings and reopen them in Dispatch.</p>
+              <h2 className="text-lg font-semibold">Bookings</h2>
+              <p className="text-xs text-slate-500">Load saved bookings and reopen them in Dispatch.</p>
             </div>
             <button
-              className="h-12 rounded-md border border-slate-300 bg-white px-5 text-base font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+              className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
               disabled={loading}
               onClick={() => loadBookings()}
               type="button"
@@ -27002,10 +27002,10 @@ export default function Home() {
         ) : null}
 
         {activeTab === "completed" ? (
-        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold">Completed</h2>
-            <p className="text-sm text-slate-500">
+        <section className="rounded-md border border-stone-200 bg-white p-3">
+          <div className="mb-3">
+            <h2 className="text-lg font-semibold">Completed</h2>
+            <p className="text-xs text-slate-500">
               Review completed bookings and undo completion when needed.
             </p>
           </div>
@@ -27015,11 +27015,11 @@ export default function Home() {
         ) : null}
 
         {activeTab === "drivers" ? (
-	        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-	          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+	        <section className="rounded-md border border-stone-200 bg-white p-3">
+	          <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
 	            <div>
-	              <h2 className="text-xl font-semibold">Driver Database</h2>
-	              <p className="text-sm text-slate-500">Save or update reusable driver details here.</p>
+	              <h2 className="text-lg font-semibold">Driver Database</h2>
+	              <p className="text-xs text-slate-500">Save or update reusable driver details here.</p>
 	            </div>
 	            <div className="flex flex-col gap-2 sm:flex-row">
 	              <button
@@ -27053,7 +27053,7 @@ export default function Home() {
 		          </div>
             {statusPanel}
 
-	          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
+	          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
 	            <div className="grid gap-3 sm:grid-cols-2">
 	              <label>
 	                <span className="mb-1 block text-sm font-medium text-slate-700">Driver name</span>
@@ -27298,11 +27298,11 @@ export default function Home() {
         ) : null}
 
         {activeTab === "rates" ? (
-	        <section className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+	        <section className="rounded-md border border-stone-200 bg-white p-3">
+          <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-xl font-semibold">Rates</h2>
-              <p className="text-sm text-slate-500">Internal customer pricing, driver payouts, and overrides.</p>
+              <h2 className="text-lg font-semibold">Rates</h2>
+              <p className="text-xs text-slate-500">Internal customer pricing, driver payouts, and overrides.</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
@@ -27325,7 +27325,7 @@ export default function Home() {
           </div>
           {rateMessageTarget === "override" ? null : statusPanel}
 
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             <div>
               <h3 className="text-base font-semibold">Default Prestige Rates</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -27735,13 +27735,13 @@ export default function Home() {
 
         {activeTab === "dashboard" ? (
         <section
-          className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm sm:p-5"
+          className="rounded-md border border-stone-200 bg-white p-3"
           data-operations-dashboard="true"
         >
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-xl font-semibold">Operations Dashboard</h2>
-              <p className="text-sm text-slate-500">
+              <h2 className="text-lg font-semibold">Operations Dashboard</h2>
+              <p className="text-xs text-slate-500">
                 Based on currently loaded bookings. Click Load Bookings or Refresh Loaded Bookings to update.
               </p>
             </div>
@@ -27757,7 +27757,7 @@ export default function Home() {
                 />
               </label>
               <button
-                className="h-11 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                className="min-h-10 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
                 disabled={loading}
                 onClick={() => loadBookings()}
                 type="button"

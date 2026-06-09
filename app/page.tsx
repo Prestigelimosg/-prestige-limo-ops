@@ -1910,20 +1910,23 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   driverIncludePayout: "Include payout in dispatch",
 };
 
-const fieldOrder: Array<keyof BookingForm> = [
+const bookingDetailFieldOrder: Array<keyof BookingForm> = [
   "company",
   "bookingType",
+  "booker",
+  "bookerContact",
+  "bookerEmail",
+  "name",
+  "pax",
+];
+
+const tripRouteFieldOrder: Array<keyof BookingForm> = [
   "vehicle",
   "date",
   "time",
   "flight",
   "pickup",
   "dropoff",
-  "booker",
-  "bookerContact",
-  "bookerEmail",
-  "name",
-  "pax",
 ];
 
 function clean(value: string | null | undefined) {
@@ -12520,6 +12523,44 @@ export default function Home() {
       {message.text}
     </div>
   );
+  const renderDispatchBookingField = (field: keyof BookingForm) => (
+    <label
+      className={field === "pickup" || field === "dropoff" ? "sm:col-span-2" : ""}
+      key={field}
+    >
+      <span className="mb-1 block text-sm font-medium text-slate-700">
+        {fieldLabels[field]}
+        {requiredFields.includes(field) ? (
+          <span className="text-red-600"> *</span>
+        ) : null}
+      </span>
+      <input
+        className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+        inputMode={
+          field === "pax"
+            ? "numeric"
+            : field === "bookerContact" || field === "driverContact"
+              ? "tel"
+              : undefined
+        }
+        min={field === "pax" ? 1 : undefined}
+        onChange={(event) => update(field, event.target.value)}
+        placeholder={fieldLabels[field]}
+        type={
+          field === "date"
+            ? "date"
+            : field === "bookerEmail"
+              ? "email"
+              : field === "bookerContact" || field === "driverContact"
+                ? "tel"
+                : field === "pax"
+                  ? "number"
+                  : "text"
+        }
+        value={booking[field]}
+      />
+    </label>
+  );
 
   const recentBookingsPanel = operationalBookings.length > 0 ? (
     <div className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
@@ -22862,8 +22903,12 @@ export default function Home() {
         </section>
 
         {activeTab === "dispatch" ? (
-        <section className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
-          <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+        <section className="flex min-w-0 flex-col gap-3" data-dispatch-workflow="true">
+          <div className="contents">
+            <section
+              className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              data-dispatch-workflow-step="booking-input-parser"
+            >
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Dispatcher Intake</h2>
@@ -23119,51 +23164,38 @@ export default function Home() {
                 </div>
               ) : null}
             </div>
+            </section>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {fieldOrder.map((field) => (
-                <label
-                  className={field === "pickup" || field === "dropoff" ? "sm:col-span-2" : ""}
-                  key={field}
-                >
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
-                    {fieldLabels[field]}
-                    {requiredFields.includes(field) ? (
-                      <span className="text-red-600"> *</span>
-                    ) : null}
-                  </span>
-                  <input
-                    className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                    inputMode={
-                      field === "pax"
-                        ? "numeric"
-                        : field === "bookerContact" || field === "driverContact"
-                          ? "tel"
-                          : undefined
-                    }
-                    min={field === "pax" ? 1 : undefined}
-                    onChange={(event) => update(field, event.target.value)}
-                    placeholder={fieldLabels[field]}
-                    type={
-                      field === "date"
-                        ? "date"
-                        : field === "bookerEmail"
-                            ? "email"
-                          : field === "bookerContact" || field === "driverContact"
-                            ? "tel"
-                          : field === "pax"
-                            ? "number"
-                            : "text"
-                    }
-                    value={booking[field]}
-                  />
-                </label>
-              ))}
-            </div>
+            <section
+              className="order-20 min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              data-dispatch-workflow-step="booking-details"
+            >
+              <div className="mb-3">
+                <h3 className="text-base font-semibold text-slate-900">Booking Details</h3>
+                <p className="text-xs text-slate-500">Account, passenger, booker, and contact details.</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {bookingDetailFieldOrder.map(renderDispatchBookingField)}
+              </div>
+            </section>
+
+            <section
+              className="order-30 min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              data-dispatch-workflow-step="pickup-dropoff-vehicle"
+            >
+              <div className="mb-3">
+                <h3 className="text-base font-semibold text-slate-900">Pickup / Drop-off / Vehicle</h3>
+                <p className="text-xs text-slate-500">Trip timing, route, flight, and vehicle details.</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {tripRouteFieldOrder.map(renderDispatchBookingField)}
+              </div>
+            </section>
 
             <section
               aria-label="OneMap Route Assist"
-              className="mt-5 rounded-md border border-cyan-200 bg-cyan-50/70 p-3"
+              className="order-[90] rounded-md border border-cyan-200 bg-cyan-50/70 p-3"
+              data-dispatch-workflow-step="onemap-route-assist"
               data-admin-onemap-route-assist="true"
             >
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -23297,8 +23329,9 @@ export default function Home() {
 
             {customerMatchSuggestion ? (
               <section
-                className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3"
+                className="order-[100] rounded-md border border-emerald-200 bg-emerald-50 p-3"
                 data-customer-match-suggestion="true"
+                data-dispatch-workflow-step="admin-lower-customer-match"
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
@@ -23390,12 +23423,13 @@ export default function Home() {
               </section>
             ) : null}
 
-            <div className="mt-5">
+            <div className="order-[100]" data-dispatch-workflow-step="admin-lower-pricing">
               {pricingPanel}
             </div>
 
             <div
-              className="mt-5 rounded-md border border-stone-200 bg-stone-50 p-3"
+              className="order-[31] rounded-md border border-stone-200 bg-stone-50 p-3"
+              data-dispatch-workflow-step="trip-extras"
               data-route-extras-child-seat-section="true"
             >
               <div className="mb-3">
@@ -23527,7 +23561,10 @@ export default function Home() {
               ) : null}
             </div>
 
-            <div className="mt-5 rounded-md border border-sky-200 bg-sky-50 p-3">
+            <section
+              className="order-[60] rounded-md border border-sky-200 bg-sky-50 p-3"
+              data-dispatch-workflow-step="driver-assignment"
+            >
               <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-sky-950">Assigned Driver</h3>
@@ -23821,10 +23858,10 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            </div>
+            </section>
 
             {shouldShowParserDebugPanel && parsedDebugBooking ? (
-              <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div className="order-[100] rounded-md border border-slate-200 bg-slate-50 p-3">
                 {parsedDebugBooking.parserWarning ? (
                   <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
                     {parsedDebugBooking.parserWarning}
@@ -23881,7 +23918,7 @@ export default function Home() {
             ) : null}
 
             {parsedDebugBooking ? (
-              <div className="mt-5 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="order-[100] flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Parser debug</p>
                   <p className="text-xs text-slate-500">Hidden by default for daily operations.</p>
@@ -23897,7 +23934,7 @@ export default function Home() {
             ) : null}
 
             {hasNeedsReviewWarnings ? (
-              <div className="mt-5 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div className="order-[100] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                 <p className="font-semibold">Needs review before saving</p>
                 <p className="mt-1">Please check these fields before saving this booking.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -23919,7 +23956,7 @@ export default function Home() {
               </div>
             ) : null}
 
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <div className="order-[100] flex flex-col gap-2 sm:flex-row">
               <button
                 className="min-h-10 rounded-md bg-slate-950 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                 disabled={saving}
@@ -23930,13 +23967,14 @@ export default function Home() {
               </button>
             </div>
             {bookingSaveMessage ? (
-              <div className={`mt-3 rounded-md border px-4 py-3 text-sm ${statusClass(bookingSaveMessage.tone)}`}>
+              <div className={`order-[100] rounded-md border px-4 py-3 text-sm ${statusClass(bookingSaveMessage.tone)}`}>
                 {bookingSaveMessage.text}
               </div>
             ) : null}
 
             <section
-              className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
+              className="order-[100] rounded-md border border-emerald-200 bg-emerald-50/60 p-2.5"
+              data-dispatch-workflow-step="admin-lower-persistence"
               data-admin-booking-persistence-panel="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -24358,8 +24396,9 @@ export default function Home() {
 
             <section
               aria-label="Dispatch Release checklist"
-              className="mt-5 rounded-md border border-sky-200 bg-sky-50/70 p-2.5"
+              className="order-[80] rounded-md border border-sky-200 bg-sky-50/70 p-2.5"
               data-admin-dispatch-release-checklist="true"
+              data-dispatch-workflow-step="driver-status-day-of-trip"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
@@ -24455,7 +24494,7 @@ export default function Home() {
 
             <section
               aria-label="Dispatch Release handoff packet"
-              className="mt-3 rounded-md border border-teal-200 bg-teal-50/70 p-2.5"
+              className="order-[80] rounded-md border border-teal-200 bg-teal-50/70 p-2.5"
               data-admin-dispatch-release-handoff-packet="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -24539,7 +24578,7 @@ export default function Home() {
 
             <section
               aria-label="Driver Acknowledgement Readiness"
-              className="mt-3 rounded-md border border-indigo-200 bg-indigo-50/70 p-2.5"
+              className="order-[80] rounded-md border border-indigo-200 bg-indigo-50/70 p-2.5"
               data-admin-driver-acknowledgement-readiness="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -24638,7 +24677,7 @@ export default function Home() {
 
             <section
               aria-label="Driver Acknowledgement Follow-up"
-              className="mt-3 rounded-md border border-cyan-200 bg-cyan-50/70 p-2.5"
+              className="order-[80] rounded-md border border-cyan-200 bg-cyan-50/70 p-2.5"
               data-admin-driver-acknowledgement-follow-up="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -24764,7 +24803,7 @@ export default function Home() {
 
             <section
               aria-label="Day-of-Trip Dispatch Monitor"
-              className="mt-3 rounded-md border border-lime-200 bg-lime-50/70 p-1 sm:p-2.5"
+              className="order-[80] rounded-md border border-lime-200 bg-lime-50/70 p-1 sm:p-2.5"
               data-admin-day-of-trip-dispatch-monitor="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -24965,7 +25004,7 @@ export default function Home() {
 
             <section
               aria-label="Day-of-Trip Exception Escalation"
-              className="mt-3 rounded-md border border-rose-200 bg-rose-50/60 p-0.5 sm:p-2.5"
+              className="order-[80] rounded-md border border-rose-200 bg-rose-50/60 p-0.5 sm:p-2.5"
               data-admin-day-of-trip-exception-escalation="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25093,7 +25132,7 @@ export default function Home() {
 
             <section
               aria-label="Dispatch Recovery / Replacement Readiness"
-              className="mt-3 rounded-md border border-sky-200 bg-sky-50/70 p-0.5 sm:p-2.5"
+              className="order-[80] rounded-md border border-sky-200 bg-sky-50/70 p-0.5 sm:p-2.5"
               data-admin-dispatch-recovery-replacement-readiness="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25219,7 +25258,7 @@ export default function Home() {
 
             <section
               aria-label="Post-Recovery Update Readiness"
-              className="mt-3 rounded-md border border-teal-200 bg-teal-50/70 p-0.5 sm:p-2.5"
+              className="order-[80] rounded-md border border-teal-200 bg-teal-50/70 p-0.5 sm:p-2.5"
               data-admin-post-recovery-update-readiness="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25345,7 +25384,7 @@ export default function Home() {
 
             <section
               aria-label="Day-of-Trip Completion Handoff"
-              className="mt-3 min-w-0 rounded-md border border-stone-200 bg-stone-50/80 p-0.5 sm:p-2.5"
+              className="order-[80] min-w-0 rounded-md border border-stone-200 bg-stone-50/80 p-0.5 sm:p-2.5"
               data-admin-day-of-trip-completion-handoff="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25470,7 +25509,7 @@ export default function Home() {
 
             <section
               aria-label="Completed Trip Closeout Review"
-              className="mt-3 min-w-0 rounded-md border border-zinc-200 bg-zinc-50/80 p-0.5 sm:p-2.5"
+              className="order-[100] min-w-0 rounded-md border border-zinc-200 bg-zinc-50/80 p-0.5 sm:p-2.5"
               data-admin-completed-trip-closeout-review="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25608,7 +25647,7 @@ export default function Home() {
 
             <section
               aria-label="Closeout to Billing Preparation Review"
-              className="mt-3 min-w-0 rounded-md border border-cyan-200 bg-cyan-50/70 p-0.5 sm:p-2.5"
+              className="order-[100] min-w-0 rounded-md border border-cyan-200 bg-cyan-50/70 p-0.5 sm:p-2.5"
               data-admin-closeout-to-billing-preparation-review="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25735,7 +25774,7 @@ export default function Home() {
 
             <section
               aria-label="Billing Preparation Exception Review"
-              className="mt-3 min-w-0 rounded-md border border-rose-200 bg-rose-50/70 p-0.5 sm:p-2.5"
+              className="order-[100] min-w-0 rounded-md border border-rose-200 bg-rose-50/70 p-0.5 sm:p-2.5"
               data-admin-billing-preparation-exception-review="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25863,7 +25902,7 @@ export default function Home() {
 
             <section
               aria-label="Billing Preparation Summary / Ready Review"
-              className="mt-3 min-w-0 rounded-md border border-sky-200 bg-sky-50/70 p-0.5 sm:p-2.5"
+              className="order-[100] min-w-0 rounded-md border border-sky-200 bg-sky-50/70 p-0.5 sm:p-2.5"
               data-admin-billing-preparation-summary-ready-review="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -25991,7 +26030,7 @@ export default function Home() {
 
             <section
               aria-label="Monthly Billing Queue Readiness Review"
-              className="mt-3 min-w-0 rounded-md border border-cyan-200 bg-cyan-50/70 p-0.5 sm:p-2.5"
+              className="order-[100] min-w-0 rounded-md border border-cyan-200 bg-cyan-50/70 p-0.5 sm:p-2.5"
               data-admin-monthly-billing-queue-readiness-review="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -26119,7 +26158,7 @@ export default function Home() {
 
             <section
               aria-label="Monthly Billing Queue Exception Review"
-              className="mt-3 min-w-0 rounded-md border border-rose-200 bg-rose-50/70 p-0.5 sm:p-2.5"
+              className="order-[100] min-w-0 rounded-md border border-rose-200 bg-rose-50/70 p-0.5 sm:p-2.5"
               data-admin-monthly-billing-queue-exception-review="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -26247,7 +26286,7 @@ export default function Home() {
 
             <section
               aria-label="Monthly Billing Month Grouping Review"
-              className="mt-3 min-w-0 rounded-md border border-teal-200 bg-teal-50/70 p-0.5 sm:p-2.5"
+              className="order-[100] min-w-0 rounded-md border border-teal-200 bg-teal-50/70 p-0.5 sm:p-2.5"
               data-admin-monthly-billing-month-grouping-review="true"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -26665,8 +26704,11 @@ export default function Home() {
             </section>
           </div>
 
-          <aside className="flex min-w-0 flex-col gap-3">
-            <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+          <aside className="contents">
+            <div
+              className="order-[40] min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              data-dispatch-workflow-step="job-card-preview"
+            >
               <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Job Card Preview</h2>
@@ -26784,7 +26826,10 @@ export default function Home() {
               )}
             </div>
 
-            <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+            <div
+              className="order-[50] min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              data-dispatch-workflow-step="customer-whatsapp-copy"
+            >
               <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Customer Copy</h2>
@@ -26864,7 +26909,10 @@ export default function Home() {
               )}
             </div>
 
-            <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+            <div
+              className="order-[70] min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              data-dispatch-workflow-step="driver-dispatch-copy"
+            >
               <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Driver Dispatch</h2>
@@ -26939,7 +26987,10 @@ export default function Home() {
             </div>
 
             {showDriverJobLinkCopy ? (
-              <div className="min-w-0 rounded-md border border-stone-200 bg-white p-3">
+              <div
+                className="order-[75] min-w-0 rounded-md border border-stone-200 bg-white p-3"
+                data-dispatch-workflow-step="driver-job-link"
+              >
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Driver Job Link</h2>
@@ -26975,7 +27026,9 @@ export default function Home() {
               </div>
             ) : null}
 
-            {statusPanel}
+            <div className="order-[100]" data-dispatch-workflow-step="admin-lower-status">
+              {statusPanel}
+            </div>
           </aside>
         </section>
         ) : null}

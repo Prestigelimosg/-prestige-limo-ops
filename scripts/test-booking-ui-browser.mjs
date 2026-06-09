@@ -3188,6 +3188,63 @@ async function runChromeTest() {
     assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Rates"]);
     assert.equal(initialTabState.selectedTab, "Dispatch");
 
+    const dispatchWorkflowOrder = await evaluate(`(() => {
+      const expectedSteps = [
+        "booking-input-parser",
+        "booking-details",
+        "pickup-dropoff-vehicle",
+        "trip-extras",
+        "job-card-preview",
+        "customer-whatsapp-copy",
+        "driver-assignment",
+        "driver-dispatch-copy",
+        "driver-status-day-of-trip",
+        "onemap-route-assist",
+        "admin-lower-persistence",
+      ];
+
+      return expectedSteps.map((step) => {
+        const element = document.querySelector(\`[data-dispatch-workflow-step="\${step}"]\`);
+        const rect = element?.getBoundingClientRect();
+
+        return {
+          step,
+          top: rect ? Math.round(rect.top + window.scrollY) : null,
+          visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+        };
+      });
+    })()`);
+    assert.deepEqual(
+      dispatchWorkflowOrder.map((item) => item.step),
+      [
+        "booking-input-parser",
+        "booking-details",
+        "pickup-dropoff-vehicle",
+        "trip-extras",
+        "job-card-preview",
+        "customer-whatsapp-copy",
+        "driver-assignment",
+        "driver-dispatch-copy",
+        "driver-status-day-of-trip",
+        "onemap-route-assist",
+        "admin-lower-persistence",
+      ],
+      "Expected dispatch workflow test fixture to check every ordered step",
+    );
+    assert.equal(
+      dispatchWorkflowOrder.every((item) => item.visible && Number.isFinite(item.top)),
+      true,
+      `Expected all ordered dispatch workflow steps to be visible: ${JSON.stringify(dispatchWorkflowOrder)}`,
+    );
+    for (let index = 1; index < dispatchWorkflowOrder.length; index += 1) {
+      assert.ok(
+        dispatchWorkflowOrder[index].top > dispatchWorkflowOrder[index - 1].top,
+        `Expected dispatch workflow step ${dispatchWorkflowOrder[index].step} to appear after ${
+          dispatchWorkflowOrder[index - 1].step
+        }: ${JSON.stringify(dispatchWorkflowOrder)}`,
+      );
+    }
+
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];
       window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));

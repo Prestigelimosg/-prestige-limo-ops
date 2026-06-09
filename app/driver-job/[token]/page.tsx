@@ -938,119 +938,7 @@ export default function DriverJobPage() {
               <h2 id="driver-status-heading" className="text-base font-semibold text-slate-900">
                 Job Status
               </h2>
-              <div
-                className="order-1 space-y-2 rounded-md border border-slate-200 bg-white p-3"
-                data-driver-job-status-boundary="true"
-              >
-                <p className="text-sm font-semibold text-slate-900" data-driver-job-status-boundary-title="true">
-                  Status Boundary
-                </p>
-                <ul
-                  className="grid gap-2 text-sm font-medium leading-6 text-slate-700"
-                  data-driver-job-status-boundary-list="true"
-                >
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Current flow: OTW, OTS, POB, then Job Completed.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Status updates are accepted only through this guarded job link.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Job Completed can include safe completion or exception text for dispatch review.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    No private account, file upload, or location-tracking action is created here.
-                  </li>
-                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    Use Report Issue for in-app admin alerts.
-                  </li>
-                </ul>
-                <p
-                  className="text-sm font-semibold leading-6 text-slate-700"
-                  data-driver-job-status-boundary-helper="true"
-                >
-                  Feedback appears under the status button you tap.
-                </p>
-              </div>
-              <div
-                className="order-5 space-y-3 rounded-md border border-slate-200 bg-white p-3"
-                data-driver-job-saved-status-history="true"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-900">Status History</p>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {savedStatusHistory.length} saved
-                  </span>
-                </div>
-                {savedStatusHistory.length > 0 ? (
-                  <ol className="space-y-2" data-driver-job-saved-status-history-list="true">
-                    {savedStatusHistory.map((event, index) => (
-                      <li
-                        className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
-                        data-driver-job-saved-status-history-row="true"
-                        key={`${event.status}-${event.occurredAt}-${index}`}
-                      >
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <span className="font-semibold" data-driver-job-saved-status-history-label="true">
-                            {statusDisplay(event.status, event.statusLabel)}
-                          </span>
-                          <span
-                            className="text-xs font-semibold text-slate-500"
-                            data-driver-job-saved-status-history-time="true"
-                          >
-                            {safeDisplayText(event.occurredAt, "Time not provided")}
-                          </span>
-                        </div>
-                        {event.safeNote ? (
-                          <p
-                            className="mt-1 break-words text-slate-600"
-                            data-driver-job-saved-status-history-note="true"
-                          >
-                            {event.safeNote}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p
-                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 ring-1 ring-slate-200"
-                    data-driver-job-saved-status-history-empty="true"
-                  >
-                    No saved status history for this link yet.
-                  </p>
-                )}
-              </div>
-              <div
-                className="order-4 space-y-3 rounded-md border border-slate-200 bg-white p-3"
-                data-driver-job-completion-notes="true"
-              >
-                <p className="text-sm font-semibold text-slate-900">Completion / Exception Notes</p>
-                <p className="text-sm font-medium leading-6 text-slate-600">
-                  Optional safe operational text included only with an accepted status update.
-                </p>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Completion note</span>
-                  <textarea
-                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-completion-note="true"
-                    maxLength={1000}
-                    onChange={(event) => setCompletionNote(event.target.value)}
-                    value={completionNote}
-                  />
-                </label>
-                <label className="block space-y-1 text-sm font-semibold text-slate-700">
-                  <span>Exception reason</span>
-                  <textarea
-                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                    data-driver-job-exception-reason="true"
-                    maxLength={1000}
-                    onChange={(event) => setExceptionReason(event.target.value)}
-                    value={exceptionReason}
-                  />
-                </label>
-              </div>
-              <div className="order-2 grid gap-3 md:grid-cols-4" data-driver-primary-step="status-buttons">
+              <div className="order-1 grid gap-3 md:grid-cols-4" data-driver-primary-step="status-buttons">
                 {statusActions.map((statusAction) => (
                   <div className="space-y-2" key={statusAction.label}>
                     <button
@@ -1075,7 +963,7 @@ export default function DriverJobPage() {
                 ))}
               </div>
               <div
-                className="order-3 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
+                className="order-2 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
                 data-driver-job-report-issue="true"
                 data-driver-primary-step="report-issue"
               >
@@ -1126,6 +1014,118 @@ export default function DriverJobPage() {
                 </div>
                 <p className="text-xs font-semibold leading-5 text-amber-900" data-driver-job-report-issue-boundary="true">
                   Internal app alert only. No external messages, live location, or photo upload.
+                </p>
+              </div>
+              <div
+                className="order-3 space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                data-driver-job-completion-notes="true"
+              >
+                <p className="text-sm font-semibold text-slate-900">Completion / Exception Notes</p>
+                <p className="text-sm font-medium leading-6 text-slate-600">
+                  Optional safe operational text included only with an accepted status update.
+                </p>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Completion note</span>
+                  <textarea
+                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-completion-note="true"
+                    maxLength={1000}
+                    onChange={(event) => setCompletionNote(event.target.value)}
+                    value={completionNote}
+                  />
+                </label>
+                <label className="block space-y-1 text-sm font-semibold text-slate-700">
+                  <span>Exception reason</span>
+                  <textarea
+                    className="min-h-24 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    data-driver-job-exception-reason="true"
+                    maxLength={1000}
+                    onChange={(event) => setExceptionReason(event.target.value)}
+                    value={exceptionReason}
+                  />
+                </label>
+              </div>
+              <div
+                className="order-4 space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                data-driver-job-saved-status-history="true"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900">Status History</p>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                    {savedStatusHistory.length} saved
+                  </span>
+                </div>
+                {savedStatusHistory.length > 0 ? (
+                  <ol className="space-y-2" data-driver-job-saved-status-history-list="true">
+                    {savedStatusHistory.map((event, index) => (
+                      <li
+                        className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+                        data-driver-job-saved-status-history-row="true"
+                        key={`${event.status}-${event.occurredAt}-${index}`}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="font-semibold" data-driver-job-saved-status-history-label="true">
+                            {statusDisplay(event.status, event.statusLabel)}
+                          </span>
+                          <span
+                            className="text-xs font-semibold text-slate-500"
+                            data-driver-job-saved-status-history-time="true"
+                          >
+                            {safeDisplayText(event.occurredAt, "Time not provided")}
+                          </span>
+                        </div>
+                        {event.safeNote ? (
+                          <p
+                            className="mt-1 break-words text-slate-600"
+                            data-driver-job-saved-status-history-note="true"
+                          >
+                            {event.safeNote}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p
+                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 ring-1 ring-slate-200"
+                    data-driver-job-saved-status-history-empty="true"
+                  >
+                    No saved status history for this link yet.
+                  </p>
+                )}
+              </div>
+              <div
+                className="order-5 space-y-2 rounded-md border border-slate-200 bg-white p-3"
+                data-driver-job-status-boundary="true"
+              >
+                <p className="text-sm font-semibold text-slate-900" data-driver-job-status-boundary-title="true">
+                  Status Boundary
+                </p>
+                <ul
+                  className="grid gap-2 text-sm font-medium leading-6 text-slate-700"
+                  data-driver-job-status-boundary-list="true"
+                >
+                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    Current flow: OTW, OTS, POB, then Job Completed.
+                  </li>
+                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    Status updates are accepted only through this guarded job link.
+                  </li>
+                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    Job Completed can include safe completion or exception text for dispatch review.
+                  </li>
+                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    No private account, file upload, or location-tracking action is created here.
+                  </li>
+                  <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                    Use Report Issue for in-app admin alerts.
+                  </li>
+                </ul>
+                <p
+                  className="text-sm font-semibold leading-6 text-slate-700"
+                  data-driver-job-status-boundary-helper="true"
+                >
+                  Feedback appears under the status button you tap.
                 </p>
               </div>
             </section>

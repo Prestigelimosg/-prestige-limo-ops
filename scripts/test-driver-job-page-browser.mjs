@@ -251,6 +251,14 @@ async function runChromeTest() {
           plate: document.querySelector("[data-driver-job-detail-plate]")?.value || "",
           vehicleModel: document.querySelector("[data-driver-job-detail-vehicle-model]")?.value || "",
         },
+        layoutPositions: {
+          completionNotes: Math.round(document.querySelector("[data-driver-job-completion-notes]")?.getBoundingClientRect().top ?? -1),
+          reportIssue: Math.round(document.querySelector("[data-driver-job-report-issue]")?.getBoundingClientRect().top ?? -1),
+          saveAcknowledge: Math.round(document.querySelector("[data-driver-job-save-acknowledge]")?.getBoundingClientRect().top ?? -1),
+          statusBoundary: Math.round(document.querySelector("[data-driver-job-status-boundary]")?.getBoundingClientRect().top ?? -1),
+          statusButtons: Math.round(document.querySelector("[data-driver-primary-step='status-buttons']")?.getBoundingClientRect().top ?? -1),
+          statusHistory: Math.round(document.querySelector("[data-driver-job-saved-status-history]")?.getBoundingClientRect().top ?? -1),
+        },
         statusBoundary: {
           helper: document.querySelector("[data-driver-job-status-boundary-helper]")?.textContent.trim() || "",
           items: [...document.querySelectorAll("[data-driver-job-status-boundary-list] li")].map((item) =>
@@ -733,6 +741,31 @@ async function runChromeTest() {
       validState.primaryStepOrder.indexOf("report-issue") > validState.primaryStepOrder.indexOf("status-buttons"),
       true,
       "Expected Report Issue after the status buttons.",
+    );
+    assert.equal(
+      validState.layoutPositions.statusButtons > validState.layoutPositions.saveAcknowledge,
+      true,
+      "Expected frequent status buttons after Save & Acknowledge Job.",
+    );
+    assert.equal(
+      validState.layoutPositions.reportIssue > validState.layoutPositions.statusButtons,
+      true,
+      "Expected Report Issue below the frequent status buttons.",
+    );
+    assert.equal(
+      validState.layoutPositions.completionNotes > validState.layoutPositions.statusButtons,
+      true,
+      "Expected optional completion notes below the frequent status buttons.",
+    );
+    assert.equal(
+      validState.layoutPositions.statusHistory > validState.layoutPositions.statusButtons,
+      true,
+      "Expected status history below the frequent status buttons.",
+    );
+    assert.equal(
+      validState.layoutPositions.statusBoundary > validState.layoutPositions.statusButtons,
+      true,
+      "Expected status boundary help below the frequent status buttons.",
     );
     assert.equal(validState.appUpdates.visible, true, "Expected driver app updates feed on tokenized driver page.");
     assert.equal(validState.appUpdates.state, "loaded", "Expected driver app updates to load through the token route.");

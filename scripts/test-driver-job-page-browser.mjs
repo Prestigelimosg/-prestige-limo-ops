@@ -247,16 +247,33 @@ async function runChromeTest() {
           title: document.querySelector("[data-driver-job-status-boundary-title]")?.textContent.trim() || "",
           visible: Boolean(document.querySelector("[data-driver-job-status-boundary]")),
         },
-        visibleText: document.body?.innerText || "",
-        urgentIssueHandoff: {
-          boundary: document.querySelector("[data-driver-job-urgent-issue-handoff-boundary]")?.textContent.trim() || "",
-          helper: document.querySelector("[data-driver-job-urgent-issue-handoff-helper]")?.textContent.trim() || "",
-          items: [...document.querySelectorAll("[data-driver-job-urgent-issue-handoff-list] li")].map((item) =>
-            item.textContent.trim(),
-          ),
-          text: document.querySelector("[data-driver-job-urgent-issue-handoff]")?.innerText || "",
-          visible: Boolean(document.querySelector("[data-driver-job-urgent-issue-handoff]")),
+        primaryStepOrder: [...document.querySelectorAll("[data-driver-primary-step]")]
+          .map((element) => ({
+            key: element.getAttribute("data-driver-primary-step") || "",
+            top: Math.round(element.getBoundingClientRect().top),
+          }))
+          .sort((first, second) => first.top - second.top)
+          .map((item) => item.key),
+        reportIssue: {
+          boundary: document.querySelector("[data-driver-job-report-issue-boundary]")?.textContent.trim() || "",
+          choices: [...document.querySelectorAll("[data-driver-job-report-issue-choice]")]
+            .map((option) => option.textContent.trim()),
+          message: document.querySelector("[data-driver-job-report-issue-message]")?.textContent.trim() || "",
+          selectVisible: Boolean(document.querySelector("[data-driver-job-report-issue-select]")),
+          submitText: document.querySelector("[data-driver-job-report-issue-submit]")?.textContent.trim() || "",
+          text: document.querySelector("[data-driver-job-report-issue]")?.innerText || "",
+          visible: Boolean(document.querySelector("[data-driver-job-report-issue]")),
         },
+        visibleText: document.body?.innerText || "",
+        urgentIssueHandoffVisible: Boolean(document.querySelector("[data-driver-job-urgent-issue-handoff]")),
+        visualButtonLabels: [...document.querySelectorAll("button")]
+          .map((button) => ({
+            left: Math.round(button.getBoundingClientRect().left),
+            text: button.textContent.trim(),
+            top: Math.round(button.getBoundingClientRect().top),
+          }))
+          .sort((first, second) => first.top - second.top || first.left - second.left)
+          .map((button) => button.text),
         workflowHandoff: {
           boundary: document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
           helper: document.querySelector("[data-driver-job-workflow-handoff-helper]")?.textContent.trim() || "",
@@ -384,6 +401,75 @@ async function runChromeTest() {
 
       assertNoSensitiveText(state);
       return state;
+    };
+
+    const clickReportIssue = async () => {
+      const beforeState = await pageState();
+      const selected = await evaluate(`(() => {
+        const select = document.querySelector("[data-driver-job-report-issue-select]");
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+
+        if (!select) {
+          return false;
+        }
+
+        setter?.call(select, "vehicle_issue");
+        select.dispatchEvent(new Event("input", { bubbles: true }));
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      })()`);
+      assert.equal(selected, true, "Expected driver issue dropdown to be selectable.");
+
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-job-report-issue-submit]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, "Expected Alert Admin button to be clickable.");
+
+      const issueState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-job-report-issue-submit]");
+            const message = document.querySelector("[data-driver-job-report-issue-message]");
+            const activityLogText = document.querySelector("[data-driver-job-activity-log]")?.innerText || "";
+            const buttonRect = button?.getBoundingClientRect();
+            const messageRect = message?.getBoundingClientRect();
+
+            return message?.textContent.trim() === "Admin alerted in-app: Vehicle issue. No external message was sent." &&
+              activityLogText.includes("Admin alert prepared") &&
+              activityLogText.includes("Driver reported: Vehicle issue.")
+              ? {
+                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
+                  messageText: message.textContent.trim(),
+                }
+              : false;
+          })()`),
+        30000,
+        "driver issue alert feedback",
+      );
+
+      assert.equal(issueState.distance <= 16, true, "Expected issue alert feedback near Alert Admin button.");
+      const afterState = await pageState();
+      assert.equal(
+        afterState.fetchCalls.some((call) =>
+          call === `POST /api/driver-job/${mockDriverJobTokens.workflowOrder}/issue-alert`,
+        ),
+        true,
+        "Expected driver issue alert to use the tokenized internal issue-alert route.",
+      );
+      assert.equal(
+        afterState.fetchCalls.length,
+        beforeState.fetchCalls.length + 1,
+        "Driver issue alert should make one internal app POST only.",
+      );
+      assertNoSensitiveText(afterState);
+      return afterState;
     };
 
     const saveDriverDetails = async () => {
@@ -1155,7 +1241,7 @@ async function runChromeTest() {
         "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
         "Use the job status buttons only when you are ready.",
         "Helper actions here are local/demo steps unless the button feedback says a guarded status update was accepted.",
-        "For urgent issues, contact the dispatcher directly.",
+        "Use Report Issue when admin needs an in-app alert.",
       ],
       "Expected compact driver workflow handoff guidance.",
     );
@@ -1164,7 +1250,40 @@ async function runChromeTest() {
       "Private account and internal compensation details are not shown here.",
       "Expected driver handoff to avoid private/internal account detail exposure.",
     );
-    assert.equal(validState.urgentIssueHandoff.visible, true, "Expected driver urgent issue handoff guidance.");
+    assert.equal(validState.urgentIssueHandoffVisible, false, "Expected old bulky urgent issue handoff to be replaced.");
+    assert.equal(validState.reportIssue.visible, true, "Expected compact driver Report Issue alert control.");
+    assert.equal(validState.reportIssue.selectVisible, true, "Expected driver issue dropdown.");
+    assert.equal(validState.reportIssue.submitText, "Alert Admin", "Expected compact Alert Admin action.");
+    assert.deepEqual(
+      validState.reportIssue.choices,
+      [
+        "Cannot find passenger",
+        "Passenger no-show",
+        "Passenger late",
+        "Flight or pickup timing changed",
+        "Route or itinerary changed",
+        "Vehicle issue",
+        "Traffic delay",
+        "Accident / safety concern",
+        "Other issue",
+      ],
+      "Expected safe driver issue dropdown choices.",
+    );
+    assert.equal(
+      validState.reportIssue.boundary,
+      "Internal app alert only. No external messages, live location, or photo upload.",
+      "Expected report issue boundary to block external sending and future-only features.",
+    );
+    assert.deepEqual(
+      validState.primaryStepOrder.slice(0, 5),
+      ["job-summary", "acknowledge", "status-workflow", "status-buttons", "report-issue"],
+      "Expected assigned job summary, acknowledgement, and status buttons to lead the driver page.",
+    );
+    assert.equal(
+      validState.primaryStepOrder.indexOf("report-issue") > validState.primaryStepOrder.indexOf("status-buttons"),
+      true,
+      "Expected Report Issue after the status buttons.",
+    );
     assert.equal(validState.appUpdates.visible, true, "Expected driver app updates feed on tokenized driver page.");
     assert.equal(validState.appUpdates.state, "loaded", "Expected driver app updates to load through the token route.");
     assert.equal(
@@ -1208,30 +1327,6 @@ async function runChromeTest() {
       [],
       "Driver app updates feed should stay read-only in this stage.",
     );
-    assert.equal(
-      validState.urgentIssueHandoff.helper,
-      "Contact dispatcher directly if you cannot proceed safely.",
-      "Expected urgent issue handoff to direct driver to dispatcher.",
-    );
-    assert.deepEqual(
-      validState.urgentIssueHandoff.items,
-      [
-        "Cannot locate passenger or pickup point.",
-        "Route details are unclear or passenger requests a major change.",
-        "Vehicle issue, safety concern, or same-day timing problem.",
-      ],
-      "Expected compact driver-facing urgent issue scenarios.",
-    );
-    assert.equal(
-      validState.urgentIssueHandoff.boundary,
-      "Guidance only. This section does not send a message from this app yet.",
-      "Expected urgent issue handoff to avoid notification/message behavior.",
-    );
-    assert.doesNotMatch(
-      validState.urgentIssueHandoff.text,
-      /\b(?:sent|submitted|notified|dispatched)\b/i,
-      "Urgent issue handoff must not imply a message or notification was sent.",
-    );
     assert.equal(validState.statusBoundary.visible, true, "Expected driver status boundary guidance.");
     assert.equal(validState.statusBoundary.title, "Status Boundary");
     assert.deepEqual(
@@ -1241,7 +1336,7 @@ async function runChromeTest() {
         "Status updates are accepted only through this guarded job link.",
         "Job Completed can include safe completion or exception text for dispatch review.",
         "No private account, file upload, or location-tracking action is created here.",
-        "For urgent issues, contact the dispatcher directly.",
+        "Use Report Issue for in-app admin alerts.",
       ],
       "Expected compact driver completion/status boundary guidance.",
     );
@@ -1332,14 +1427,14 @@ async function runChromeTest() {
     assert.equal(validState.visibleText.includes("Completion / Exception Notes"), true);
     assert.equal(validState.visibleText.includes("Status History"), true);
     assert.deepEqual(
-      validState.buttonLabels.filter((buttonLabel) =>
-        ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
+      validState.visualButtonLabels.filter((buttonLabel) =>
+        ["Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin", "Save"].includes(buttonLabel),
       ),
-      ["Acknowledge Job", "Save", "OTW", "OTS", "POB", "Job Completed"],
-      "Expected public driver job page to show acknowledgement, details, and status controls in order.",
+      ["Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin", "Save"],
+      "Expected public driver job page to show acknowledgement, status, issue alert, and details controls in order.",
     );
     assert.deepEqual(
-      validState.buttonLabels.filter((buttonLabel) =>
+      validState.visualButtonLabels.filter((buttonLabel) =>
         [
           "Acknowledge Job",
           "Activate Mock Live Location",
@@ -1349,21 +1444,23 @@ async function runChromeTest() {
           "OTS",
           "POB",
           "Job Completed",
+          "Alert Admin",
         ].includes(
           buttonLabel,
         ),
       ),
       [
         "Acknowledge Job",
-        "Activate Mock Live Location",
-        "Trigger Mock 1-Hour Reminder",
-        "Save",
         "OTW",
         "OTS",
         "POB",
         "Job Completed",
+        "Alert Admin",
+        "Activate Mock Live Location",
+        "Trigger Mock 1-Hour Reminder",
+        "Save",
       ],
-      "Expected public driver job page to show mock live location and reminder controls before details/status controls.",
+      "Expected public driver job page to show primary status and issue controls before lower-priority mock/details controls.",
     );
     assertNoSensitiveText(validState);
 
@@ -1403,6 +1500,7 @@ async function runChromeTest() {
     await clickBlockedLiveLocation("Mock live location has ended for this job.");
     await fillCompletionNotes();
     await clickStatus("Job Completed", "Job Completed");
+    await clickReportIssue();
     const completedLiveLocationState = await pageState();
     assert.ok(
       completedLiveLocationState.visibleText.includes("Mock live location inactive"),
@@ -1422,6 +1520,7 @@ async function runChromeTest() {
         "Mock reminder blocked",
         "Job Completed marked",
         "Completion note prepared",
+        "Admin alert prepared",
       ],
       "Expected public driver activity log to preserve reminder and successful workflow event order.",
     );
@@ -1441,16 +1540,12 @@ async function runChromeTest() {
     );
     assert.equal(arrivalState.workflowHandoff.visible, true, "Expected Arrival job to show workflow handoff guidance.");
     assert.equal(arrivalState.statusBoundary.visible, true, "Expected Arrival job to show status boundary guidance.");
-    assert.equal(arrivalState.urgentIssueHandoff.visible, true, "Expected Arrival job to show urgent issue handoff.");
+    assert.equal(arrivalState.urgentIssueHandoffVisible, false, "Expected Arrival old urgent handoff to stay replaced.");
+    assert.equal(arrivalState.reportIssue.visible, true, "Expected Arrival job to show Report Issue alert control.");
     assert.equal(
-      arrivalState.urgentIssueHandoff.boundary,
-      "Guidance only. This section does not send a message from this app yet.",
-      "Expected Arrival urgent issue handoff to stay guidance-only.",
-    );
-    assert.equal(
-      arrivalState.urgentIssueHandoff.items.includes("Cannot locate passenger or pickup point."),
+      arrivalState.reportIssue.choices.includes("Cannot find passenger"),
       true,
-      "Expected Arrival urgent handoff to cover passenger/pickup issues.",
+      "Expected Arrival Report Issue to cover passenger lookup issues.",
     );
     assert.deepEqual(
       arrivalState.statusBoundary.items,
@@ -1459,14 +1554,14 @@ async function runChromeTest() {
         "Status updates are accepted only through this guarded job link.",
         "Job Completed can include safe completion or exception text for dispatch review.",
         "No private account, file upload, or location-tracking action is created here.",
-        "For urgent issues, contact the dispatcher directly.",
+        "Use Report Issue for in-app admin alerts.",
       ],
       "Expected Arrival job to keep driver status boundary guidance.",
     );
     assert.equal(
-      arrivalState.workflowHandoff.items.includes("For urgent issues, contact the dispatcher directly."),
+      arrivalState.workflowHandoff.items.includes("Use Report Issue when admin needs an in-app alert."),
       true,
-      "Expected Arrival driver handoff to keep urgent dispatcher guidance.",
+      "Expected Arrival driver handoff to point to the internal report issue action.",
     );
     assert.ok(arrivalState.visibleText.includes("Mock Driver Reminder"));
     assert.ok(arrivalState.visibleText.includes("Mock Dispatcher Driver Workflow Summary"));
@@ -1569,6 +1664,7 @@ async function runChromeTest() {
             "OTS",
             "POB",
             "Job Completed",
+            "Alert Admin",
           ].includes(
             buttonLabel,
           ),
@@ -1585,9 +1681,9 @@ async function runChromeTest() {
         `${label} token should not show driver status boundary guidance.`,
       );
       assert.equal(
-        blockedState.urgentIssueHandoff.visible,
+        blockedState.reportIssue.visible,
         false,
-        `${label} token should not show driver urgent issue handoff guidance.`,
+        `${label} token should not show driver report issue controls.`,
       );
       assertNoSensitiveText(blockedState);
     }

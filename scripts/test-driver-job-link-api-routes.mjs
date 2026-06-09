@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { GET } from "../app/api/driver-job/[token]/route.ts";
+import { POST as POST_ISSUE_ALERT } from "../app/api/driver-job/[token]/issue-alert/route.ts";
 import { PATCH } from "../app/api/driver-job/[token]/status/route.ts";
 import {
   mockDriverJobTokens,
@@ -42,6 +43,22 @@ async function patchDriverJobStatus(token, status) {
   };
 }
 
+async function postDriverJobIssueAlert(token, issueType) {
+  const response = await POST_ISSUE_ALERT(
+    new Request(`http://localhost/api/driver-job/${token}/issue-alert`, {
+      body: JSON.stringify({ issue_type: issueType }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    }),
+    routeContext(token),
+  );
+
+  return {
+    body: await response.json(),
+    status: response.status,
+  };
+}
+
 function assertNoSensitiveData(value) {
   const text = JSON.stringify(value);
 
@@ -57,6 +74,7 @@ function assertNoSensitiveData(value) {
   assert.doesNotMatch(text, /BOOKING_B_SECRET_/);
   assert.doesNotMatch(text, /\b160\b/, "Response should not expose customer price.");
   assert.doesNotMatch(text, /\b95\b/, "Response should not expose driver payout.");
+  assert.doesNotMatch(text, /telegram|whatsapp|email|sms|push/i);
 }
 
 for (const [token, expectedStatus, expectedReason] of [
@@ -130,6 +148,32 @@ for (const [requestedStatus, expectedStatus] of [
   assert.equal(unrelatedResult.body.payload.status, "assigned");
   assertNoSensitiveData(patchResult);
   assertNoSensitiveData(linkedResult);
+}
+
+{
+  resetMockDriverJobLinkDataForTests();
+
+  const malformedAlert = await postDriverJobIssueAlert(mockDriverJobTokens.validA, "driver_payout_needed");
+  const alertResult = await postDriverJobIssueAlert(mockDriverJobTokens.validA, "vehicle_issue");
+  const blockedAlert = await postDriverJobIssueAlert("not-a-real-token", "vehicle_issue");
+
+  assert.equal(malformedAlert.status, 400);
+  assert.equal(malformedAlert.body.ok, false);
+  assert.equal(alertResult.status, 200);
+  assert.equal(alertResult.body.ok, true);
+  assert.equal(alertResult.body.mode, "mock");
+  assert.equal(alertResult.body.external_send, false);
+  assert.deepEqual(alertResult.body.alert, {
+    issue_label: "Vehicle issue",
+    issue_type: "vehicle_issue",
+    notification_status: "queued",
+  });
+  assert.equal(blockedAlert.status, 401);
+  assert.equal(blockedAlert.body.ok, false);
+  assert.equal(blockedAlert.body.reason, "unauthorized");
+  assertNoSensitiveData(malformedAlert);
+  assertNoSensitiveData(alertResult);
+  assertNoSensitiveData(blockedAlert);
 }
 
 {

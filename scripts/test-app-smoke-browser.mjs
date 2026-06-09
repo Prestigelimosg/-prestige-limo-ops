@@ -35915,6 +35915,14 @@ async function runChromeTest() {
           buttonLabels: buttons.map((button) => button.text),
           buttons,
           currentStatus: document.querySelector("[data-driver-job-current-status]")?.textContent.trim() || "",
+          reportIssue: {
+            boundary: document.querySelector("[data-driver-job-report-issue-boundary]")?.textContent.trim() || "",
+            choices: [...document.querySelectorAll("[data-driver-job-report-issue-choice]")].map((option) =>
+              option.textContent.trim()
+            ),
+            submitText: document.querySelector("[data-driver-job-report-issue-submit]")?.textContent.trim() || "",
+            visible: Boolean(document.querySelector("[data-driver-job-report-issue]")),
+          },
           driverWorkflowHandoff: {
             boundary:
               document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
@@ -36357,7 +36365,7 @@ async function runChromeTest() {
           "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
           "Use the job status buttons only when you are ready.",
           "Helper actions here are local/demo steps unless the button feedback says a guarded status update was accepted.",
-          "For urgent issues, contact the dispatcher directly.",
+          "Use Report Issue when admin needs an in-app alert.",
         ],
         `${viewport.label}: expected driver handoff to explain review, status, local/demo, and urgent dispatcher steps`,
       );
@@ -36386,6 +36394,28 @@ async function runChromeTest() {
       );
       assert.equal(initialState.payNowFieldPresent, false, `${viewport.label}: expected no PayNow field on public driver job link`);
       assert.deepEqual(
+        initialState.reportIssue.choices,
+        [
+          "Cannot find passenger",
+          "Passenger no-show",
+          "Passenger late",
+          "Flight or pickup timing changed",
+          "Route or itinerary changed",
+          "Vehicle issue",
+          "Traffic delay",
+          "Accident / safety concern",
+          "Other issue",
+        ],
+        `${viewport.label}: expected driver report issue choices`,
+      );
+      assert.equal(initialState.reportIssue.visible, true, `${viewport.label}: expected driver report issue alert control`);
+      assert.equal(initialState.reportIssue.submitText, "Alert Admin", `${viewport.label}: expected Alert Admin button`);
+      assert.equal(
+        initialState.reportIssue.boundary,
+        "Internal app alert only. No external messages, live location, or photo upload.",
+        `${viewport.label}: expected report issue to remain internal-app only`,
+      );
+      assert.deepEqual(
         [
           "Prestige Limo Driver Job",
           "Job Summary",
@@ -36401,6 +36431,7 @@ async function runChromeTest() {
           "Mock Live Location",
           "Mock Driver Reminder",
           "Job Status",
+          "Report Issue",
           "Status History",
           "Completion / Exception Notes",
         ].filter((value) => !initialState.text.includes(value)),
@@ -39002,7 +39033,7 @@ async function runChromeTest() {
     state.customerFolderIndexHandoffRouteBoundaries = [];
     state.customerBookingDocumentHistoryRouteBoundaries = [];
     state.customerBookingPreSubmitReviewRouteBoundaries = [];
-    state.driverUrgentIssueHandoffRouteBoundaries = [];
+    state.driverReportIssueRouteBoundaries = [];
     for (const route of [
       { context: "/book", expectedText: "Booking Request", url: customerBookingUrl },
       { context: "/my-bookings", expectedText: "My Bookings", url: customerPortalUrl },
@@ -39016,8 +39047,8 @@ async function runChromeTest() {
       if (route.context === "/driver-job/[token]") {
         await waitForSelector(
           evaluate,
-          "[data-driver-job-urgent-issue-handoff]",
-          `${route.context} urgent issue handoff boundary`,
+          "[data-driver-job-report-issue]",
+          `${route.context} report issue boundary`,
         );
       }
       state.internalQaMockArchiveRouteBoundaries.push({
@@ -39528,17 +39559,17 @@ async function runChromeTest() {
         [],
         `Expected no admin DSP completion billing prep wording leak for ${route.context}`,
       );
-      const driverUrgentIssueHandoffVisible = await evaluate(
-        `Boolean(document.querySelector("[data-driver-job-urgent-issue-handoff]"))`,
+      const driverReportIssueVisible = await evaluate(
+        `Boolean(document.querySelector("[data-driver-job-report-issue]"))`,
       );
-      state.driverUrgentIssueHandoffRouteBoundaries.push({
+      state.driverReportIssueRouteBoundaries.push({
         context: route.context,
-        visible: driverUrgentIssueHandoffVisible,
+        visible: driverReportIssueVisible,
       });
       assert.equal(
-        driverUrgentIssueHandoffVisible,
+        driverReportIssueVisible,
         route.context === "/driver-job/[token]",
-        `Expected driver urgent issue handoff visibility boundary for ${route.context}`,
+        `Expected driver report issue visibility boundary for ${route.context}`,
       );
       const customerFolderIndexHandoffVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-folder-index-handoff]"))`,

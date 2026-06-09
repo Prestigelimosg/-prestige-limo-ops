@@ -77,6 +77,13 @@ export type AdminAppNotificationRecord = AdminAppNotificationInput & {
   updated_at: string | null;
 };
 
+export type DriverJobIssueAdminAppNotificationInput = {
+  booking_reference: string | null;
+  driver_status: string | null;
+  issue_label: string;
+  issue_type: string;
+};
+
 export type AdminAppNotificationPagination = {
   has_next_page: boolean;
   has_previous_page: boolean;
@@ -527,6 +534,55 @@ function getServerOnlyNotificationSupabaseClient(
   }
 }
 
+function getServerOnlyDriverIssueNotificationSupabaseClient(): AdminBookingResult<SupabaseClient> {
+  if (process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") {
+    return {
+      error: disabledNotificationPersistenceError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  const stagingReadiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!stagingReadiness.ok) {
+    return {
+      error: safeNotificationConfigError,
+      ok: false,
+      status: stagingReadiness.status,
+    };
+  }
+
+  const supabaseUrl = configValueOrNull(process.env.SUPABASE_URL);
+  const serviceRoleKey = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return {
+      error: safeNotificationConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  try {
+    return {
+      data: createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          persistSession: false,
+        },
+      }),
+      ok: true,
+    };
+  } catch {
+    return {
+      category: "client_init_failed",
+      error: safeNotificationConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+}
+
 function normalizeNotificationRecord(row: UnknownRecord): AdminAppNotificationRecord {
   return {
     actor_label: textOrNull(row.actor_label),
@@ -863,6 +919,65 @@ export async function createAdminAppNotification(
     actor_role: actor.actor_role,
     delivery_surface: "admin_app",
     source_surface: actor.source_surface,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await clientResult.data
+    .from("admin_app_notification_outbox")
+    .insert(payload)
+    .select(notificationSelect)
+    .single();
+
+  if (error) {
+    return safeAdapterFailure(safeNotificationCreateError, 500, error);
+  }
+
+  return {
+    data: normalizeNotificationRecord(asRecord(data)),
+    ok: true,
+  };
+}
+
+export async function createDriverJobIssueAdminAppNotification(
+  input: DriverJobIssueAdminAppNotificationInput,
+): Promise<AdminBookingResult<AdminAppNotificationRecord>> {
+  const parsed = parseAdminAppNotificationCreatePayload({
+    booking_reference: input.booking_reference,
+    event_key: [
+      "driver-issue-alert",
+      String(input.booking_reference || "unassigned").replace(/[^A-Za-z0-9._:-]+/g, "-"),
+      input.issue_type,
+      Date.now(),
+    ].join("-"),
+    notification_status: "queued",
+    notification_type: "driver_status",
+    priority: input.issue_type === "accident_or_safety_concern" ? "urgent" : "high",
+    safe_context: {
+      driver_status: input.driver_status || "not_provided",
+      issue_label: input.issue_label,
+      issue_type: input.issue_type,
+      workflow_area: "driver_issue_alert",
+    },
+    safe_message: `Driver reported: ${input.issue_label}.`,
+    safe_title: "Driver issue alert",
+    workflow_area: "driver_issue_alert",
+  });
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const clientResult = getServerOnlyDriverIssueNotificationSupabaseClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const payload = {
+    ...parsed.data,
+    actor_label: "driver-job-issue-alert",
+    actor_role: "system",
+    delivery_surface: "admin_app",
+    source_surface: "system",
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await clientResult.data

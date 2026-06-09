@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import type { SafeDriverJobPayload } from "../../../lib/driver-job-link";
 import {
+  driverJobIssueChoices,
+  getDriverJobIssueChoice,
+} from "../../../lib/driver-job-issue-alert";
+import {
   driverJobStatusDisplayLabels,
   guardDriverJobStatusTransition,
   validateDriverJobStatusUpdate,
@@ -73,6 +77,22 @@ type DriverAppUpdateApiResponse =
   | {
       error?: string;
       ok: false;
+    };
+
+type DriverIssueAlertApiResponse =
+  | {
+      alert?: {
+        issue_label?: string | null;
+        issue_type?: string | null;
+        notification_status?: string | null;
+      };
+      external_send?: false;
+      ok: true;
+    }
+  | {
+      error?: string;
+      ok: false;
+      reason?: DriverJobApiBlockedReason;
     };
 
 type DriverAppUpdateState = {
@@ -318,6 +338,9 @@ export default function DriverJobPage() {
   const [activityLog, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [completionNote, setCompletionNote] = useState("");
   const [exceptionReason, setExceptionReason] = useState("");
+  const [driverIssueFeedback, setDriverIssueFeedback] = useState<ControlFeedback | null>(null);
+  const [reportingDriverIssue, setReportingDriverIssue] = useState(false);
+  const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
   const [driverAppUpdates, setDriverAppUpdates] =
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
@@ -435,6 +458,9 @@ export default function DriverJobPage() {
       setActivityLog([]);
       setCompletionNote("");
       setExceptionReason("");
+      setDriverIssueFeedback(null);
+      setReportingDriverIssue(false);
+      setSelectedDriverIssue("");
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
       setSavedDriverDetails(null);
       setStatusFeedback(null);
@@ -676,6 +702,56 @@ export default function DriverJobPage() {
     );
   }
 
+  async function reportDriverIssue() {
+    if (!token || pageState.kind !== "ready") {
+      return;
+    }
+
+    const issueChoice = getDriverJobIssueChoice(selectedDriverIssue);
+
+    if (!issueChoice) {
+      setDriverIssueFeedback({
+        tone: "error",
+        text: "Choose an issue before alerting admin.",
+      });
+      return;
+    }
+
+    setReportingDriverIssue(true);
+    setDriverIssueFeedback(null);
+
+    try {
+      const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`, {
+        body: JSON.stringify({ issue_type: issueChoice.value }),
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      const result = await response.json() as DriverIssueAlertApiResponse;
+
+      if (!response.ok || !result.ok) {
+        setDriverIssueFeedback({
+          tone: "error",
+          text: "Admin alert could not be saved. Contact dispatcher directly.",
+        });
+        return;
+      }
+
+      setDriverIssueFeedback({
+        tone: "success",
+        text: `Admin alerted in-app: ${issueChoice.label}. No external message was sent.`,
+      });
+      addActivity("Admin alert prepared", `Driver reported: ${issueChoice.label}.`);
+    } catch {
+      setDriverIssueFeedback({
+        tone: "error",
+        text: "Admin alert failed. Contact dispatcher directly.",
+      });
+    } finally {
+      setReportingDriverIssue(false);
+    }
+  }
+
   async function updateStatus(nextStatus: string, label: string) {
     if (!token || pageState.kind !== "ready") {
       return;
@@ -854,7 +930,11 @@ export default function DriverJobPage() {
 
         {pageState.kind === "ready" ? (
           <>
-            <section className="space-y-3" aria-labelledby="driver-job-summary-heading">
+            <section
+              className="order-1 space-y-3"
+              aria-labelledby="driver-job-summary-heading"
+              data-driver-primary-step="job-summary"
+            >
               <div className="flex items-center justify-between gap-3">
                 <h2 id="driver-job-summary-heading" className="text-base font-semibold text-slate-900">
                   Job Summary
@@ -878,7 +958,7 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="space-y-3 rounded-md border border-stone-200 bg-white p-3"
+              className="order-[80] space-y-3 rounded-md border border-stone-200 bg-white p-3"
               aria-labelledby="driver-workflow-handoff-heading"
               data-driver-job-workflow-handoff="true"
             >
@@ -908,7 +988,7 @@ export default function DriverJobPage() {
                   was accepted.
                 </li>
                 <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                  For urgent issues, contact the dispatcher directly.
+                  Use Report Issue when admin needs an in-app alert.
                 </li>
               </ul>
               <p
@@ -920,45 +1000,7 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
-              aria-labelledby="driver-urgent-issue-handoff-heading"
-              data-driver-job-urgent-issue-handoff="true"
-            >
-              <div className="space-y-1">
-                <h2 id="driver-urgent-issue-handoff-heading" className="text-base font-semibold text-amber-950">
-                  Urgent issue?
-                </h2>
-                <p
-                  className="text-sm font-semibold leading-6 text-amber-900"
-                  data-driver-job-urgent-issue-handoff-helper="true"
-                >
-                  Contact dispatcher directly if you cannot proceed safely.
-                </p>
-              </div>
-              <ul
-                className="grid gap-2 text-sm font-medium leading-6 text-amber-900"
-                data-driver-job-urgent-issue-handoff-list="true"
-              >
-                <li className="rounded-md bg-white/80 px-3 py-2 ring-1 ring-amber-200">
-                  Cannot locate passenger or pickup point.
-                </li>
-                <li className="rounded-md bg-white/80 px-3 py-2 ring-1 ring-amber-200">
-                  Route details are unclear or passenger requests a major change.
-                </li>
-                <li className="rounded-md bg-white/80 px-3 py-2 ring-1 ring-amber-200">
-                  Vehicle issue, safety concern, or same-day timing problem.
-                </li>
-              </ul>
-              <p
-                className="text-sm font-semibold leading-6 text-amber-900"
-                data-driver-job-urgent-issue-handoff-boundary="true"
-              >
-                Guidance only. This section does not send a message from this app yet.
-              </p>
-            </section>
-
-            <section
-              className="space-y-3"
+              className="order-[90] space-y-3"
               aria-labelledby="driver-app-updates-heading"
               data-driver-job-app-updates="true"
             >
@@ -1022,7 +1064,7 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="space-y-3" aria-labelledby="assigned-driver-heading">
+            <section className="order-1 space-y-3" aria-labelledby="assigned-driver-heading">
               <h2 id="assigned-driver-heading" className="text-base font-semibold text-slate-900">
                 Assigned Driver
               </h2>
@@ -1055,7 +1097,7 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="space-y-3"
+              className="order-[80] space-y-3"
               aria-labelledby="driver-workflow-summary-heading"
               data-driver-job-workflow-summary="true"
             >
@@ -1094,7 +1136,11 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="space-y-3" aria-labelledby="driver-acknowledgement-heading">
+            <section
+              className="order-2 space-y-3"
+              aria-labelledby="driver-acknowledgement-heading"
+              data-driver-primary-step="acknowledge"
+            >
               <h2 id="driver-acknowledgement-heading" className="text-base font-semibold text-slate-900">
                 Job Acknowledgement
               </h2>
@@ -1127,7 +1173,7 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="space-y-3" aria-labelledby="driver-live-location-heading">
+            <section className="order-[82] space-y-3" aria-labelledby="driver-live-location-heading">
               <h2 id="driver-live-location-heading" className="text-base font-semibold text-slate-900">
                 Mock Live Location
               </h2>
@@ -1164,7 +1210,7 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="space-y-3"
+              className="order-[82] space-y-3"
               aria-labelledby="driver-reminder-heading"
               data-driver-job-reminder-section="true"
             >
@@ -1241,7 +1287,7 @@ export default function DriverJobPage() {
 
             {showMockLatestFlightEta ? (
               <section
-                className="space-y-3"
+                className="order-[82] space-y-3"
                 aria-labelledby="driver-latest-eta-heading"
                 data-driver-job-latest-eta-section="true"
               >
@@ -1292,7 +1338,7 @@ export default function DriverJobPage() {
 
             {showMockOtsPhotoProof ? (
               <section
-                className="space-y-3"
+                className="order-[82] space-y-3"
                 aria-labelledby="driver-ots-photo-proof-heading"
                 data-driver-job-ots-photo-proof-section="true"
               >
@@ -1335,7 +1381,7 @@ export default function DriverJobPage() {
               </section>
             ) : null}
 
-            <section className="space-y-3" aria-labelledby="driver-details-heading">
+            <section className="order-[84] space-y-3" aria-labelledby="driver-details-heading">
               <h2 id="driver-details-heading" className="text-base font-semibold text-slate-900">
                 Driver Details
               </h2>
@@ -1430,7 +1476,7 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="space-y-3" aria-labelledby="driver-activity-log-heading">
+            <section className="order-[84] space-y-3" aria-labelledby="driver-activity-log-heading">
               <h2 id="driver-activity-log-heading" className="text-base font-semibold text-slate-900">
                 Driver Activity Log
               </h2>
@@ -1462,12 +1508,16 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="space-y-3 pb-6" aria-labelledby="driver-status-heading">
+            <section
+              className="order-3 flex flex-col gap-3 pb-6"
+              aria-labelledby="driver-status-heading"
+              data-driver-primary-step="status-workflow"
+            >
               <h2 id="driver-status-heading" className="text-base font-semibold text-slate-900">
                 Job Status
               </h2>
               <div
-                className="space-y-2 rounded-md border border-slate-200 bg-white p-3"
+                className="order-1 space-y-2 rounded-md border border-slate-200 bg-white p-3"
                 data-driver-job-status-boundary="true"
               >
                 <p className="text-sm font-semibold text-slate-900" data-driver-job-status-boundary-title="true">
@@ -1490,7 +1540,7 @@ export default function DriverJobPage() {
                     No private account, file upload, or location-tracking action is created here.
                   </li>
                   <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                    For urgent issues, contact the dispatcher directly.
+                    Use Report Issue for in-app admin alerts.
                   </li>
                 </ul>
                 <p
@@ -1501,7 +1551,7 @@ export default function DriverJobPage() {
                 </p>
               </div>
               <div
-                className="space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                className="order-5 space-y-3 rounded-md border border-slate-200 bg-white p-3"
                 data-driver-job-saved-status-history="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1550,7 +1600,7 @@ export default function DriverJobPage() {
                 )}
               </div>
               <div
-                className="space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                className="order-4 space-y-3 rounded-md border border-slate-200 bg-white p-3"
                 data-driver-job-completion-notes="true"
               >
                 <p className="text-sm font-semibold text-slate-900">Completion / Exception Notes</p>
@@ -1578,7 +1628,7 @@ export default function DriverJobPage() {
                   />
                 </label>
               </div>
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="order-2 grid gap-3 md:grid-cols-4" data-driver-primary-step="status-buttons">
                 {statusActions.map((statusAction) => (
                   <div className="space-y-2" key={statusAction.label}>
                     <button
@@ -1601,6 +1651,60 @@ export default function DriverJobPage() {
                     ) : null}
                   </div>
                 ))}
+              </div>
+              <div
+                className="order-3 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
+                data-driver-job-report-issue="true"
+                data-driver-primary-step="report-issue"
+              >
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-amber-950">Report Issue</p>
+                  <p className="text-sm font-medium leading-6 text-amber-900">
+                    Choose the issue and alert admin inside the app.
+                  </p>
+                </div>
+                <label className="block space-y-1 text-sm font-semibold text-amber-950">
+                  <span>Issue type</span>
+                  <select
+                    className="h-11 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                    data-driver-job-report-issue-select="true"
+                    onChange={(event) => {
+                      setSelectedDriverIssue(event.target.value);
+                      setDriverIssueFeedback(null);
+                    }}
+                    value={selectedDriverIssue}
+                  >
+                    <option value="">Choose issue</option>
+                    {driverJobIssueChoices.map((choice) => (
+                      <option data-driver-job-report-issue-choice={choice.value} key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="space-y-2">
+                  <button
+                    className="h-11 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    data-driver-job-report-issue-submit="true"
+                    disabled={reportingDriverIssue}
+                    onClick={reportDriverIssue}
+                    type="button"
+                  >
+                    {reportingDriverIssue ? "Alerting..." : "Alert Admin"}
+                  </button>
+                  {driverIssueFeedback ? (
+                    <p
+                      aria-live="polite"
+                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(driverIssueFeedback.tone)}`}
+                      data-driver-job-report-issue-message="true"
+                    >
+                      {driverIssueFeedback.text}
+                    </p>
+                  ) : null}
+                </div>
+                <p className="text-xs font-semibold leading-5 text-amber-900" data-driver-job-report-issue-boundary="true">
+                  Internal app alert only. No external messages, live location, or photo upload.
+                </p>
               </div>
             </section>
           </>

@@ -44,6 +44,8 @@ const adminMonthlyInvoiceDraftItemReviewsApiPath =
   "/api/admin-monthly-invoice-draft-item-reviews";
 const adminMonthlyInvoiceIssueReviewsApiPath = "/api/admin-monthly-invoice-issue-reviews";
 const adminMonthlyInvoiceIssueRecordsApiPath = "/api/admin-monthly-invoice-issue-records";
+const adminMonthlyInvoiceIssueRecordPdfReadinessApiPath =
+  "/api/admin-monthly-invoice-issue-record-pdf-readiness";
 const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
@@ -1018,7 +1020,10 @@ type AdminMonthlyInvoiceIssueRecordReadState = {
   status: "idle" | "loading" | "loaded" | "error";
 };
 
-type AdminMonthlyInvoiceIssueRecordAction = "reserve-invoice-number" | "save-issue-record";
+type AdminMonthlyInvoiceIssueRecordAction =
+  | "mark-pdf-ready"
+  | "reserve-invoice-number"
+  | "save-issue-record";
 
 type AdminMonthlyInvoiceNumberReservationRecord = {
   invoice_number?: string | null;
@@ -5054,6 +5059,47 @@ async function reserveAdminMonthlyInvoiceNumberForIssueRecord(
   };
 }
 
+async function markAdminMonthlyInvoiceIssueRecordPdfReviewReady(
+  issueRecord: AdminMonthlyInvoiceIssueRecordRecord,
+) {
+  const issueRecordId = clean(issueRecord.id);
+
+  if (!issueRecordId) {
+    throw new Error("Monthly invoice PDF review readiness requires a saved issue record.");
+  }
+
+  const response = await fetch(adminMonthlyInvoiceIssueRecordPdfReadinessApiPath, {
+    body: JSON.stringify({
+      issue_record_id: issueRecordId,
+      safe_issue_record_note:
+        "Marked ready for separate PDF review from admin monthly invoice issue record control.",
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly invoice PDF review readiness failed.");
+  }
+
+  const readyIssueRecord = result.issue_record as AdminMonthlyInvoiceIssueRecordRecord | null;
+
+  if (
+    !readyIssueRecord ||
+    clean(readyIssueRecord.id) !== issueRecordId ||
+    readyIssueRecord.issue_record_status !== "pdf_generation_ready" ||
+    readyIssueRecord.pdf_generation_status !== "ready_to_generate"
+  ) {
+    throw new Error("Monthly invoice PDF review readiness response was incomplete.");
+  }
+
+  return readyIssueRecord;
+}
+
 async function saveAdminMonthlyBillingDraftPlanFromGroup(group: AdminMonthlyBillingGroup) {
   const customerAccount = clean(group.customer_account);
   const billingMonth = clean(group.billing_month);
@@ -5835,6 +5881,25 @@ function adminMonthlyInvoiceNumberReservationFailureMessage(rawError: unknown) {
   }
 
   return "Monthly invoice number reservation failed safely.";
+}
+
+function adminMonthlyInvoicePdfReadinessFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Monthly invoice PDF review readiness is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Monthly invoice PDF review readiness requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|not ready|not found|incomplete/.test(normalizedError)) {
+    return "Monthly invoice PDF review readiness details need review.";
+  }
+
+  return "Monthly invoice PDF review readiness failed safely.";
 }
 
 function adminMonthlyBillingGroupingBillingMonthFromDate(value: string | null | undefined) {
@@ -15557,15 +15622,23 @@ export default function Home() {
     adminMonthlyInvoiceIssueRecordAction === "save-issue-record";
   const monthlyInvoiceNumberReservationSaving =
     adminMonthlyInvoiceIssueRecordAction === "reserve-invoice-number";
+  const monthlyInvoicePdfReadinessSaving =
+    adminMonthlyInvoiceIssueRecordAction === "mark-pdf-ready";
+  const monthlyInvoiceIssueRecordHasNumberedFlow =
+    monthlyInvoiceIssueRecordPrimaryRecord?.issue_record_status === "invoice_number_reserved" ||
+    monthlyInvoiceIssueRecordPrimaryRecord?.issue_record_status === "pdf_generation_ready" ||
+    Boolean(clean(monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number));
   const monthlyInvoiceIssueRecordSaveDisabled =
     !monthlyInvoiceIssueReviewPrimaryReview ||
     !clean(monthlyInvoiceIssueReviewPrimaryReview.id) ||
     !clean(monthlyInvoiceIssueReviewPrimaryReview.draft_id) ||
+    monthlyInvoiceIssueRecordHasNumberedFlow ||
     monthlyInvoiceIssueReviewTotalTripsCount < 1 ||
     monthlyInvoiceIssueReviewLoading ||
     monthlyInvoiceIssueRecordLoading ||
     monthlyInvoiceIssueRecordSaving ||
-    monthlyInvoiceNumberReservationSaving;
+    monthlyInvoiceNumberReservationSaving ||
+    monthlyInvoicePdfReadinessSaving;
   const monthlyInvoiceIssueRecordSaveButtonLabel = monthlyInvoiceIssueRecordSaving
     ? "Saving issue record..."
     : monthlyInvoiceIssueRecordHasRecord
@@ -15666,7 +15739,8 @@ export default function Home() {
     monthlyInvoiceIssueReviewLoading ||
     monthlyInvoiceIssueRecordLoading ||
     monthlyInvoiceIssueRecordSaving ||
-    monthlyInvoiceNumberReservationSaving;
+    monthlyInvoiceNumberReservationSaving ||
+    monthlyInvoicePdfReadinessSaving;
   const monthlyInvoiceNumberReservationButtonLabel = monthlyInvoiceNumberReservationSaving
     ? "Reserving number..."
     : monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number_status === "reserved" ||
@@ -15741,6 +15815,101 @@ export default function Home() {
         message: {
           tone: "error",
           text: adminMonthlyInvoiceNumberReservationFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminMonthlyInvoiceIssueRecordAction(null);
+    }
+  };
+  const monthlyInvoicePdfReadinessDisabled =
+    !monthlyInvoiceIssueRecordPrimaryRecord ||
+    !clean(monthlyInvoiceIssueRecordPrimaryRecord.id) ||
+    monthlyInvoiceIssueRecordPrimaryRecord.issue_record_status !== "invoice_number_reserved" ||
+    monthlyInvoiceIssueRecordPrimaryRecord.draft_lock_status !== "locked_for_issue" ||
+    monthlyInvoiceIssueRecordPrimaryRecord.invoice_number_status !== "reserved" ||
+    !clean(monthlyInvoiceIssueRecordPrimaryRecord.invoice_number) ||
+    monthlyInvoiceIssueRecordPrimaryRecord.pdf_generation_status !== "not_requested" ||
+    monthlyInvoiceIssueRecordPrimaryRecord.invoice_delivery_status !== "not_sent" ||
+    monthlyInvoiceIssueRecordPrimaryRecord.payment_record_status !== "not_recorded" ||
+    monthlyInvoiceIssueReviewLoading ||
+    monthlyInvoiceIssueRecordLoading ||
+    monthlyInvoiceIssueRecordSaving ||
+    monthlyInvoiceNumberReservationSaving ||
+    monthlyInvoicePdfReadinessSaving;
+  const monthlyInvoicePdfReadinessButtonLabel = monthlyInvoicePdfReadinessSaving
+    ? "Marking PDF ready..."
+    : monthlyInvoiceIssueRecordPrimaryRecord?.issue_record_status === "pdf_generation_ready" ||
+        monthlyInvoiceIssueRecordPrimaryRecord?.pdf_generation_status === "ready_to_generate"
+      ? "PDF review ready"
+      : "Mark PDF review ready";
+  const markMonthlyInvoiceIssueRecordPdfReviewReady = async () => {
+    if (!monthlyInvoiceIssueRecordPrimaryRecord || monthlyInvoicePdfReadinessDisabled) {
+      setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: monthlyInvoiceIssueRecordPrimaryRecord
+            ? "Saved monthly invoice issue record is not ready for PDF review readiness."
+            : "Load a saved monthly invoice issue record before marking PDF review readiness.",
+        },
+      }));
+      return;
+    }
+
+    setAdminMonthlyInvoiceIssueRecordAction("mark-pdf-ready");
+    setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Marking monthly invoice issue record ready for PDF review through the guarded admin API...",
+      },
+    }));
+
+    try {
+      const readyIssueRecord = await markAdminMonthlyInvoiceIssueRecordPdfReviewReady(
+        monthlyInvoiceIssueRecordPrimaryRecord,
+      );
+
+      setAdminMonthlyInvoiceIssueRecordReadState((current) => {
+        const savedId = clean(readyIssueRecord.id);
+        const savedReviewId = clean(readyIssueRecord.issue_review_id);
+        const savedDraftId = clean(readyIssueRecord.draft_id);
+        const savedAccount = clean(readyIssueRecord.customer_account);
+        const savedMonth = clean(readyIssueRecord.billing_month);
+        const savedMonthLabel = adminMonthlyBillingGroupingMonthLabel(savedMonth);
+        const otherRecords = current.issueRecords.filter((record) => {
+          if (savedId && clean(record.id) === savedId) {
+            return false;
+          }
+
+          if (savedReviewId && clean(record.issue_review_id) === savedReviewId) {
+            return false;
+          }
+
+          if (savedDraftId && clean(record.draft_id) === savedDraftId) {
+            return false;
+          }
+
+          return clean(record.customer_account) !== savedAccount || clean(record.billing_month) !== savedMonth;
+        });
+
+        return {
+          ...current,
+          issueRecords: [readyIssueRecord, ...otherRecords],
+          message: {
+            tone: "success",
+            text: `Marked monthly invoice issue record ready for PDF review for ${savedAccount} / ${savedMonthLabel}. No PDF file, payment, payout, notification, or sending was created.`,
+          },
+          status: "loaded",
+        };
+      });
+    } catch (error) {
+      setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminMonthlyInvoicePdfReadinessFailureMessage(error),
         },
         status: "error",
       }));
@@ -26399,7 +26568,7 @@ export default function Home() {
                         }`
                       : "No saved issue record for this review yet."}
                   </p>
-                  <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1">
                     <button
                       className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-teal-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
                       data-admin-monthly-invoice-issue-record-save-action="true"
@@ -26418,6 +26587,15 @@ export default function Home() {
                     >
                       {monthlyInvoiceNumberReservationButtonLabel}
                     </button>
+                    <button
+                      className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-white px-3 py-1.5 text-xs font-semibold text-teal-900 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
+                      data-admin-monthly-invoice-pdf-readiness-action="true"
+                      disabled={monthlyInvoicePdfReadinessDisabled}
+                      onClick={markMonthlyInvoiceIssueRecordPdfReviewReady}
+                      type="button"
+                    >
+                      {monthlyInvoicePdfReadinessButtonLabel}
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -26434,7 +26612,7 @@ export default function Home() {
               <div className="mt-2 grid grid-cols-1 gap-1 min-[300px]:grid-cols-2 sm:mt-3 xl:grid-cols-3">
                 {monthlyBillingMonthGroupingReviewItems.map((item) => (
                   <div
-                    className={`min-h-12 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
+                    className={`min-h-11 min-w-0 rounded-md border px-1 py-1.5 text-[11px] sm:px-2 ${
                       item.state === "ready"
                         ? "border-emerald-200 bg-white text-emerald-950"
                         : item.key === "month-grouping-status" ||
@@ -26475,13 +26653,14 @@ export default function Home() {
                 ))}
               </div>
               <p
-                className="mt-1.5 border-t border-teal-200 pt-1.5 text-[11px] leading-4 text-teal-900 md:text-[10px] md:leading-3"
+                className="mt-1 border-t border-teal-200 pt-1 text-[10px] leading-3 text-teal-900"
                 data-admin-monthly-billing-month-grouping-review-boundary="true"
               >
                 Guarded admin API read plus monthly billing draft-plan, invoice draft-prep, item-review,
-                issue-review, issue-record save, and invoice-number reservation only. No direct Supabase write
-                outside approved API routes, invoice creation, PDF, payment, payout, notification sending,
-                auth change, parser change, billing activation, customer message, or driver notification behavior.
+                issue-review, issue-record save, invoice-number reservation, and PDF-review readiness only.
+                No direct Supabase write outside approved API routes; no invoice creation, PDF generation, PDF
+                sending, payment, payout, notification sending, auth change, parser change, billing activation,
+                customer message, or driver notification behavior.
               </p>
             </section>
           </div>

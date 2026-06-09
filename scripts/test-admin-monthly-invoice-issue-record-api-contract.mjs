@@ -17,6 +17,9 @@ const issueReviewId = "11111111-1111-4111-8111-111111111111";
 const secondIssueReviewId = "44444444-4444-4444-8444-444444444444";
 const draftId = "22222222-2222-4222-8222-222222222222";
 const secondDraftId = "55555555-5555-4555-8555-555555555555";
+const pdfReadyIssueRecordId = "66666666-6666-4666-8666-666666666666";
+const pdfReadyIssueReviewId = "77777777-7777-4777-8777-777777777777";
+const pdfReadyDraftId = "88888888-8888-4888-8888-888888888888";
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_MONTHLY_INVOICE_ISSUE_RECORD_SENTINEL|mock-monthly-invoice-issue-record-admin-session-token|monthly-invoice-issue-record-contract\.supabase\.co|service_role|server-only|server_only|stack|sql|secret|key|createClient/i;
 const unsafeIssueRecordLeakPattern =
@@ -26,6 +29,7 @@ const sourceFiles = [
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
+  "app/api/admin-monthly-invoice-issue-record-pdf-readiness/route.ts",
   "app/api/admin-monthly-invoice-issue-records/route.ts",
 ];
 const originalEnv = {
@@ -150,6 +154,10 @@ async function loadHarness() {
     persistence: require(path.join(
       tempDir,
       "lib/admin-monthly-invoice-issue-record-persistence.js",
+    )),
+    pdfReadinessRoute: require(path.join(
+      tempDir,
+      "app/api/admin-monthly-invoice-issue-record-pdf-readiness/route.js",
     )),
     route: require(path.join(tempDir, "app/api/admin-monthly-invoice-issue-records/route.js")),
   };
@@ -438,6 +446,35 @@ function seedRows() {
         source_surface: "admin_api",
         updated_at: "2026-06-08T00:00:00.000Z",
       },
+      {
+        actor_label: "Contract admin",
+        actor_role: "admin",
+        billing_month: "2026-09",
+        created_at: "2026-06-08T00:00:00.000Z",
+        customer_account: "PDF Ready Account",
+        draft_id: pdfReadyDraftId,
+        draft_lock_status: "locked_for_issue",
+        id: pdfReadyIssueRecordId,
+        invoice_delivery_status: "not_sent",
+        invoice_number: "PLO-202609-0001",
+        invoice_number_status: "reserved",
+        issue_record_status: "invoice_number_reserved",
+        issue_review_id: pdfReadyIssueReviewId,
+        payment_record_status: "not_recorded",
+        pdf_generation_status: "not_requested",
+        safe_issue_record_context: {
+          invoice_number_status: "Invoice number reserved through approved sequence API.",
+          issue_summary: "Safe reserved invoice issue record summary",
+          next_action: "Review PDF readiness before a separate PDF generation approval.",
+        },
+        safe_issue_record_note: "Safe reserved issue record note.",
+        source_issue_review_summary: {
+          source: "monthly_invoice_issue_review",
+          status: "ready_for_future_issue",
+        },
+        source_surface: "admin_api",
+        updated_at: "2026-06-08T00:00:00.000Z",
+      },
     ],
   };
 }
@@ -535,6 +572,34 @@ try {
     harness.persistence.parseAdminMonthlyInvoiceIssueRecordCreatePayload(validPaidPayload).ok,
     false,
     "Expected manual invoice number payload to be rejected by sequence-only guard.",
+  );
+  assert.deepEqual(
+    harness.persistence.parseAdminMonthlyInvoiceIssueRecordPdfReadyPayload({
+      issue_record_id: pdfReadyIssueRecordId,
+      safe_issue_record_note: "Safe PDF review readiness note.",
+    }),
+    {
+      data: {
+        issue_record_id: pdfReadyIssueRecordId,
+        safe_issue_record_note: "Safe PDF review readiness note.",
+      },
+      ok: true,
+    },
+  );
+  assert.equal(
+    harness.persistence.parseAdminMonthlyInvoiceIssueRecordPdfReadyPayload({
+      issue_record_id: "not-a-uuid",
+    }).ok,
+    false,
+    "Expected malformed PDF readiness issue record id to be rejected.",
+  );
+  assert.equal(
+    harness.persistence.parseAdminMonthlyInvoiceIssueRecordPdfReadyPayload({
+      issue_record_id: pdfReadyIssueRecordId,
+      pdf_url: "https://example.invalid/invoice.pdf",
+    }).ok,
+    false,
+    "Expected unsafe PDF readiness fields to be rejected.",
   );
 
   for (const [label, params] of [
@@ -720,6 +785,84 @@ try {
   );
   assert.equal(unsafeSaveResult.response.status, 400);
   assertNoLeaks(unsafeSaveResult, "unsafe save response");
+
+  validEnv();
+  const pdfReadyMock = installMockClient(seedRows());
+  const pdfReadyResult = await callJson(
+    harness.pdfReadinessRoute.POST,
+    new Request("http://localhost/api/admin-monthly-invoice-issue-record-pdf-readiness", {
+      body: JSON.stringify({
+        issue_record_id: pdfReadyIssueRecordId,
+        safe_issue_record_note: "Safe PDF review readiness note.",
+      }),
+      headers: validHeaders({ "content-type": "application/json" }),
+      method: "POST",
+    }),
+  );
+  assert.equal(pdfReadyResult.response.status, 200);
+  assert.equal(pdfReadyResult.body.ok, true);
+  assert.equal(pdfReadyResult.body.issue_record.id, pdfReadyIssueRecordId);
+  assert.equal(pdfReadyResult.body.issue_record.invoice_number, "PLO-202609-0001");
+  assert.equal(pdfReadyResult.body.issue_record.issue_record_status, "pdf_generation_ready");
+  assert.equal(pdfReadyResult.body.issue_record.pdf_generation_status, "ready_to_generate");
+  assert.equal(pdfReadyResult.body.issue_record.invoice_delivery_status, "not_sent");
+  assert.equal(pdfReadyResult.body.issue_record.payment_record_status, "not_recorded");
+  assert.equal(pdfReadyMock.client.selectHistory.at(-1).table, "monthly_invoice_issue_records");
+  assert.deepEqual(pdfReadyMock.client.selectHistory.at(-1).filters, [
+    {
+      column: "id",
+      type: "eq",
+      value: pdfReadyIssueRecordId,
+    },
+  ]);
+  assert.equal(pdfReadyMock.client.operations.at(-1).operation, "update");
+  assert.equal(pdfReadyMock.client.operations.at(-1).table, "monthly_invoice_issue_records");
+  assert.deepEqual(pdfReadyMock.client.operations.at(-1).filters, [
+    {
+      column: "id",
+      type: "eq",
+      value: pdfReadyIssueRecordId,
+    },
+  ]);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(pdfReadyMock.client.operations.at(-1).payload, "invoice_number"),
+    false,
+    "PDF readiness transition must not accept or write invoice numbers from the browser.",
+  );
+  assert.equal(
+    /pdf_url|pdf_link|payment_link|payout|paynow|notification|telegram|whatsapp|customer_price|driver_payout|secret|token/i.test(
+      JSON.stringify(pdfReadyMock.client.operations.at(-1).payload),
+    ),
+    false,
+    "PDF readiness transition payload must not write unsafe PDF/payment/payout/send/private fields.",
+  );
+  assertNoLeaks(pdfReadyResult, "monthly invoice issue record PDF readiness response");
+
+  const unsafePdfReadyResult = await callJson(
+    harness.pdfReadinessRoute.POST,
+    new Request("http://localhost/api/admin-monthly-invoice-issue-record-pdf-readiness", {
+      body: JSON.stringify({
+        issue_record_id: pdfReadyIssueRecordId,
+        payment_link: "https://example.invalid/pay",
+      }),
+      headers: validHeaders({ "content-type": "application/json" }),
+      method: "POST",
+    }),
+  );
+  assert.equal(unsafePdfReadyResult.response.status, 400);
+  assertNoLeaks(unsafePdfReadyResult, "unsafe PDF readiness response");
+
+  setEnv({});
+  const publicPdfReadyBlocked = await callJson(
+    harness.pdfReadinessRoute.POST,
+    new Request("http://localhost/api/admin-monthly-invoice-issue-record-pdf-readiness", {
+      body: JSON.stringify({ issue_record_id: pdfReadyIssueRecordId }),
+      method: "POST",
+    }),
+  );
+  assert.equal(publicPdfReadyBlocked.response.status, 403);
+  assert.equal(publicPdfReadyBlocked.body.error, routeBlockedMessage);
+  assertNoLeaks(publicPdfReadyBlocked, "anonymous PDF readiness blocked route");
 
   validEnv();
   const updateMock = installMockClient(seedRows());

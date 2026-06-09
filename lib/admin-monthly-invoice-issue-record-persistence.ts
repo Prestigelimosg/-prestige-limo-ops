@@ -108,6 +108,11 @@ export type AdminMonthlyInvoiceIssueRecordUpdateInput =
     issue_record_id: string | null;
   };
 
+export type AdminMonthlyInvoiceIssueRecordPdfReadyInput = {
+  issue_record_id: string;
+  safe_issue_record_note: string | null;
+};
+
 export type AdminMonthlyInvoiceIssueRecordLoadParams = {
   billing_month: string | null;
   customer_account_search: string | null;
@@ -175,6 +180,8 @@ const safeIssueRecordLoadError =
   "Admin monthly invoice issue record load failed safely.";
 const safeIssueRecordUpdateError =
   "Admin monthly invoice issue record update failed safely.";
+const safeIssueRecordPdfReadyError =
+  "Admin monthly invoice issue record PDF review transition failed safely.";
 const allowedIssueRecordStatuses = new Set<string>(
   adminMonthlyInvoiceIssueRecordStatuses,
 );
@@ -235,6 +242,10 @@ const allowedSaveFields = new Set([
   "safe_issue_record_context",
   "safe_issue_record_note",
   "source_issue_review_summary",
+]);
+const allowedPdfReadyFields = new Set([
+  "issue_record_id",
+  "safe_issue_record_note",
 ]);
 const allowedSafeContextFields = new Set([
   "delivery_status",
@@ -1251,6 +1262,47 @@ export function parseAdminMonthlyInvoiceIssueRecordUpdatePayload(
   return parseIssueRecordPayload(value, "update");
 }
 
+export function parseAdminMonthlyInvoiceIssueRecordPdfReadyPayload(
+  value: unknown,
+): AdminBookingResult<AdminMonthlyInvoiceIssueRecordPdfReadyInput> {
+  const record = asRecord(value);
+
+  if (
+    unknownKeys(record, allowedPdfReadyFields, "invoice_issue_record_pdf_ready").length > 0 ||
+    findForbiddenFieldNames(record).length > 0 ||
+    findForbiddenTextValues(record).length > 0
+  ) {
+    return forbiddenIssueRecordResult();
+  }
+
+  const issueRecordId = validUuid(record.issue_record_id);
+  const safeIssueRecordNote = optionalSafeText(
+    record.safe_issue_record_note,
+    maxSafeIssueRecordNoteLength,
+  );
+
+  if (
+    !issueRecordId ||
+    (hasOwn(record, "safe_issue_record_note") &&
+      record.safe_issue_record_note &&
+      !safeIssueRecordNote)
+  ) {
+    return {
+      error: "Admin monthly invoice issue record PDF review details are malformed.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return {
+    data: {
+      issue_record_id: issueRecordId,
+      safe_issue_record_note: safeIssueRecordNote,
+    },
+    ok: true,
+  };
+}
+
 export async function loadAdminMonthlyInvoiceIssueRecords(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
@@ -1376,6 +1428,92 @@ export async function updateAdminMonthlyInvoiceIssueRecord(
 
   if (error) {
     return safeAdapterFailure(safeIssueRecordUpdateError, 500, error);
+  }
+
+  return {
+    data: normalizeIssueRecordRecord(asRecord(data)),
+    ok: true,
+  };
+}
+
+export async function markAdminMonthlyInvoiceIssueRecordPdfReviewReady(
+  input: AdminMonthlyInvoiceIssueRecordPdfReadyInput,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminBookingResult<AdminMonthlyInvoiceIssueRecordRecord>> {
+  const clientResult = getServerOnlyIssueRecordSupabaseClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const { data: existingRows, error: loadError } = await clientResult.data
+    .from("monthly_invoice_issue_records")
+    .select(invoiceIssueRecordSelect)
+    .eq("id", input.issue_record_id)
+    .limit(1);
+
+  if (loadError) {
+    return safeAdapterFailure(safeIssueRecordPdfReadyError, 500, loadError);
+  }
+
+  const existingRecord = asArray(existingRows).map(asRecord).map(normalizeIssueRecordRecord)[0];
+
+  if (!existingRecord) {
+    return {
+      error: "Admin monthly invoice issue record was not found.",
+      ok: false,
+      status: 404,
+    };
+  }
+
+  if (
+    existingRecord.issue_record_status !== "invoice_number_reserved" ||
+    existingRecord.draft_lock_status !== "locked_for_issue" ||
+    existingRecord.invoice_number_status !== "reserved" ||
+    !textOrNull(existingRecord.invoice_number) ||
+    existingRecord.pdf_generation_status !== "not_requested" ||
+    existingRecord.invoice_delivery_status !== "not_sent" ||
+    existingRecord.payment_record_status !== "not_recorded"
+  ) {
+    return {
+      error: "Admin monthly invoice issue record is not ready for PDF review.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const safeIssueRecordContext: AdminMonthlyInvoiceIssueRecordSafeContext = {
+    ...asRecord(existingRecord.safe_issue_record_context),
+    invoice_number_status: "Invoice number reserved through approved sequence API.",
+    issue_summary:
+      textOrNull(existingRecord.safe_issue_record_context?.issue_summary) ||
+      "Saved monthly invoice issue record marked ready for PDF review.",
+    next_action:
+      "Review PDF generation separately before any file creation, sending, or settlement step.",
+    pdf_generation_status: "Ready for separately approved PDF generation review.",
+  };
+  const safeIssueRecordNote =
+    input.safe_issue_record_note ||
+    textOrNull(existingRecord.safe_issue_record_note) ||
+    "Marked ready for separate PDF review from admin monthly invoice issue record control.";
+  const { data, error } = await clientResult.data
+    .from("monthly_invoice_issue_records")
+    .update({
+      actor_label: actor.actor_label,
+      actor_role: actor.actor_role,
+      issue_record_status: "pdf_generation_ready",
+      pdf_generation_status: "ready_to_generate",
+      safe_issue_record_context: safeIssueRecordContext,
+      safe_issue_record_note: safeIssueRecordNote,
+      source_surface: actor.source_surface,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.issue_record_id)
+    .select(invoiceIssueRecordSelect)
+    .single();
+
+  if (error) {
+    return safeAdapterFailure(safeIssueRecordPdfReadyError, 500, error);
   }
 
   return {

@@ -3011,7 +3011,7 @@ function assertBookingUiState(state) {
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /issue-review/);
   assert.match(
     state.monthlyBillingMonthGroupingReview.boundary,
-    /issue-record save, and invoice-number reservation only/,
+    /issue-record save, invoice-number reservation, and PDF-review readiness only/,
   );
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /No direct Supabase write outside approved API routes/);
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /invoice creation/);
@@ -12269,6 +12269,7 @@ async function runChromeTest() {
           total_count: 1,
         },
       ];
+      window.__prestigeMonthlyInvoicePdfReadinessRequests = [];
       window.__prestigeMonthlyInvoiceNumberReservationRequests = [];
       window.__prestigeMonthlyInvoiceIssueRecordRequests = [];
       window.__prestigeMonthlyInvoiceIssueRecords = [
@@ -13129,6 +13130,56 @@ async function runChromeTest() {
           }
         }
 
+        if (String(target).includes("/api/admin-monthly-invoice-issue-record-pdf-readiness")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMonthlyInvoicePdfReadinessRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "POST") {
+            const recordIndex = (window.__prestigeMonthlyInvoiceIssueRecords || []).findIndex(
+              (record) => record.id === parsedBody?.issue_record_id,
+            );
+            const existingRecord =
+              recordIndex >= 0 ? window.__prestigeMonthlyInvoiceIssueRecords[recordIndex] : {};
+            const updatedRecord = {
+              ...existingRecord,
+              issue_record_status: "pdf_generation_ready",
+              pdf_generation_status: "ready_to_generate",
+              safe_issue_record_context: {
+                ...(existingRecord.safe_issue_record_context || {}),
+                next_action:
+                  "Review PDF generation separately before any file creation, sending, or settlement step.",
+                pdf_generation_status: "Ready for separately approved PDF generation review.",
+              },
+              safe_issue_record_note: parsedBody?.safe_issue_record_note || existingRecord.safe_issue_record_note,
+            };
+
+            if (recordIndex >= 0) {
+              window.__prestigeMonthlyInvoiceIssueRecords[recordIndex] = updatedRecord;
+            }
+
+            return new Response(
+              JSON.stringify({
+                issue_record: updatedRecord,
+                ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
         return previousFetch(...args);
       };
     })()`);
@@ -13210,6 +13261,8 @@ async function runChromeTest() {
             monthlyInvoiceDraftRequests: window.__prestigeMonthlyInvoiceDraftRequests || [],
             monthlyInvoiceIssueRecordRequests: window.__prestigeMonthlyInvoiceIssueRecordRequests || [],
             monthlyInvoiceIssueReviewRequests: window.__prestigeMonthlyInvoiceIssueReviewRequests || [],
+            monthlyInvoicePdfReadinessRequests:
+              window.__prestigeMonthlyInvoicePdfReadinessRequests || [],
             monthlyInvoiceNumberReservationRequests:
               window.__prestigeMonthlyInvoiceNumberReservationRequests || [],
             monthlyBillingMonthGroupingReview: (() => {
@@ -13315,6 +13368,14 @@ async function runChromeTest() {
                 })(),
                 invoiceNumberReservationButton: (() => {
                   const button = section?.querySelector("[data-admin-monthly-invoice-number-reservation-action='true']");
+
+                  return {
+                    disabled: button?.disabled ?? true,
+                    text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+                  };
+                })(),
+                invoicePdfReadinessButton: (() => {
+                  const button = section?.querySelector("[data-admin-monthly-invoice-pdf-readiness-action='true']");
 
                   return {
                     disabled: button?.disabled ?? true,
@@ -14310,6 +14371,14 @@ async function runChromeTest() {
                 text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
               };
             })(),
+            pdfReadinessButton: (() => {
+              const button = section?.querySelector("[data-admin-monthly-invoice-pdf-readiness-action='true']");
+
+              return {
+                disabled: button?.disabled ?? true,
+                text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+              };
+            })(),
             summary:
               section?.querySelector("[data-admin-monthly-invoice-issue-record-action-summary='true']")
                 ?.textContent.replace(/\\s+/g, " ")
@@ -14380,6 +14449,14 @@ async function runChromeTest() {
       },
       "Expected monthly invoice number reservation button to disable after the number is reserved",
     );
+    assert.deepEqual(
+      monthlyInvoiceNumberReservationState.pdfReadinessButton,
+      {
+        disabled: false,
+        text: "Mark PDF review ready",
+      },
+      "Expected monthly invoice PDF readiness button to enable after the number is reserved",
+    );
     assert.equal(
       /driver_payout|paynow|payment_link|pdf_url|payout|customer_price|parser|raw_ai|notification|telegram|whatsapp|service_role|secret|token/i.test(
         JSON.stringify(monthlyInvoiceNumberReservationPostRequest.body),
@@ -14393,6 +14470,109 @@ async function runChromeTest() {
       ),
       true,
       "Expected monthly invoice number reservation feedback to keep PDF/payment/payout/notification boundaries visible",
+    );
+    const clickedMonthlyInvoicePdfReadiness = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-monthly-invoice-pdf-readiness-action='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedMonthlyInvoicePdfReadiness,
+      true,
+      "Expected monthly invoice PDF readiness button to be clickable after number reservation",
+    );
+    const monthlyInvoicePdfReadinessState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+
+          return {
+            feedback:
+              section?.querySelector("[data-admin-monthly-invoice-issue-record-read-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            pdfReadinessRequests: window.__prestigeMonthlyInvoicePdfReadinessRequests || [],
+            pdfReadinessButton: (() => {
+              const button = section?.querySelector("[data-admin-monthly-invoice-pdf-readiness-action='true']");
+
+              return {
+                disabled: button?.disabled ?? true,
+                text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+              };
+            })(),
+            summary:
+              section?.querySelector("[data-admin-monthly-invoice-issue-record-action-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.pdfReadinessRequests?.some((request) => request.method === "POST") &&
+          candidateState.feedback.includes("Marked monthly invoice issue record ready for PDF review")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly invoice PDF readiness transition",
+    );
+    const monthlyInvoicePdfReadinessPostRequest =
+      monthlyInvoicePdfReadinessState.pdfReadinessRequests.find((request) => request.method === "POST");
+    assert.deepEqual(
+      {
+        body: {
+          issue_record_id: monthlyInvoicePdfReadinessPostRequest.body.issue_record_id,
+          safe_issue_record_note: monthlyInvoicePdfReadinessPostRequest.body.safe_issue_record_note,
+        },
+        hasSessionTokenHeader: Boolean(
+          monthlyInvoicePdfReadinessPostRequest.headers["x-prestige-admin-session-token"],
+        ),
+        method: monthlyInvoicePdfReadinessPostRequest.method,
+        purpose: monthlyInvoicePdfReadinessPostRequest.headers["x-prestige-admin-purpose"] || "",
+      },
+      {
+        body: {
+          issue_record_id: "55555555-5555-4555-8555-555555555555",
+          safe_issue_record_note:
+            "Marked ready for separate PDF review from admin monthly invoice issue record control.",
+        },
+        hasSessionTokenHeader: false,
+        method: "POST",
+        purpose: "admin-booking-persistence",
+      },
+      "Expected monthly invoice PDF readiness to POST only the saved issue record id and safe note through the guarded API path",
+    );
+    assert.equal(
+      monthlyInvoicePdfReadinessState.summary.includes("PDF generation ready") &&
+        monthlyInvoicePdfReadinessState.summary.includes("LOADEDSAVEDC-0001"),
+      true,
+      "Expected monthly invoice issue record summary to show PDF readiness while retaining the reserved invoice number",
+    );
+    assert.deepEqual(
+      monthlyInvoicePdfReadinessState.pdfReadinessButton,
+      {
+        disabled: true,
+        text: "PDF review ready",
+      },
+      "Expected monthly invoice PDF readiness button to disable after readiness is marked",
+    );
+    assert.equal(
+      /billing_month|customer_account|invoice_number|invoice_prefix|pdf_url|pdf_link|payment_link|payout|paynow|notification|telegram|whatsapp|customer_price|driver_payout|secret|token/i.test(
+        JSON.stringify(monthlyInvoicePdfReadinessPostRequest.body),
+      ),
+      false,
+      "Expected monthly invoice PDF readiness body to avoid customer, invoice number, PDF link, payment, payout, send, secret, and token fields",
+    );
+    assert.equal(
+      /No PDF file, payment, payout, notification, or sending was created/i.test(
+        monthlyInvoicePdfReadinessState.feedback,
+      ),
+      true,
+      "Expected monthly invoice PDF readiness feedback to keep PDF/payment/payout/notification boundaries visible",
     );
     const clickedMonthlyGroupingNextPage = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-billing-month-grouping-next-page='true']");

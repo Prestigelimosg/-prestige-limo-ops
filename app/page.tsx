@@ -44,6 +44,8 @@ const adminMonthlyInvoiceDraftItemReviewsApiPath =
   "/api/admin-monthly-invoice-draft-item-reviews";
 const adminMonthlyInvoiceIssueReviewsApiPath = "/api/admin-monthly-invoice-issue-reviews";
 const adminMonthlyInvoiceIssueRecordsApiPath = "/api/admin-monthly-invoice-issue-records";
+const adminMonthlyInvoiceNumberReservationsApiPath =
+  "/api/admin-monthly-invoice-number-reservations";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
@@ -1016,7 +1018,15 @@ type AdminMonthlyInvoiceIssueRecordReadState = {
   status: "idle" | "loading" | "loaded" | "error";
 };
 
-type AdminMonthlyInvoiceIssueRecordAction = "save-issue-record";
+type AdminMonthlyInvoiceIssueRecordAction = "reserve-invoice-number" | "save-issue-record";
+
+type AdminMonthlyInvoiceNumberReservationRecord = {
+  invoice_number?: string | null;
+  invoice_number_status?: "reserved" | null;
+  invoice_prefix?: string | null;
+  invoice_sequence_number?: number | null;
+  issue_record_id?: string | null;
+};
 
 type AdminMapRouteAssistLocationField = "dropoff" | "pickup";
 
@@ -2407,6 +2417,23 @@ function findMockCustomerByText(value: string | null | undefined, onlyIndividual
       );
     }) ?? null
   );
+}
+
+function deriveAdminMonthlyInvoicePrefix(customerAccount: string | null | undefined) {
+  const cleanedAccount = clean(customerAccount);
+  const configuredPrefix = clean(findMockCustomerByText(cleanedAccount)?.invoicePrefix).toUpperCase();
+
+  if (/^[A-Z0-9]{2,12}$/.test(configuredPrefix)) {
+    return configuredPrefix;
+  }
+
+  const compactAccount = cleanedAccount.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  if (compactAccount.length >= 2) {
+    return compactAccount.slice(0, 12);
+  }
+
+  return "INV";
 }
 
 function findMockCustomerByEmailDomain(domain: string | null | undefined) {
@@ -4892,6 +4919,7 @@ async function loadAdminMonthlyInvoiceIssueRecordsRead({
   billingMonth,
   customerAccountSearch,
   draftId,
+  issueRecordId,
   issueReviewId,
   limit,
   page,
@@ -4899,6 +4927,7 @@ async function loadAdminMonthlyInvoiceIssueRecordsRead({
   billingMonth: string | null;
   customerAccountSearch: string;
   draftId: string | null;
+  issueRecordId?: string | null;
   issueReviewId: string | null;
   limit: number;
   page: number;
@@ -4924,6 +4953,12 @@ async function loadAdminMonthlyInvoiceIssueRecordsRead({
     params.set("issue_review_id", cleanedIssueReviewId);
   }
 
+  const cleanedIssueRecordId = clean(issueRecordId);
+
+  if (cleanedIssueRecordId) {
+    params.set("issue_record_id", cleanedIssueRecordId);
+  }
+
   const cleanedDraftId = clean(draftId);
 
   if (cleanedDraftId) {
@@ -4947,6 +4982,75 @@ async function loadAdminMonthlyInvoiceIssueRecordsRead({
       ? (result.issue_records as AdminMonthlyInvoiceIssueRecordRecord[])
       : [],
     pagination: (result.pagination || null) as AdminMonthlyInvoiceIssueRecordPagination | null,
+  };
+}
+
+async function reserveAdminMonthlyInvoiceNumberForIssueRecord(
+  issueRecord: AdminMonthlyInvoiceIssueRecordRecord,
+) {
+  const issueRecordId = clean(issueRecord.id);
+  const customerAccount = clean(issueRecord.customer_account);
+  const billingMonth = clean(issueRecord.billing_month);
+  const invoicePrefix = deriveAdminMonthlyInvoicePrefix(customerAccount);
+
+  if (!issueRecordId || !customerAccount || !billingMonth) {
+    throw new Error("Monthly invoice number reservation requires a saved issue record.");
+  }
+
+  if (issueRecord.invoice_number_status === "reserved" || clean(issueRecord.invoice_number)) {
+    throw new Error("Monthly invoice number is already reserved for this saved issue record.");
+  }
+
+  const response = await fetch(adminMonthlyInvoiceNumberReservationsApiPath, {
+    body: JSON.stringify({
+      billing_month: billingMonth,
+      customer_account: customerAccount,
+      invoice_prefix: invoicePrefix,
+      issue_record_id: issueRecordId,
+      safe_sequence_note: "Reserved from admin monthly invoice issue record control.",
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Monthly invoice number reservation failed.");
+  }
+
+  const reservation =
+    result.invoice_number_reservation as AdminMonthlyInvoiceNumberReservationRecord | null;
+
+  if (!reservation || clean(reservation.issue_record_id) !== issueRecordId) {
+    throw new Error("Monthly invoice number reservation response was empty.");
+  }
+
+  const { issueRecords } = await loadAdminMonthlyInvoiceIssueRecordsRead({
+    billingMonth,
+    customerAccountSearch: customerAccount,
+    draftId: clean(issueRecord.draft_id),
+    issueRecordId,
+    issueReviewId: clean(issueRecord.issue_review_id),
+    limit: 1,
+    page: 1,
+  });
+  const refreshedRecord =
+    issueRecords.find((record) => clean(record.id) === issueRecordId) || null;
+
+  if (
+    !refreshedRecord ||
+    refreshedRecord.invoice_number_status !== "reserved" ||
+    clean(refreshedRecord.invoice_number) !== clean(reservation.invoice_number)
+  ) {
+    throw new Error("Monthly invoice number reservation load-back failed.");
+  }
+
+  return {
+    refreshedRecord,
+    reservation,
   };
 }
 
@@ -5712,6 +5816,25 @@ function adminMonthlyInvoiceIssueRecordSaveFailureMessage(rawError: unknown) {
   }
 
   return "Saved monthly invoice issue record failed safely.";
+}
+
+function adminMonthlyInvoiceNumberReservationFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Monthly invoice number reservation is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Monthly invoice number reservation requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown|already reserved|load-back/.test(normalizedError)) {
+    return "Monthly invoice number reservation details need review.";
+  }
+
+  return "Monthly invoice number reservation failed safely.";
 }
 
 function adminMonthlyBillingGroupingBillingMonthFromDate(value: string | null | undefined) {
@@ -15432,6 +15555,8 @@ export default function Home() {
   };
   const monthlyInvoiceIssueRecordSaving =
     adminMonthlyInvoiceIssueRecordAction === "save-issue-record";
+  const monthlyInvoiceNumberReservationSaving =
+    adminMonthlyInvoiceIssueRecordAction === "reserve-invoice-number";
   const monthlyInvoiceIssueRecordSaveDisabled =
     !monthlyInvoiceIssueReviewPrimaryReview ||
     !clean(monthlyInvoiceIssueReviewPrimaryReview.id) ||
@@ -15439,7 +15564,8 @@ export default function Home() {
     monthlyInvoiceIssueReviewTotalTripsCount < 1 ||
     monthlyInvoiceIssueReviewLoading ||
     monthlyInvoiceIssueRecordLoading ||
-    monthlyInvoiceIssueRecordSaving;
+    monthlyInvoiceIssueRecordSaving ||
+    monthlyInvoiceNumberReservationSaving;
   const monthlyInvoiceIssueRecordSaveButtonLabel = monthlyInvoiceIssueRecordSaving
     ? "Saving issue record..."
     : monthlyInvoiceIssueRecordHasRecord
@@ -15517,6 +15643,104 @@ export default function Home() {
         message: {
           tone: "error",
           text: adminMonthlyInvoiceIssueRecordSaveFailureMessage(error),
+        },
+        status: "error",
+      }));
+    } finally {
+      setAdminMonthlyInvoiceIssueRecordAction(null);
+    }
+  };
+  const monthlyInvoiceNumberReservationPrefix =
+    deriveAdminMonthlyInvoicePrefix(monthlyInvoiceIssueRecordPrimaryRecord?.customer_account);
+  const monthlyInvoiceNumberReservationDisabled =
+    !monthlyInvoiceIssueRecordPrimaryRecord ||
+    !clean(monthlyInvoiceIssueRecordPrimaryRecord.id) ||
+    !clean(monthlyInvoiceIssueRecordPrimaryRecord.customer_account) ||
+    !clean(monthlyInvoiceIssueRecordPrimaryRecord.billing_month) ||
+    monthlyInvoiceIssueRecordPrimaryRecord.draft_lock_status !== "locked_for_issue" ||
+    monthlyInvoiceIssueRecordPrimaryRecord.issue_record_status !== "draft_locked" ||
+    !["not_reserved", "ready_to_reserve"].includes(
+      monthlyInvoiceIssueRecordPrimaryRecord.invoice_number_status || "not_reserved",
+    ) ||
+    Boolean(clean(monthlyInvoiceIssueRecordPrimaryRecord.invoice_number)) ||
+    monthlyInvoiceIssueReviewLoading ||
+    monthlyInvoiceIssueRecordLoading ||
+    monthlyInvoiceIssueRecordSaving ||
+    monthlyInvoiceNumberReservationSaving;
+  const monthlyInvoiceNumberReservationButtonLabel = monthlyInvoiceNumberReservationSaving
+    ? "Reserving number..."
+    : monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number_status === "reserved" ||
+        clean(monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number)
+      ? "Number reserved"
+      : `Reserve ${monthlyInvoiceNumberReservationPrefix}`;
+  const reserveMonthlyInvoiceNumberFromCurrentIssueRecord = async () => {
+    if (!monthlyInvoiceIssueRecordPrimaryRecord || monthlyInvoiceNumberReservationDisabled) {
+      setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: monthlyInvoiceIssueRecordPrimaryRecord
+            ? "Saved monthly invoice issue record is not ready for number reservation."
+            : "Load or create a saved monthly invoice issue record before reserving a number.",
+        },
+      }));
+      return;
+    }
+
+    setAdminMonthlyInvoiceIssueRecordAction("reserve-invoice-number");
+    setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Reserving monthly invoice number through the guarded admin API...",
+      },
+    }));
+
+    try {
+      const { refreshedRecord, reservation } =
+        await reserveAdminMonthlyInvoiceNumberForIssueRecord(
+          monthlyInvoiceIssueRecordPrimaryRecord,
+        );
+
+      setAdminMonthlyInvoiceIssueRecordReadState((current) => {
+        const savedId = clean(refreshedRecord.id);
+        const savedReviewId = clean(refreshedRecord.issue_review_id);
+        const savedDraftId = clean(refreshedRecord.draft_id);
+        const savedAccount = clean(refreshedRecord.customer_account);
+        const savedMonth = clean(refreshedRecord.billing_month);
+        const savedMonthLabel = adminMonthlyBillingGroupingMonthLabel(savedMonth);
+        const otherRecords = current.issueRecords.filter((record) => {
+          if (savedId && clean(record.id) === savedId) {
+            return false;
+          }
+
+          if (savedReviewId && clean(record.issue_review_id) === savedReviewId) {
+            return false;
+          }
+
+          if (savedDraftId && clean(record.draft_id) === savedDraftId) {
+            return false;
+          }
+
+          return clean(record.customer_account) !== savedAccount || clean(record.billing_month) !== savedMonth;
+        });
+
+        return {
+          ...current,
+          issueRecords: [refreshedRecord, ...otherRecords],
+          message: {
+            tone: "success",
+            text: `Reserved monthly invoice number ${clean(reservation.invoice_number)} for ${savedAccount} / ${savedMonthLabel}. No PDF, payment, payout, or sending was created.`,
+          },
+          status: "loaded",
+        };
+      });
+    } catch (error) {
+      setAdminMonthlyInvoiceIssueRecordReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: adminMonthlyInvoiceNumberReservationFailureMessage(error),
         },
         status: "error",
       }));
@@ -26168,18 +26392,33 @@ export default function Home() {
                     data-admin-monthly-invoice-issue-record-action-summary="true"
                   >
                     {monthlyInvoiceIssueRecordHasRecord
-                      ? `Saved issue record: ${monthlyInvoiceIssueRecordStatusLabel} / ${monthlyInvoiceIssueRecordDraftLockStatusLabel}`
+                      ? `Saved issue record: ${monthlyInvoiceIssueRecordStatusLabel} / ${monthlyInvoiceIssueRecordDraftLockStatusLabel} / ${monthlyInvoiceIssueRecordNumberStatusLabel}${
+                          clean(monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number)
+                            ? ` / ${clean(monthlyInvoiceIssueRecordPrimaryRecord?.invoice_number)}`
+                            : ""
+                        }`
                       : "No saved issue record for this review yet."}
                   </p>
-                  <button
-                    className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-teal-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
-                    data-admin-monthly-invoice-issue-record-save-action="true"
-                    disabled={monthlyInvoiceIssueRecordSaveDisabled}
-                    onClick={saveMonthlyInvoiceIssueRecordFromCurrentReview}
-                    type="button"
-                  >
-                    {monthlyInvoiceIssueRecordSaveButtonLabel}
-                  </button>
+                  <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center">
+                    <button
+                      className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-teal-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
+                      data-admin-monthly-invoice-issue-record-save-action="true"
+                      disabled={monthlyInvoiceIssueRecordSaveDisabled}
+                      onClick={saveMonthlyInvoiceIssueRecordFromCurrentReview}
+                      type="button"
+                    >
+                      {monthlyInvoiceIssueRecordSaveButtonLabel}
+                    </button>
+                    <button
+                      className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-white px-3 py-1.5 text-xs font-semibold text-teal-900 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
+                      data-admin-monthly-invoice-number-reservation-action="true"
+                      disabled={monthlyInvoiceNumberReservationDisabled}
+                      onClick={reserveMonthlyInvoiceNumberFromCurrentIssueRecord}
+                      type="button"
+                    >
+                      {monthlyInvoiceNumberReservationButtonLabel}
+                    </button>
+                  </div>
                 </div>
               ) : null}
               <label className="mt-1 block min-w-0 text-xs font-semibold text-teal-950 sm:mt-3">
@@ -26240,9 +26479,9 @@ export default function Home() {
                 data-admin-monthly-billing-month-grouping-review-boundary="true"
               >
                 Guarded admin API read plus monthly billing draft-plan, invoice draft-prep, item-review,
-                issue-review, and issue-record save only. No direct Supabase write outside approved API routes,
-                invoice creation, PDF, payment, payout, notification sending, auth change, parser change,
-                billing activation, customer message, or driver notification behavior.
+                issue-review, issue-record save, and invoice-number reservation only. No direct Supabase write
+                outside approved API routes, invoice creation, PDF, payment, payout, notification sending,
+                auth change, parser change, billing activation, customer message, or driver notification behavior.
               </p>
             </section>
           </div>

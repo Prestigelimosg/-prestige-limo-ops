@@ -2761,7 +2761,7 @@ async function runChromeTest() {
           state.boundary.includes("invoice draft-prep") &&
           state.boundary.includes("item-review") &&
           state.boundary.includes("issue-review") &&
-          state.boundary.includes("issue-record save only.") &&
+          state.boundary.includes("issue-record save, and invoice-number reservation only.") &&
           state.boundary.includes("No direct Supabase write outside approved API routes") &&
           state.boundary.includes("invoice creation") &&
           state.boundary.includes("PDF") &&

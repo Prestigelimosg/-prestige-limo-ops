@@ -8994,7 +8994,7 @@ async function runChromeTest() {
           "invoice draft-prep",
           "item-review",
           "issue-review",
-          "issue-record save only.",
+          "issue-record save, and invoice-number reservation only.",
           "No direct Supabase write outside approved API routes",
           "invoice creation",
           "PDF",

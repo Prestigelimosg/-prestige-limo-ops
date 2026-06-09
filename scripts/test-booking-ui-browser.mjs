@@ -3009,7 +3009,10 @@ function assertBookingUiState(state) {
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /monthly billing draft-plan/);
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /invoice draft-prep/);
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /issue-review/);
-  assert.match(state.monthlyBillingMonthGroupingReview.boundary, /issue-record save only/);
+  assert.match(
+    state.monthlyBillingMonthGroupingReview.boundary,
+    /issue-record save, and invoice-number reservation only/,
+  );
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /No direct Supabase write outside approved API routes/);
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /invoice creation/);
   assert.match(state.monthlyBillingMonthGroupingReview.boundary, /PDF/);
@@ -12266,6 +12269,7 @@ async function runChromeTest() {
           total_count: 1,
         },
       ];
+      window.__prestigeMonthlyInvoiceNumberReservationRequests = [];
       window.__prestigeMonthlyInvoiceIssueRecordRequests = [];
       window.__prestigeMonthlyInvoiceIssueRecords = [
         {
@@ -12978,10 +12982,15 @@ async function runChromeTest() {
             const billingMonth = url.searchParams.get("billing_month") || "";
             const customerSearch = (url.searchParams.get("customer_account_search") || "").toLowerCase();
             const draftId = url.searchParams.get("draft_id") || "";
+            const issueRecordId = url.searchParams.get("issue_record_id") || "";
             const issueReviewId = url.searchParams.get("issue_review_id") || "";
             const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
             const page = Math.max(1, Number(url.searchParams.get("page") || 1));
             const filteredRecords = allRecords.filter((record) => {
+              if (issueRecordId && record.id !== issueRecordId) {
+                return false;
+              }
+
               if (billingMonth && record.billing_month !== billingMonth) {
                 return false;
               }
@@ -13054,6 +13063,65 @@ async function runChromeTest() {
             return new Response(
               JSON.stringify({
                 issue_record: issueRecord,
+                ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
+        if (String(target).includes("/api/admin-monthly-invoice-number-reservations")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMonthlyInvoiceNumberReservationRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "POST") {
+            const invoicePrefix = String(parsedBody?.invoice_prefix || "").toUpperCase();
+            const invoiceNumber = \`\${invoicePrefix}-0001\`;
+            const recordIndex = (window.__prestigeMonthlyInvoiceIssueRecords || []).findIndex(
+              (record) => record.id === parsedBody?.issue_record_id,
+            );
+            const existingRecord =
+              recordIndex >= 0 ? window.__prestigeMonthlyInvoiceIssueRecords[recordIndex] : {};
+            const updatedRecord = {
+              ...existingRecord,
+              invoice_number: invoiceNumber,
+              invoice_number_status: "reserved",
+              invoice_prefix: invoicePrefix,
+              invoice_sequence_number: 1,
+              issue_record_status: "invoice_number_reserved",
+              safe_issue_record_context: {
+                ...(existingRecord.safe_issue_record_context || {}),
+                invoice_number_status: "Invoice number reserved by approved sequence API.",
+                next_action: "Review invoice issue readiness before any PDF, payment, or send step.",
+              },
+            };
+
+            if (recordIndex >= 0) {
+              window.__prestigeMonthlyInvoiceIssueRecords[recordIndex] = updatedRecord;
+            }
+
+            return new Response(
+              JSON.stringify({
+                invoice_number_reservation: {
+                  invoice_number: invoiceNumber,
+                  invoice_number_status: "reserved",
+                  invoice_prefix: invoicePrefix,
+                  invoice_sequence_number: 1,
+                  issue_record_id: parsedBody?.issue_record_id,
+                },
                 ok: true,
               }),
               { status: 200, headers: { "content-type": "application/json" } },
@@ -13142,6 +13210,8 @@ async function runChromeTest() {
             monthlyInvoiceDraftRequests: window.__prestigeMonthlyInvoiceDraftRequests || [],
             monthlyInvoiceIssueRecordRequests: window.__prestigeMonthlyInvoiceIssueRecordRequests || [],
             monthlyInvoiceIssueReviewRequests: window.__prestigeMonthlyInvoiceIssueReviewRequests || [],
+            monthlyInvoiceNumberReservationRequests:
+              window.__prestigeMonthlyInvoiceNumberReservationRequests || [],
             monthlyBillingMonthGroupingReview: (() => {
               const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
 
@@ -13237,6 +13307,14 @@ async function runChromeTest() {
                     .trim() || "",
                 issueRecordSaveButton: (() => {
                   const button = section?.querySelector("[data-admin-monthly-invoice-issue-record-save-action='true']");
+
+                  return {
+                    disabled: button?.disabled ?? true,
+                    text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+                  };
+                })(),
+                invoiceNumberReservationButton: (() => {
+                  const button = section?.querySelector("[data-admin-monthly-invoice-number-reservation-action='true']");
 
                   return {
                     disabled: button?.disabled ?? true,
@@ -13642,7 +13720,7 @@ async function runChromeTest() {
     );
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.issueRecordActionSummary,
-      "Saved issue record: Draft locked / Locked for issue",
+      "Saved issue record: Draft locked / Locked for issue / Not reserved",
     );
     assert.deepEqual(
       loadedBookingState.monthlyBillingMonthGroupingReview.issueRecordSaveButton,
@@ -14196,6 +14274,125 @@ async function runChromeTest() {
       ),
       false,
       "Expected monthly invoice issue record refresh to avoid unsafe private, send, parser, secret, and token fields",
+    );
+    const clickedMonthlyInvoiceNumberReservation = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-monthly-invoice-number-reservation-action='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedMonthlyInvoiceNumberReservation,
+      true,
+      "Expected saved monthly invoice number reservation button to be clickable",
+    );
+    const monthlyInvoiceNumberReservationState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+
+          return {
+            feedback:
+              section?.querySelector("[data-admin-monthly-invoice-issue-record-read-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            issueRecordRequests: window.__prestigeMonthlyInvoiceIssueRecordRequests || [],
+            reservationRequests: window.__prestigeMonthlyInvoiceNumberReservationRequests || [],
+            reserveButton: (() => {
+              const button = section?.querySelector("[data-admin-monthly-invoice-number-reservation-action='true']");
+
+              return {
+                disabled: button?.disabled ?? true,
+                text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+              };
+            })(),
+            summary:
+              section?.querySelector("[data-admin-monthly-invoice-issue-record-action-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.reservationRequests?.some((request) => request.method === "POST") &&
+          candidateState.feedback.includes("Reserved monthly invoice number LOADEDSAVEDC-0001")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly invoice number reservation",
+    );
+    const monthlyInvoiceNumberReservationPostRequest =
+      monthlyInvoiceNumberReservationState.reservationRequests.find((request) => request.method === "POST");
+    assert.deepEqual(
+      {
+        body: {
+          billing_month: monthlyInvoiceNumberReservationPostRequest.body.billing_month,
+          customer_account: monthlyInvoiceNumberReservationPostRequest.body.customer_account,
+          invoice_prefix: monthlyInvoiceNumberReservationPostRequest.body.invoice_prefix,
+          issue_record_id: monthlyInvoiceNumberReservationPostRequest.body.issue_record_id,
+          safe_sequence_note: monthlyInvoiceNumberReservationPostRequest.body.safe_sequence_note,
+        },
+        hasSessionTokenHeader: Boolean(
+          monthlyInvoiceNumberReservationPostRequest.headers["x-prestige-admin-session-token"],
+        ),
+        method: monthlyInvoiceNumberReservationPostRequest.method,
+        purpose: monthlyInvoiceNumberReservationPostRequest.headers["x-prestige-admin-purpose"] || "",
+      },
+      {
+        body: {
+          billing_month: "2026-05",
+          customer_account: "LOADED SAVED COMPANY",
+          invoice_prefix: "LOADEDSAVEDC",
+          issue_record_id: "55555555-5555-4555-8555-555555555555",
+          safe_sequence_note: "Reserved from admin monthly invoice issue record control.",
+        },
+        hasSessionTokenHeader: false,
+        method: "POST",
+        purpose: "admin-booking-persistence",
+      },
+      "Expected monthly invoice number reservation to POST only safe sequence fields through the guarded API path",
+    );
+    assert.equal(
+      monthlyInvoiceNumberReservationState.issueRecordRequests.some(
+        (request) =>
+          request.method === "GET" &&
+          request.search ===
+            "?limit=1&page=1&billing_month=2026-05&customer_account_search=LOADED+SAVED+COMPANY&issue_review_id=33333333-3333-4333-8333-333333333333&issue_record_id=55555555-5555-4555-8555-555555555555&draft_id=11111111-1111-4111-8111-111111111111",
+      ),
+      true,
+      "Expected monthly invoice number reservation to load back the exact saved issue record through the guarded read API",
+    );
+    assert.equal(
+      monthlyInvoiceNumberReservationState.summary.includes("Number reserved") &&
+        monthlyInvoiceNumberReservationState.summary.includes("LOADEDSAVEDC-0001"),
+      true,
+      "Expected monthly invoice issue record summary to show the reserved invoice number after load-back",
+    );
+    assert.deepEqual(
+      monthlyInvoiceNumberReservationState.reserveButton,
+      {
+        disabled: true,
+        text: "Number reserved",
+      },
+      "Expected monthly invoice number reservation button to disable after the number is reserved",
+    );
+    assert.equal(
+      /driver_payout|paynow|payment_link|pdf_url|payout|customer_price|parser|raw_ai|notification|telegram|whatsapp|service_role|secret|token/i.test(
+        JSON.stringify(monthlyInvoiceNumberReservationPostRequest.body),
+      ),
+      false,
+      "Expected monthly invoice number reservation body to avoid unsafe private, send, parser, secret, and token fields",
+    );
+    assert.equal(
+      /pdf|payment|payout|notification|telegram|whatsapp/i.test(
+        monthlyInvoiceNumberReservationState.feedback,
+      ),
+      true,
+      "Expected monthly invoice number reservation feedback to keep PDF/payment/payout/notification boundaries visible",
     );
     const clickedMonthlyGroupingNextPage = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-billing-month-grouping-next-page='true']");

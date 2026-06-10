@@ -35,6 +35,8 @@ const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
 const adminDriverJobLinksApiPath = "/api/admin-driver-job-links";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
+const adminDriverJobDspActualTimeSummariesApiPath =
+  "/api/admin-driver-job-dsp-actual-time-summaries";
 const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
 const adminMonthlyBillingDraftPlansApiPath = "/api/admin-monthly-billing-draft-plans";
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
@@ -657,6 +659,24 @@ type AdminDriverJobStatusReadState = {
   message: Message | null;
   status: "idle" | "loading" | "loaded" | "error";
   statuses: AdminDriverJobStatusEvent[];
+};
+
+type AdminDriverJobDspActualTimeStatus = "complete" | "started" | "not_started";
+
+type AdminDriverJobDspActualTimeSummaryRecord = {
+  actual_time_status?: AdminDriverJobDspActualTimeStatus | null;
+  booking_reference?: string | null;
+  dsp_billable_minutes?: number | null;
+  dsp_ended_at?: string | null;
+  dsp_started_at?: string | null;
+  dsp_total_minutes?: number | null;
+};
+
+type AdminDriverJobDspActualTimeReadState = {
+  latestSummary: AdminDriverJobDspActualTimeSummaryRecord | null;
+  message: Message | null;
+  status: "idle" | "loading" | "loaded" | "error";
+  summaries: AdminDriverJobDspActualTimeSummaryRecord[];
 };
 
 type AdminAppNotificationType =
@@ -4611,6 +4631,44 @@ async function loadAdminDriverJobStatusRead(bookingReference: string) {
   };
 }
 
+async function loadAdminDriverJobDspActualTimeRead(bookingReference: string) {
+  const params = new URLSearchParams({
+    booking_reference: bookingReference,
+    limit: "3",
+  });
+
+  const response = await fetch(`${adminDriverJobDspActualTimeSummariesApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Driver DSP actual time read failed.");
+  }
+
+  const summaries = Array.isArray(result.summaries)
+    ? (result.summaries as AdminDriverJobDspActualTimeSummaryRecord[])
+    : [];
+  const matchingSummaries = summaries.filter(
+    (summary) => clean(summary.booking_reference) === bookingReference,
+  );
+
+  return {
+    latestSummary:
+      matchingSummaries.find(
+        (summary) =>
+          summary.actual_time_status === "complete" &&
+          adminMonthlyBillingGroupingCount(summary.dsp_total_minutes) > 0,
+      ) ||
+      matchingSummaries[0] ||
+      null,
+    summaries: matchingSummaries.slice(0, 3),
+  };
+}
+
 async function loadAdminAppNotificationsRead() {
   const params = new URLSearchParams({
     limit: "5",
@@ -5622,12 +5680,14 @@ async function saveAdminMonthlyInvoiceDraftItemReviewFromDraft({
 
 async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
   bookingTypeHint,
+  dspActualTimeSummary,
   existingPriceReview,
   invoiceDraft,
   itemReview,
   reviewedAmountCents,
 }: {
   bookingTypeHint: string | null;
+  dspActualTimeSummary: AdminDriverJobDspActualTimeSummaryRecord | null;
   existingPriceReview: AdminMonthlyInvoiceBillableItemPriceReviewRecord | null;
   invoiceDraft: AdminMonthlyInvoiceDraftRecord;
   itemReview: AdminMonthlyInvoiceDraftItemReviewRecord;
@@ -5662,13 +5722,22 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
   const calculationBasis = adminMonthlyInvoiceBillableCalculationBasis(bookingType);
   const dspTotalMinutes =
     adminMonthlyInvoiceContextNumber(itemSummary, "dsp_total_minutes") ??
-    adminMonthlyInvoiceContextNumber(tripContext, "dsp_total_minutes");
+    adminMonthlyInvoiceContextNumber(tripContext, "dsp_total_minutes") ??
+    adminMonthlyInvoiceContextNumber(
+      dspActualTimeSummary as Record<string, unknown> | null,
+      "dsp_total_minutes",
+    );
   const dspBillableMinutes =
     adminMonthlyInvoiceContextNumber(itemSummary, "dsp_billable_minutes") ??
-    adminMonthlyInvoiceContextNumber(tripContext, "dsp_billable_minutes");
+    adminMonthlyInvoiceContextNumber(tripContext, "dsp_billable_minutes") ??
+    adminMonthlyInvoiceContextNumber(
+      dspActualTimeSummary as Record<string, unknown> | null,
+      "dsp_billable_minutes",
+    );
   const isDspBillableReview = calculationBasis === "dsp_actual_time";
   const hasDspActualMinutes =
     !isDspBillableReview || (dspTotalMinutes !== null && dspBillableMinutes !== null);
+  const dspActualTimeStatus = clean(dspActualTimeSummary?.actual_time_status);
   const priceReviewStatus: AdminMonthlyInvoicePriceReviewStatus = hasDspActualMinutes
     ? "approved_for_invoice_draft"
     : "needs_correction";
@@ -5710,6 +5779,15 @@ async function saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
         booking_reference: bookingReference,
         booking_type: bookingType,
         calculation_basis: calculationBasis,
+        ...(isDspBillableReview && dspActualTimeStatus
+          ? { dsp_actual_time_status: dspActualTimeStatus }
+          : {}),
+        ...(isDspBillableReview && dspBillableMinutes !== null
+          ? { dsp_billable_minutes: dspBillableMinutes }
+          : {}),
+        ...(isDspBillableReview && dspTotalMinutes !== null
+          ? { dsp_total_minutes: dspTotalMinutes }
+          : {}),
         draft_id: draftId,
         item_review_status: itemReview.item_review_status || null,
         reviewed_amount_cents: reviewedAmountCents,
@@ -7042,6 +7120,15 @@ export default function Home() {
       status: "idle",
       statuses: [],
     });
+  const [
+    adminDriverJobDspActualTimeReadState,
+    setAdminDriverJobDspActualTimeReadState,
+  ] = useState<AdminDriverJobDspActualTimeReadState>({
+    latestSummary: null,
+    message: null,
+    status: "idle",
+    summaries: [],
+  });
   const [adminAppNotificationReadState, setAdminAppNotificationReadState] =
     useState<AdminAppNotificationReadState>({
       message: null,
@@ -8010,6 +8097,114 @@ export default function Home() {
     adminMonthlyInvoiceDraftItemReviewReadState.itemReviews,
     adminMonthlyInvoiceDraftItemReviewReadState.status,
     adminMonthlyInvoiceDraftReadState.invoiceDrafts,
+    dispatchReleaseWorkflowBookingReference,
+  ]);
+
+  useEffect(() => {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    let cancelled = false;
+
+    void (async () => {
+      await Promise.resolve();
+
+      if (cancelled) {
+        return;
+      }
+
+      const invoiceDraft = adminMonthlyInvoiceDraftReadState.invoiceDrafts[0] || null;
+      const draftId = clean(invoiceDraft?.id);
+      const itemReview = draftId
+        ? adminMonthlyInvoiceDraftItemReviewReadState.itemReviews.find(
+            (review) => clean(review.draft_id) === draftId,
+          ) || null
+        : adminMonthlyInvoiceDraftItemReviewReadState.itemReviews[0] || null;
+      const itemBookingReference = clean(itemReview?.booking_reference) || bookingReference;
+      const linkedTrips = Array.isArray(invoiceDraft?.linked_trips)
+        ? invoiceDraft.linked_trips
+        : [];
+      const linkedTrip =
+        linkedTrips.find((trip) => clean(trip.id) === clean(itemReview?.draft_trip_link_id)) ||
+        linkedTrips.find((trip) => clean(trip.booking_reference) === itemBookingReference) ||
+        null;
+      const itemSummary = itemReview?.source_trip_summary || {};
+      const tripContext = linkedTrip?.safe_trip_context || {};
+      const bookingType =
+        adminMonthlyInvoiceBillableBookingTypeFromHint(booking.bookingType) ||
+        adminMonthlyInvoiceBillableBookingTypeFromHint(
+          adminMonthlyInvoiceContextText(itemSummary, "booking_type"),
+        ) ||
+        adminMonthlyInvoiceBillableBookingTypeFromHint(
+          adminMonthlyInvoiceContextText(tripContext, "booking_type"),
+        );
+      const requiresDspActualTime =
+        bookingType === "DSP" || bookingType === "hourly";
+
+      if (!itemBookingReference || !requiresDspActualTime) {
+        setAdminDriverJobDspActualTimeReadState({
+          latestSummary: null,
+          message: null,
+          status: "idle",
+          summaries: [],
+        });
+        return;
+      }
+
+      setAdminDriverJobDspActualTimeReadState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Loading saved DSP actual-time evidence through the guarded admin API...",
+        },
+        status: "loading",
+      }));
+
+      try {
+        const { latestSummary, summaries } =
+          await loadAdminDriverJobDspActualTimeRead(itemBookingReference);
+
+        if (cancelled) {
+          return;
+        }
+
+        setAdminDriverJobDspActualTimeReadState({
+          latestSummary,
+          message: {
+            tone: latestSummary?.actual_time_status === "complete" ? "success" : "info",
+            text:
+              latestSummary?.actual_time_status === "complete"
+                ? `Loaded saved DSP actual-time evidence for ${itemBookingReference}.`
+                : "No complete saved DSP actual-time evidence is available yet.",
+          },
+          status: "loaded",
+          summaries,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminDriverJobDspActualTimeReadState({
+          latestSummary: null,
+          message: {
+            tone: "error",
+            text:
+              error instanceof Error
+                ? error.message
+                : "Driver DSP actual time read failed safely.",
+          },
+          status: "error",
+          summaries: [],
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    adminMonthlyInvoiceDraftItemReviewReadState.itemReviews,
+    adminMonthlyInvoiceDraftReadState.invoiceDrafts,
+    booking.bookingType,
     dispatchReleaseWorkflowBookingReference,
   ]);
 
@@ -15879,6 +16074,70 @@ export default function Home() {
     );
   const monthlyInvoiceBillablePriceReviewAmountCents =
     adminMonthlyInvoiceAmountInputToCents(adminMonthlyInvoiceBillablePriceReviewAmountInput);
+  const monthlyInvoiceBillableLinkedTrips = Array.isArray(
+    monthlyInvoiceDraftPrimaryDraft?.linked_trips,
+  )
+    ? monthlyInvoiceDraftPrimaryDraft.linked_trips
+    : [];
+  const monthlyInvoiceBillableLinkedTrip =
+    monthlyInvoiceBillableLinkedTrips.find(
+      (trip) =>
+        clean(trip.id) === clean(monthlyInvoiceDraftItemReviewPrimaryReview?.draft_trip_link_id),
+    ) ||
+    monthlyInvoiceBillableLinkedTrips.find(
+      (trip) =>
+        clean(trip.booking_reference) ===
+        clean(monthlyInvoiceDraftItemReviewPrimaryReview?.booking_reference),
+    ) ||
+    null;
+  const monthlyInvoiceBillableItemSummary =
+    monthlyInvoiceDraftItemReviewPrimaryReview?.source_trip_summary || {};
+  const monthlyInvoiceBillableTripContext =
+    monthlyInvoiceBillableLinkedTrip?.safe_trip_context || {};
+  const monthlyInvoiceBillableBookingType =
+    adminMonthlyInvoiceBillableBookingTypeFromHint(booking.bookingType) ||
+    adminMonthlyInvoiceBillableBookingTypeFromHint(
+      adminMonthlyInvoiceContextText(monthlyInvoiceBillableItemSummary, "booking_type"),
+    ) ||
+    adminMonthlyInvoiceBillableBookingTypeFromHint(
+      adminMonthlyInvoiceContextText(monthlyInvoiceBillableTripContext, "booking_type"),
+    );
+  const monthlyInvoiceBillableUsesDspActualTime =
+    monthlyInvoiceBillableBookingType === "DSP" ||
+    monthlyInvoiceBillableBookingType === "hourly";
+  const monthlyInvoiceBillableDspSummaryRecord =
+    adminDriverJobDspActualTimeReadState.latestSummary as Record<string, unknown> | null;
+  const monthlyInvoiceBillableDspTotalMinutes =
+    adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableItemSummary, "dsp_total_minutes") ??
+    adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableTripContext, "dsp_total_minutes") ??
+    adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableDspSummaryRecord, "dsp_total_minutes");
+  const monthlyInvoiceBillableDspBillableMinutes =
+    adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableItemSummary, "dsp_billable_minutes") ??
+    adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableTripContext, "dsp_billable_minutes") ??
+    adminMonthlyInvoiceContextNumber(monthlyInvoiceBillableDspSummaryRecord, "dsp_billable_minutes");
+  const monthlyInvoiceBillableDspActualTimeComplete =
+    !monthlyInvoiceBillableUsesDspActualTime ||
+    (monthlyInvoiceBillableDspTotalMinutes !== null &&
+      monthlyInvoiceBillableDspBillableMinutes !== null);
+  const monthlyInvoiceBillableDspEvidenceLabel = (() => {
+    if (!monthlyInvoiceBillableUsesDspActualTime) {
+      return "";
+    }
+
+    if (adminDriverJobDspActualTimeReadState.status === "loading") {
+      return "DSP actual time: loading saved timing evidence.";
+    }
+
+    if (adminDriverJobDspActualTimeReadState.status === "error") {
+      return "DSP actual time: saved timing evidence unavailable.";
+    }
+
+    if (monthlyInvoiceBillableDspActualTimeComplete) {
+      return `DSP actual time: ${monthlyInvoiceBillableDspTotalMinutes} total min / ${monthlyInvoiceBillableDspBillableMinutes} billable min.`;
+    }
+
+    return "DSP actual time: start/end evidence needed before invoice issue review.";
+  })();
   const monthlyInvoiceIssueReviewReadinessLabel =
     adminMonthlyBillingGroupingReadinessLabel(
       monthlyInvoiceIssueReviewPrimaryReview?.readiness_status,
@@ -16546,6 +16805,8 @@ export default function Home() {
     !clean(monthlyInvoiceDraftPrimaryDraft.id) ||
     !clean(monthlyInvoiceDraftItemReviewPrimaryReview.id) ||
     !monthlyInvoiceBillablePriceReviewAmountCents ||
+    (monthlyInvoiceBillableUsesDspActualTime &&
+      adminDriverJobDspActualTimeReadState.status === "loading") ||
     monthlyInvoiceDraftLoading ||
     monthlyInvoiceDraftItemReviewLoading ||
     monthlyInvoiceDraftItemReviewSaving ||
@@ -16587,6 +16848,7 @@ export default function Home() {
     try {
       const savedPriceReview = await saveAdminMonthlyInvoiceBillablePriceReviewFromItemReview({
         bookingTypeHint: booking.bookingType,
+        dspActualTimeSummary: adminDriverJobDspActualTimeReadState.latestSummary,
         existingPriceReview: monthlyInvoiceBillablePriceReviewPrimaryReview,
         invoiceDraft: monthlyInvoiceDraftPrimaryDraft,
         itemReview: monthlyInvoiceDraftItemReviewPrimaryReview,
@@ -27670,14 +27932,24 @@ export default function Home() {
                   className="mt-2 flex min-w-0 flex-col gap-1.5 rounded-md border border-teal-200 bg-white p-1.5 lg:flex-row lg:items-center lg:justify-between"
                   data-admin-monthly-invoice-billable-price-review-action-row="true"
                 >
-                  <p
-                    className="min-w-0 break-words text-xs font-semibold text-teal-950"
-                    data-admin-monthly-invoice-billable-price-review-action-summary="true"
-                  >
-                    {monthlyInvoiceBillablePriceReviewHasReview
-                      ? `Saved price review: ${monthlyInvoiceBillablePriceReviewStatusLabel} / ${monthlyInvoiceBillablePriceReviewDecisionLabel} / ${monthlyInvoiceBillablePriceReviewAmountLabel}`
-                      : "No saved billable price review for this item yet."}
-                  </p>
+                  <div className="min-w-0 space-y-0.5">
+                    <p
+                      className="min-w-0 break-words text-xs font-semibold text-teal-950"
+                      data-admin-monthly-invoice-billable-price-review-action-summary="true"
+                    >
+                      {monthlyInvoiceBillablePriceReviewHasReview
+                        ? `Saved price review: ${monthlyInvoiceBillablePriceReviewStatusLabel} / ${monthlyInvoiceBillablePriceReviewDecisionLabel} / ${monthlyInvoiceBillablePriceReviewAmountLabel}`
+                        : "No saved billable price review for this item yet."}
+                    </p>
+                    {monthlyInvoiceBillableDspEvidenceLabel ? (
+                      <p
+                        className="break-words text-[11px] font-medium text-teal-800"
+                        data-admin-monthly-invoice-billable-dsp-actual-time-evidence="true"
+                      >
+                        {monthlyInvoiceBillableDspEvidenceLabel}
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,10rem)_auto] lg:shrink-0">
                     <label className="min-w-0 text-[11px] font-semibold text-teal-950">
                       <span>Reviewed amount</span>

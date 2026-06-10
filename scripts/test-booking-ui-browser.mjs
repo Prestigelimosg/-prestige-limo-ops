@@ -12620,6 +12620,19 @@ async function runChromeTest() {
           },
         ],
       };
+      window.__prestigeAdminDriverJobDspActualTimeRequests = [];
+      window.__prestigeAdminDriverJobDspActualTimeSummaries = {
+        "ui-cleanup-load-fixture": [
+          {
+            actual_time_status: "complete",
+            booking_reference: "ui-cleanup-load-fixture",
+            dsp_billable_minutes: 195,
+            dsp_ended_at: "2026-06-07T12:40:00.000Z",
+            dsp_started_at: "2026-06-07T09:25:00.000Z",
+            dsp_total_minutes: 195,
+          },
+        ],
+      };
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
       window.fetch = async (...args) => {
@@ -12823,6 +12836,46 @@ async function runChromeTest() {
                   has_status_history: statuses.length > 0,
                 },
                 version: "focused-browser-driver-job-status-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
+        if (String(target).includes("/api/admin-driver-job-dsp-actual-time-summaries")) {
+          const url = new URL(String(target), window.location.origin);
+          const bookingReference = url.searchParams.get("booking_reference") || "";
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeAdminDriverJobDspActualTimeRequests.push({
+            booking_reference: bookingReference,
+            headers,
+            limit: url.searchParams.get("limit") || "",
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const summaries =
+              window.__prestigeAdminDriverJobDspActualTimeSummaries[bookingReference] || [];
+
+            return new Response(
+              JSON.stringify({
+                booking_reference: bookingReference,
+                latest_summary: summaries[0] || null,
+                ok: true,
+                summaries,
+                summary: {
+                  complete_summary_count: summaries.filter(
+                    (summary) => summary.actual_time_status === "complete",
+                  ).length,
+                  has_complete_actual_time: summaries.some(
+                    (summary) => summary.actual_time_status === "complete",
+                  ),
+                  summary_count: summaries.length,
+                },
+                version: "focused-browser-driver-job-dsp-actual-time-read-mock",
               }),
               { status: 200, headers: { "content-type": "application/json" } },
             );
@@ -13708,6 +13761,8 @@ async function runChromeTest() {
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
             adminDriverJobLinkRequests: window.__prestigeAdminDriverJobLinkRequests || [],
+            adminDriverJobDspActualTimeRequests:
+              window.__prestigeAdminDriverJobDspActualTimeRequests || [],
             driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             monthlyBillingDraftPlanRequests: window.__prestigeMonthlyBillingDraftPlanRequests || [],
@@ -13802,6 +13857,10 @@ async function runChromeTest() {
                 billablePriceReviewAmountInput:
                   section?.querySelector("[data-admin-monthly-invoice-billable-price-review-amount-input='true']")
                     ?.value || "",
+                billablePriceReviewDspEvidence:
+                  section?.querySelector("[data-admin-monthly-invoice-billable-dsp-actual-time-evidence='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
                 billablePriceReviewSaveButton: (() => {
                   const button = section?.querySelector("[data-admin-monthly-invoice-billable-price-review-save-action='true']");
 
@@ -14817,6 +14876,197 @@ async function runChromeTest() {
         text: "Refresh issue review",
       },
       "Expected issue review button to enable only after billable price review is approved",
+    );
+    await setFieldValueByLabel("Booking type", "DSP", "DSP billing path booking type");
+    const monthlyInvoiceDspActualTimeEvidenceState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+
+          return {
+            dspEvidence:
+              section?.querySelector("[data-admin-monthly-invoice-billable-dsp-actual-time-evidence='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            requests: window.__prestigeAdminDriverJobDspActualTimeRequests || [],
+            saveButton: (() => {
+              const button = section?.querySelector("[data-admin-monthly-invoice-billable-price-review-save-action='true']");
+
+              return {
+                disabled: button?.disabled ?? true,
+                text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+              };
+            })(),
+          };
+        })()`);
+
+        return candidateState?.requests?.some(
+          (request) =>
+            request.method === "GET" &&
+            request.booking_reference === "ui-cleanup-load-fixture" &&
+            request.limit === "3",
+        ) &&
+          candidateState?.dspEvidence === "DSP actual time: 195 total min / 195 billable min." &&
+          !candidateState?.saveButton?.disabled
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly invoice DSP actual-time evidence read",
+    );
+    const monthlyInvoiceDspActualTimeReadRequest =
+      monthlyInvoiceDspActualTimeEvidenceState.requests
+        .filter((request) => request.method === "GET")
+        .at(-1);
+    assert.deepEqual(
+      {
+        booking_reference: monthlyInvoiceDspActualTimeReadRequest.booking_reference,
+        hasSessionTokenHeader: Boolean(
+          monthlyInvoiceDspActualTimeReadRequest.headers["x-prestige-admin-session-token"],
+        ),
+        limit: monthlyInvoiceDspActualTimeReadRequest.limit,
+        method: monthlyInvoiceDspActualTimeReadRequest.method,
+        purpose: monthlyInvoiceDspActualTimeReadRequest.headers["x-prestige-admin-purpose"] || "",
+        search: monthlyInvoiceDspActualTimeReadRequest.search,
+      },
+      {
+        booking_reference: "ui-cleanup-load-fixture",
+        hasSessionTokenHeader: false,
+        limit: "3",
+        method: "GET",
+        purpose: "admin-booking-persistence",
+        search: "?booking_reference=ui-cleanup-load-fixture&limit=3",
+      },
+      "Expected DSP billing path to read saved actual-time evidence through the guarded admin API path",
+    );
+    assert.equal(
+      /driver_job_link_id|raw_token|token_hash|customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret/i.test(
+        JSON.stringify(monthlyInvoiceDspActualTimeEvidenceState.requests),
+      ),
+      false,
+      "Expected DSP actual-time evidence request shape to avoid token/link, finance, parser, and secret fields",
+    );
+    const clickedMonthlyInvoiceDspBillablePriceReviewRefresh = await waitForCondition(
+      async () => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-admin-monthly-invoice-billable-price-review-save-action='true']");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+
+        return clicked ? clicked : false;
+      },
+      10000,
+      "monthly invoice DSP billable price review button enabled after actual-time evidence load",
+    );
+    assert.equal(
+      clickedMonthlyInvoiceDspBillablePriceReviewRefresh,
+      true,
+      "Expected DSP billable price review refresh button to be clickable after actual-time evidence load",
+    );
+    const monthlyInvoiceDspBillablePriceReviewSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+
+          return {
+            feedback:
+              section?.querySelector("[data-admin-monthly-invoice-billable-price-review-read-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            requests: window.__prestigeMonthlyInvoiceBillablePriceReviewRequests || [],
+            summary:
+              section?.querySelector("[data-admin-monthly-invoice-billable-price-review-action-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.requests?.some((request) => request.method === "PATCH") &&
+          candidateState.feedback.includes("Refreshed monthly invoice billable price review for ui-cleanup-load-fixture")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly invoice DSP billable price review refresh",
+    );
+    const monthlyInvoiceDspBillablePriceReviewPatchRequest =
+      monthlyInvoiceDspBillablePriceReviewSaveState.requests.find(
+        (request) => request.method === "PATCH",
+      );
+    assert.deepEqual(
+      {
+        body: {
+          booking_reference: monthlyInvoiceDspBillablePriceReviewPatchRequest.body.booking_reference,
+          booking_type: monthlyInvoiceDspBillablePriceReviewPatchRequest.body.booking_type,
+          calculation_basis: monthlyInvoiceDspBillablePriceReviewPatchRequest.body.calculation_basis,
+          dsp_billable_minutes:
+            monthlyInvoiceDspBillablePriceReviewPatchRequest.body.dsp_billable_minutes,
+          dsp_total_minutes:
+            monthlyInvoiceDspBillablePriceReviewPatchRequest.body.dsp_total_minutes,
+          price_decision: monthlyInvoiceDspBillablePriceReviewPatchRequest.body.price_decision,
+          price_review_status:
+            monthlyInvoiceDspBillablePriceReviewPatchRequest.body.price_review_status,
+          reviewed_customer_amount_cents:
+            monthlyInvoiceDspBillablePriceReviewPatchRequest.body.reviewed_customer_amount_cents,
+        },
+        hasSessionTokenHeader: Boolean(
+          monthlyInvoiceDspBillablePriceReviewPatchRequest.headers["x-prestige-admin-session-token"],
+        ),
+        method: monthlyInvoiceDspBillablePriceReviewPatchRequest.method,
+        purpose: monthlyInvoiceDspBillablePriceReviewPatchRequest.headers["x-prestige-admin-purpose"] || "",
+      },
+      {
+        body: {
+          booking_reference: "ui-cleanup-load-fixture",
+          booking_type: "DSP",
+          calculation_basis: "dsp_actual_time",
+          dsp_billable_minutes: 195,
+          dsp_total_minutes: 195,
+          price_decision: "include_in_invoice",
+          price_review_status: "approved_for_invoice_draft",
+          reviewed_customer_amount_cents: 18850,
+        },
+        hasSessionTokenHeader: false,
+        method: "PATCH",
+        purpose: "admin-booking-persistence",
+      },
+      "Expected DSP billable price review to carry saved actual-time minutes through the guarded API path",
+    );
+    assert.deepEqual(
+      Object.keys(monthlyInvoiceDspBillablePriceReviewPatchRequest.body).sort(),
+      [
+        "billing_item_type",
+        "booking_reference",
+        "booking_type",
+        "calculation_basis",
+        "currency",
+        "draft_id",
+        "draft_trip_link_id",
+        "dsp_billable_minutes",
+        "dsp_total_minutes",
+        "item_review_id",
+        "price_decision",
+        "price_review_id",
+        "price_review_status",
+        "reviewed_customer_amount_cents",
+        "safe_price_review_context",
+        "safe_price_review_note",
+        "source_price_context",
+      ],
+      "Expected DSP billable price review save to avoid invoice-number/PDF/payment/payout/send fields",
+    );
+    assert.equal(
+      /driver_job_link_id|raw_token|token_hash|customer_price|payment_link|pdf_url|paynow|driver_payout|payout|parser|raw_ai|notification|telegram|whatsapp|service_role|secret/i.test(
+        JSON.stringify(monthlyInvoiceDspBillablePriceReviewPatchRequest.body),
+      ),
+      false,
+      "Expected DSP billable price review body to avoid token/link, private finance, send, parser, secret fields",
     );
     const clickedMonthlyInvoiceIssueReviewSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-invoice-issue-review-save-action='true']");

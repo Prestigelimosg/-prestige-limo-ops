@@ -9892,6 +9892,7 @@ async function runChromeTest() {
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
       window.__prestigeDriverDeleteRequests = [];
+      window.__prestigeAdminSavedBookingReadRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -9911,6 +9912,29 @@ async function runChromeTest() {
           } catch {
             window.__prestigeDriverProfileRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          const savedBookingReadUrl = new URL(url, window.location.href);
+          const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
+          const savedBooking =
+            String(window.__prestigeDriverDeleteSavedBooking?.id) === String(savedBookingReadId)
+              ? window.__prestigeDriverDeleteSavedBooking
+              : (window.__prestigeLoadedBookings || []).find(
+                  (booking) => String(booking.id) === String(savedBookingReadId),
+                ) || null;
+
+          window.__prestigeAdminSavedBookingReadRequests.push({
+            id: savedBookingReadId,
+            method,
+            url,
+          });
+
+          return jsonResponse({
+            booking: method === "GET" ? savedBooking : null,
+            ok: method === "GET",
+            version: "browser-admin-saved-booking-read-mock",
+          }, method === "GET" ? 200 : 405);
         }
 
         if (!url.includes("/rest/v1/")) {
@@ -11555,6 +11579,7 @@ async function runChromeTest() {
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeAdminSavedBookingReadRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
     })()`);
 
@@ -12384,6 +12409,7 @@ async function runChromeTest() {
             bookingInsert: bookingInsert?.body || null,
             bookingDeleteOrPatchCount: bookingDeleteOrPatchRequests.length,
             fetchCalls: window.__prestigeFetchCalls || [],
+            savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
             statusText: document.body.innerText || "",
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
           };
@@ -12401,6 +12427,16 @@ async function runChromeTest() {
       saveAfterDriverDeleteState.unhandledSupabaseCalls,
       [],
       `Expected booking save after driver delete calls to be mocked, got ${saveAfterDriverDeleteState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      saveAfterDriverDeleteState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+      [{ id: "990510", method: "GET" }],
+      "Expected booking save after driver delete to use the typed admin saved booking read API",
+    );
+    assert.deepEqual(
+      saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected booking save after driver delete not to read bookings through the legacy admin data shim",
     );
     assert.equal(
       saveAfterDriverDeleteState.bookingInsert?.driver_id,
@@ -17248,6 +17284,7 @@ async function runChromeTest() {
         return window.__prestigeOriginalAnchorClick.call(this);
       };
       window.__prestigeSaveRequestBodies = [];
+      window.__prestigeAdminSavedBookingReadRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -17338,6 +17375,27 @@ async function runChromeTest() {
             ok: true,
             version: "crm-save-calendar-mock",
           });
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          const savedBookingReadUrl = new URL(url, window.location.href);
+          const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
+
+          window.__prestigeAdminSavedBookingReadRequests.push({
+            id: savedBookingReadId,
+            method,
+            url,
+          });
+
+          if (method === "GET" && savedBookingReadId === String(savedBooking.id)) {
+            return jsonResponse({
+              booking: savedBooking,
+              ok: true,
+              version: "browser-admin-saved-booking-read-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
         if (!url.includes("/rest/v1/")) {
@@ -17464,6 +17522,7 @@ async function runChromeTest() {
                 calendarSyncStatusRequest,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeSaveRequestBodies || [],
+                savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
                 bookingInsert: bookingInsert?.body || null,
               }
@@ -17480,6 +17539,16 @@ async function runChromeTest() {
       crmSaveState.unhandledSupabaseCalls,
       [],
       `Expected all Supabase calls to be mocked, got ${crmSaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      crmSaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+      [{ id: String(crmSavedBookingFixture.id), method: "GET" }],
+      "Expected post-save reload to use the typed admin saved booking read API",
+    );
+    assert.deepEqual(
+      crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected post-save reload not to read bookings through the legacy admin data shim",
     );
     const disallowedCalendarOrSendCalls = crmSaveState.fetchCalls.filter((call) => {
       const [, method = "GET", rawUrl = ""] = call.match(/^(\S+)\s+(.+)$/) || [];
@@ -18250,6 +18319,7 @@ async function runChromeTest() {
 
       window.__prestigeFetchCalls = [];
       window.__prestigeMrLeeSaveRequestBodies = [];
+      window.__prestigeAdminSavedBookingReadRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -18269,6 +18339,27 @@ async function runChromeTest() {
           } catch {
             window.__prestigeMrLeeSaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          const savedBookingReadUrl = new URL(url, window.location.href);
+          const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
+
+          window.__prestigeAdminSavedBookingReadRequests.push({
+            id: savedBookingReadId,
+            method,
+            url,
+          });
+
+          if (method === "GET" && savedBookingReadId === String(savedBooking.id)) {
+            return jsonResponse({
+              booking: savedBooking,
+              ok: true,
+              version: "browser-admin-saved-booking-read-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
         if (!url.includes("/rest/v1/")) {
@@ -18325,6 +18416,7 @@ async function runChromeTest() {
                 bodyText,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeMrLeeSaveRequestBodies || [],
+                savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
                 bookingInsert: bookingInsert?.body || null,
               }
@@ -18341,6 +18433,16 @@ async function runChromeTest() {
       mrLeeNoCompanySaveState.unhandledSupabaseCalls,
       [],
       `Expected Mr Lee no-company save to mock every Supabase call, got ${mrLeeNoCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      mrLeeNoCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+      [{ id: String(mrLeeNoCompanySavedBookingFixture.id), method: "GET" }],
+      "Expected Mr Lee no-company post-save reload to use the typed admin saved booking read API",
+    );
+    assert.deepEqual(
+      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected Mr Lee no-company post-save reload not to read bookings through the legacy admin data shim",
     );
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.company_id, null);
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booker_id, null);
@@ -18612,6 +18714,7 @@ async function runChromeTest() {
 
       window.__prestigeFetchCalls = [];
       window.__prestigeExistingCompanySaveRequestBodies = [];
+      window.__prestigeAdminSavedBookingReadRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeExistingCompanyLookupCount = 0;
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
@@ -18632,6 +18735,27 @@ async function runChromeTest() {
           } catch {
             window.__prestigeExistingCompanySaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          const savedBookingReadUrl = new URL(url, window.location.href);
+          const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
+
+          window.__prestigeAdminSavedBookingReadRequests.push({
+            id: savedBookingReadId,
+            method,
+            url,
+          });
+
+          if (method === "GET" && savedBookingReadId === String(savedBooking.id)) {
+            return jsonResponse({
+              booking: savedBooking,
+              ok: true,
+              version: "browser-admin-saved-booking-read-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
         if (!url.includes("/rest/v1/")) {
@@ -18725,6 +18849,7 @@ async function runChromeTest() {
                 bodyText,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeExistingCompanySaveRequestBodies || [],
+                savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
                 bookingInsert: bookingInsert?.body || null,
               }
@@ -18741,6 +18866,16 @@ async function runChromeTest() {
       mrLeeExistingCompanySaveState.unhandledSupabaseCalls,
       [],
       `Expected Mr Lee existing-company save to mock every Supabase call, got ${mrLeeExistingCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      mrLeeExistingCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+      [{ id: String(mrLeeExistingCompanySavedBookingFixture.id), method: "GET" }],
+      "Expected Mr Lee existing-company post-save reload to use the typed admin saved booking read API",
+    );
+    assert.deepEqual(
+      mrLeeExistingCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected Mr Lee existing-company post-save reload not to read bookings through the legacy admin data shim",
     );
     assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.company_id, 901);
     assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.traveler_id, 903);
@@ -18791,6 +18926,7 @@ async function runChromeTest() {
 
       window.__prestigeFetchCalls = [];
       window.__prestigeCrmFailureSaveRequestBodies = [];
+      window.__prestigeAdminSavedBookingReadRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
@@ -18810,6 +18946,27 @@ async function runChromeTest() {
           } catch {
             window.__prestigeCrmFailureSaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          const savedBookingReadUrl = new URL(url, window.location.href);
+          const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
+
+          window.__prestigeAdminSavedBookingReadRequests.push({
+            id: savedBookingReadId,
+            method,
+            url,
+          });
+
+          if (method === "GET" && savedBookingReadId === String(savedBooking.id)) {
+            return jsonResponse({
+              booking: savedBooking,
+              ok: true,
+              version: "browser-admin-saved-booking-read-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
         if (!url.includes("/rest/v1/")) {
@@ -18875,6 +19032,7 @@ async function runChromeTest() {
             ? {
                 bodyText,
                 fetchCalls: window.__prestigeFetchCalls || [],
+                savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
                 bookingInsert: bookingInsert?.body || null,
               }
@@ -18891,6 +19049,16 @@ async function runChromeTest() {
       mrLeeCrmFailureSaveState.unhandledSupabaseCalls,
       [],
       `Expected Mr Lee CRM failure save to mock every Supabase call, got ${mrLeeCrmFailureSaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      mrLeeCrmFailureSaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+      [{ id: String(mrLeeCrmFailureSavedBookingFixture.id), method: "GET" }],
+      "Expected Mr Lee CRM-failure post-save reload to use the typed admin saved booking read API",
+    );
+    assert.deepEqual(
+      mrLeeCrmFailureSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected Mr Lee CRM-failure post-save reload not to read bookings through the legacy admin data shim",
     );
     assert.equal(mrLeeCrmFailureSaveState.bookingInsert?.company_id, null);
     assert.match(mrLeeCrmFailureSaveState.bodyText, /Booking saved, but CRM update failed: CRM service unavailable/);

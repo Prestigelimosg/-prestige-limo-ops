@@ -57,6 +57,7 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
+const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
 const adminBookingCalendarSyncStatusesApiPath =
   "/api/admin-booking-calendar-sync-statuses";
@@ -422,6 +423,13 @@ type AdminRateSetupReadResponse = {
   ok?: boolean;
   settings?: RateSettingsRecord | null;
   travelers?: TravelerRecord[];
+  version?: string;
+};
+
+type AdminSavedBookingReadResponse = {
+  booking?: BookingRecord | null;
+  error?: string;
+  ok?: boolean;
   version?: string;
 };
 
@@ -11884,19 +11892,44 @@ export default function Home() {
   }
 
   async function fetchSavedBookingById(bookingId: string | number) {
-    if (!adminLegacyDataClient) {
+    if (typeof fetch !== "function") {
       return {
         data: null,
-        error: new Error("Admin data API is not available."),
+        error: new Error("Admin saved booking read API is not available."),
       };
     }
 
-    return adminLegacyDataClient
-      .from(adminLegacyTables.bookings)
-      .select(adminBookingSelectColumns)
-      .eq("id", bookingId)
-      .limit(1)
-      .maybeSingle();
+    try {
+      const searchParams = new URLSearchParams({ id: String(bookingId) });
+      const response = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingReadResponse | null;
+
+      if (!response.ok || responseBody?.ok !== true) {
+        return {
+          data: null,
+          error: readAdminLegacyDataError(responseBody, "Admin saved booking read request failed."),
+        };
+      }
+
+      if (!responseBody.booking) {
+        return {
+          data: null,
+          error: new Error("No saved booking row returned."),
+        };
+      }
+
+      return {
+        data: responseBody.booking,
+        error: null,
+      };
+    } catch {
+      return adminLegacyDataError("Admin saved booking read request failed.") as AdminLegacyDataResult<BookingRecord>;
+    }
   }
 
   async function loadBookings(successText = "Bookings loaded.", options?: { silent?: boolean }) {

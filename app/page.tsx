@@ -7121,6 +7121,9 @@ export default function Home() {
   const [bookingCalendarMessages, setBookingCalendarMessages] =
     useState<Record<string, Message>>({});
   const [bookingCalendarDownloadId, setBookingCalendarDownloadId] = useState<string | null>(null);
+  const [jobCardCalendarMessage, setJobCardCalendarMessage] = useState<Message | null>(null);
+  const [jobCardCalendarAction, setJobCardCalendarAction] =
+    useState<"download-calendar" | "save-calendar" | null>(null);
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
@@ -8953,6 +8956,13 @@ export default function Home() {
   }, [driverSearchTerm, drivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
+  const loadedBookingRecord = useMemo(
+    () =>
+      clean(loadedBookingId)
+        ? bookings.find((bookingRecord) => String(bookingRecord.id) === clean(loadedBookingId)) ?? null
+        : null,
+    [bookings, loadedBookingId],
+  );
   const dashboardDriverCandidates = useMemo(() => {
     const candidateMap = new Map<string, DashboardDriverCandidate>();
     const driversById = new Map(drivers.map((driver) => [driver.id, driver]));
@@ -9483,6 +9493,8 @@ export default function Home() {
     setAcceptedReviewWarningKey("");
     setBookingSaveMessage(null);
     setCustomerMatchFeedback(null);
+    setJobCardCalendarAction(null);
+    setJobCardCalendarMessage(null);
   }
 
   function clearParseArtifacts() {
@@ -11364,7 +11376,7 @@ export default function Home() {
     }
   }
 
-  async function saveBooking() {
+  async function saveBooking(): Promise<BookingRecord | null> {
     const currentNeedsReviewWarnings = [
       ...getNeedsReviewWarnings(booking),
       ...getPricingReviewWarnings(draftPricing),
@@ -11382,13 +11394,13 @@ export default function Home() {
 
       setMessage(reviewMessage);
       setBookingSaveMessage(reviewMessage);
-      return;
+      return null;
     }
 
     setBookingSaveMessage(null);
 
     if (!validateBooking()) {
-      return;
+      return null;
     }
 
     if (!adminLegacyDataClient) {
@@ -11402,7 +11414,7 @@ export default function Home() {
         text: saveMessage.text,
       });
       setBookingSaveMessage(saveMessage);
-      return;
+      return null;
     }
 
     setSaving(true);
@@ -11515,6 +11527,7 @@ export default function Home() {
 
         setMessage(saveMessage);
         setBookingSaveMessage(saveMessage);
+        return null;
       } else {
         if (!crmUpdateFailed && company.id) {
           try {
@@ -11541,7 +11554,7 @@ export default function Home() {
           });
           setBookingSaveMessage(saveMessage);
           setAcceptedReviewWarningKey("");
-          return;
+          return null;
         }
 
         const savedBookingRecord = savedBookingResult.data as BookingRecord;
@@ -11551,22 +11564,30 @@ export default function Home() {
             ...currentBookings.filter((currentBooking) => String(currentBooking.id) !== String(savedBookingRecord.id)),
           ]),
         );
+        setLoadedBookingId(String(savedBookingRecord.id));
+        const savedCustomerLabel =
+          getBookingCompanyName(savedBookingRecord) ||
+          getBookerName(savedBookingRecord) ||
+          getBookingName(savedBookingRecord) ||
+          "customer/account pending review";
         const saveMessage = {
           tone: crmUpdateFailed ? "error" : "success",
           text: crmUpdateFailed
             ? `Booking saved, but CRM update failed: ${crmErrorMessage || "Unknown CRM error."}`
-            : `Booking saved successfully: ${savedBookingId}`,
+            : `Booking saved successfully: ${savedBookingId}. Customer/account: ${savedCustomerLabel}.`,
         } satisfies Message;
 
         setMessage(saveMessage);
         setBookingSaveMessage(saveMessage);
         setAcceptedReviewWarningKey("");
+        return savedBookingRecord;
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown save error.";
       const saveMessage = { tone: "error", text: `Booking save failed: ${errorMessage}` } satisfies Message;
       setMessage(saveMessage);
       setBookingSaveMessage(saveMessage);
+      return null;
     } finally {
       setSaving(false);
     }
@@ -12676,6 +12697,25 @@ export default function Home() {
     }));
   }
 
+  async function createAndDownloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
+    const bookingId = String(bookingRecord.id);
+    const response = await fetch(adminBookingCalendarEventsApiPath, {
+      body: JSON.stringify(buildSavedBookingCalendarEventPayload(bookingRecord)),
+      headers: {
+        "Content-Type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as AdminBookingCalendarEventResponse | null;
+
+    if (!response.ok || !result?.ok || !result.ics) {
+      throw new Error(result?.error || "Calendar event file could not be created.");
+    }
+
+    downloadIcsFile(result.calendar_event?.filename || `prestige-booking-${bookingId}.ics`, result.ics);
+  }
+
   async function downloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
     const bookingId = String(bookingRecord.id);
 
@@ -12686,21 +12726,7 @@ export default function Home() {
     });
 
     try {
-      const response = await fetch(adminBookingCalendarEventsApiPath, {
-        body: JSON.stringify(buildSavedBookingCalendarEventPayload(bookingRecord)),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = (await response.json().catch(() => null)) as AdminBookingCalendarEventResponse | null;
-
-      if (!response.ok || !result?.ok || !result.ics) {
-        throw new Error(result?.error || "Calendar event file could not be created.");
-      }
-
-      downloadIcsFile(result.calendar_event?.filename || `prestige-booking-${bookingId}.ics`, result.ics);
+      await createAndDownloadSavedBookingCalendarEvent(bookingRecord);
       setBookingCalendarMessage(bookingId, {
         tone: "success",
         text: "Calendar file downloaded.",
@@ -12714,6 +12740,84 @@ export default function Home() {
       });
     } finally {
       setBookingCalendarDownloadId(null);
+    }
+  }
+
+  async function saveBookingAndDownloadCalendar() {
+    setJobCardCalendarAction("save-calendar");
+    setJobCardCalendarMessage({
+      tone: "info",
+      text: "Saving booking before calendar...",
+    });
+
+    const savedBookingRecord = await saveBooking();
+
+    if (!savedBookingRecord) {
+      setJobCardCalendarMessage({
+        tone: "error",
+        text: "Calendar not created because booking save did not complete.",
+      });
+      setJobCardCalendarAction(null);
+      return;
+    }
+
+    setJobCardCalendarAction("download-calendar");
+    setJobCardCalendarMessage({
+      tone: "info",
+      text: "Preparing calendar file...",
+    });
+
+    try {
+      await createAndDownloadSavedBookingCalendarEvent(savedBookingRecord);
+      const customerLabel =
+        getBookingCompanyName(savedBookingRecord) ||
+        getBookerName(savedBookingRecord) ||
+        getBookingName(savedBookingRecord) ||
+        "customer/account";
+
+      setJobCardCalendarMessage({
+        tone: "success",
+        text: `Saved for ${customerLabel}. Calendar file downloaded.`,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
+
+      setJobCardCalendarMessage({
+        tone: "error",
+        text: `Booking saved, but calendar download failed: ${errorMessage}`,
+      });
+    } finally {
+      setJobCardCalendarAction(null);
+    }
+  }
+
+  async function downloadJobCardCalendarEvent() {
+    if (!loadedBookingRecord) {
+      await saveBookingAndDownloadCalendar();
+      return;
+    }
+
+    setJobCardCalendarAction("download-calendar");
+    setJobCardCalendarMessage({
+      tone: "info",
+      text: "Preparing calendar file...",
+    });
+
+    try {
+      await createAndDownloadSavedBookingCalendarEvent(loadedBookingRecord);
+      setJobCardCalendarMessage({
+        tone: "success",
+        text: "Calendar file downloaded.",
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
+
+      setJobCardCalendarMessage({
+        tone: "error",
+        text: `Calendar download failed: ${errorMessage}`,
+      });
+    } finally {
+      setJobCardCalendarAction(null);
     }
   }
 
@@ -28288,6 +28392,25 @@ export default function Home() {
                         {showParserDebug ? "Hide parser debug" : "Show parser debug"}
                       </button>
                     ) : null}
+                    <button
+                      className="min-h-9 rounded-md border border-sky-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-job-card-calendar-action="true"
+                      disabled={
+                        saving ||
+                        jobCardCalendarAction !== null ||
+                        Boolean(bookingCalendarDownloadId)
+                      }
+                      onClick={downloadJobCardCalendarEvent}
+                      type="button"
+                    >
+                      {jobCardCalendarAction === "save-calendar"
+                        ? "Saving..."
+                        : jobCardCalendarAction === "download-calendar"
+                          ? "Calendar..."
+                          : loadedBookingRecord
+                            ? "Add to Calendar"
+                            : "Save Booking + Calendar"}
+                    </button>
                     {jobCardCopyEditState.isEditing ? (
                       <>
                         <button
@@ -28332,6 +28455,16 @@ export default function Home() {
                       data-copy-feedback="job-card"
                     >
                       {copyFeedback.text}
+                    </div>
+                  ) : null}
+                  {jobCardCalendarMessage ? (
+                    <div
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
+                        jobCardCalendarMessage.tone,
+                      )}`}
+                      data-job-card-calendar-feedback="true"
+                    >
+                      {jobCardCalendarMessage.text}
                     </div>
                   ) : null}
                 </div>

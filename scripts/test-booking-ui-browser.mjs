@@ -16781,6 +16781,27 @@ async function runChromeTest() {
         });
 
       window.__prestigeFetchCalls = [];
+      window.__prestigeCrmSaveCalendarRequests = [];
+      window.__prestigeCrmSaveCalendarDownloads = [];
+      window.__prestigeCrmSaveCalendarBlobTypes = [];
+      window.URL.createObjectURL = (blob) => {
+        window.__prestigeCrmSaveCalendarBlobTypes.push(blob?.type || "");
+        return "blob:prestige-crm-save-calendar-test";
+      };
+      window.URL.revokeObjectURL = () => {};
+      window.__prestigeOriginalAnchorClick =
+        window.__prestigeOriginalAnchorClick || window.HTMLAnchorElement.prototype.click;
+      window.HTMLAnchorElement.prototype.click = function crmSaveCalendarDownloadClickRecorder() {
+        if (this.download) {
+          window.__prestigeCrmSaveCalendarDownloads.push({
+            download: this.download,
+            href: this.href,
+          });
+          return;
+        }
+
+        return window.__prestigeOriginalAnchorClick.call(this);
+      };
       window.__prestigeSaveRequestBodies = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
@@ -16801,6 +16822,35 @@ async function runChromeTest() {
           } catch {
             window.__prestigeSaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-booking-calendar-events")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeCrmSaveCalendarRequests.push({
+            body: parsedBody,
+            method,
+            url,
+          });
+
+          return jsonResponse({
+            calendar_event: {
+              filename: \`prestige-booking-\${parsedBody?.booking_reference || "saved-booking"}.ics\`,
+            },
+            ics: [
+              "BEGIN:VCALENDAR",
+              "BEGIN:VEVENT",
+              \`SUMMARY:Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || "Traveler"}\`,
+              "END:VEVENT",
+              "END:VCALENDAR",
+            ].join("\\r\\n"),
+            ok: true,
+            version: "crm-save-calendar-mock",
+          });
         }
 
         if (!url.includes("/rest/v1/")) {
@@ -16891,7 +16941,7 @@ async function runChromeTest() {
 
     const clickedSaveBookingCrm = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + CRM",
+        (button) => button.textContent.trim() === "Save Booking + Calendar",
       );
 
       if (!saveButton || saveButton.disabled) {
@@ -16901,7 +16951,7 @@ async function runChromeTest() {
       saveButton.click();
       return true;
     })()`);
-    assert.equal(clickedSaveBookingCrm, true, "Expected Save Booking + CRM button to be clickable");
+    assert.equal(clickedSaveBookingCrm, true, "Expected Save Booking + Calendar button to be clickable");
 
     const crmSaveState = await waitForCondition(
       async () => {
@@ -16910,10 +16960,16 @@ async function runChromeTest() {
           const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
             (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
           );
+          const calendarRequest = (window.__prestigeCrmSaveCalendarRequests || [])[0] || null;
 
-          return bodyText.includes("Booking saved successfully: ${crmSavedBookingFixture.id}")
+          return bodyText.includes("Booking saved successfully: ${crmSavedBookingFixture.id}") &&
+            bodyText.includes("Customer/account: BROWSER UI TEST COMPANY.") &&
+            bodyText.includes("Saved for BROWSER UI TEST COMPANY. Calendar file downloaded.")
             ? {
                 bodyText,
+                calendarDownloads: window.__prestigeCrmSaveCalendarDownloads || [],
+                calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
+                calendarRequest,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeSaveRequestBodies || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -16933,9 +16989,34 @@ async function runChromeTest() {
       [],
       `Expected all Supabase calls to be mocked, got ${crmSaveState.unhandledSupabaseCalls.join(", ")}`,
     );
-    assert.ok(
-      crmSaveState.fetchCalls.every((call) => call.includes("/rest/v1/")),
-      `Expected CRM save test to make only mocked Supabase REST calls, got ${crmSaveState.fetchCalls.join(", ")}`,
+    const disallowedCalendarOrSendCalls = crmSaveState.fetchCalls.filter((call) => {
+      const [, method = "GET", rawUrl = ""] = call.match(/^(\S+)\s+(.+)$/) || [];
+      const lowerUrl = rawUrl.toLowerCase();
+
+      if (lowerUrl.includes("/api/admin-booking-calendar-events")) {
+        return false;
+      }
+
+      if (/googleapis|icloud|outlook|graph\.microsoft|apple\.com/i.test(lowerUrl)) {
+        return true;
+      }
+
+      const path = lowerUrl.split(/[?#]/)[0] || lowerUrl;
+
+      if (/\/api\/(?:calendar|webhooks?|notifications?|whatsapp|telegram|sms|email|mail|payments?|paynow|pdf)(?:\/|$)/i.test(path)) {
+        return true;
+      }
+
+      if (/\/api\/(?:admin-)?invoices?(?:\/|$)/i.test(path) && method.toUpperCase() !== "GET") {
+        return true;
+      }
+
+      return false;
+    });
+    assert.deepEqual(
+      disallowedCalendarOrSendCalls,
+      [],
+      `Expected CRM save calendar flow not to call calendar providers, messaging, invoice, payment, or PDF APIs, got ${crmSaveState.fetchCalls.join(", ")}`,
     );
     assert.equal(crmSaveState.bookingInsert?.company_id, crmSavedBookingFixture.company_id);
     assert.equal(crmSaveState.bookingInsert?.booker_id, crmSavedBookingFixture.booker_id);
@@ -16948,6 +17029,40 @@ async function runChromeTest() {
     assert.equal(crmSaveState.bookingInsert?.pax, 2);
     assert.equal(crmSaveState.bookingInsert?.extra_stop_count, 1);
     assert.equal(crmSaveState.bookingInsert?.child_seat_required, true);
+    assert.deepEqual(crmSaveState.calendarRequest?.body, {
+      booking_reference: crmSavedBookingFixture.id,
+      booking_type: "MNG",
+      booker_name: "BROWSER UI TEST BOOKER",
+      company_name: "BROWSER UI TEST COMPANY",
+      date: "2026-05-27",
+      driver_contact: "",
+      driver_name: "TEST DRIVER CRM 20260516",
+      driver_plate_number: "",
+      dropoff_address: "Raffles Hotel Singapore",
+      flight_no: "SQ333",
+      id: crmSavedBookingFixture.id,
+      pax: 2,
+      pickup_address: "Changi Airport T3",
+      pickup_time: "1530hrs",
+      route: "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
+      status: "assigned",
+      traveler_name: "BROWSER UI TEST TRAVELER",
+      vehicle: "AVF",
+    });
+    assert.equal(
+      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
+        JSON.stringify(crmSaveState.calendarRequest?.body),
+      ),
+      false,
+      "Expected Save Booking + Calendar payload to omit private finance, parser, notes, and secret fields",
+    );
+    assert.deepEqual(crmSaveState.calendarDownloads, [
+      {
+        download: `prestige-booking-${crmSavedBookingFixture.id}.ics`,
+        href: "blob:prestige-crm-save-calendar-test",
+      },
+    ]);
+    assert.deepEqual(crmSaveState.calendarBlobTypes, ["text/calendar;charset=utf-8"]);
     assert.equal(crmSaveState.bookingInsert?.child_seat_count, 2);
     assert.equal(crmSaveState.bookingInsert?.child_seat_type, "booster seat");
     assert.equal(crmSaveState.bookingInsert?.customer_rate_override, 160);

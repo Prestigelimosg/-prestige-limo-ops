@@ -390,6 +390,7 @@ const adminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const publicRouteRuntimeResourcePattern =
   /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)|supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
 const customerBookingRequestApiPattern = /\/api\/customer-booking-requests(?:[/?#]|$)/i;
+const customerPortalSavedBookingsApiPattern = /\/api\/customer-saved-bookings(?:[/?#]|$)/i;
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
@@ -34363,6 +34364,7 @@ async function runChromeTest() {
         initialState.integrationCalls,
         initialState.resourceCalls,
         "/my-bookings desktop load",
+        customerPortalSavedBookingsApiPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/my-bookings desktop load"),
@@ -34398,6 +34400,7 @@ async function runChromeTest() {
         editState.integrationCalls,
         editState.resourceCalls,
         "/my-bookings edit action",
+        customerPortalSavedBookingsApiPattern,
       );
 
       await clickCustomerPortalRequestCancel("booking-004");
@@ -34431,6 +34434,7 @@ async function runChromeTest() {
         cancelState.integrationCalls,
         cancelState.resourceCalls,
         "/my-bookings cancel action",
+        customerPortalSavedBookingsApiPattern,
       );
 
       await clickCustomerPortalFilter("Completed");
@@ -34631,6 +34635,7 @@ async function runChromeTest() {
         invalidRequestState.integrationCalls,
         invalidRequestState.resourceCalls,
         "/my-bookings invalid request",
+        customerPortalSavedBookingsApiPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/my-bookings invalid request"),
@@ -34666,6 +34671,7 @@ async function runChromeTest() {
         validRequestState.integrationCalls,
         validRequestState.resourceCalls,
         "/my-bookings valid request",
+        customerPortalSavedBookingsApiPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/my-bookings valid request"),
@@ -34693,6 +34699,7 @@ async function runChromeTest() {
         repeatedRequestState.integrationCalls,
         repeatedRequestState.resourceCalls,
         "/my-bookings repeated request",
+        customerPortalSavedBookingsApiPattern,
       );
 
       await clickCustomerPortalFilter("Upcoming");
@@ -34759,6 +34766,7 @@ async function runChromeTest() {
         changeState.integrationCalls,
         changeState.resourceCalls,
         "/my-bookings edit action",
+        customerPortalSavedBookingsApiPattern,
       );
 
       await setCustomerPortalSearch("Sentosa");
@@ -35325,6 +35333,7 @@ async function runChromeTest() {
         mobileState.integrationCalls,
         mobileState.resourceCalls,
         "/my-bookings mobile",
+        customerPortalSavedBookingsApiPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/my-bookings mobile"),

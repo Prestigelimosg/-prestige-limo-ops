@@ -1,9 +1,15 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type BookingStatus = "Cancelled" | "Completed" | "Confirmed" | "Pending Staff Review" | "Requested";
+import {
+  customerPortalSavedBookingsApiPath,
+  mapCustomerSavedBookingsPayload,
+  type BookingStatus,
+  type CustomerPortalBooking,
+} from "../../lib/customer-portal-saved-bookings-adapter";
+
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type PortalSection = "New Booking Request" | BookingFilter;
 
@@ -28,19 +34,6 @@ type BookingRequestForm = {
 type BookingRequestFeedback = {
   tone: "info" | "success" | "error";
   text: string;
-};
-
-type CustomerPortalBooking = {
-  dropoffLocation: string;
-  flightNumber?: string;
-  id: string;
-  passengerName: string;
-  pickupDateTime: string;
-  pickupLocation: string;
-  serviceType: string;
-  specialRequest?: string;
-  status: BookingStatus;
-  vehicleType: string;
 };
 
 const serviceOptions = [
@@ -508,6 +501,7 @@ export default function CustomerPortalPage() {
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
+  const [portalBookings, setPortalBookings] = useState<CustomerPortalBooking[]>(bookings);
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
@@ -521,10 +515,53 @@ export default function CustomerPortalPage() {
   const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let isCurrent = true;
+
+    async function loadSavedBookings() {
+      try {
+        const response = await fetch(`${customerPortalSavedBookingsApiPath}?limit=25&page=1`, {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: {
+            "x-prestige-customer-purpose": "customer-saved-bookings-read",
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const mappedBookings = mapCustomerSavedBookingsPayload(await response.json());
+
+        if (isCurrent && mappedBookings) {
+          setPortalBookings(mappedBookings);
+          setExpandedBookingId("");
+          setChangeFeedback({});
+          setBookingPages({ ...initialBookingPages });
+          setSelectedBookingMonths({ ...initialSelectedBookingMonths });
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          return;
+        }
+      }
+    }
+
+    loadSavedBookings();
+
+    return () => {
+      isCurrent = false;
+      controller.abort();
+    };
+  }, []);
+
   const filteredBookings = useMemo(() => {
     const query = normalize(searchQuery);
 
-    return bookings.filter((booking) => {
+    return portalBookings.filter((booking) => {
       if (!rowMatchesFilter(booking, activeFilter)) {
         return false;
       }
@@ -547,7 +584,7 @@ export default function CustomerPortalPage() {
         .filter(Boolean)
         .some((value) => normalize(String(value)).includes(query));
     });
-  }, [activeFilter, searchQuery]);
+  }, [activeFilter, portalBookings, searchQuery]);
 
   const pastMonthOptions = useMemo(() => {
     if (activeFilter === "Upcoming") {

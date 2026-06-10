@@ -59,6 +59,8 @@ const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
+const adminSavedBookingDriverAssignmentsApiPath =
+  "/api/admin-saved-booking-driver-assignments";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
 const adminBookingCalendarSyncStatusesApiPath =
   "/api/admin-booking-calendar-sync-statuses";
@@ -386,6 +388,17 @@ type AdminSavedBookingReadResponse = {
 };
 
 type AdminSavedBookingStatusResponse = {
+  booking?: {
+    id?: string | number;
+    status?: BookingStatusValue | string | null;
+    updated_at?: string | null;
+  } | null;
+  error?: string;
+  ok?: boolean;
+  version?: string;
+};
+
+type AdminSavedBookingDriverAssignmentResponse = {
   booking?: {
     id?: string | number;
     status?: BookingStatusValue | string | null;
@@ -13377,10 +13390,10 @@ export default function Home() {
     const bookingId = String(bookingRecord.id);
     const nextStatus = statusAfterClearingAssignedDriver(bookingRecord.status);
 
-    if (!adminLegacyDataClient) {
+    if (typeof fetch !== "function") {
       const errorMessage = {
         tone: "error",
-        text: "Clear assigned driver failed: Admin data API is not available.",
+        text: "Clear assigned driver failed: Admin saved booking driver assignment API is not available.",
       } satisfies Message;
       setMessage(errorMessage);
       setDriverAssignmentMessage(bookingId, errorMessage);
@@ -13393,23 +13406,35 @@ export default function Home() {
     setDriverAssignmentMessage(bookingId, loadingMessage);
 
     try {
-      const { error } = await adminLegacyDataClient
-        .from(adminLegacyTables.bookings)
-        .update({
-          driver_id: null,
-          driver_name: null,
-          driver_contact: null,
-          driver_plate_number: null,
-          driver_payout_override: null,
-          driver_payout_reason: null,
-          driver_notes: null,
-          driver_dispatch_include_payout: false,
+      const response = await fetch(adminSavedBookingDriverAssignmentsApiPath, {
+        body: JSON.stringify({
+          action: "clear",
+          booking_id: bookingId,
           status: nextStatus,
-        })
-        .eq("id", bookingRecord.id);
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "PATCH",
+      });
+      const responseBody =
+        (await response.json().catch(() => null)) as AdminSavedBookingDriverAssignmentResponse | null;
 
-      if (error) {
-        throw new Error(error.message);
+      if (
+        !response.ok ||
+        responseBody?.ok !== true ||
+        !responseBody.booking ||
+        String(responseBody.booking.id) !== bookingId ||
+        responseBody.booking.status !== nextStatus ||
+        !responseBody.booking.updated_at
+      ) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          "Admin saved booking driver assignment clear request failed.",
+        );
+
+        throw new Error(formatSupabaseError(error));
       }
 
       setBookings((current) =>
@@ -13426,6 +13451,7 @@ export default function Home() {
                 driver_notes: null,
                 driver_dispatch_include_payout: false,
                 status: nextStatus,
+                updated_at: responseBody.booking?.updated_at || currentBooking.updated_at,
               }
             : currentBooking,
         ),
@@ -13499,6 +13525,16 @@ export default function Home() {
       rateSettings,
       driverDraft.payoutOverride,
     );
+    const driverContact =
+      clean(driverDraft.driverContact) ||
+      clean(selectedDashboardDriver?.contactNumber) ||
+      clean(selectedDriver?.contact_number) ||
+      null;
+    const driverPlateNumber =
+      clean(driverDraft.driverPlate) ||
+      clean(selectedDashboardDriver?.plateNumber) ||
+      clean(selectedDriver?.plate_number) ||
+      null;
 
     if (!driverName) {
       const errorMessage = {
@@ -13520,10 +13556,10 @@ export default function Home() {
       return;
     }
 
-    if (!adminLegacyDataClient) {
+    if (typeof fetch !== "function") {
       const errorMessage = {
         tone: "error",
-        text: "Assign driver failed: Admin data API is not available.",
+        text: "Assign driver failed: Admin saved booking driver assignment API is not available.",
       } satisfies Message;
       setMessage(errorMessage);
       setDriverAssignmentMessage(bookingId, errorMessage);
@@ -13536,33 +13572,44 @@ export default function Home() {
     setDriverAssignmentMessage(bookingId, loadingMessage);
 
     try {
-      const { error } = await adminLegacyDataClient
-        .from(adminLegacyTables.bookings)
-        .update({
+      const response = await fetch(adminSavedBookingDriverAssignmentsApiPath, {
+        body: JSON.stringify({
+          action: "assign",
+          booking_id: bookingId,
           driver_id: selectedDriverId,
           driver_name: driverName,
-          driver_contact:
-            clean(driverDraft.driverContact) ||
-            clean(selectedDashboardDriver?.contactNumber) ||
-            clean(selectedDriver?.contact_number) ||
-            null,
-          driver_plate_number:
-            clean(driverDraft.driverPlate) ||
-            clean(selectedDashboardDriver?.plateNumber) ||
-            clean(selectedDriver?.plate_number) ||
-            null,
+          driver_contact: driverContact,
+          driver_plate_number: driverPlateNumber,
           driver_payout_amount: calculatedPayout || null,
           ...selectedDriverPayoutFields,
           driver_payout_override: manualPayout,
           driver_payout_reason: clean(driverDraft.payoutReason) || null,
           driver_notes: clean(driverDraft.notes) || null,
           driver_dispatch_include_payout: driverDraft.includePayout,
-          status: "assigned",
-        })
-        .eq("id", bookingRecord.id);
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "PATCH",
+      });
+      const responseBody =
+        (await response.json().catch(() => null)) as AdminSavedBookingDriverAssignmentResponse | null;
 
-      if (error) {
-        throw new Error(error.message);
+      if (
+        !response.ok ||
+        responseBody?.ok !== true ||
+        !responseBody.booking ||
+        String(responseBody.booking.id) !== bookingId ||
+        responseBody.booking.status !== "assigned" ||
+        !responseBody.booking.updated_at
+      ) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          "Admin saved booking driver assignment request failed.",
+        );
+
+        throw new Error(formatSupabaseError(error));
       }
 
       setBookings((current) =>
@@ -13572,14 +13619,8 @@ export default function Home() {
                 ...currentBooking,
                 driver_id: selectedDriverId,
                 driver_name: driverName,
-                driver_contact:
-                  clean(driverDraft.driverContact) ||
-                  clean(selectedDashboardDriver?.contactNumber) ||
-                  clean(selectedDriver?.contact_number),
-                driver_plate_number:
-                  clean(driverDraft.driverPlate) ||
-                  clean(selectedDashboardDriver?.plateNumber) ||
-                  clean(selectedDriver?.plate_number),
+                driver_contact: driverContact,
+                driver_plate_number: driverPlateNumber,
                 driver_payout_amount: calculatedPayout,
                 ...selectedDriverPayoutFields,
                 driver_payout_override: manualPayout,
@@ -13587,6 +13628,7 @@ export default function Home() {
                 driver_notes: clean(driverDraft.notes),
                 driver_dispatch_include_payout: driverDraft.includePayout,
                 status: "assigned",
+                updated_at: responseBody.booking?.updated_at || currentBooking.updated_at,
               }
             : currentBooking,
         ),

@@ -1278,6 +1278,14 @@ function bookingPatchCalls(fetchCalls) {
   );
 }
 
+function driverAssignmentApiCalls(fetchCalls) {
+  return fetchCalls.filter(
+    (call) =>
+      call.startsWith("PATCH ") &&
+      call.includes("/api/admin-saved-booking-driver-assignments"),
+  );
+}
+
 function installSupabaseRestNetworkGuard(client, blockedSupabaseRequests, blockedSupabaseMutationRequests) {
   client.on("Fetch.requestPaused", ({ requestId, request }) => {
     const method = request?.method || "GET";
@@ -6685,6 +6693,86 @@ async function runChromeTest() {
         }
 
         if (
+          method === "PATCH" &&
+          String(target).includes("/api/admin-saved-booking-driver-assignments")
+        ) {
+          let parsedBody = bodyText;
+
+          try {
+            parsedBody = JSON.parse(bodyText);
+          } catch {}
+
+          const updatedAt = new Date().toISOString();
+          const bookingId = String(parsedBody?.booking_id || "");
+          const assignmentFixtureIds = new Set([
+            "${dashboardDriverAssignmentFixture.id}",
+            "${dashboardAssignedDriverClearFixture.id}",
+            "${dashboardProfilePayoutAssignmentFixture.id}",
+            "${dashboardOtwClearDriverFixture.id}",
+          ]);
+
+          if (assignmentFixtureIds.has(bookingId)) {
+            window.__prestigeDashboardDriverAssignmentBodies.push(parsedBody);
+          }
+
+          window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) => {
+            if (String(booking.id) !== bookingId) {
+              return booking;
+            }
+
+            if (parsedBody?.action === "clear") {
+              return {
+                ...booking,
+                driver_contact: null,
+                driver_dispatch_include_payout: false,
+                driver_id: null,
+                driver_name: null,
+                driver_notes: null,
+                driver_payout_override: null,
+                driver_payout_reason: null,
+                driver_plate_number: null,
+                status: parsedBody.status,
+                updated_at: updatedAt,
+              };
+            }
+
+            return {
+              ...booking,
+              driver_contact: parsedBody.driver_contact,
+              driver_dispatch_include_payout: parsedBody.driver_dispatch_include_payout,
+              driver_id: parsedBody.driver_id,
+              driver_name: parsedBody.driver_name,
+              driver_notes: parsedBody.driver_notes,
+              driver_payout_amount: parsedBody.driver_payout_amount,
+              driver_payout_max:
+                "driver_payout_max" in parsedBody ? parsedBody.driver_payout_max : booking.driver_payout_max,
+              driver_payout_min:
+                "driver_payout_min" in parsedBody ? parsedBody.driver_payout_min : booking.driver_payout_min,
+              driver_payout_override: parsedBody.driver_payout_override,
+              driver_payout_reason: parsedBody.driver_payout_reason,
+              driver_payout_unit:
+                "driver_payout_unit" in parsedBody ? parsedBody.driver_payout_unit : booking.driver_payout_unit,
+              driver_plate_number: parsedBody.driver_plate_number,
+              status: "assigned",
+              updated_at: updatedAt,
+            };
+          });
+
+          return new Response(JSON.stringify({
+            booking: {
+              id: bookingId,
+              status: parsedBody?.action === "clear" ? parsedBody.status : "assigned",
+              updated_at: updatedAt,
+            },
+            ok: true,
+            version: "browser-admin-saved-booking-driver-assignment-mock",
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (
           method === "GET" &&
           String(target).includes("/api/admin-saved-bookings")
         ) {
@@ -6824,19 +6912,6 @@ async function runChromeTest() {
             });
           }
 
-          if (
-            String(target).includes("id=eq.${dashboardDriverAssignmentFixture.id}") ||
-            String(target).includes("id=eq.${dashboardAssignedDriverClearFixture.id}") ||
-            String(target).includes("id=eq.${dashboardProfilePayoutAssignmentFixture.id}") ||
-            String(target).includes("id=eq.${dashboardOtwClearDriverFixture.id}")
-          ) {
-            window.__prestigeDashboardDriverAssignmentBodies.push(parsedBody);
-
-            return new Response(JSON.stringify([]), {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            });
-          }
         }
 
         if (method === "DELETE" && String(target).includes("/rest/v1/bookings")) {
@@ -7707,6 +7782,11 @@ async function runChromeTest() {
       "Expected invalid manual payout to be rejected before booking PATCH",
     );
     assert.deepEqual(
+      driverAssignmentApiCalls(invalidDashboardAssignPayoutState.fetchCalls),
+      [],
+      "Expected invalid manual payout to be rejected before driver assignment API call",
+    );
+    assert.deepEqual(
       invalidDashboardAssignPayoutState.assignmentBodies,
       [],
       "Expected invalid manual payout not to save an assignment body",
@@ -7851,18 +7931,22 @@ async function runChromeTest() {
     const dashboardAssignmentBookingPatches = bookingPatchCalls(dashboardAssignmentState.fetchCalls);
     assert.equal(
       dashboardAssignmentBookingPatches.length,
-      1,
-      `Expected dashboard assignment to make one mocked booking PATCH, got ${dashboardAssignmentState.fetchCalls.join(", ")}`,
+      0,
+      `Expected dashboard assignment not to use legacy booking PATCH, got ${dashboardAssignmentState.fetchCalls.join(", ")}`,
     );
-    assert.match(
-      dashboardAssignmentBookingPatches[0],
-      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardDriverAssignmentFixture.id}`),
+    const dashboardAssignmentApiCalls = driverAssignmentApiCalls(dashboardAssignmentState.fetchCalls);
+    assert.equal(
+      dashboardAssignmentApiCalls.length,
+      1,
+      `Expected dashboard assignment to use typed driver assignment API, got ${dashboardAssignmentState.fetchCalls.join(", ")}`,
     );
     assert.ok(
       dashboardAssignmentState.fetchCalls.every((call) => !call.includes("/rest/v1/drivers")),
       `Expected dashboard assignment not to modify driver profiles, got ${dashboardAssignmentState.fetchCalls.join(", ")}`,
     );
     assert.equal(dashboardAssignmentState.assignmentBodies.length, 1);
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.action, "assign");
+    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.booking_id, dashboardDriverAssignmentFixture.id);
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_name, "DASHBOARD TEST DRIVER");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_contact, "+65 8555 7777");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_plate_number, "SLC777D");
@@ -7871,7 +7955,7 @@ async function runChromeTest() {
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_payout_reason, "Dashboard assignment test");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_notes, "Meet at arrival belt");
     assert.equal(dashboardAssignmentState.assignmentBodies[0]?.driver_dispatch_include_payout, true);
-    assert.equal(dashboardAssignmentState.assignmentBodies[0]?.status, "assigned");
+    assert.equal("status" in dashboardAssignmentState.assignmentBodies[0], false);
     assert.match(dashboardAssignmentState.articleText, /Assigned/i);
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
@@ -8843,26 +8927,25 @@ async function runChromeTest() {
     const clearedAssignedDriverBookingPatches = bookingPatchCalls(clearedAssignedDriverState.fetchCalls);
     assert.equal(
       clearedAssignedDriverBookingPatches.length,
-      1,
-      `Expected clear assigned driver to make one mocked booking PATCH, got ${clearedAssignedDriverState.fetchCalls.join(", ")}`,
+      0,
+      `Expected clear assigned driver not to use legacy booking PATCH, got ${clearedAssignedDriverState.fetchCalls.join(", ")}`,
     );
-    assert.match(
-      clearedAssignedDriverBookingPatches[0],
-      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardAssignedDriverClearFixture.id}`),
+    const clearedAssignedDriverApiCalls = driverAssignmentApiCalls(clearedAssignedDriverState.fetchCalls);
+    assert.equal(
+      clearedAssignedDriverApiCalls.length,
+      1,
+      `Expected clear assigned driver to use typed driver assignment API, got ${clearedAssignedDriverState.fetchCalls.join(", ")}`,
     );
     assert.ok(
       clearedAssignedDriverState.fetchCalls.every((call) => !call.includes("/rest/v1/drivers")),
       `Expected clear assigned driver not to modify driver profiles, got ${clearedAssignedDriverState.fetchCalls.join(", ")}`,
     );
     assert.equal(clearedAssignedDriverState.assignmentBodies.length, 1);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_id, null);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_name, null);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_contact, null);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_plate_number, null);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_payout_override, null);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_payout_reason, null);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_notes, null);
-    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.driver_dispatch_include_payout, false);
+    assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.action, "clear");
+    assert.equal(
+      clearedAssignedDriverState.assignmentBodies[0]?.booking_id,
+      dashboardAssignedDriverClearFixture.id,
+    );
     assert.equal(clearedAssignedDriverState.assignmentBodies[0]?.status, "confirmed");
     assert.match(clearedAssignedDriverState.articleText, /Confirmed/i);
     assert.match(clearedAssignedDriverState.articleText, /Driver:\s*—/);
@@ -8962,18 +9045,21 @@ async function runChromeTest() {
     const clearedOtwAssignedDriverBookingPatches = bookingPatchCalls(clearedOtwAssignedDriverState.fetchCalls);
     assert.equal(
       clearedOtwAssignedDriverBookingPatches.length,
-      1,
-      `Expected OTW clear assigned driver to make one mocked booking PATCH, got ${clearedOtwAssignedDriverState.fetchCalls.join(", ")}`,
+      0,
+      `Expected OTW clear assigned driver not to use legacy booking PATCH, got ${clearedOtwAssignedDriverState.fetchCalls.join(", ")}`,
     );
-    assert.match(
-      clearedOtwAssignedDriverBookingPatches[0],
-      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardOtwClearDriverFixture.id}`),
+    const clearedOtwAssignedDriverApiCalls = driverAssignmentApiCalls(clearedOtwAssignedDriverState.fetchCalls);
+    assert.equal(
+      clearedOtwAssignedDriverApiCalls.length,
+      1,
+      `Expected OTW clear assigned driver to use typed driver assignment API, got ${clearedOtwAssignedDriverState.fetchCalls.join(", ")}`,
     );
     assert.equal(clearedOtwAssignedDriverState.assignmentBodies.length, 1);
-    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_id, null);
-    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_name, null);
-    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_contact, null);
-    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.driver_plate_number, null);
+    assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.action, "clear");
+    assert.equal(
+      clearedOtwAssignedDriverState.assignmentBodies[0]?.booking_id,
+      dashboardOtwClearDriverFixture.id,
+    );
     assert.equal(clearedOtwAssignedDriverState.assignmentBodies[0]?.status, "confirmed");
     assert.equal(clearedOtwAssignedDriverState.hasClearButton, false);
     assert.equal(clearedOtwAssignedDriverState.hasMarkPobButton, false);
@@ -10865,8 +10951,7 @@ async function runChromeTest() {
 
         if (
           method === "PATCH" &&
-          url.includes("/rest/v1/bookings") &&
-          url.includes("id=eq.${dashboardProfilePayoutAssignmentFixture.id}")
+          url.includes("/api/admin-saved-booking-driver-assignments")
         ) {
           let parsedBody = bodyText;
 
@@ -10876,7 +10961,15 @@ async function runChromeTest() {
 
           window.__prestigeDashboardProfilePayoutAssignmentBodies.push(parsedBody);
 
-          return jsonResponse([]);
+          return jsonResponse({
+            booking: {
+              id: parsedBody?.booking_id || "",
+              status: parsedBody?.action === "clear" ? parsedBody.status : "assigned",
+              updated_at: new Date().toISOString(),
+            },
+            ok: true,
+            version: "browser-admin-saved-booking-driver-assignment-profile-mock",
+          });
         }
 
         if (url.includes("/rest/v1/")) {
@@ -11516,10 +11609,21 @@ async function runChromeTest() {
     const profilePayoutAssignmentBookingPatches = bookingPatchCalls(profilePayoutAssignmentState.fetchCalls);
     assert.equal(
       profilePayoutAssignmentBookingPatches.length,
+      0,
+      `Expected profile payout assignment not to use legacy booking PATCH, got ${profilePayoutAssignmentState.fetchCalls.join(", ")}`,
+    );
+    const profilePayoutAssignmentApiCalls = driverAssignmentApiCalls(profilePayoutAssignmentState.fetchCalls);
+    assert.equal(
+      profilePayoutAssignmentApiCalls.length,
       1,
-      `Expected profile payout assignment to make one mocked booking PATCH, got ${profilePayoutAssignmentState.fetchCalls.join(", ")}`,
+      `Expected profile payout assignment to use typed driver assignment API, got ${profilePayoutAssignmentState.fetchCalls.join(", ")}`,
     );
     assert.equal(profilePayoutAssignmentState.assignmentBodies.length, 1);
+    assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.action, "assign");
+    assert.equal(
+      profilePayoutAssignmentState.assignmentBodies[0]?.booking_id,
+      dashboardProfilePayoutAssignmentFixture.id,
+    );
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_id, reusableDriverProfileFixture.id);
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_name, "REUSABLE PROFILE TEST DRIVER");
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_contact, "+65 8111 2222");

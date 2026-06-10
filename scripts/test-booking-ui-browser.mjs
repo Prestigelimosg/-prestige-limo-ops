@@ -5996,6 +5996,7 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardSameTimeAssignedT1234Fixture)},
       ];
       window.__prestigeFetchCalls = [];
+      window.__prestigeAdminSavedBookingListRequests = [];
       window.__prestigeDashboardDriverAssignmentBodies = [];
       window.__prestigeBookingCompletionRequests = [];
       window.__prestigeCompletedDeleteRequests = [];
@@ -6685,10 +6686,21 @@ async function runChromeTest() {
 
         if (
           method === "GET" &&
-          String(target).includes("/rest/v1/bookings") &&
-          String(target).includes("select=")
+          String(target).includes("/api/admin-saved-bookings")
         ) {
-          return new Response(JSON.stringify(window.__prestigeLoadedBookings || []), {
+          const listUrl = new URL(String(target), window.location.href);
+
+          window.__prestigeAdminSavedBookingListRequests.push({
+            limit: listUrl.searchParams.get("limit") || "",
+            method,
+            url: String(target),
+          });
+
+          return new Response(JSON.stringify({
+            bookings: window.__prestigeLoadedBookings || [],
+            ok: true,
+            version: "browser-admin-saved-booking-list-read-mock",
+          }), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
@@ -6824,6 +6836,23 @@ async function runChromeTest() {
         })()`),
       10000,
       "mock loaded recent booking",
+    );
+
+    const typedLoadBookingsReadState = await evaluate(`(() => ({
+      legacyBookingListReads: (window.__prestigeFetchCalls || []).filter(
+        (call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings"),
+      ),
+      typedListReads: window.__prestigeAdminSavedBookingListRequests || [],
+    }))()`);
+    assert.deepEqual(
+      typedLoadBookingsReadState.typedListReads.map(({ limit, method }) => ({ limit, method })),
+      [{ limit: "25", method: "GET" }],
+      "Expected Load Bookings to use the typed admin saved booking list API",
+    );
+    assert.deepEqual(
+      typedLoadBookingsReadState.legacyBookingListReads,
+      [],
+      "Expected Load Bookings not to read the booking list through the legacy admin data shim",
     );
 
     const hiddenLegacyMrLeeBookingsState = await evaluate(`(() => {
@@ -9917,6 +9946,14 @@ async function runChromeTest() {
         if (url.includes("/api/admin-saved-bookings")) {
           const savedBookingReadUrl = new URL(url, window.location.href);
           const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
+          if (!savedBookingReadId) {
+            return jsonResponse({
+              bookings: method === "GET" ? window.__prestigeLoadedBookings || [] : [],
+              ok: method === "GET",
+              version: "browser-admin-saved-booking-list-read-mock",
+            }, method === "GET" ? 200 : 405);
+          }
+
           const savedBooking =
             String(window.__prestigeDriverDeleteSavedBooking?.id) === String(savedBookingReadId)
               ? window.__prestigeDriverDeleteSavedBooking
@@ -19861,6 +19898,7 @@ async function runChromeTest() {
     await evaluate(`(() => {
       const singleCompletedBooking = ${JSON.stringify(completedEmptyStateUndoFixture)};
       window.__prestigeFetchCalls = [];
+      window.__prestigeAdminSavedBookingListRequests = [];
       window.__prestigeBookingCompletionRequests = [];
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
@@ -19873,10 +19911,21 @@ async function runChromeTest() {
 
         if (
           method === "GET" &&
-          String(target).includes("/rest/v1/bookings") &&
-          String(target).includes("select=")
+          String(target).includes("/api/admin-saved-bookings")
         ) {
-          return new Response(JSON.stringify([singleCompletedBooking]), {
+          const listUrl = new URL(String(target), window.location.href);
+
+          window.__prestigeAdminSavedBookingListRequests.push({
+            limit: listUrl.searchParams.get("limit") || "",
+            method,
+            url: String(target),
+          });
+
+          return new Response(JSON.stringify({
+            bookings: [singleCompletedBooking],
+            ok: true,
+            version: "browser-admin-saved-booking-list-read-mock",
+          }), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
@@ -19952,6 +20001,23 @@ async function runChromeTest() {
         evaluate(`document.body.innerText.includes("COMPLETED EMPTY STATE TRAVELER")`),
       10000,
       "single completed booking loaded for empty-state undo test",
+    );
+
+    const typedEmptyStateLoadBookingsReadState = await evaluate(`(() => ({
+      legacyBookingListReads: (window.__prestigeFetchCalls || []).filter(
+        (call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings"),
+      ),
+      typedListReads: window.__prestigeAdminSavedBookingListRequests || [],
+    }))()`);
+    assert.deepEqual(
+      typedEmptyStateLoadBookingsReadState.typedListReads.map(({ limit, method }) => ({ limit, method })),
+      [{ limit: "25", method: "GET" }],
+      "Expected empty-state Load Bookings to use the typed admin saved booking list API",
+    );
+    assert.deepEqual(
+      typedEmptyStateLoadBookingsReadState.legacyBookingListReads,
+      [],
+      "Expected empty-state Load Bookings not to read the booking list through the legacy admin data shim",
     );
 
     await clickTab("Completed", "Completed Bookings");

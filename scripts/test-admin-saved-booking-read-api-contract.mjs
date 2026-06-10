@@ -147,6 +147,7 @@ class MockSupabaseQuery {
   constructor(client, table) {
     this.client = client;
     this.filters = [];
+    this.orderBy = [];
     this.resultLimit = null;
     this.resultMode = "many";
     this.selectedColumns = null;
@@ -165,6 +166,12 @@ class MockSupabaseQuery {
 
   limit(count) {
     this.resultLimit = count;
+
+    return this;
+  }
+
+  order(column, options) {
+    this.orderBy.push({ column, options });
 
     return this;
   }
@@ -189,6 +196,7 @@ class MockSupabaseQuery {
     return this.client.selectRows(
       this.table,
       this.filters,
+      this.orderBy,
       this.resultLimit,
       this.resultMode,
       this.selectedColumns,
@@ -222,12 +230,13 @@ class MockSupabaseClient {
     );
   }
 
-  selectRows(table, filters, resultLimit, resultMode, selectedColumns) {
+  selectRows(table, filters, orderBy, resultLimit, resultMode, selectedColumns) {
     const failure = this.failures[`select:${table}`] || this.failures[table] || null;
 
     this.selectHistory.push({
       filters: clone(filters),
       limit: resultLimit,
+      orderBy: clone(orderBy),
       resultMode,
       selectedColumns,
       table,
@@ -245,7 +254,21 @@ class MockSupabaseClient {
       };
     }
 
-    const rows = this.filterRows(table, filters).slice(0, resultLimit || undefined);
+    const rows = this.filterRows(table, filters)
+      .sort((first, second) => {
+        for (const order of orderBy) {
+          const firstValue = String(first[order.column] ?? "");
+          const secondValue = String(second[order.column] ?? "");
+          const comparison = firstValue.localeCompare(secondValue);
+
+          if (comparison !== 0) {
+            return order.options?.ascending === false ? -comparison : comparison;
+          }
+        }
+
+        return 0;
+      })
+      .slice(0, resultLimit || undefined);
 
     return {
       data: resultMode === "maybeSingle" ? rows[0] ?? null : rows,
@@ -353,6 +376,7 @@ const seed = {
     {
       id: "other-booking",
       booking_type: "DEP",
+      created_at: "2026-05-28T07:30:00.000Z",
       companies: {
         company_name: "OTHER COMPANY",
       },
@@ -368,6 +392,21 @@ try {
   assert.equal(reader.adminSavedBookingReadVersion, "admin-saved-booking-read-v1");
 
   assert.equal(reader.parseAdminSavedBookingReadParams({}).ok, false);
+  assert.deepEqual(reader.parseAdminSavedBookingListReadParams({}), {
+    data: {
+      limit: 25,
+    },
+    ok: true,
+  });
+  assert.deepEqual(reader.parseAdminSavedBookingListReadParams({ limit: "2" }), {
+    data: {
+      limit: 2,
+    },
+    ok: true,
+  });
+  assert.equal(reader.parseAdminSavedBookingReadParams({ id: "save-read-1", limit: "2" }).ok, false);
+  assert.equal(reader.parseAdminSavedBookingListReadParams({ limit: "0" }).ok, false);
+  assert.equal(reader.parseAdminSavedBookingListReadParams({ id: "save-read-1" }).ok, false);
   assert.equal(
     reader.parseAdminSavedBookingReadParams({
       id: "save-read-1",
@@ -408,6 +447,21 @@ try {
   assert.equal(driverBlockedMock.client.operations.length, 0);
   assertNoUnsafeResponse(driverBlockedResult, "driver blocked response");
 
+  const listBlockedMock = installMockClient(seed);
+  const listBlockedResult = await routeJson(
+    await route.GET(
+      new Request("http://localhost/api/admin-saved-bookings?limit=2", {
+        headers: sessionHeaders({ referer: "http://localhost/my-bookings" }),
+      }),
+    ),
+  );
+
+  assert.equal(listBlockedResult.status, 403);
+  assert.equal(listBlockedResult.body.error, routeBlockedMessage);
+  assert.equal(listBlockedMock.createdClients.length, 0);
+  assert.equal(listBlockedMock.client.operations.length, 0);
+  assertNoUnsafeResponse(listBlockedResult, "blocked list response");
+
   setEnv(enabledEnv());
 
   const validMock = installMockClient(seed);
@@ -446,6 +500,47 @@ try {
   assert.equal(validMock.client.selectHistory[0].selectedColumns.includes("parser_debug"), false);
   assertNoWrites(validMock, "valid read");
   assertNoUnsafeResponse(readResult, "valid read response");
+
+  setEnv(enabledEnv());
+
+  const listMock = installMockClient(seed);
+  const listResult = await routeJson(
+    await route.GET(
+      new Request("http://localhost/api/admin-saved-bookings?limit=2", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(listResult.status, 200);
+  assert.equal(listResult.body.ok, true);
+  assert.equal(listResult.body.version, "admin-saved-booking-read-v1");
+  assert.deepEqual(
+    listResult.body.bookings.map((booking) => booking.id),
+    ["other-booking", "save-read-1"],
+  );
+  assert.equal(listResult.body.bookings[0].companies.company_name, "OTHER COMPANY");
+  assert.equal(listResult.body.bookings[1].customer_price_amount, 88);
+  assert.equal(listResult.body.bookings[1].driver_payout_amount, 55);
+  assert.equal(listResult.body.bookings[1].internal_admin_note, undefined);
+  assert.equal(listResult.body.bookings[1].parser_debug, undefined);
+  assert.equal(listMock.createdClients.length, 1);
+  assert.equal(listMock.client.selectHistory.length, 1);
+  assert.equal(listMock.client.selectHistory[0].table, "bookings");
+  assert.deepEqual(listMock.client.selectHistory[0].filters, []);
+  assert.deepEqual(listMock.client.selectHistory[0].orderBy, [
+    {
+      column: "created_at",
+      options: {
+        ascending: false,
+      },
+    },
+  ]);
+  assert.equal(listMock.client.selectHistory[0].limit, 2);
+  assert.equal(listMock.client.selectHistory[0].selectedColumns.includes("internal_admin_note"), false);
+  assert.equal(listMock.client.selectHistory[0].selectedColumns.includes("parser_debug"), false);
+  assertNoWrites(listMock, "valid list read");
+  assertNoUnsafeResponse(listResult, "valid list response");
 
   setEnv(enabledEnv());
 

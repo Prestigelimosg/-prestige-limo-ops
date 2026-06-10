@@ -4,7 +4,10 @@ import {
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
-import { loadAdminSavedBookingById } from "../../../lib/admin-saved-booking-read";
+import {
+  loadAdminSavedBookingById,
+  loadAdminSavedBookingList,
+} from "../../../lib/admin-saved-booking-read";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +77,30 @@ export async function GET(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await loadAdminSavedBookingById(new URL(request.url).searchParams, actor);
+    const searchParams = new URL(request.url).searchParams;
+    const isSingleBookingRead = Boolean(searchParams.get("id") || searchParams.get("booking_id"));
+
+    if (isSingleBookingRead) {
+      const result = await loadAdminSavedBookingById(searchParams, actor);
+
+      if (!result.ok) {
+        return Response.json(
+          {
+            error: result.error,
+            ok: false,
+          },
+          { status: result.status },
+        );
+      }
+
+      return Response.json({
+        booking: result.data.booking,
+        ok: true,
+        version: result.data.version,
+      });
+    }
+
+    const result = await loadAdminSavedBookingList(searchParams, actor);
 
     if (!result.ok) {
       return Response.json(
@@ -87,7 +113,7 @@ export async function GET(request: Request) {
     }
 
     return Response.json({
-      booking: result.data.booking,
+      bookings: result.data.bookings,
       ok: true,
       version: result.data.version,
     });

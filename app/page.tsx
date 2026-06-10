@@ -75,56 +75,6 @@ const adminLegacyTables = {
   travelers: "travelers",
 } as const;
 
-const adminBookingSelectColumns = [
-  "id",
-  "company_id",
-  "booker_id",
-  "traveler_id",
-  "booking_type",
-  "vehicle",
-  "pickup_time",
-  "pickup_address",
-  "dropoff_address",
-  "flight_no",
-  "route",
-  "pax",
-  "job_card",
-  "status",
-  "driver_id",
-  "driver_name",
-  "driver_contact",
-  "driver_plate_number",
-  "customer_rate",
-  "customer_rate_unit",
-  "customer_price_amount",
-  "customer_rate_override",
-  "customer_price_override_reason",
-  "driver_payout_min",
-  "driver_payout_max",
-  "driver_payout_amount",
-  "driver_payout_override",
-  "driver_payout_reason",
-  "driver_payout_unit",
-  "driver_notes",
-  "driver_dispatch_include_payout",
-  "midnight_surcharge",
-  "midnight_payout",
-  "extra_stop_count",
-  "extra_stop_surcharge",
-  "extra_stop_payout",
-  "child_seat_required",
-  "child_seat_count",
-  "child_seat_type",
-  "child_seat_customer_surcharge",
-  "child_seat_driver_payout",
-  "pricing_source",
-  "created_at",
-  "updated_at",
-  "companies(company_name, domain)",
-  "bookers(booker_name, email, phone)",
-  "travelers(traveler_name)",
-].join(", ");
-
 type AdminLegacyDataTable = (typeof adminLegacyTables)[keyof typeof adminLegacyTables];
 type AdminLegacyDataMode = "delete" | "insert" | "select" | "update" | "upsert";
 type AdminLegacyDataFilterOperator = "eq" | "ilike";
@@ -428,6 +378,7 @@ type AdminRateSetupReadResponse = {
 
 type AdminSavedBookingReadResponse = {
   booking?: BookingRecord | null;
+  bookings?: BookingRecord[];
   error?: string;
   ok?: boolean;
   version?: string;
@@ -11933,11 +11884,11 @@ export default function Home() {
   }
 
   async function loadBookings(successText = "Bookings loaded.", options?: { silent?: boolean }) {
-    if (!adminLegacyDataClient) {
+    if (typeof fetch !== "function") {
       if (!options?.silent) {
         setMessage({
           tone: "error",
-          text: "Admin data API is not available.",
+          text: "Admin saved booking read API is not available.",
         });
       }
       return;
@@ -11949,18 +11900,23 @@ export default function Home() {
     }
 
     try {
-      const { data, error } = await adminLegacyDataClient
-        .from(adminLegacyTables.bookings)
-        .select(adminBookingSelectColumns)
-        .order("created_at", { ascending: false })
-        .limit(25);
+      const searchParams = new URLSearchParams({ limit: "25" });
+      const response = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingReadResponse | null;
 
-      if (error) {
+      if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings)) {
         if (!options?.silent) {
+          const error = readAdminLegacyDataError(responseBody, "Admin saved booking list read request failed.");
+
           setMessage({ tone: "error", text: `Load bookings failed: ${formatSupabaseError(error)}` });
         }
       } else {
-        const loadedBookings = sortBookingsNewestFirst((data ?? []) as BookingRecord[]);
+        const loadedBookings = sortBookingsNewestFirst(responseBody.bookings);
         setBookings(loadedBookings);
         if (!options?.silent) {
           if (loadedBookings.length === 0) {

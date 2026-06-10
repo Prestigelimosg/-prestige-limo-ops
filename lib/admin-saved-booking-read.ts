@@ -10,6 +10,10 @@ export type AdminSavedBookingReadParams = {
   id: string;
 };
 
+export type AdminSavedBookingListReadParams = {
+  limit: number;
+};
+
 export type AdminSavedBookingRecord = {
   booker_id: number | null;
   bookers: {
@@ -74,6 +78,11 @@ export type AdminSavedBookingReadData = {
   version: typeof adminSavedBookingReadVersion;
 };
 
+export type AdminSavedBookingListReadData = {
+  bookings: AdminSavedBookingRecord[];
+  version: typeof adminSavedBookingReadVersion;
+};
+
 type AdminSavedBookingReadFailureCategory =
   | "auth_or_key_rejected"
   | "client_init_failed"
@@ -98,9 +107,12 @@ type UnknownRecord = Record<string, unknown>;
 type SavedBookingClient = Pick<SupabaseClient, "from">;
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
-const allowedQueryParams = new Set(["booking_id", "id"]);
+const allowedSingleReadQueryParams = new Set(["booking_id", "id"]);
+const allowedListReadQueryParams = new Set(["limit"]);
 const adminSavedBookingReadSelect =
   "id, company_id, booker_id, traveler_id, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+const defaultListLimit = 25;
+const maxListLimit = 100;
 const malformedParamsError =
   "Admin saved booking read parameters are malformed.";
 const safeActorError =
@@ -376,6 +388,16 @@ function validBookingId(value: unknown) {
     : null;
 }
 
+function positiveInteger(value: unknown, defaultValue: number, maxValue: number) {
+  if (value === undefined || value === null || value === "") {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= maxValue ? parsed : null;
+}
+
 function nestedCompany(value: unknown): AdminSavedBookingRecord["companies"] {
   const record = asRecord(value);
   const companyName = textOrNull(record.company_name, 220);
@@ -481,7 +503,7 @@ export function parseAdminSavedBookingReadParams(
   params: URLSearchParams | UnknownRecord,
 ): AdminSavedBookingReadResult<AdminSavedBookingReadParams> {
   const unsupportedParam = paramEntries(params).find(
-    ([key]) => !allowedQueryParams.has(key),
+    ([key]) => !allowedSingleReadQueryParams.has(key),
   );
 
   if (unsupportedParam) {
@@ -507,6 +529,43 @@ export function parseAdminSavedBookingReadParams(
   return {
     data: {
       id,
+    },
+    ok: true,
+  };
+}
+
+export function parseAdminSavedBookingListReadParams(
+  params: URLSearchParams | UnknownRecord,
+): AdminSavedBookingReadResult<AdminSavedBookingListReadParams> {
+  const unsupportedParam = paramEntries(params).find(
+    ([key]) => !allowedListReadQueryParams.has(key),
+  );
+
+  if (unsupportedParam) {
+    return {
+      error: malformedParamsError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const limit = positiveInteger(
+    readParamsValue(params, "limit"),
+    defaultListLimit,
+    maxListLimit,
+  );
+
+  if (!limit) {
+    return {
+      error: malformedParamsError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return {
+    data: {
+      limit,
     },
     ok: true,
   };
@@ -542,6 +601,45 @@ export async function loadAdminSavedBookingById(
   return {
     data: {
       booking: toSavedBookingRecord(data),
+      version: adminSavedBookingReadVersion,
+    },
+    ok: true,
+  };
+}
+
+export async function loadAdminSavedBookingList(
+  input: URLSearchParams | UnknownRecord,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminSavedBookingReadResult<AdminSavedBookingListReadData>> {
+  const parsed = parseAdminSavedBookingListReadParams(input);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const clientResult = getSavedBookingClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const { data, error } = await clientResult.data
+    .from("bookings")
+    .select(adminSavedBookingReadSelect)
+    .order("created_at", { ascending: false })
+    .limit(parsed.data.limit);
+
+  if (error) {
+    return safeDatabaseFailure(safeReadError, 500, error);
+  }
+
+  return {
+    data: {
+      bookings: Array.isArray(data)
+        ? data
+            .map(toSavedBookingRecord)
+            .filter((booking): booking is AdminSavedBookingRecord => Boolean(booking))
+        : [],
       version: adminSavedBookingReadVersion,
     },
     ok: true,

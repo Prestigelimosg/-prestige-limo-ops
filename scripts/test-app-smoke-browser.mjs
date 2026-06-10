@@ -30856,9 +30856,59 @@ async function runChromeTest() {
           const serviceHistoryHandoff = document.querySelector(
             "[data-customer-account-service-history-handoff='${customerId}']",
           );
+          const customerFolderSavedBookings = document.querySelector(
+            "[data-customer-folder-saved-bookings='${customerId}']",
+          );
           return {
             bookingHistory: document.querySelector("[data-customer-booking-history]")?.innerText || "",
             boundary: detail?.querySelector("[data-payment-collection-boundary]")?.textContent.trim() || "",
+            customerFolderSavedBookings: {
+              boundary:
+                customerFolderSavedBookings
+                  ?.querySelector("[data-customer-folder-saved-bookings-boundary]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              buttonLabels: [...(customerFolderSavedBookings?.querySelectorAll("button") || [])].map((button) =>
+                button.textContent.trim(),
+              ),
+              empty:
+                customerFolderSavedBookings
+                  ?.querySelector("[data-customer-folder-saved-bookings-empty]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              heading:
+                customerFolderSavedBookings
+                  ?.querySelector("[data-customer-folder-saved-bookings-heading]")
+                  ?.textContent.trim() || "",
+              note:
+                customerFolderSavedBookings
+                  ?.querySelector("[data-customer-folder-saved-bookings-note]")
+                  ?.textContent.replace(/\\s+/g, " ")
+                  .trim() || "",
+              rowCount:
+                customerFolderSavedBookings?.querySelectorAll("[data-customer-folder-saved-bookings-row]").length ||
+                0,
+              summaryLabels: [
+                ...(customerFolderSavedBookings?.querySelectorAll("[data-customer-folder-saved-bookings-summary]") ||
+                  []),
+              ].map((item) => item.getAttribute("data-customer-folder-saved-bookings-summary") || ""),
+              text: customerFolderSavedBookings?.textContent || "",
+              unsafeText: [
+                "driver payout",
+                "paynow payout",
+                "contact phone",
+                "passenger phone",
+                "payment link",
+                "parser/debug",
+                "debug internals",
+                "admin finance",
+                "service role",
+                "secret",
+              ].filter((value) =>
+                (customerFolderSavedBookings?.textContent || "").toLowerCase().includes(value),
+              ),
+              visible: Boolean(customerFolderSavedBookings),
+            },
             detailText: detail?.innerText || "",
             forbiddenText: [
               "driver payout",
@@ -31093,6 +31143,63 @@ async function runChromeTest() {
           state.serviceHistoryHandoff.unsafeText,
           [],
           `Expected ${customerName} account service-history handoff to avoid private/internal wording`,
+        );
+        assert.equal(
+          state.customerFolderSavedBookings.visible,
+          true,
+          `Expected ${customerName} customer folder saved booking read panel`,
+        );
+        assert.equal(
+          state.customerFolderSavedBookings.heading,
+          "Saved Booking References",
+          `Expected ${customerName} saved booking read heading`,
+        );
+        for (const expectedSavedBookingBoundaryText of [
+          "Loads safe saved booking references for this customer folder only.",
+          "No booking write",
+          "invoice/PDF/payment action",
+          "notification/calendar action",
+          "contact detail",
+          "pricing fields",
+          "driver compensation",
+          "parser data",
+          "private notes",
+        ]) {
+          assert.equal(
+            state.customerFolderSavedBookings.boundary.includes(expectedSavedBookingBoundaryText),
+            true,
+            `Expected ${customerName} saved booking read boundary: ${expectedSavedBookingBoundaryText}`,
+          );
+        }
+        assert.deepEqual(
+          state.customerFolderSavedBookings.summaryLabels,
+          ["Customer/account", "Returned", "Matched", "Source"],
+          `Expected ${customerName} saved booking read summary labels`,
+        );
+        assert.deepEqual(
+          state.customerFolderSavedBookings.buttonLabels,
+          ["Load Saved Bookings"],
+          `Expected ${customerName} saved booking read to expose one guarded load action`,
+        );
+        assert.equal(
+          state.customerFolderSavedBookings.note.includes(`Load saved booking references for ${customerName}`),
+          true,
+          `Expected ${customerName} saved booking read idle note`,
+        );
+        assert.equal(
+          state.customerFolderSavedBookings.empty,
+          "No saved booking references loaded yet.",
+          `Expected ${customerName} saved booking read to start empty`,
+        );
+        assert.equal(
+          state.customerFolderSavedBookings.rowCount,
+          0,
+          `Expected ${customerName} saved booking read not to show rows before staff clicks load`,
+        );
+        assert.deepEqual(
+          state.customerFolderSavedBookings.unsafeText,
+          [],
+          `Expected ${customerName} saved booking read to avoid private/internal wording`,
         );
         for (const expectedHandoffText of [
           "Customer Service History / Account Handoff",

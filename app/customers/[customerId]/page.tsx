@@ -7,6 +7,7 @@ import {
   type MockCustomer,
   type MockCustomerBooking,
 } from "../_data/mock-customers";
+import { CustomerFolderSavedBookingsPanel } from "./saved-bookings-panel";
 
 type CustomerFolderPageProps = {
   params: Promise<{
@@ -261,6 +262,8 @@ export default async function MockCustomerFolderPage({ params }: CustomerFolderP
             change is created here.
           </p>
         </section>
+
+        <CustomerFolderSavedBookingsPanel customerId={customer.id} customerName={customer.companyName} />
 
         <section
           className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"

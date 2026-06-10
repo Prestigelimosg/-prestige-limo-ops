@@ -417,6 +417,33 @@ try {
 
   setEnv(enabledEnv());
 
+  const customerFolderMock = installMockClient(seed);
+  const customerFolderReadResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&limit=10", {
+        headers: sessionHeaders({ referer: "http://localhost/customers/ubs" }),
+      }),
+    ),
+  );
+
+  assert.equal(customerFolderReadResult.status, 200);
+  assert.equal(customerFolderReadResult.body.ok, true);
+  assert.deepEqual(customerFolderReadResult.body.summary, {
+    matched_count: 2,
+    recent_read_count: 3,
+    returned_count: 2,
+  });
+  assert.deepEqual(
+    customerFolderReadResult.body.saved_bookings.map((booking) => booking.booking_reference),
+    ["UBS-SAFE-002", "UBS-SAFE-001"],
+  );
+  assert.equal(customerFolderMock.client.operations.length, 0);
+  assert.equal(customerFolderMock.client.selectHistory.length, 1);
+  assert.equal(customerFolderMock.client.selectHistory[0].table, "bookings");
+  assertNoLeaks(customerFolderReadResult, "customer folder saved bookings read response should stay safe");
+
+  setEnv(enabledEnv());
+
   const failureMock = installMockClient(seed, {
     failures: {
       "select:bookings": {

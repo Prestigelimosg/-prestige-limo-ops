@@ -1080,6 +1080,14 @@ export async function updateDriverAppNotificationStatusForToken(
     return linkResult;
   }
 
+  if (!linkResult.data.id) {
+    return {
+      error: safeNotificationUpdateError,
+      ok: false,
+      status: 404,
+    };
+  }
+
   const payload = {
     actor_label: "verified_driver_job_link",
     actor_role: "driver",
@@ -1087,12 +1095,14 @@ export async function updateDriverAppNotificationStatusForToken(
     source_surface: "driver_api",
     updated_at: new Date().toISOString(),
   };
+  const driverLinkNotificationScope = `driver_job_link_id.is.null,driver_job_link_id.eq.${linkResult.data.id}`;
   const { data, error } = await clientResult.data
     .from(notificationTable)
     .update(payload)
     .eq("id", input.notification_id)
     .eq("delivery_surface", "driver_app")
     .eq("booking_reference", linkResult.data.booking_reference)
+    .or(driverLinkNotificationScope)
     .eq("notification_status", "queued")
     .select(notificationSelect)
     .single();

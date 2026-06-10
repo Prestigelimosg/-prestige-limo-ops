@@ -16,6 +16,11 @@ const serverSessionToken = "mock-customer-driver-notification-session-token";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_DRIVER_NOTIFICATION_SENTINEL";
 const supabaseUrlSentinel = "https://customer-driver-notification-contract.supabase.co";
 const notificationTable = "customer_driver_app_notification_outbox";
+const nowDate = new Date();
+const validDriverLinkExpiresAt = new Date(nowDate.getTime() + 6 * 60 * 60 * 1000).toISOString();
+const farFutureDriverLinkExpiresAt = new Date(
+  nowDate.getTime() + 7 * 24 * 60 * 60 * 1000,
+).toISOString();
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_DRIVER_NOTIFICATION_SENTINEL|mock-customer-driver-notification-session-token|customer-driver-notification-contract\.supabase\.co|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const unsafeNotificationLeakPattern =
@@ -121,6 +126,29 @@ function transpileTypescript(source, filename) {
   }).outputText.replace(/require\("([^"]+)\.ts"\)/g, 'require("$1.js")');
 }
 
+function parseOrFilterExpression(expression) {
+  return String(expression)
+    .split(",")
+    .map((condition) => {
+      const [column, operator, ...rest] = condition.split(".");
+      const value = rest.join(".");
+
+      if (operator === "is" && value === "null") {
+        return {
+          column,
+          type: "is",
+          value: null,
+        };
+      }
+
+      return {
+        column,
+        type: operator,
+        value,
+      };
+    });
+}
+
 async function writeHarnessFile(tempDir, relativePath) {
   const sourcePath = path.join(process.cwd(), relativePath);
   const outputPath = path.join(tempDir, relativePath.replace(/\.ts$/, ".js"));
@@ -220,6 +248,15 @@ class MockSupabaseQuery {
     return this;
   }
 
+  or(expression) {
+    this.filters.push({
+      conditions: parseOrFilterExpression(expression),
+      type: "or",
+    });
+
+    return this;
+  }
+
   select(columns) {
     if (!this.operation) {
       this.operation = "select";
@@ -306,9 +343,19 @@ class MockSupabaseClient {
   }
 
   filterRows(table, filters) {
-    return this.tables[table].filter((row) =>
-      filters.every((filter) => row[filter.column] === filter.value),
-    );
+    return this.tables[table].filter((row) => filters.every((filter) => this.rowMatchesFilter(row, filter)));
+  }
+
+  rowMatchesFilter(row, filter) {
+    if (filter.type === "or") {
+      return filter.conditions.some((condition) => this.rowMatchesFilter(row, condition));
+    }
+
+    if (filter.type === "is") {
+      return row[filter.column] === null || row[filter.column] === undefined;
+    }
+
+    return row[filter.column] === filter.value;
   }
 
   insertRow(table, payload, resultMode, selectedColumns) {
@@ -421,7 +468,7 @@ class MockSupabaseClient {
     const updatedRows = [];
 
     this.tables[table] = this.tables[table].map((row) => {
-      const matches = filters.every((filter) => row[filter.column] === filter.value);
+      const matches = filters.every((filter) => this.rowMatchesFilter(row, filter));
 
       if (!matches) {
         return row;
@@ -787,7 +834,7 @@ try {
       driver_job_links: [
         {
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
-          expires_at: "2026-06-09T01:00:00.000Z",
+          expires_at: validDriverLinkExpiresAt,
           id: driverLinkId,
           link_status: "active",
           revoked_at: null,
@@ -858,7 +905,7 @@ try {
       driver_job_links: [
         {
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
-          expires_at: "2026-06-09T01:00:00.000Z",
+          expires_at: validDriverLinkExpiresAt,
           id: driverLinkId,
           link_status: "active",
           revoked_at: null,
@@ -890,11 +937,127 @@ try {
         { column: "id", type: "eq", value: "notification-driver-safe-one" },
         { column: "delivery_surface", type: "eq", value: "driver_app" },
         { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
+        {
+          conditions: [
+            { column: "driver_job_link_id", type: "is", value: null },
+            { column: "driver_job_link_id", type: "eq", value: driverLinkId },
+          ],
+          type: "or",
+        },
         { column: "notification_status", type: "eq", value: "queued" },
       ],
-      "Expected driver PATCH to update only exact queued scoped notification",
+      "Expected driver PATCH to update only exact queued notifications scoped to the verified link",
     );
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(driverPatch.body)), false);
+
+    setEnv(validEnv());
+    const bookingWideDriverPatchMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          delivery_surface: "driver_app",
+          driver_job_link_id: null,
+          id: "notification-driver-booking-wide",
+        }),
+      ],
+      driver_job_links: [
+        {
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          expires_at: validDriverLinkExpiresAt,
+          id: driverLinkId,
+          link_status: "active",
+          revoked_at: null,
+          token_hash: tokenHash(driverToken),
+        },
+      ],
+    });
+    const bookingWideDriverPatch = await responseJson(
+      await driverRoute.PATCH(
+        new Request(`http://localhost/api/driver-job/${driverToken}/notifications`, {
+          body: JSON.stringify({
+            notification_id: "notification-driver-booking-wide",
+            notification_status: "dismissed",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "PATCH",
+        }),
+        routeContext(driverToken),
+      ),
+    );
+
+    assert.equal(bookingWideDriverPatch.status, 200);
+    assert.equal(bookingWideDriverPatch.body.notification.notification_status, "dismissed");
+    assert.equal(
+      bookingWideDriverPatchMock.client.tables[notificationTable][0].notification_status,
+      "dismissed",
+      "Booking-wide driver notification rows may still be updated by the verified booking link",
+    );
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(bookingWideDriverPatch.body)), false);
+
+    setEnv(validEnv());
+    const otherDriverLinkId = "22222222-2222-4222-8222-222222222222";
+    const mismatchedDriverPatchMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          delivery_surface: "driver_app",
+          driver_job_link_id: otherDriverLinkId,
+          id: "notification-driver-other-link",
+        }),
+      ],
+      driver_job_links: [
+        {
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          expires_at: validDriverLinkExpiresAt,
+          id: driverLinkId,
+          link_status: "active",
+          revoked_at: null,
+          token_hash: tokenHash(driverToken),
+        },
+      ],
+    });
+    const mismatchedDriverPatch = await responseJson(
+      await driverRoute.PATCH(
+        new Request(`http://localhost/api/driver-job/${driverToken}/notifications`, {
+          body: JSON.stringify({
+            notification_id: "notification-driver-other-link",
+            notification_status: "dismissed",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "PATCH",
+        }),
+        routeContext(driverToken),
+      ),
+    );
+
+    assert.equal(mismatchedDriverPatch.status, 404);
+    assert.equal(
+      mismatchedDriverPatchMock.client.tables[notificationTable][0].notification_status,
+      "queued",
+      "Mismatched driver-link notification rows must not be changed before rejection",
+    );
+    assert.deepEqual(
+      mismatchedDriverPatchMock.client.updateHistory[0].filters,
+      [
+        { column: "id", type: "eq", value: "notification-driver-other-link" },
+        { column: "delivery_surface", type: "eq", value: "driver_app" },
+        { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
+        {
+          conditions: [
+            { column: "driver_job_link_id", type: "is", value: null },
+            { column: "driver_job_link_id", type: "eq", value: driverLinkId },
+          ],
+          type: "or",
+        },
+        { column: "notification_status", type: "eq", value: "queued" },
+      ],
+      "Expected mismatched driver PATCH to include driver job link id before update",
+    );
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(mismatchedDriverPatch.body)), false);
 
     setEnv(validEnv());
     const farFutureDriverToken = "safe-driver-notification-far-future-token";
@@ -910,7 +1073,7 @@ try {
       driver_job_links: [
         {
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
-          expires_at: "2036-06-09T01:00:00.000Z",
+          expires_at: farFutureDriverLinkExpiresAt,
           id: driverLinkId,
           link_status: "active",
           revoked_at: null,

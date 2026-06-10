@@ -58,6 +58,7 @@ const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
+const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
 const adminBookingCalendarSyncStatusesApiPath =
   "/api/admin-booking-calendar-sync-statuses";
@@ -379,6 +380,17 @@ type AdminRateSetupReadResponse = {
 type AdminSavedBookingReadResponse = {
   booking?: BookingRecord | null;
   bookings?: BookingRecord[];
+  error?: string;
+  ok?: boolean;
+  version?: string;
+};
+
+type AdminSavedBookingStatusResponse = {
+  booking?: {
+    id?: string | number;
+    status?: BookingStatusValue | string | null;
+    updated_at?: string | null;
+  } | null;
   error?: string;
   ok?: boolean;
   version?: string;
@@ -13170,10 +13182,10 @@ export default function Home() {
   ) {
     const bookingId = String(bookingRecord.id);
 
-    if (!adminLegacyDataClient) {
+    if (typeof fetch !== "function") {
       const errorMessage = {
         tone: "error",
-        text: `${errorPrefix}: Admin data API is not available.`,
+        text: `${errorPrefix}: Admin saved booking status API is not available.`,
       } satisfies Message;
       setBookingCompletionMessage(bookingId, errorMessage);
       return;
@@ -13184,17 +13196,33 @@ export default function Home() {
     setBookingCompletionMessage(bookingId, loadingMessage);
 
     try {
-      const updatedAt = new Date().toISOString();
-      const { error } = await adminLegacyDataClient
-        .from(adminLegacyTables.bookings)
-        .update({
+      const response = await fetch(adminSavedBookingStatusesApiPath, {
+        body: JSON.stringify({
+          booking_id: bookingId,
           status: nextStatus,
-          updated_at: updatedAt,
-        })
-        .eq("id", bookingRecord.id);
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "PATCH",
+      });
+      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingStatusResponse | null;
 
-      if (error) {
-        throw new Error(error.message);
+      if (
+        !response.ok ||
+        responseBody?.ok !== true ||
+        !responseBody.booking ||
+        String(responseBody.booking.id) !== bookingId ||
+        responseBody.booking.status !== nextStatus ||
+        !responseBody.booking.updated_at
+      ) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          "Admin saved booking status update request failed.",
+        );
+
+        throw new Error(formatSupabaseError(error));
       }
 
       setBookings((current) =>
@@ -13203,7 +13231,7 @@ export default function Home() {
             ? {
                 ...currentBooking,
                 status: nextStatus,
-                updated_at: updatedAt,
+                updated_at: responseBody.booking?.updated_at || currentBooking.updated_at,
               }
             : currentBooking,
         ),

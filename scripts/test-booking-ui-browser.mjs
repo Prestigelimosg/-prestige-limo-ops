@@ -6706,6 +6706,47 @@ async function runChromeTest() {
           });
         }
 
+        if (
+          method === "PATCH" &&
+          String(target).includes("/api/admin-saved-booking-statuses")
+        ) {
+          let parsedBody = bodyText;
+
+          try {
+            parsedBody = JSON.parse(bodyText);
+          } catch {}
+
+          const updatedAt = new Date().toISOString();
+
+          window.__prestigeBookingCompletionRequests.push({
+            body: parsedBody,
+            method,
+            url: String(target),
+          });
+          window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) =>
+            String(booking.id) === String(parsedBody.booking_id)
+              ? {
+                  ...booking,
+                  status: parsedBody.status,
+                  updated_at: updatedAt,
+                }
+              : booking,
+          );
+
+          return new Response(JSON.stringify({
+            booking: {
+              id: parsedBody.booking_id,
+              status: parsedBody.status,
+              updated_at: updatedAt,
+            },
+            ok: true,
+            version: "browser-admin-saved-booking-status-mock",
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         if (method === "PATCH" && String(target).includes("/rest/v1/bookings")) {
           let parsedBody = bodyText;
 
@@ -9000,12 +9041,13 @@ async function runChromeTest() {
       const statusBookingPatches = bookingPatchCalls(statusState.fetchCalls);
       assert.equal(
         statusBookingPatches.length,
-        1,
-        `Expected ${description} to make one mocked booking PATCH, got ${statusState.fetchCalls.join(", ")}`,
+        0,
+        `Expected ${description} not to use the legacy booking status shim, got ${statusState.fetchCalls.join(", ")}`,
       );
-      assert.match(
-        statusBookingPatches[0],
-        new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${fixture.id}`),
+      assert.equal(
+        statusState.fetchCalls.filter((call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses")).length,
+        1,
+        `Expected ${description} to PATCH the typed saved booking status API once, got ${statusState.fetchCalls.join(", ")}`,
       );
       assert.ok(
         statusState.fetchCalls.every((call) => !call.includes("/rest/v1/drivers")),
@@ -9014,14 +9056,14 @@ async function runChromeTest() {
       assert.equal(statusState.completionRequests.length, 1);
       assert.match(
         statusState.completionRequests[0]?.url || "",
-        new RegExp(`\\/rest\\/v1\\/bookings.*id=eq\\.${fixture.id}`),
+        /\/api\/admin-saved-booking-statuses/,
       );
       assert.deepEqual(
         Object.keys(statusState.completionRequests[0]?.body || {}).sort(),
-        ["status", "updated_at"],
+        ["booking_id", "status"],
       );
+      assert.equal(statusState.completionRequests[0]?.body?.booking_id, String(fixture.id));
       assert.equal(statusState.completionRequests[0]?.body?.status, expectedStatus);
-      assert.match(statusState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
       assert.equal(statusState.localMessageCount, 1);
       assert.equal(
         statusState.messageIsInStatusControls,
@@ -9218,24 +9260,25 @@ async function runChromeTest() {
     const dashboardCompletionBookingPatches = bookingPatchCalls(dashboardCompletionState.fetchCalls);
     assert.equal(
       dashboardCompletionBookingPatches.length,
-      1,
-      `Expected mark completed to make one mocked booking PATCH, got ${dashboardCompletionState.fetchCalls.join(", ")}`,
+      0,
+      `Expected mark completed not to use the legacy booking status shim, got ${dashboardCompletionState.fetchCalls.join(", ")}`,
     );
-    assert.match(
-      dashboardCompletionBookingPatches[0],
-      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardCompletionActionFixture.id}`),
+    assert.equal(
+      dashboardCompletionState.fetchCalls.filter((call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses")).length,
+      1,
+      `Expected mark completed to PATCH the typed saved booking status API once, got ${dashboardCompletionState.fetchCalls.join(", ")}`,
     );
     assert.equal(dashboardCompletionState.completionRequests.length, 1);
     assert.match(
       dashboardCompletionState.completionRequests[0]?.url || "",
-      new RegExp(`\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardCompletionActionFixture.id}`),
+      /\/api\/admin-saved-booking-statuses/,
     );
     assert.deepEqual(
       Object.keys(dashboardCompletionState.completionRequests[0]?.body || {}).sort(),
-      ["status", "updated_at"],
+      ["booking_id", "status"],
     );
+    assert.equal(dashboardCompletionState.completionRequests[0]?.body?.booking_id, String(dashboardCompletionActionFixture.id));
     assert.equal(dashboardCompletionState.completionRequests[0]?.body?.status, "completed");
-    assert.match(dashboardCompletionState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(dashboardCompletionState.localSuccessMessageCount, 1);
     assert.notEqual(
       dashboardCompletionState.globalStatusText,
@@ -9731,20 +9774,25 @@ async function runChromeTest() {
     const undoAssignedCompletionBookingPatches = bookingPatchCalls(undoAssignedCompletionState.fetchCalls);
     assert.equal(
       undoAssignedCompletionBookingPatches.length,
-      1,
-      `Expected undo completed assigned to make one mocked booking PATCH, got ${undoAssignedCompletionState.fetchCalls.join(", ")}`,
+      0,
+      `Expected undo completed assigned not to use the legacy booking status shim, got ${undoAssignedCompletionState.fetchCalls.join(", ")}`,
     );
-    assert.match(
-      undoAssignedCompletionBookingPatches[0],
-      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${completedUndoAssignedFixture.id}`),
+    assert.equal(
+      undoAssignedCompletionState.fetchCalls.filter((call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses")).length,
+      1,
+      `Expected undo completed assigned to PATCH the typed saved booking status API once, got ${undoAssignedCompletionState.fetchCalls.join(", ")}`,
     );
     assert.equal(undoAssignedCompletionState.completionRequests.length, 1);
+    assert.match(
+      undoAssignedCompletionState.completionRequests[0]?.url || "",
+      /\/api\/admin-saved-booking-statuses/,
+    );
     assert.deepEqual(
       Object.keys(undoAssignedCompletionState.completionRequests[0]?.body || {}).sort(),
-      ["status", "updated_at"],
+      ["booking_id", "status"],
     );
+    assert.equal(undoAssignedCompletionState.completionRequests[0]?.body?.booking_id, String(completedUndoAssignedFixture.id));
     assert.equal(undoAssignedCompletionState.completionRequests[0]?.body?.status, "assigned");
-    assert.match(undoAssignedCompletionState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(undoAssignedCompletionState.localUndoMessageCount, 1);
     assert.equal(
       undoAssignedCompletionState.messageIsInFeedbackCard,
@@ -9836,20 +9884,25 @@ async function runChromeTest() {
     const undoConfirmedCompletionBookingPatches = bookingPatchCalls(undoConfirmedCompletionState.fetchCalls);
     assert.equal(
       undoConfirmedCompletionBookingPatches.length,
-      1,
-      `Expected undo completed confirmed to make one mocked booking PATCH, got ${undoConfirmedCompletionState.fetchCalls.join(", ")}`,
+      0,
+      `Expected undo completed confirmed not to use the legacy booking status shim, got ${undoConfirmedCompletionState.fetchCalls.join(", ")}`,
     );
-    assert.match(
-      undoConfirmedCompletionBookingPatches[0],
-      new RegExp(`^PATCH .*\\/rest\\/v1\\/bookings.*id=eq\\.${completedUndoConfirmedFixture.id}`),
+    assert.equal(
+      undoConfirmedCompletionState.fetchCalls.filter((call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses")).length,
+      1,
+      `Expected undo completed confirmed to PATCH the typed saved booking status API once, got ${undoConfirmedCompletionState.fetchCalls.join(", ")}`,
     );
     assert.equal(undoConfirmedCompletionState.completionRequests.length, 1);
+    assert.match(
+      undoConfirmedCompletionState.completionRequests[0]?.url || "",
+      /\/api\/admin-saved-booking-statuses/,
+    );
     assert.deepEqual(
       Object.keys(undoConfirmedCompletionState.completionRequests[0]?.body || {}).sort(),
-      ["status", "updated_at"],
+      ["booking_id", "status"],
     );
+    assert.equal(undoConfirmedCompletionState.completionRequests[0]?.body?.booking_id, String(completedUndoConfirmedFixture.id));
     assert.equal(undoConfirmedCompletionState.completionRequests[0]?.body?.status, "confirmed");
-    assert.match(undoConfirmedCompletionState.completionRequests[0]?.body?.updated_at || "", /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(undoConfirmedCompletionState.localUndoMessageCount, 1);
     assert.equal(
       undoConfirmedCompletionState.messageIsInFeedbackCard,
@@ -19933,6 +19986,38 @@ async function runChromeTest() {
 
         if (
           method === "PATCH" &&
+          String(target).includes("/api/admin-saved-booking-statuses")
+        ) {
+          let parsedBody = bodyText;
+
+          try {
+            parsedBody = JSON.parse(bodyText);
+          } catch {}
+
+          const updatedAt = new Date().toISOString();
+
+          window.__prestigeBookingCompletionRequests.push({
+            body: parsedBody,
+            method,
+            url: String(target),
+          });
+
+          return new Response(JSON.stringify({
+            booking: {
+              id: parsedBody.booking_id,
+              status: parsedBody.status,
+              updated_at: updatedAt,
+            },
+            ok: true,
+            version: "browser-admin-saved-booking-status-mock",
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (
+          method === "PATCH" &&
           String(target).includes("/rest/v1/bookings") &&
           String(target).includes("id=eq.${completedEmptyStateUndoFixture.id}")
         ) {
@@ -20061,6 +20146,7 @@ async function runChromeTest() {
             completionRequests: window.__prestigeBookingCompletionRequests || [],
             emptyStateVisible: document.body.innerText.includes("No completed bookings loaded yet."),
             feedbackCardText: feedbackCard?.textContent.trim() || "",
+            fetchCalls: window.__prestigeFetchCalls || [],
             globalStatusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
             localUndoMessageCount: localUndoMessages.length,
             messageText: completionMessage?.textContent.trim() || "",
@@ -20088,11 +20174,26 @@ async function runChromeTest() {
       [],
       `Expected single undo Supabase calls to be mocked, got ${emptyCompletedUndoState.unhandledSupabaseCalls.join(", ")}`,
     );
+    assert.equal(
+      bookingPatchCalls(emptyCompletedUndoState.fetchCalls).length,
+      0,
+      `Expected single undo not to use the legacy booking status shim, got ${emptyCompletedUndoState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(
+      emptyCompletedUndoState.fetchCalls.filter((call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses")).length,
+      1,
+      `Expected single undo to PATCH the typed saved booking status API once, got ${emptyCompletedUndoState.fetchCalls.join(", ")}`,
+    );
     assert.equal(emptyCompletedUndoState.completionRequests.length, 1);
+    assert.match(
+      emptyCompletedUndoState.completionRequests[0]?.url || "",
+      /\/api\/admin-saved-booking-statuses/,
+    );
     assert.deepEqual(
       Object.keys(emptyCompletedUndoState.completionRequests[0]?.body || {}).sort(),
-      ["status", "updated_at"],
+      ["booking_id", "status"],
     );
+    assert.equal(emptyCompletedUndoState.completionRequests[0]?.body?.booking_id, String(completedEmptyStateUndoFixture.id));
     assert.equal(emptyCompletedUndoState.completionRequests[0]?.body?.status, "confirmed");
     assert.equal(emptyCompletedUndoState.localUndoMessageCount, 1);
     assert.equal(emptyCompletedUndoState.messageIsInFeedbackCard, true);

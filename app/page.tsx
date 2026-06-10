@@ -55,6 +55,7 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
+const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
@@ -567,6 +568,15 @@ type RateOverrideListMessage = Message & {
 
 type DriverDeleteMessage = Message & {
   driverId: string;
+};
+
+type AdminBookingCalendarEventResponse = {
+  calendar_event?: {
+    filename?: string | null;
+  } | null;
+  error?: string;
+  ics?: string;
+  ok?: boolean;
 };
 
 type CopyFeedback = Message & {
@@ -3497,6 +3507,51 @@ function formatDashboardRoute(bookingRecord: BookingRecord) {
   );
 
   return `${pickup} → ${dropoff}`;
+}
+
+function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
+  const routePoints = getRoutePoints(bookingRecord);
+  const pickup = clean(bookingRecord.pickup_address) || routePoints[0] || "";
+  const dropoff =
+    clean(bookingRecord.dropoff_address) || routePoints[routePoints.length - 1] || "";
+  const route = routePoints.length >= 2 ? routePoints.join(" > ") : [pickup, dropoff].filter(Boolean).join(" > ");
+
+  return {
+    booking_reference: String(bookingRecord.id),
+    booking_type: clean(bookingRecord.booking_type),
+    booker_name: getBookerName(bookingRecord),
+    company_name: getBookingCompanyName(bookingRecord),
+    date: getBookingDateKey(bookingRecord),
+    driver_contact: clean(bookingRecord.driver_contact),
+    driver_name: clean(bookingRecord.driver_name),
+    driver_plate_number: clean(bookingRecord.driver_plate_number),
+    dropoff_address: dropoff,
+    flight_no: clean(bookingRecord.flight_no),
+    id: bookingRecord.id,
+    pax: bookingRecord.pax || 1,
+    pickup_address: pickup,
+    pickup_time: formatPickupTime(bookingRecord.pickup_time),
+    route,
+    status: clean(bookingRecord.status),
+    traveler_name: getBookingName(bookingRecord),
+    vehicle: clean(bookingRecord.vehicle),
+  };
+}
+
+function downloadIcsFile(filename: string, ics: string) {
+  if (typeof document === "undefined" || typeof URL === "undefined") {
+    throw new Error("Calendar download is available only in the browser.");
+  }
+
+  const blobUrl = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+  const link = document.createElement("a");
+
+  link.href = blobUrl;
+  link.download = filename || "prestige-booking.ics";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
 }
 
 function formatCreatedAt(value: string | null | undefined) {
@@ -7063,6 +7118,9 @@ export default function Home() {
     useState<Record<string, Message>>({});
   const [bookingCopyMessages, setBookingCopyMessages] =
     useState<Record<string, Message>>({});
+  const [bookingCalendarMessages, setBookingCalendarMessages] =
+    useState<Record<string, Message>>({});
+  const [bookingCalendarDownloadId, setBookingCalendarDownloadId] = useState<string | null>(null);
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
@@ -12611,6 +12669,54 @@ export default function Home() {
     }));
   }
 
+  function setBookingCalendarMessage(bookingId: string, nextMessage: Message) {
+    setBookingCalendarMessages((current) => ({
+      ...current,
+      [bookingId]: nextMessage,
+    }));
+  }
+
+  async function downloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
+    const bookingId = String(bookingRecord.id);
+
+    setBookingCalendarDownloadId(bookingId);
+    setBookingCalendarMessage(bookingId, {
+      tone: "info",
+      text: "Preparing calendar file...",
+    });
+
+    try {
+      const response = await fetch(adminBookingCalendarEventsApiPath, {
+        body: JSON.stringify(buildSavedBookingCalendarEventPayload(bookingRecord)),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as AdminBookingCalendarEventResponse | null;
+
+      if (!response.ok || !result?.ok || !result.ics) {
+        throw new Error(result?.error || "Calendar event file could not be created.");
+      }
+
+      downloadIcsFile(result.calendar_event?.filename || `prestige-booking-${bookingId}.ics`, result.ics);
+      setBookingCalendarMessage(bookingId, {
+        tone: "success",
+        text: "Calendar file downloaded.",
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
+
+      setBookingCalendarMessage(bookingId, {
+        tone: "error",
+        text: `Calendar download failed: ${errorMessage}`,
+      });
+    } finally {
+      setBookingCalendarDownloadId(null);
+    }
+  }
+
   function setBookingCompletionMessage(bookingId: string, nextMessage: Message | null) {
     setBookingCompletionMessages((current) => {
       if (!nextMessage) {
@@ -13037,6 +13143,45 @@ export default function Home() {
     }
   }
 
+  function renderBookingCalendarDownloadAction(
+    bookingRecord: BookingRecord,
+    surface: "completed" | "dashboard" | "recent",
+  ) {
+    const bookingId = String(bookingRecord.id);
+    const calendarMessage = bookingCalendarMessages[bookingId] ?? null;
+    const isDownloading = bookingCalendarDownloadId === bookingId;
+    const downloadInProgress = Boolean(bookingCalendarDownloadId);
+
+    return (
+      <>
+        <button
+          aria-label={`Download calendar event for booking ${bookingId}`}
+          className={`h-10 w-full rounded-md border border-sky-300 bg-white px-3 text-sm font-semibold text-sky-800 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+            surface === "dashboard" ? "mt-2" : ""
+          }`}
+          data-booking-calendar-download={bookingId}
+          data-booking-calendar-surface={surface}
+          disabled={downloadInProgress}
+          onClick={() => downloadSavedBookingCalendarEvent(bookingRecord)}
+          title="Download .ics calendar file"
+          type="button"
+        >
+          {isDownloading ? "Calendar..." : "Calendar"}
+        </button>
+        {calendarMessage ? (
+          <p
+            className={`rounded-md border px-3 py-2 text-xs ${statusClass(
+              calendarMessage.tone,
+            )}`}
+            data-booking-calendar-message={bookingId}
+          >
+            {calendarMessage.text}
+          </p>
+        ) : null}
+      </>
+    );
+  }
+
   function renderBookingCards(sectionBookings: BookingRecord[], emptyText: string) {
     if (sectionBookings.length === 0) {
       return (
@@ -13182,6 +13327,7 @@ export default function Home() {
                 >
                   Load this booking
                 </button>
+                {renderBookingCalendarDownloadAction(savedBooking, "dashboard")}
 
                 {!isCompleted || bookingCompletionMessage ? (
                   <div className="mt-2 flex flex-col gap-2" data-dashboard-status-controls={bookingId}>
@@ -13753,6 +13899,7 @@ export default function Home() {
                   >
                     Load this booking
                   </button>
+                  {renderBookingCalendarDownloadAction(savedBooking, "recent")}
                   {!isCompleted ? (
                     <button
                       className="h-10 rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
@@ -13942,6 +14089,7 @@ export default function Home() {
                       >
                         Load this booking
                       </button>
+                      {renderBookingCalendarDownloadAction(savedBooking, "completed")}
                       <button
                         className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         data-completed-undo-booking={bookingId}

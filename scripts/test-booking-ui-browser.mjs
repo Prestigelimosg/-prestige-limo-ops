@@ -5966,6 +5966,30 @@ async function runChromeTest() {
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
+      window.__prestigeAdminBookingCalendarEventRequests = [];
+      window.__prestigeCalendarBlobTypes = [];
+      window.__prestigeCalendarDownloadClicks = [];
+      window.__prestigeCalendarRevokedUrls = [];
+      window.URL.createObjectURL = (blob) => {
+        window.__prestigeCalendarBlobTypes.push(blob?.type || "");
+        return "blob:prestige-calendar-browser-test";
+      };
+      window.URL.revokeObjectURL = (url) => {
+        window.__prestigeCalendarRevokedUrls.push(String(url));
+      };
+      window.__prestigeOriginalAnchorClick =
+        window.__prestigeOriginalAnchorClick || window.HTMLAnchorElement.prototype.click;
+      window.HTMLAnchorElement.prototype.click = function calendarDownloadClickRecorder() {
+        if (this.download) {
+          window.__prestigeCalendarDownloadClicks.push({
+            download: this.download,
+            href: this.href,
+          });
+          return;
+        }
+
+        return window.__prestigeOriginalAnchorClick.call(this);
+      };
       window.__prestigeAdminAppNotifications = [
         {
           created_at: "2026-06-08T02:00:00.000Z",
@@ -6017,6 +6041,50 @@ async function runChromeTest() {
         })();
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+        if (String(target).includes("/api/admin-booking-calendar-events")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeAdminBookingCalendarEventRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "POST") {
+            const bookingReference = String(parsedBody?.booking_reference || "saved-booking");
+
+            return new Response(
+              JSON.stringify({
+                calendar_event: {
+                  filename: \`prestige-booking-\${bookingReference}.ics\`,
+                },
+                ics: [
+                  "BEGIN:VCALENDAR",
+                  "BEGIN:VEVENT",
+                  \`SUMMARY:Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || bookingReference}\`,
+                  "END:VEVENT",
+                  "END:VCALENDAR",
+                ].join("\\r\\n"),
+                ok: true,
+                version: "browser-admin-booking-calendar-event-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(JSON.stringify({ ok: false, error: "Calendar event method not mocked." }), {
+            status: 405,
+            headers: { "content-type": "application/json" },
+          });
+        }
 
         if (String(target).includes("/api/admin-app-notifications")) {
           const url = new URL(String(target), window.location.origin);
@@ -6700,6 +6768,102 @@ async function runChromeTest() {
       "Expected Bookings card not to display the saved driver payout range maximum plus extras as the actual payout",
     );
 
+    const clickedRecentCalendarDownload = await evaluate(`(() => {
+      const button = document.querySelector(
+        "[data-booking-calendar-download='ui-cleanup-load-fixture'][data-booking-calendar-surface='recent']",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedRecentCalendarDownload, true, "Expected Recent Bookings calendar button to be clickable");
+
+    const recentCalendarDownloadState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const request = (window.__prestigeAdminBookingCalendarEventRequests || []).find(
+            (candidate) => candidate.body?.booking_reference === "ui-cleanup-load-fixture",
+          );
+          const message =
+            document
+              .querySelector("[data-booking-calendar-message='ui-cleanup-load-fixture']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+          const downloads = window.__prestigeCalendarDownloadClicks || [];
+
+          if (!request || message !== "Calendar file downloaded." || downloads.length === 0) {
+            return false;
+          }
+
+          return {
+            blobTypes: window.__prestigeCalendarBlobTypes || [],
+            download: downloads[downloads.length - 1],
+            message,
+            request,
+            revokedUrls: window.__prestigeCalendarRevokedUrls || [],
+          };
+        })()`),
+      10000,
+      "Recent Bookings calendar download",
+    );
+    assert.deepEqual(
+      {
+        body: recentCalendarDownloadState.request.body,
+        hasSessionTokenHeader: Boolean(
+          recentCalendarDownloadState.request.headers["x-prestige-admin-session-token"],
+        ),
+        method: recentCalendarDownloadState.request.method,
+        purpose: recentCalendarDownloadState.request.headers["x-prestige-admin-purpose"] || "",
+      },
+      {
+        body: {
+          booking_reference: "ui-cleanup-load-fixture",
+          booking_type: "DEP",
+          booker_name: "LOADED SAVED BOOKER",
+          company_name: "LOADED SAVED COMPANY",
+          date: "2026-05-28",
+          driver_contact: "+65 8888 0000",
+          driver_name: "LOADED SAVED DRIVER",
+          driver_plate_number: "SLA1234X",
+          dropoff_address: "Changi Airport T2",
+          flight_no: "SQ999",
+          id: "ui-cleanup-load-fixture",
+          pax: 3,
+          pickup_address: "Raffles Hotel Singapore",
+          pickup_time: "0945hrs",
+          route: "Raffles Hotel Singapore > Changi Airport T2",
+          status: "confirmed",
+          traveler_name: "LOADED SAVED TRAVELER",
+          vehicle: "VAN",
+        },
+        hasSessionTokenHeader: false,
+        method: "POST",
+        purpose: "admin-booking-persistence",
+      },
+      "Expected calendar download to POST only safe saved booking fields through the admin ICS route",
+    );
+    assert.equal(
+      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
+        JSON.stringify(recentCalendarDownloadState.request.body),
+      ),
+      false,
+      "Expected calendar download payload to omit pricing, payout, billing, parser, notes, and secret fields",
+    );
+    assert.deepEqual(
+      recentCalendarDownloadState.download,
+      {
+        download: "prestige-booking-ui-cleanup-load-fixture.ics",
+        href: "blob:prestige-calendar-browser-test",
+      },
+      "Expected calendar action to download one .ics file without provider sync",
+    );
+    assert.deepEqual(recentCalendarDownloadState.blobTypes, ["text/calendar;charset=utf-8"]);
+    assert.deepEqual(recentCalendarDownloadState.revokedUrls, ["blob:prestige-calendar-browser-test"]);
+
     await setInputValue("[data-bookings-search-input='true']", "luther", "Bookings search");
     await waitForCondition(
       () =>
@@ -6829,6 +6993,7 @@ async function runChromeTest() {
             bodyText.includes("Assign driver to this booking") &&
             bodyText.includes("This updates the selected booking only.") &&
             [...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Assign to this booking") &&
+            Boolean(document.querySelector("[data-booking-calendar-surface='dashboard']")) &&
             Boolean(document.querySelector("[data-dashboard-load-booking='true']"));
         })()`),
       10000,

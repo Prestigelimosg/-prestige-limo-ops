@@ -38,6 +38,8 @@ const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
 const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
+const adminCompletedBookingBillingReadinessAuditsApiPath =
+  "/api/admin-completed-booking-billing-readiness-audits";
 const adminMonthlyBillingDraftPlansApiPath = "/api/admin-monthly-billing-draft-plans";
 const adminMonthlyInvoiceDraftsApiPath = "/api/admin-monthly-invoice-drafts";
 const adminMonthlyInvoiceDraftTripCandidatesApiPath =
@@ -831,6 +833,55 @@ type AdminMonthlyBillingGroupingReadState = {
   status: "idle" | "loading" | "loaded" | "error";
   summary: AdminMonthlyBillingGroupingSummary | null;
 };
+
+type AdminCompletedBookingBillingReadinessAuditRequirement =
+  | "customer_account"
+  | "billing_month"
+  | "billable_amount_source";
+
+type AdminCompletedBookingBillingReadinessAuditStatus = "ready" | "blocked";
+
+type AdminCompletedBookingBillingReadinessAuditBookingPayload = {
+  billing_month: string | null;
+  booker_id: number | null;
+  booking_reference: string;
+  company_id: number | null;
+  company_name: string | null;
+  customer_display_name: string | null;
+  pricing_source: string | null;
+  status: string;
+  traveler_id: number | null;
+};
+
+type AdminCompletedBookingBillingReadinessAuditItem = {
+  billing_month?: string | null;
+  booking_reference?: string | null;
+  customer_account?: string | null;
+  customer_id?: string | null;
+  missing_requirements?: AdminCompletedBookingBillingReadinessAuditRequirement[];
+  readiness_status?: AdminCompletedBookingBillingReadinessAuditStatus | null;
+  safe_reason?: string | null;
+  source?: "completed_saved_booking" | string | null;
+};
+
+type AdminCompletedBookingBillingReadinessAuditSummary = {
+  blocked_count?: number | null;
+  missing_billable_amount_source_count?: number | null;
+  missing_billing_month_count?: number | null;
+  missing_customer_account_count?: number | null;
+  non_completed_skipped_count?: number | null;
+  ready_count?: number | null;
+  total_completed_count?: number | null;
+};
+
+type AdminCompletedBookingBillingReadinessAuditReadState = {
+  auditItems: AdminCompletedBookingBillingReadinessAuditItem[];
+  message: Message | null;
+  status: "idle" | "loading" | "loaded" | "error";
+  summary: AdminCompletedBookingBillingReadinessAuditSummary | null;
+};
+
+type AdminCompletedBookingBillingReadinessAuditAction = "read-audit";
 
 type AdminMonthlyBillingDraftPlanStatus =
   | "planning"
@@ -3570,6 +3621,41 @@ function buildSavedBookingCalendarEventPayload(bookingRecord: BookingRecord) {
   };
 }
 
+function hasSavedCustomerBillingAmountSource(bookingRecord: BookingRecord) {
+  return [
+    bookingRecord.customer_price_amount,
+    bookingRecord.customer_rate,
+    bookingRecord.customer_rate_override,
+  ].some((value) => {
+    if (value === null || value === undefined) {
+      return false;
+    }
+
+    return Number.isFinite(Number(value));
+  });
+}
+
+function buildCompletedBookingBillingReadinessAuditPayload(
+  bookingRecord: BookingRecord,
+): AdminCompletedBookingBillingReadinessAuditBookingPayload {
+  const companyName = getBookingCompanyName(bookingRecord);
+  const pricingSource =
+    clean(bookingRecord.pricing_source) ||
+    (hasSavedCustomerBillingAmountSource(bookingRecord) ? "saved_customer_billing_source" : "");
+
+  return {
+    billing_month: adminMonthlyBillingGroupingBillingMonthFromDate(getBookingDateKey(bookingRecord)),
+    booker_id: bookingRecord.booker_id,
+    booking_reference: String(bookingRecord.id),
+    company_id: bookingRecord.company_id,
+    company_name: companyName || null,
+    customer_display_name: companyName || null,
+    pricing_source: pricingSource || null,
+    status: clean(bookingRecord.status) || "completed",
+    traveler_id: bookingRecord.traveler_id,
+  };
+}
+
 function downloadIcsFile(filename: string, ics: string) {
   if (typeof document === "undefined" || typeof URL === "undefined") {
     throw new Error("Calendar download is available only in the browser.");
@@ -4988,6 +5074,38 @@ async function loadAdminMonthlyBillingGroupsRead({
   };
 }
 
+async function loadAdminCompletedBookingBillingReadinessAudit({
+  billingMonth,
+  completedBookings,
+}: {
+  billingMonth: string | null;
+  completedBookings: AdminCompletedBookingBillingReadinessAuditBookingPayload[];
+}) {
+  const response = await fetch(adminCompletedBookingBillingReadinessAuditsApiPath, {
+    body: JSON.stringify({
+      ...(billingMonth ? { billing_month: billingMonth } : {}),
+      completed_bookings: completedBookings,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.ok) {
+    throw new Error(result?.error || "Completed booking billing readiness audit failed.");
+  }
+
+  return {
+    auditItems: Array.isArray(result.audit_items)
+      ? (result.audit_items as AdminCompletedBookingBillingReadinessAuditItem[])
+      : [],
+    summary: (result.summary || null) as AdminCompletedBookingBillingReadinessAuditSummary | null,
+  };
+}
+
 async function loadAdminMonthlyBillingDraftPlansRead({
   billingMonth,
   customerAccountSearch,
@@ -6130,6 +6248,25 @@ function adminMonthlyBillingGroupingFailureMessage(rawError: unknown) {
   return "Saved monthly billing grouping read failed safely.";
 }
 
+function adminCompletedBookingBillingReadinessAuditFailureMessage(rawError: unknown) {
+  const normalizedError =
+    rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
+
+  if (/not enabled|configuration/.test(normalizedError)) {
+    return "Completed booking billing readiness audit is not enabled or configured on this server.";
+  }
+
+  if (/forbidden|internal admin dashboard|verified admin|dispatcher/.test(normalizedError)) {
+    return "Completed booking billing readiness audit requires the approved admin or dispatcher surface.";
+  }
+
+  if (/missing|required|malformed|invalid|unknown/.test(normalizedError)) {
+    return "Completed booking billing readiness audit details need review.";
+  }
+
+  return "Completed booking billing readiness audit failed safely.";
+}
+
 function adminMonthlyBillingDraftPlanFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -6529,6 +6666,20 @@ function adminMonthlyBillingGroupingReadinessLabel(
   }
 
   return "Needs review";
+}
+
+function adminCompletedBookingBillingReadinessRequirementLabel(
+  requirement: AdminCompletedBookingBillingReadinessAuditRequirement,
+) {
+  if (requirement === "customer_account") {
+    return "customer/account";
+  }
+
+  if (requirement === "billing_month") {
+    return "billing month";
+  }
+
+  return "billable source";
 }
 
 function adminMonthlyBillingDraftPlanStatusLabel(
@@ -7289,6 +7440,19 @@ export default function Home() {
       status: "idle",
       summary: null,
     });
+  const [
+    adminCompletedBookingBillingReadinessAuditReadState,
+    setAdminCompletedBookingBillingReadinessAuditReadState,
+  ] = useState<AdminCompletedBookingBillingReadinessAuditReadState>({
+    auditItems: [],
+    message: null,
+    status: "idle",
+    summary: null,
+  });
+  const [
+    adminCompletedBookingBillingReadinessAuditAction,
+    setAdminCompletedBookingBillingReadinessAuditAction,
+  ] = useState<AdminCompletedBookingBillingReadinessAuditAction | null>(null);
   const [adminMonthlyBillingDraftPlanReadState, setAdminMonthlyBillingDraftPlanReadState] =
     useState<AdminMonthlyBillingDraftPlanReadState>({
       draftPlans: [],
@@ -9393,6 +9557,76 @@ export default function Home() {
       completionMessage.text === "Completed job deleted." &&
       isDeleteCompletedJobMessage(completionMessage),
   );
+
+  async function readCompletedBookingBillingReadinessAudit() {
+    if (adminCompletedBookingBillingReadinessAuditAction) {
+      return;
+    }
+
+    const auditBookings = completedBookings.map(buildCompletedBookingBillingReadinessAuditPayload);
+
+    if (auditBookings.length === 0) {
+      setAdminCompletedBookingBillingReadinessAuditReadState({
+        auditItems: [],
+        message: {
+          tone: "info",
+          text: "Load completed saved bookings before running the billing readiness audit.",
+        },
+        status: "idle",
+        summary: null,
+      });
+      return;
+    }
+
+    setAdminCompletedBookingBillingReadinessAuditAction("read-audit");
+    setAdminCompletedBookingBillingReadinessAuditReadState((current) => ({
+      ...current,
+      message: {
+        tone: "info",
+        text: "Checking completed saved bookings through the guarded admin audit API...",
+      },
+      status: "loading",
+    }));
+
+    try {
+      const { auditItems, summary } = await loadAdminCompletedBookingBillingReadinessAudit({
+        billingMonth: adminMonthlyBillingGroupingBillingMonthFilter,
+        completedBookings: auditBookings,
+      });
+      const totalCompletedCount = adminMonthlyBillingGroupingCount(summary?.total_completed_count);
+      const blockedCount = adminMonthlyBillingGroupingCount(summary?.blocked_count);
+      const billingMonthText = adminMonthlyBillingGroupingBillingMonthFilter
+        ? ` for ${adminMonthlyBillingGroupingMonthLabel(adminMonthlyBillingGroupingBillingMonthFilter)}`
+        : "";
+
+      setAdminCompletedBookingBillingReadinessAuditReadState({
+        auditItems,
+        message: {
+          tone: blockedCount > 0 ? "error" : totalCompletedCount > 0 ? "success" : "info",
+          text:
+            totalCompletedCount > 0
+              ? `Completed booking billing readiness audit checked ${totalCompletedCount} completed saved booking${
+                  totalCompletedCount === 1 ? "" : "s"
+                }${billingMonthText}.`
+              : `No completed saved bookings matched${billingMonthText || " the current billing month"}.`,
+        },
+        status: "loaded",
+        summary,
+      });
+    } catch (error) {
+      setAdminCompletedBookingBillingReadinessAuditReadState({
+        auditItems: [],
+        message: {
+          tone: "error",
+          text: adminCompletedBookingBillingReadinessAuditFailureMessage(error),
+        },
+        status: "error",
+        summary: null,
+      });
+    } finally {
+      setAdminCompletedBookingBillingReadinessAuditAction(null);
+    }
+  }
 
   const multiBookingPreviewItems = Array.isArray(multiBookingNotice?.extractedBookingsPreview)
     ? multiBookingNotice.extractedBookingsPreview.filter(Boolean)
@@ -16398,6 +16632,91 @@ export default function Home() {
     monthlyBillingSavedGroupingPrimaryGroup?.safe_readiness_status || null;
   const monthlyBillingSavedGroupingReadinessLabel =
     adminMonthlyBillingGroupingReadinessLabel(monthlyBillingSavedGroupingReadinessStatus);
+  const completedBillingReadinessAuditSummary =
+    adminCompletedBookingBillingReadinessAuditReadState.summary;
+  const completedBillingReadinessAuditTotalCount = adminMonthlyBillingGroupingCount(
+    completedBillingReadinessAuditSummary?.total_completed_count,
+  );
+  const completedBillingReadinessAuditReadyCount = adminMonthlyBillingGroupingCount(
+    completedBillingReadinessAuditSummary?.ready_count,
+  );
+  const completedBillingReadinessAuditBlockedCount = adminMonthlyBillingGroupingCount(
+    completedBillingReadinessAuditSummary?.blocked_count,
+  );
+  const completedBillingReadinessAuditMissingAccountCount = adminMonthlyBillingGroupingCount(
+    completedBillingReadinessAuditSummary?.missing_customer_account_count,
+  );
+  const completedBillingReadinessAuditMissingMonthCount = adminMonthlyBillingGroupingCount(
+    completedBillingReadinessAuditSummary?.missing_billing_month_count,
+  );
+  const completedBillingReadinessAuditMissingBillableSourceCount =
+    adminMonthlyBillingGroupingCount(
+      completedBillingReadinessAuditSummary?.missing_billable_amount_source_count,
+    );
+  const completedBillingReadinessAuditBlockedItems =
+    adminCompletedBookingBillingReadinessAuditReadState.auditItems.filter(
+      (item) => item.readiness_status === "blocked",
+    );
+  const completedBillingReadinessAuditBlockedReferenceText =
+    completedBillingReadinessAuditBlockedItems.length > 0
+      ? completedBillingReadinessAuditBlockedItems
+          .slice(0, 5)
+          .map((item) => {
+            const missingRequirements = Array.isArray(item.missing_requirements)
+              ? item.missing_requirements.map(adminCompletedBookingBillingReadinessRequirementLabel)
+              : [];
+            const missingLabel = missingRequirements.length
+              ? ` (${missingRequirements.join(", ")})`
+              : "";
+
+            return `${clean(item.booking_reference) || "booking reference unavailable"}${missingLabel}`;
+          })
+          .join(", ")
+      : "";
+  const completedBillingReadinessAuditSummaryDetail = (() => {
+    if (adminCompletedBookingBillingReadinessAuditReadState.status === "loading") {
+      return "Completed booking billing readiness audit is checking loaded completed jobs.";
+    }
+
+    if (adminCompletedBookingBillingReadinessAuditReadState.status === "error") {
+      return "Completed booking billing readiness audit unavailable.";
+    }
+
+    if (
+      adminCompletedBookingBillingReadinessAuditReadState.status === "loaded" &&
+      completedBillingReadinessAuditSummary
+    ) {
+      return `Audit: ${completedBillingReadinessAuditReadyCount} ready, ${completedBillingReadinessAuditBlockedCount} blocked, ${completedBillingReadinessAuditTotalCount} completed. Missing customer/account ${completedBillingReadinessAuditMissingAccountCount}, billing month ${completedBillingReadinessAuditMissingMonthCount}, billable source ${completedBillingReadinessAuditMissingBillableSourceCount}.`;
+    }
+
+    return completedBookings.length > 0
+      ? `Audit not run for ${completedBookings.length} loaded completed saved booking${
+          completedBookings.length === 1 ? "" : "s"
+        }.`
+      : "No completed saved bookings loaded for audit.";
+  })();
+  const completedBillingReadinessAuditBlockedDetail =
+    completedBillingReadinessAuditBlockedReferenceText
+      ? ` Blocked: ${completedBillingReadinessAuditBlockedReferenceText}${
+          completedBillingReadinessAuditBlockedItems.length > 5 ? ", and more" : ""
+        }.`
+      : adminCompletedBookingBillingReadinessAuditReadState.status === "loaded" &&
+          completedBillingReadinessAuditSummary
+        ? " No blocked completed booking references returned."
+        : "";
+  const completedBillingReadinessAuditReady =
+    adminCompletedBookingBillingReadinessAuditReadState.status === "loaded" &&
+    completedBillingReadinessAuditTotalCount > 0 &&
+    completedBillingReadinessAuditBlockedCount === 0;
+  const completedBillingReadinessAuditRunning =
+    adminCompletedBookingBillingReadinessAuditAction === "read-audit";
+  const completedBillingReadinessAuditButtonDisabled =
+    completedBillingReadinessAuditRunning || completedBookings.length === 0;
+  const completedBillingReadinessAuditButtonLabel = completedBillingReadinessAuditRunning
+    ? "Auditing..."
+    : adminCompletedBookingBillingReadinessAuditReadState.status === "loaded"
+      ? "Refresh audit"
+      : "Audit billing readiness";
   const monthlyBillingDraftPlanStatusLabel =
     adminMonthlyBillingDraftPlanStatusLabel(monthlyBillingDraftPlanPrimaryPlan?.draft_status);
   const monthlyBillingDraftPlanReadyTripsCount = monthlyBillingDraftPlanPrimaryPlan
@@ -17698,6 +18017,12 @@ export default function Home() {
       key: "blocked-trips-count",
       label: "Blocked trips count",
       state: monthlyBillingSavedGroupingBlockedTripsCount === 0 ? "ready" : "needs-action",
+    },
+    {
+      detail: `${completedBillingReadinessAuditSummaryDetail}${completedBillingReadinessAuditBlockedDetail}`,
+      key: "completed-billing-readiness-audit",
+      label: "Completed billing audit",
+      state: completedBillingReadinessAuditReady ? "ready" : "needs-action",
     },
     {
       detail: monthlyBillingMonthGroupingTotalTripsDetail,
@@ -28042,6 +28367,16 @@ export default function Home() {
                       {adminMonthlyBillingGroupingReadState.message.text}
                     </p>
                   ) : null}
+                  {adminCompletedBookingBillingReadinessAuditReadState.message ? (
+                    <p
+                      className={`mt-1 rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(
+                        adminCompletedBookingBillingReadinessAuditReadState.message.tone,
+                      )}`}
+                      data-admin-completed-booking-billing-readiness-audit-feedback="true"
+                    >
+                      {adminCompletedBookingBillingReadinessAuditReadState.message.text}
+                    </p>
+                  ) : null}
                   {adminMonthlyBillingDraftPlanReadState.message ? (
                     <p
                       className={`mt-1 rounded-md border px-2 py-1 text-xs font-semibold ${statusClass(
@@ -28213,6 +28548,36 @@ export default function Home() {
                       type="button"
                     >
                       Next
+                    </button>
+                  </div>
+                </div>
+                <div className="min-w-0 font-semibold sm:col-span-2 2xl:col-span-4">
+                  <div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <div className="min-w-0">
+                      <span
+                        className="block break-words text-[11px] leading-4 text-teal-900"
+                        data-admin-completed-booking-billing-readiness-audit-summary="true"
+                      >
+                        {completedBillingReadinessAuditSummaryDetail}
+                      </span>
+                      {completedBillingReadinessAuditBlockedReferenceText ? (
+                        <span
+                          className="mt-0.5 block break-words text-[11px] leading-4 text-amber-900"
+                          data-admin-completed-booking-billing-readiness-audit-blocked-references="true"
+                        >
+                          Blocked: {completedBillingReadinessAuditBlockedReferenceText}
+                          {completedBillingReadinessAuditBlockedItems.length > 5 ? ", and more" : ""}.
+                        </span>
+                      ) : null}
+                    </div>
+                    <button
+                      className="min-h-9 min-w-0 rounded-md border border-teal-700 bg-white px-3 py-1.5 text-xs font-semibold text-teal-900 transition enabled:hover:bg-teal-50 disabled:cursor-not-allowed disabled:border-teal-200 disabled:bg-teal-100 disabled:text-teal-700"
+                      data-admin-completed-booking-billing-readiness-audit-action="true"
+                      disabled={completedBillingReadinessAuditButtonDisabled}
+                      onClick={readCompletedBookingBillingReadinessAudit}
+                      type="button"
+                    >
+                      {completedBillingReadinessAuditButtonLabel}
                     </button>
                   </div>
                 </div>
@@ -28467,9 +28832,10 @@ export default function Home() {
                 className="mt-1 border-t border-teal-200 pt-1 text-[10px] leading-3 text-teal-900"
                 data-admin-monthly-billing-month-grouping-review-boundary="true"
               >
-                Guarded admin API read plus monthly billing draft-plan, invoice draft-prep, item-review,
-                billable price review, issue-review, issue-record save, invoice-number reservation, and PDF-review
-                readiness only. No direct Supabase write outside approved API routes; no invoice creation, PDF
+                Guarded admin API read plus completed-booking billing-readiness audit, monthly billing
+                draft-plan, invoice draft-prep, item-review, billable price review, issue-review,
+                issue-record save, invoice-number reservation, and PDF-review readiness only. No direct Supabase
+                write outside approved API routes; no invoice creation, PDF
                 generation, PDF sending, payment, payout, notification sending, auth change, parser change, billing
                 activation, customer message, or driver notification behavior.
               </p>

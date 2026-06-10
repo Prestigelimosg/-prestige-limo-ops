@@ -2898,6 +2898,17 @@ function assertBookingUiState(state) {
     "Load or apply a saved operational booking before reading saved monthly billing groups.",
   );
   assert.equal(
+    state.monthlyBillingMonthGroupingReview.billingReadinessAuditSummary,
+    "No completed saved bookings loaded for audit.",
+  );
+  assert.deepEqual(
+    state.monthlyBillingMonthGroupingReview.billingReadinessAuditButton,
+    {
+      disabled: true,
+      text: "Audit billing readiness",
+    },
+  );
+  assert.equal(
     state.monthlyBillingMonthGroupingReview.status,
     "Monthly billing month grouping review needed",
   );
@@ -2936,6 +2947,7 @@ function assertBookingUiState(state) {
       "Billing month",
       "Ready trips count",
       "Blocked trips count",
+      "Completed billing audit",
       "Total trips in month",
       "Month grouping status",
       "Admin review status",
@@ -2950,6 +2962,7 @@ function assertBookingUiState(state) {
       "billing-month",
       "ready-trips-count",
       "blocked-trips-count",
+      "completed-billing-readiness-audit",
       "total-trips-in-month",
       "month-grouping-status",
       "admin-review-status",
@@ -2976,6 +2989,12 @@ function assertBookingUiState(state) {
     state.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "blocked-trips-count")
       ?.detail,
     "1 blocked trip in this local month group.",
+  );
+  assert.equal(
+    state.monthlyBillingMonthGroupingReview.items.find(
+      (item) => item.key === "completed-billing-readiness-audit",
+    )?.detail,
+    "No completed saved bookings loaded for audit.",
   );
   assert.equal(
     state.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "total-trips-in-month")
@@ -4892,6 +4911,29 @@ async function runChromeTest() {
               ?.querySelector("[data-admin-monthly-billing-month-grouping-read-feedback='true']")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "",
+          billingReadinessAuditFeedback:
+            section
+              ?.querySelector("[data-admin-completed-booking-billing-readiness-audit-feedback='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          billingReadinessAuditSummary:
+            section
+              ?.querySelector("[data-admin-completed-booking-billing-readiness-audit-summary='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          billingReadinessAuditBlockedReferences:
+            section
+              ?.querySelector("[data-admin-completed-booking-billing-readiness-audit-blocked-references='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          billingReadinessAuditButton: (() => {
+            const button = section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-action='true']");
+
+            return {
+              disabled: button?.disabled ?? true,
+              text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+            };
+          })(),
           forbiddenPanelText: [
             "customer price",
             "driver payout",
@@ -6016,6 +6058,7 @@ async function runChromeTest() {
       window.__prestigeMonthlyBillingDraftPlanRequests = [];
       window.__prestigeMonthlyBillingDraftPlans = [];
       window.__prestigeMonthlyBillingGroupingRequests = [];
+      window.__prestigeCompletedBillingReadinessAuditRequests = [];
       window.__prestigeMonthlyBillingGroupingGroups = [
         {
           billing_month: "2026-05",
@@ -6570,6 +6613,71 @@ async function runChromeTest() {
           }
 
           return new Response(JSON.stringify({ ok: false, error: "Monthly grouping method not mocked." }), {
+            status: 405,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (String(target).includes("/api/admin-completed-booking-billing-readiness-audits")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeCompletedBillingReadinessAuditRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "POST") {
+            return new Response(
+              JSON.stringify({
+                audit_items: [
+                  {
+                    billing_month: "2026-05",
+                    booking_reference: "ui-completed-load-fixture",
+                    customer_account: "COMPLETED TEST COMPANY",
+                    customer_id: "801",
+                    missing_requirements: [],
+                    readiness_status: "ready",
+                    safe_reason:
+                      "Completed saved booking has customer/account, billing month, and billable amount source for billing review.",
+                    source: "completed_saved_booking",
+                  },
+                  {
+                    billing_month: "2026-05",
+                    booking_reference: "AUDIT-MISSING-BILLABLE-SOURCE",
+                    customer_account: "AUDIT SAFE ACCOUNT",
+                    customer_id: "802",
+                    missing_requirements: ["billable_amount_source"],
+                    readiness_status: "blocked",
+                    safe_reason:
+                      "Completed saved booking blocked from billing review: missing billable_amount_source.",
+                    source: "completed_saved_booking",
+                  },
+                ],
+                ok: true,
+                summary: {
+                  blocked_count: 1,
+                  missing_billable_amount_source_count: 1,
+                  missing_billing_month_count: 0,
+                  missing_customer_account_count: 0,
+                  non_completed_skipped_count: 0,
+                  ready_count: 1,
+                  total_completed_count: 2,
+                },
+                version: "browser-completed-booking-billing-readiness-audit-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(JSON.stringify({ ok: false, error: "Billing audit method not mocked." }), {
             status: 405,
             headers: { "content-type": "application/json" },
           });
@@ -12719,6 +12827,7 @@ async function runChromeTest() {
         },
       ];
       window.__prestigeMonthlyBillingDraftPlanRequests = [];
+      window.__prestigeCompletedBillingReadinessAuditRequests = [];
       window.__prestigeMonthlyBillingDraftPlans = [
         {
           billing_month: "2026-05",
@@ -13200,6 +13309,67 @@ async function runChromeTest() {
                   total_count: filteredGroups.reduce((total, group) => total + Number(group.total_count || 0), 0),
                 },
                 version: "focused-browser-monthly-billing-grouping-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
+        if (String(target).includes("/api/admin-completed-booking-billing-readiness-audits")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeCompletedBillingReadinessAuditRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "POST") {
+            return new Response(
+              JSON.stringify({
+                audit_items: [
+                  {
+                    billing_month: "2026-05",
+                    booking_reference: "ui-completed-load-fixture",
+                    customer_account: "COMPLETED TEST COMPANY",
+                    customer_id: "801",
+                    missing_requirements: [],
+                    readiness_status: "ready",
+                    safe_reason:
+                      "Completed saved booking has customer/account, billing month, and billable amount source for billing review.",
+                    source: "completed_saved_booking",
+                  },
+                  {
+                    billing_month: "2026-05",
+                    booking_reference: "AUDIT-MISSING-BILLABLE-SOURCE",
+                    customer_account: "AUDIT SAFE ACCOUNT",
+                    customer_id: "802",
+                    missing_requirements: ["billable_amount_source"],
+                    readiness_status: "blocked",
+                    safe_reason:
+                      "Completed saved booking blocked from billing review: missing billable_amount_source.",
+                    source: "completed_saved_booking",
+                  },
+                ],
+                ok: true,
+                summary: {
+                  blocked_count: 1,
+                  missing_billable_amount_source_count: 1,
+                  missing_billing_month_count: 0,
+                  missing_customer_account_count: 0,
+                  non_completed_skipped_count: 0,
+                  ready_count: 1,
+                  total_completed_count: 2,
+                },
+                version: "focused-browser-completed-booking-billing-readiness-audit-mock",
               }),
               { status: 200, headers: { "content-type": "application/json" } },
             );
@@ -14029,6 +14199,8 @@ async function runChromeTest() {
               window.__prestigeAdminDriverJobDspActualTimeRequests || [],
             driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
+            completedBillingReadinessAuditRequests:
+              window.__prestigeCompletedBillingReadinessAuditRequests || [],
             monthlyBillingDraftPlanRequests: window.__prestigeMonthlyBillingDraftPlanRequests || [],
             monthlyBillingGroupingRequests: window.__prestigeMonthlyBillingGroupingRequests || [],
             monthlyInvoiceDraftItemReviewRequests: window.__prestigeMonthlyInvoiceDraftItemReviewRequests || [],
@@ -14062,6 +14234,26 @@ async function runChromeTest() {
                   section?.querySelector("[data-admin-monthly-billing-month-grouping-read-feedback='true']")
                     ?.textContent.replace(/\\s+/g, " ")
                     .trim() || "",
+                billingReadinessAuditFeedback:
+                  section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-feedback='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                billingReadinessAuditSummary:
+                  section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-summary='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                billingReadinessAuditBlockedReferences:
+                  section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-blocked-references='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                billingReadinessAuditButton: (() => {
+                  const button = section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-action='true']");
+
+                  return {
+                    disabled: button?.disabled ?? true,
+                    text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+                  };
+                })(),
                 billingDraftPlanReadFeedback:
                   section?.querySelector("[data-admin-monthly-billing-draft-plan-read-feedback='true']")
                     ?.textContent.replace(/\\s+/g, " ")
@@ -14567,6 +14759,17 @@ async function runChromeTest() {
       loadedBookingState.monthlyBillingMonthGroupingReview.readFeedback,
       "Loaded 1 of 2 saved monthly billing groups for May 2026.",
     );
+    assert.deepEqual(
+      loadedBookingState.monthlyBillingMonthGroupingReview.billingReadinessAuditButton,
+      {
+        disabled: false,
+        text: "Audit billing readiness",
+      },
+    );
+    assert.match(
+      loadedBookingState.monthlyBillingMonthGroupingReview.billingReadinessAuditSummary,
+      /^Audit not run for \d+ loaded completed saved bookings?\.$/,
+    );
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.billingDraftPlanReadFeedback,
       "Loaded 1 of 2 saved monthly billing draft plans for May 2026.",
@@ -14685,6 +14888,12 @@ async function runChromeTest() {
         ?.detail,
       "1 blocked trip in saved month group.",
     );
+    assert.match(
+      loadedBookingState.monthlyBillingMonthGroupingReview.items.find(
+        (item) => item.key === "completed-billing-readiness-audit",
+      )?.detail,
+      /^Audit not run for \d+ loaded completed saved bookings?\.$/,
+    );
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "total-trips-in-month")
         ?.detail,
@@ -14699,6 +14908,147 @@ async function runChromeTest() {
       loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "admin-review-status")
         ?.detail,
       "Saved monthly billing draft plan: Planning. 2 ready, 1 blocked, 3 total trips. Saved monthly invoice draft status: Pending admin review. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved invoice draft page 1 of 2. Saved monthly invoice draft item review: Item reviewed. Decision: Include in draft. No saved billable price review returned for this saved item yet. Saved monthly invoice issue review: Issue review pending. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved issue review page 1 of 2. Saved monthly invoice issue record: Draft locked. Draft lock: Locked for issue. Number reservation: Not reserved. PDF: Not requested. Delivery: Not sent. Payment record: Not recorded.",
+    );
+    const clickedCompletedBillingReadinessAudit = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-completed-booking-billing-readiness-audit-action='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedCompletedBillingReadinessAudit,
+      true,
+      "Expected completed booking billing readiness audit button to be clickable",
+    );
+    const completedBillingReadinessAuditState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+          const itemDetail = (key) =>
+            section
+              ?.querySelector(\`[data-admin-monthly-billing-month-grouping-review-item='\${key}'] [data-admin-monthly-billing-month-grouping-review-detail]\`)
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "";
+          const button = section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-action='true']");
+
+          return {
+            blockedReferences:
+              section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-blocked-references='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            button: {
+              disabled: button?.disabled ?? true,
+              text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+            },
+            feedback:
+              section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            itemDetail: itemDetail("completed-billing-readiness-audit"),
+            requests: window.__prestigeCompletedBillingReadinessAuditRequests || [],
+            summary:
+              section?.querySelector("[data-admin-completed-booking-billing-readiness-audit-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.requests?.some((request) => request.method === "POST") &&
+          candidateState.summary ===
+            "Audit: 1 ready, 1 blocked, 2 completed. Missing customer/account 0, billing month 0, billable source 1."
+          ? candidateState
+          : false;
+      },
+      10000,
+      "completed booking billing readiness audit",
+    );
+    const completedBillingReadinessAuditPostRequest =
+      completedBillingReadinessAuditState.requests.find((request) => request.method === "POST");
+    assert.deepEqual(
+      {
+        bodyBillingMonth: completedBillingReadinessAuditPostRequest.body.billing_month,
+        hasSessionTokenHeader: Boolean(
+          completedBillingReadinessAuditPostRequest.headers["x-prestige-admin-session-token"],
+        ),
+        method: completedBillingReadinessAuditPostRequest.method,
+        purpose: completedBillingReadinessAuditPostRequest.headers["x-prestige-admin-purpose"] || "",
+      },
+      {
+        bodyBillingMonth: "2026-05",
+        hasSessionTokenHeader: false,
+        method: "POST",
+        purpose: "admin-booking-persistence",
+      },
+      "Expected completed booking billing readiness audit to POST through the guarded admin API",
+    );
+    assert.equal(
+      Array.isArray(completedBillingReadinessAuditPostRequest.body.completed_bookings),
+      true,
+      "Expected completed booking billing readiness audit to post completed_bookings",
+    );
+    assert.equal(
+      completedBillingReadinessAuditPostRequest.body.completed_bookings.length > 0,
+      true,
+      "Expected completed booking billing readiness audit to include loaded completed bookings",
+    );
+    assert.deepEqual(
+      [
+        ...new Set(
+          completedBillingReadinessAuditPostRequest.body.completed_bookings.flatMap((booking) =>
+            Object.keys(booking),
+          ),
+        ),
+      ].sort(),
+      [
+        "billing_month",
+        "booker_id",
+        "booking_reference",
+        "company_id",
+        "company_name",
+        "customer_display_name",
+        "pricing_source",
+        "status",
+        "traveler_id",
+      ],
+      "Expected completed booking billing readiness audit payload to use only safe completed-booking fields",
+    );
+    assert.equal(
+      completedBillingReadinessAuditPostRequest.body.completed_bookings.every(
+        (booking) => String(booking.status || "").toLowerCase() === "completed",
+      ),
+      true,
+      "Expected completed booking billing readiness audit payload to include completed bookings only",
+    );
+    assert.equal(
+      /customer_price|customer_rate|driver_payout|paynow|payment|invoice|pdf|payout|parser|raw_ai|notification|telegram|whatsapp|service_role|secret|token|job_card|driver_notes|internal_admin_note|admin_note|pickup_address|dropoff_address|flight_no|route|pax/i.test(
+        JSON.stringify(completedBillingReadinessAuditPostRequest.body),
+      ),
+      false,
+      "Expected completed booking billing readiness audit body to avoid price, payout, invoice/payment/PDF/send, parser, note, route, and secret fields",
+    );
+    assert.equal(
+      completedBillingReadinessAuditState.feedback,
+      "Completed booking billing readiness audit checked 2 completed saved bookings for May 2026.",
+    );
+    assert.equal(
+      completedBillingReadinessAuditState.blockedReferences,
+      "Blocked: AUDIT-MISSING-BILLABLE-SOURCE (billable source).",
+    );
+    assert.equal(
+      completedBillingReadinessAuditState.itemDetail,
+      "Audit: 1 ready, 1 blocked, 2 completed. Missing customer/account 0, billing month 0, billable source 1. Blocked: AUDIT-MISSING-BILLABLE-SOURCE (billable source).",
+    );
+    assert.deepEqual(
+      completedBillingReadinessAuditState.button,
+      {
+        disabled: false,
+        text: "Refresh audit",
+      },
+      "Expected completed booking billing readiness audit button to stay compact after a safe read",
     );
     const clickedMonthlyBillingDraftPlanSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-billing-draft-plan-save-action='true']");

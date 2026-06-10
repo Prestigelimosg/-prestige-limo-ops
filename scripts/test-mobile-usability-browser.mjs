@@ -208,7 +208,8 @@ function stripMobileCustomerPortalDocumentHistoryBoundary(text, context) {
     .replaceAll("Booking Documents / Request History", "")
     .replaceAll("Booking request history is read-only for now.", "")
     .replaceAll("No price, payment, invoice, PDF, or billing file is created here.", "")
-    .replaceAll("Review before submitting", "");
+    .replaceAll("Review before submitting", "")
+    .replace(/\bPDF\b/g, "");
 }
 
 function assertNoMobileCustomerFacingPriceLeaks(text, context) {

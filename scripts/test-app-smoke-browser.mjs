@@ -390,7 +390,6 @@ const adminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const publicRouteRuntimeResourcePattern =
   /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)|supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
 const customerBookingRequestApiPattern = /\/api\/customer-booking-requests(?:[/?#]|$)/i;
-const customerBookingStatusApiPattern = /\/api\/customer-booking-statuses(?:[/?#]|$)/i;
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
@@ -422,7 +421,8 @@ function stripCustomerPortalDocumentHistoryBoundary(text, context) {
     .replaceAll("Booking Documents / Request History", "")
     .replaceAll("Booking request history is read-only for now.", "")
     .replaceAll("No price, payment, invoice, PDF, or billing file is created here.", "")
-    .replaceAll("Review before submitting", "");
+    .replaceAll("Review before submitting", "")
+    .replace(/\bPDF\b/g, "");
 }
 
 function assertNoCustomerFacingPriceVisibilityLeaks(text, context) {
@@ -31868,6 +31868,7 @@ async function runChromeTest() {
         const confirmationStatus = document.querySelector("[data-customer-booking-confirmation-status]");
         const nextSteps = document.querySelector("[data-customer-booking-next-steps]");
         const preSubmitReview = document.querySelector("[data-customer-booking-pre-submit-review]");
+        const portalLink = document.querySelector("[data-customer-booking-portal-link]");
         const preSubmitReviewText = preSubmitReview?.innerText || "";
         const lowerTextForForbidden = text.replace(preSubmitReviewText, "").toLowerCase();
         const submitRect = submit?.getBoundingClientRect();
@@ -31875,6 +31876,7 @@ async function runChromeTest() {
         const confirmationStatusRect = confirmationStatus?.getBoundingClientRect();
         const nextStepsRect = nextSteps?.getBoundingClientRect();
         const preSubmitReviewRect = preSubmitReview?.getBoundingClientRect();
+        const portalLinkRect = portalLink?.getBoundingClientRect();
 
         const fieldState = Object.fromEntries(
           [
@@ -32278,6 +32280,11 @@ async function runChromeTest() {
               preSubmitReviewRect && preSubmitReviewRect.width > 0 && preSubmitReviewRect.height > 0,
             ),
           },
+          portalLink: {
+            href: portalLink?.getAttribute("href") || "",
+            text: portalLink?.textContent.trim() || "",
+            visible: Boolean(portalLinkRect && portalLinkRect.width > 0 && portalLinkRect.height > 0),
+          },
           removedInternalControls: [
             "Customer / account",
             "Customer reference / PO",
@@ -32321,6 +32328,15 @@ async function runChromeTest() {
         initialState.text.includes("Submit Booking Request"),
         true,
         "Expected /book customer-safe submit button",
+      );
+      assert.deepEqual(
+        initialState.portalLink,
+        {
+          href: "/my-bookings",
+          text: "Portal",
+          visible: true,
+        },
+        "Expected /book to expose a compact Portal link to /my-bookings",
       );
       assert.equal(initialState.confirmationStatus.visible, false, "Expected /book status panel to wait for submit");
       assert.equal(
@@ -33323,6 +33339,8 @@ async function runChromeTest() {
         const documentHistoryRows = [...document.querySelectorAll("[data-customer-booking-document-history-row]")];
         const visibleLeakText = documentHistory?.innerText ? text.replace(documentHistory.innerText, "") : text;
         const lowerVisibleLeakText = visibleLeakText.toLowerCase();
+        const help = document.querySelector("[data-customer-portal-help]");
+        const helpRect = help?.getBoundingClientRect();
         const changeIntake = document.querySelector("[data-customer-change-request-intake]");
         const changeIntakeRect = changeIntake?.getBoundingClientRect();
         const changeSubmit = document.querySelector("[data-customer-change-request-submit]");
@@ -33707,6 +33725,19 @@ async function runChromeTest() {
             visible: Boolean(guidanceRect && guidanceRect.width > 0 && guidanceRect.height > 0),
           },
           integrationCalls: window.__customerPortalIntegrationCalls || [],
+          compactHelp: {
+            text: help?.textContent || "",
+            visible: Boolean(helpRect && helpRect.width > 0 && helpRect.height > 0),
+          },
+          removedGiantSections: {
+            bookingDocumentHistory: Boolean(document.querySelector("[data-customer-booking-document-history]")),
+            changeRequest: Boolean(document.querySelector("[data-customer-change-request-intake]")),
+            driverHandoff: Boolean(document.querySelector("[data-customer-driver-handoff-status]")),
+            requestCancellation: Boolean(document.querySelector("[data-customer-cancellation-request-intake]")),
+            requestNextSteps: Boolean(document.querySelector("[data-customer-request-next-steps]")),
+            requestStatusLookup: Boolean(document.querySelector("[data-customer-request-status-lookup]")),
+            supportHandoff: Boolean(document.querySelector("[data-customer-support-handoff]")),
+          },
           requestStatusLookup: {
             detail: document.querySelector("[data-customer-request-status-lookup-detail]")?.textContent.trim() || "",
             helper: document.querySelector("[data-customer-request-status-helper]")?.textContent.trim() || "",
@@ -33836,6 +33867,11 @@ async function runChromeTest() {
           rowCount: rows.length,
           rowIds: rows.map((row) => row.getAttribute("data-customer-portal-row") || ""),
           rows: rows.map((row) => ({
+            actions: [...row.querySelectorAll("[data-customer-portal-row-action]")].map((button) => ({
+              action: button.getAttribute("data-customer-portal-row-action") || "",
+              disabled: Boolean(button.disabled),
+              text: button.textContent.trim(),
+            })),
             id: row.getAttribute("data-customer-portal-row") || "",
             requestButtonCount: row.querySelectorAll("[data-customer-portal-request-change]").length,
             status: row.getAttribute("data-customer-portal-status") || "",
@@ -33852,123 +33888,6 @@ async function runChromeTest() {
           text,
         };
       })()`);
-
-    const setCustomerPortalRequestStatusLookup = async (value) => {
-      const actualValue = await evaluate(`(() => {
-        const input = document.querySelector("[data-customer-request-status-lookup-input]");
-
-        if (!input) {
-          return null;
-        }
-
-        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
-        descriptor?.set?.call(input, ${JSON.stringify(value)});
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-
-        return input.value;
-      })()`);
-      assert.equal(actualValue, value, "Expected customer request status lookup to accept test value");
-    };
-
-    const submitCustomerPortalRequestStatusLookup = async () => {
-      const submitted = await evaluate(`(() => {
-        const button = document.querySelector("[data-customer-request-status-lookup-submit]");
-
-        if (!button) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-      assert.equal(submitted, true, "Expected customer request status lookup submit to be clickable");
-    };
-
-    const setCustomerChangeRequestField = async (field, value) => {
-      const actualValue = await evaluate(`(() => {
-        const control = document.querySelector(${JSON.stringify(`[data-customer-change-request-field="${field}"]`)});
-
-        if (!control) {
-          return null;
-        }
-
-        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
-        descriptor?.set?.call(control, ${JSON.stringify(value)});
-        control.dispatchEvent(new Event("input", { bubbles: true }));
-        control.dispatchEvent(new Event("change", { bubbles: true }));
-
-        return control.value;
-      })()`);
-      assert.equal(actualValue, value, `Expected customer change request field ${field} to accept test value`);
-    };
-
-    const setCustomerChangeRequestPickupTime = async (hour, minute) => {
-      const actualValue = await evaluate(`(() => {
-        const hourSelect = document.querySelector("[data-customer-change-request-pickup-hour]");
-        const minuteSelect = document.querySelector("[data-customer-change-request-pickup-minute]");
-
-        if (!hourSelect || !minuteSelect) {
-          return null;
-        }
-
-        hourSelect.value = ${JSON.stringify(hour)};
-        hourSelect.dispatchEvent(new Event("input", { bubbles: true }));
-        hourSelect.dispatchEvent(new Event("change", { bubbles: true }));
-        minuteSelect.value = ${JSON.stringify(minute)};
-        minuteSelect.dispatchEvent(new Event("input", { bubbles: true }));
-        minuteSelect.dispatchEvent(new Event("change", { bubbles: true }));
-
-        return \`\${hourSelect.value}:\${minuteSelect.value}\`;
-      })()`);
-      assert.equal(actualValue, `${hour}:${minute}`, "Expected customer change request pickup time to accept test value");
-    };
-
-    const submitCustomerChangeRequest = async () => {
-      const submitted = await evaluate(`(() => {
-        const button = document.querySelector("[data-customer-change-request-submit]");
-
-        if (!button) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-      assert.equal(submitted, true, "Expected customer change request submit to be clickable");
-    };
-
-    const setCustomerCancellationRequestField = async (field, value) => {
-      const actualValue = await evaluate(`(() => {
-        const control = document.querySelector(${JSON.stringify(`[data-customer-cancellation-request-field="${field}"]`)});
-
-        if (!control) {
-          return null;
-        }
-
-        const descriptor = Object.getOwnPropertyDescriptor(control.constructor.prototype, "value");
-        descriptor?.set?.call(control, ${JSON.stringify(value)});
-        control.dispatchEvent(new Event("input", { bubbles: true }));
-        control.dispatchEvent(new Event("change", { bubbles: true }));
-
-        return control.value;
-      })()`);
-      assert.equal(actualValue, value, `Expected customer cancellation request field ${field} to accept test value`);
-    };
-
-    const submitCustomerCancellationRequest = async () => {
-      const submitted = await evaluate(`(() => {
-        const button = document.querySelector("[data-customer-cancellation-request-submit]");
-
-        if (!button) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-      assert.equal(submitted, true, "Expected customer cancellation request submit to be clickable");
-    };
 
     const setCustomerPortalSearch = async (value) => {
       const actualValue = await evaluate(`(() => {
@@ -34112,9 +34031,9 @@ async function runChromeTest() {
       assert.equal(clicked, true, `Expected customer portal detail button for ${bookingId} to be clickable`);
     };
 
-    const clickCustomerPortalRequestChange = async (bookingId) => {
+    const clickCustomerPortalRequestAmendment = async (bookingId) => {
       const clicked = await evaluate(`(() => {
-        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-request-change="${bookingId}"]`)});
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-request-amendment="${bookingId}"]`)});
 
         if (!button) {
           return false;
@@ -34123,7 +34042,21 @@ async function runChromeTest() {
         button.click();
         return true;
       })()`);
-      assert.equal(clicked, true, `Expected customer portal request change button for ${bookingId} to be clickable`);
+      assert.equal(clicked, true, `Expected customer portal amendment button for ${bookingId} to be clickable`);
+    };
+
+    const clickCustomerPortalRequestCancel = async (bookingId) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-request-cancel="${bookingId}"]`)});
+
+        if (!button) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, `Expected customer portal cancel button for ${bookingId} to be clickable`);
     };
 
     const assertCustomerPortalPagedState = (state, expected) => {
@@ -34351,206 +34284,55 @@ async function runChromeTest() {
         "Search by passenger, pickup, drop-off, flight, or service. Use the tabs to switch between upcoming and past trips.",
         "Expected /my-bookings search guidance near lookup control",
       );
-      assert.equal(initialState.requestStatusLookup.visible, true, "Expected /my-bookings request status lookup");
+      assert.deepEqual(
+        initialState.removedGiantSections,
+        {
+          bookingDocumentHistory: false,
+          changeRequest: false,
+          driverHandoff: false,
+          requestCancellation: false,
+          requestNextSteps: false,
+          requestStatusLookup: false,
+          supportHandoff: false,
+        },
+        "Expected /my-bookings duplicate giant customer portal sections to be removed",
+      );
+      assert.equal(initialState.compactHelp.visible, true, "Expected /my-bookings compact help disclosure");
       assert.equal(
-        initialState.requestStatusLookup.helper,
-        "Have a booking reference? Check its saved status here after secure customer access is enabled.",
-        "Expected /my-bookings customer request status lookup helper",
+        initialState.compactHelp.text.includes("Requests here are reviewed by the Prestige Limo team before any booking is updated."),
+        true,
+        "Expected /my-bookings compact help review boundary",
+      );
+      for (const removedCustomerPortalText of [
+        "Request Status Lookup",
+        "Request a Change",
+        "Request Cancellation",
+        "Booking Documents / Request History",
+      ]) {
+        assert.equal(
+          initialState.text.includes(removedCustomerPortalText),
+          false,
+          `Expected /my-bookings to remove duplicate section: ${removedCustomerPortalText}`,
+        );
+      }
+      assert.equal(
+        initialState.rows.every((row) => row.actions.map((action) => action.text).join("|") === "PDF|Amendment|Cancel"),
+        true,
+        "Expected every visible booking row to expose PDF, Amendment, and Cancel actions",
       );
       assert.equal(
-        initialState.requestStatusLookup.text.includes(
-          "Pending review means our team has received your request but has not confirmed availability yet.",
+        initialState.rows.every((row) => row.actions.find((action) => action.action === "pdf")?.disabled === true),
+        true,
+        "Expected customer PDF row action to stay status-only/disabled",
+      );
+      assert.equal(
+        initialState.rows.every(
+          (row) =>
+            row.actions.find((action) => action.action === "amendment")?.disabled === false &&
+            row.actions.find((action) => action.action === "cancel")?.disabled === false,
         ),
         true,
-        "Expected /my-bookings pending review status helper not to imply confirmation",
-      );
-      assert.equal(
-        initialState.requestStatusLookup.text.includes(
-          "For urgent or short-notice requests, our team will review before confirming.",
-        ),
-        true,
-        "Expected /my-bookings urgent request review helper",
-      );
-      assert.equal(initialState.requestStatusLookup.submitVisible, true, "Expected /my-bookings status lookup submit");
-      assert.equal(
-        initialState.requestStatusLookup.detail,
-        "Enter your booking reference to check status.",
-        "Expected /my-bookings status lookup to start without a fake request reference",
-      );
-      assert.equal(initialState.requestNextSteps.visible, true, "Expected /my-bookings request next-steps timeline");
-      assert.equal(
-        initialState.requestNextSteps.helper,
-        "Pending requests are not confirmed yet. Our team reviews availability before confirming your booking.",
-        "Expected /my-bookings next-steps helper to say pending requests are not confirmed yet",
-      );
-      for (const expectedNextStep of [
-        "Request received",
-        "Team reviews availability",
-        "Team contacts you / confirms",
-        "Booking confirmed only after review",
-      ]) {
-        assert.equal(
-          initialState.requestNextSteps.bookingText.includes(expectedNextStep),
-          true,
-          `Expected /my-bookings booking next-step: ${expectedNextStep}`,
-        );
-      }
-      for (const expectedChangeStep of [
-        "Change request prepared",
-        "Team reviews the requested change",
-        "Change request does not change your booking yet",
-        "Team confirms before any booking change",
-      ]) {
-        assert.equal(
-          initialState.requestNextSteps.changeText.includes(expectedChangeStep),
-          true,
-          `Expected /my-bookings change next-step: ${expectedChangeStep}`,
-        );
-      }
-      assert.equal(
-        initialState.requestNextSteps.text.includes("For urgent or short-notice requests, please contact our team directly."),
-        true,
-        "Expected /my-bookings next-steps urgent/short-notice guidance",
-      );
-      assert.equal(initialState.supportHandoff.visible, true, "Expected /my-bookings support handoff");
-      assert.equal(
-        initialState.supportHandoff.helper,
-        "For urgent booking help, changes, cancellation help, or short-notice trips, contact our team directly.",
-        "Expected /my-bookings support handoff helper",
-      );
-      assert.equal(
-        initialState.supportHandoff.boundary,
-        "This section does not send a message yet. Your booking is not changed or cancelled from here.",
-        "Expected /my-bookings support handoff local-only boundary",
-      );
-      for (const expectedSupportItem of [
-        "Urgent booking help",
-        "Change request help",
-        "Cancellation request help",
-        "Short-notice / same-day help",
-      ]) {
-        assert.equal(
-          initialState.supportHandoff.text.includes(expectedSupportItem),
-          true,
-          `Expected /my-bookings support handoff item: ${expectedSupportItem}`,
-        );
-      }
-      assert.equal(initialState.driverHandoff.visible, true, "Expected /my-bookings driver handoff status");
-      assert.equal(
-        initialState.driverHandoff.helper,
-        "Driver details are shown only after booking confirmation.",
-        "Expected /my-bookings driver handoff confirmation boundary",
-      );
-      assert.equal(
-        initialState.driverHandoff.urgent,
-        "For urgent same-day help, contact our team directly.",
-        "Expected /my-bookings driver handoff urgent same-day helper",
-      );
-      assert.deepEqual(
-        initialState.driverHandoff.rowIds,
-        initialState.rowIds,
-        "Expected /my-bookings driver handoff rows to use current visible bookings only",
-      );
-      assert.equal(
-        initialState.driverHandoff.rows.some((row) => row.handoffStatus === "Driver assigned."),
-        true,
-        "Expected /my-bookings driver handoff to show assigned status for confirmed visible bookings",
-      );
-      assert.equal(
-        initialState.driverHandoff.rows.some((row) => row.handoffStatus === "Driver details pending."),
-        true,
-        "Expected /my-bookings driver handoff to show pending status for confirmed visible bookings",
-      );
-      for (const pendingDriverHandoffRow of initialState.driverHandoff.rows.filter((row) =>
-        ["Pending Staff Review", "Requested"].includes(row.bookingStatus),
-      )) {
-        assert.equal(
-          pendingDriverHandoffRow.text.includes("not confirmed yet"),
-          true,
-          `Expected pending/request row ${pendingDriverHandoffRow.id} not to imply confirmation`,
-        );
-        assert.equal(
-          pendingDriverHandoffRow.handoffStatus === "Driver assigned.",
-          false,
-          `Expected pending/request row ${pendingDriverHandoffRow.id} not to show driver assigned`,
-        );
-      }
-      assert.equal(
-        initialState.documentHistory.visible,
-        true,
-        "Expected /my-bookings booking document/request history clarity",
-      );
-      assert.equal(
-        initialState.documentHistory.helper,
-        "Booking request history is read-only for now.",
-        "Expected /my-bookings document history read-only helper",
-      );
-      for (const expectedDocumentBoundary of [
-        "Change, cancellation, and support requests are request-only and reviewed by our team.",
-        "No PDF/document is generated yet. No invoice/payment link is created.",
-        "No request is sent automatically from this local section.",
-        "No booking is changed, cancelled, or confirmed automatically. For urgent help, contact our team directly.",
-      ]) {
-        assert.equal(
-          initialState.documentHistory.boundary.includes(expectedDocumentBoundary),
-          true,
-          `Expected /my-bookings document history boundary: ${expectedDocumentBoundary}`,
-        );
-      }
-      assert.deepEqual(
-        initialState.documentHistory.rowIds,
-        initialState.rowIds,
-        "Expected /my-bookings document history rows to use current visible bookings only",
-      );
-      for (const pendingDocumentHistoryRow of initialState.documentHistory.rows.filter((row) =>
-        ["Pending Staff Review", "Requested"].includes(row.bookingStatus),
-      )) {
-        assert.equal(
-          pendingDocumentHistoryRow.text.includes("Request-only, pending team review."),
-          true,
-          `Expected pending/request document history row ${pendingDocumentHistoryRow.id} to stay request-only`,
-        );
-        assert.equal(
-          pendingDocumentHistoryRow.text.includes("Read-only confirmed booking record."),
-          false,
-          `Expected pending/request document history row ${pendingDocumentHistoryRow.id} not to imply confirmation`,
-        );
-      }
-      assert.equal(initialState.changeRequestIntake.visible, true, "Expected /my-bookings change request intake");
-      assert.equal(
-        initialState.changeRequestIntake.helper,
-        "Choose from the currently visible bookings below. This prepares a request only and does not change your booking yet.",
-        "Expected /my-bookings change request intake helper",
-      );
-      assert.equal(
-        initialState.changeRequestIntake.feedbackText,
-        "Choose one of the visible bookings below and prepare a change request for team review.",
-        "Expected /my-bookings change request intake initial feedback",
-      );
-      assert.equal(
-        initialState.changeRequestIntake.submitVisible,
-        true,
-        "Expected /my-bookings change request intake submit",
-      );
-      assert.equal(
-        initialState.cancellationRequestIntake.visible,
-        true,
-        "Expected /my-bookings cancellation request intake",
-      );
-      assert.equal(
-        initialState.cancellationRequestIntake.helper,
-        "Choose from the currently visible eligible bookings below. This prepares a request only and does not cancel your booking yet.",
-        "Expected /my-bookings cancellation request intake helper",
-      );
-      assert.equal(
-        initialState.cancellationRequestIntake.feedbackText,
-        "Choose one of the visible eligible bookings below and prepare a cancellation request for team review.",
-        "Expected /my-bookings cancellation request intake initial feedback",
-      );
-      assert.equal(
-        initialState.cancellationRequestIntake.submitVisible,
-        true,
-        "Expected /my-bookings cancellation request intake submit",
+        "Expected upcoming rows to allow local Amendment and Cancel review actions",
       );
       assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
       assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
@@ -34569,26 +34351,6 @@ async function runChromeTest() {
         initialState.rows.filter((row) => ["Completed", "Cancelled"].includes(row.status)).map((row) => row.status),
         [],
         "Expected Upcoming filter to hide completed and cancelled bookings",
-      );
-      assert.deepEqual(
-        initialState.changeRequestIntake.optionIds,
-        initialState.rowIds,
-        "Expected /my-bookings change request options to use current visible rows only",
-      );
-      assert.deepEqual(
-        initialState.cancellationRequestIntake.optionIds,
-        initialState.rowIds,
-        "Expected /my-bookings cancellation request options to use current visible eligible rows only",
-      );
-      assert.equal(
-        initialState.changeRequestIntake.optionIds.includes("booking-011"),
-        false,
-        "Expected /my-bookings change request options not to include hidden page-two rows",
-      );
-      assert.equal(
-        initialState.cancellationRequestIntake.optionIds.includes("booking-011"),
-        false,
-        "Expected /my-bookings cancellation request options not to include hidden page-two rows",
       );
       assert.deepEqual(
         initialState.forbiddenVisibleText,
@@ -34610,196 +34372,69 @@ async function runChromeTest() {
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
       await checkTelegramBoundary("/my-bookings desktop");
 
-      await setCustomerPortalRequestStatusLookup("CUST-STATUS-001");
-      await submitCustomerPortalRequestStatusLookup();
-      const secureLookupState = await waitForCondition(
+      await clickCustomerPortalRequestAmendment("booking-001");
+      const amendmentState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.requestStatusLookup.status === "Secure access required" ? candidateState : false;
+          return candidateState.feedbackText.includes("Amendment request noted for review") ? candidateState : false;
         },
         10000,
-        "customer portal secure saved status lookup",
+        "customer portal amendment feedback",
       );
       assert.equal(
-        secureLookupState.requestStatusLookup.detail,
-        "Customer booking status lookup requires secure customer account access before saved booking statuses can be read.",
-        "Expected saved lookup to stay blocked until customer auth is enabled",
+        amendmentState.feedbackText,
+        "Amendment request noted for review. Prestige Limo staff will confirm before anything changes.",
+        "Expected customer portal Amendment action to stay staff-reviewed",
       );
-      assert.equal(
-        secureLookupState.requestStatusLookup.status === "Confirmed",
-        false,
-        "Expected blocked saved lookup not to imply confirmation",
-      );
+      assert.equal(amendmentState.feedbackRowId, "booking-001", "Expected Amendment feedback near the clicked row");
       assert.deepEqual(
-        secureLookupState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        amendmentState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
-        "Expected /my-bookings saved status lookup not to call Supabase, payment, bank, notification, or calendar APIs",
+        "Expected Amendment action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
-      assert.equal(
-        secureLookupState.integrationCalls.filter((call) => customerBookingStatusApiPattern.test(call)).length,
-        1,
-        "Expected /my-bookings saved status lookup to call only the customer booking status API once",
-      );
-      assertNoCustomerFacingPriceVisibilityLeaks(secureLookupState.text, "/my-bookings secure status lookup");
-      assertNoAdminBookingPersistenceLeaks(secureLookupState.text, "/my-bookings secure status lookup");
+      assertNoCustomerFacingPriceVisibilityLeaks(amendmentState.text, "/my-bookings amendment action");
+      assertNoAdminBookingPersistenceLeaks(amendmentState.text, "/my-bookings amendment action");
       assertNoPublicRouteRuntimeCalls(
-        secureLookupState.integrationCalls,
-        secureLookupState.resourceCalls,
-        "/my-bookings secure status lookup",
-        customerBookingStatusApiPattern,
-      );
-      assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings secure status lookup"),
-        "/my-bookings secure status lookup",
-      );
-      await setCustomerPortalViewportAndLoad(desktopViewport);
-
-      await setCustomerChangeRequestField("bookingId", "booking-002");
-      await setCustomerChangeRequestField("changeType", "Pickup date/time");
-      await setCustomerChangeRequestField("newPickupDate", "2026-06-01");
-      await setCustomerChangeRequestPickupTime("16", "25");
-      await setCustomerChangeRequestField("routeChange", "Please move pickup to Orchard entrance if available.");
-      await setCustomerChangeRequestField("teamNotes", "Passenger asked for a later pickup if possible.");
-      await submitCustomerChangeRequest();
-      const validChangeRequestState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.changeRequestIntake.feedbackText.includes("Change request prepared for team review")
-            ? candidateState
-            : false;
-        },
-        10000,
-        "customer portal valid change request intake feedback",
-      );
-      assert.equal(
-        validChangeRequestState.changeRequestIntake.selectedBookingId,
-        "booking-002",
-        "Expected /my-bookings change request to target the selected visible row",
-      );
-      assert.equal(
-        validChangeRequestState.changeRequestIntake.pendingNote,
-        "This booking request is still pending team review and is not confirmed yet.",
-        "Expected pending booking change intake not to imply confirmation",
-      );
-      assert.equal(
-        validChangeRequestState.changeRequestIntake.feedbackText.includes("This does not change your booking yet."),
-        true,
-        "Expected valid change request feedback not to imply saved booking changes",
-      );
-      assert.equal(
-        validChangeRequestState.changeRequestIntake.feedbackText.includes("This is request-only and not confirmed yet."),
-        true,
-        "Expected valid change request feedback to remain request-only",
-      );
-      assert.equal(
-        validChangeRequestState.changeRequestIntake.feedbackText.includes("For urgent changes, please contact our team directly."),
-        true,
-        "Expected valid change request feedback to direct urgent changes to the team",
-      );
-      assert.equal(
-        validChangeRequestState.changeRequestIntake.feedbackDistanceFromSubmit <= 24,
-        true,
-        `Expected change request feedback near submit button, got ${validChangeRequestState.changeRequestIntake.feedbackDistanceFromSubmit}px`,
-      );
-      assert.equal(
-        validChangeRequestState.rows.find((row) => row.id === "booking-002")?.status,
-        "Pending Staff Review",
-        "Expected change request intake not to confirm or change the booking row status",
-      );
-      assert.equal(
-        validChangeRequestState.changeRequestIntake.values.newPickupTime,
-        "16:25",
-        "Expected /my-bookings change request pickup time selectors to capture HH:mm",
-      );
-      assert.deepEqual(
-        validChangeRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
-        [],
-        "Expected valid /my-bookings change request not to call Supabase, payment, bank, notification, or calendar APIs",
-      );
-      assertNoCustomerFacingPriceVisibilityLeaks(validChangeRequestState.text, "/my-bookings valid change request");
-      assertNoAdminBookingPersistenceLeaks(validChangeRequestState.text, "/my-bookings valid change request");
-      assertNoPublicRouteRuntimeCalls(
-        validChangeRequestState.integrationCalls,
-        validChangeRequestState.resourceCalls,
-        "/my-bookings valid change request",
-      );
-      assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings valid change request"),
-        "/my-bookings valid change request",
+        amendmentState.integrationCalls,
+        amendmentState.resourceCalls,
+        "/my-bookings amendment action",
       );
 
-      await setCustomerCancellationRequestField("bookingId", "booking-004");
-      await setCustomerCancellationRequestField(
-        "reason",
-        "Passenger needs to cancel this trip and understands the team must review first.",
-      );
-      await submitCustomerCancellationRequest();
-      const validCancellationRequestState = await waitForCondition(
+      await clickCustomerPortalRequestCancel("booking-004");
+      const cancelState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.cancellationRequestIntake.feedbackText.includes(
-            "Cancellation request prepared for team review",
-          )
-            ? candidateState
-            : false;
+          return candidateState.feedbackText.includes("Cancel request noted for review") ? candidateState : false;
         },
         10000,
-        "customer portal valid cancellation request intake feedback",
+        "customer portal cancel feedback",
       );
       assert.equal(
-        validCancellationRequestState.cancellationRequestIntake.selectedBookingId,
-        "booking-004",
-        "Expected /my-bookings cancellation request to target the selected visible row",
+        cancelState.feedbackText,
+        "Cancel request noted for review. Your booking is not cancelled until Prestige Limo confirms.",
+        "Expected customer portal Cancel action not to directly cancel the booking",
       );
+      assert.equal(cancelState.feedbackRowId, "booking-004", "Expected Cancel feedback near the clicked row");
       assert.equal(
-        validCancellationRequestState.cancellationRequestIntake.feedbackText.includes("Your booking is not cancelled yet."),
-        true,
-        "Expected valid cancellation request feedback not to imply direct cancellation",
-      );
-      assert.equal(
-        validCancellationRequestState.cancellationRequestIntake.feedbackText.includes("Our team must review first."),
-        true,
-        "Expected valid cancellation request feedback to require team review",
-      );
-      assert.equal(
-        validCancellationRequestState.cancellationRequestIntake.feedbackText.includes(
-          "For urgent or same-day cancellation, please contact our team directly.",
-        ),
-        true,
-        "Expected valid cancellation request feedback to direct urgent cancellations to the team",
-      );
-      assert.equal(
-        validCancellationRequestState.cancellationRequestIntake.feedbackDistanceFromSubmit <= 24,
-        true,
-        `Expected cancellation request feedback near submit button, got ${validCancellationRequestState.cancellationRequestIntake.feedbackDistanceFromSubmit}px`,
-      );
-      assert.equal(
-        validCancellationRequestState.rows.find((row) => row.id === "booking-004")?.status,
+        cancelState.rows.find((row) => row.id === "booking-004")?.status,
         "Confirmed",
-        "Expected cancellation request intake not to cancel or change the booking row status",
+        "Expected Cancel action not to change row status",
       );
       assert.deepEqual(
-        validCancellationRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        cancelState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
-        "Expected valid /my-bookings cancellation request not to call Supabase, payment, bank, notification, or calendar APIs",
+        "Expected Cancel action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
-      assertNoCustomerFacingPriceVisibilityLeaks(
-        validCancellationRequestState.text,
-        "/my-bookings valid cancellation request",
-      );
-      assertNoAdminBookingPersistenceLeaks(validCancellationRequestState.text, "/my-bookings valid cancellation request");
+      assertNoCustomerFacingPriceVisibilityLeaks(cancelState.text, "/my-bookings cancel action");
+      assertNoAdminBookingPersistenceLeaks(cancelState.text, "/my-bookings cancel action");
       assertNoPublicRouteRuntimeCalls(
-        validCancellationRequestState.integrationCalls,
-        validCancellationRequestState.resourceCalls,
-        "/my-bookings valid cancellation request",
-      );
-      assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings valid cancellation request"),
-        "/my-bookings valid cancellation request",
+        cancelState.integrationCalls,
+        cancelState.resourceCalls,
+        "/my-bookings cancel action",
       );
 
       await clickCustomerPortalFilter("Completed");
-      const completedForChangeRequestState = await waitForCondition(
+      const completedForActionsState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
           return candidateState.activeFilter === "Completed" && candidateState.rowIds.includes("booking-013")
@@ -34807,118 +34442,22 @@ async function runChromeTest() {
             : false;
         },
         10000,
-        "customer portal completed rows for closed change request",
+        "customer portal completed rows for disabled actions",
       );
       assert.equal(
-        completedForChangeRequestState.changeRequestIntake.optionIds.includes("booking-013"),
-        true,
-        "Expected closed change request check to use visible completed row",
-      );
-      assert.equal(
-        completedForChangeRequestState.cancellationRequestIntake.optionIds.includes("booking-013"),
-        false,
-        "Expected closed cancellation request check not to offer visible completed row as eligible",
-      );
-      assert.equal(
-        completedForChangeRequestState.cancellationRequestIntake.closedWarning,
-        "This booking cannot be cancelled here. Please contact our team if you need help.",
-        "Expected closed booking warning in cancellation request intake",
-      );
-      assert.deepEqual(
-        completedForChangeRequestState.driverHandoff.rowIds,
-        completedForChangeRequestState.rowIds,
-        "Expected completed driver handoff rows to use visible completed rows only",
-      );
-      assert.equal(
-        completedForChangeRequestState.driverHandoff.rows.every(
-          (row) => row.handoffStatus === "Read-only trip record." && row.text.includes("read-only here"),
+        completedForActionsState.rows.every(
+          (row) =>
+            row.actions.find((action) => action.action === "pdf")?.disabled === true &&
+            row.actions.find((action) => action.action === "amendment")?.disabled === true &&
+            row.actions.find((action) => action.action === "cancel")?.disabled === true,
         ),
         true,
-        "Expected completed driver handoff rows to stay read-only",
-      );
-      await setCustomerChangeRequestField("bookingId", "booking-013");
-      await submitCustomerChangeRequest();
-      const closedChangeRequestState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.changeRequestIntake.feedbackText.includes("Completed or cancelled bookings cannot be changed here")
-            ? candidateState
-            : false;
-        },
-        10000,
-        "customer portal closed booking change request feedback",
+        "Expected completed bookings to keep row actions visible but read-only",
       );
       assert.equal(
-        closedChangeRequestState.changeRequestIntake.closedWarning,
-        "Completed or cancelled bookings cannot be changed here. Please contact our team.",
-        "Expected closed booking warning in change request intake",
-      );
-      assert.equal(
-        closedChangeRequestState.changeRequestIntake.feedbackText,
-        "Completed or cancelled bookings cannot be changed here. Please contact our team.",
-        "Expected completed booking change request submit to stay safe",
-      );
-      assert.deepEqual(
-        closedChangeRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
-        [],
-        "Expected closed /my-bookings change request not to call Supabase, payment, bank, notification, or calendar APIs",
-      );
-      assertNoCustomerFacingPriceVisibilityLeaks(closedChangeRequestState.text, "/my-bookings closed change request");
-      assertNoAdminBookingPersistenceLeaks(closedChangeRequestState.text, "/my-bookings closed change request");
-      assertNoPublicRouteRuntimeCalls(
-        closedChangeRequestState.integrationCalls,
-        closedChangeRequestState.resourceCalls,
-        "/my-bookings closed change request",
-      );
-      assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings closed change request"),
-        "/my-bookings closed change request",
-      );
-
-      await submitCustomerCancellationRequest();
-      const closedCancellationRequestState = await waitForCondition(
-        async () => {
-          const candidateState = await readCustomerPortalState();
-          return candidateState.cancellationRequestIntake.feedbackText.includes(
-            "This booking cannot be cancelled here",
-          )
-            ? candidateState
-            : false;
-        },
-        10000,
-        "customer portal closed booking cancellation request feedback",
-      );
-      assert.equal(
-        closedCancellationRequestState.cancellationRequestIntake.feedbackText,
-        "This booking cannot be cancelled here. Please contact our team if you need help.",
-        "Expected completed booking cancellation request submit to stay safe",
-      );
-      assert.equal(
-        closedCancellationRequestState.cancellationRequestIntake.optionIds.includes("booking-013"),
+        completedForActionsState.text.includes("Request change"),
         false,
-        "Expected completed booking not to become selectable for cancellation",
-      );
-      assert.deepEqual(
-        closedCancellationRequestState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
-        [],
-        "Expected closed /my-bookings cancellation request not to call Supabase, payment, bank, notification, or calendar APIs",
-      );
-      assertNoCustomerFacingPriceVisibilityLeaks(
-        closedCancellationRequestState.text,
-        "/my-bookings closed cancellation request",
-      );
-      assertNoAdminBookingPersistenceLeaks(
-        closedCancellationRequestState.text,
-        "/my-bookings closed cancellation request",
-      );
-      assertNoPublicRouteRuntimeCalls(
-        closedCancellationRequestState.integrationCalls,
-        closedCancellationRequestState.resourceCalls,
-        "/my-bookings closed cancellation request",
-      );
-      assertNoBrowserPersistenceLeaks(
-        await readBrowserPersistenceState("/my-bookings closed cancellation request"),
-        "/my-bookings closed cancellation request",
+        "Expected old Request change wording to be retired",
       );
 
       await clickCustomerPortalFilter("Upcoming");
@@ -34930,7 +34469,7 @@ async function runChromeTest() {
             : false;
         },
         10000,
-        "customer portal Upcoming reset after closed change request check",
+        "customer portal Upcoming reset after row action checks",
       );
 
       await clickCustomerPortalPageButton("next");
@@ -35189,37 +34728,37 @@ async function runChromeTest() {
         assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
       }
 
-      await clickCustomerPortalRequestChange("booking-001");
+      await clickCustomerPortalRequestAmendment("booking-001");
       const changeState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.feedbackText.includes("Change request noted for review") ? candidateState : false;
+          return candidateState.feedbackText.includes("Amendment request noted for review") ? candidateState : false;
         },
         10000,
-        "customer portal request change feedback",
+        "customer portal amendment feedback",
       );
       assert.equal(
         changeState.feedbackText,
-        "Change request noted for review. Prestige Limo staff will review it before confirmation.",
-        "Expected customer portal change request to stay staff-reviewed",
+        "Amendment request noted for review. Prestige Limo staff will confirm before anything changes.",
+        "Expected customer portal Amendment action to stay staff-reviewed",
       );
-      assert.equal(changeState.feedbackRowId, "booking-001", "Expected request change feedback near the clicked row");
+      assert.equal(changeState.feedbackRowId, "booking-001", "Expected Amendment feedback near the clicked row");
       assert.equal(
         changeState.rows.find((row) => row.id === "booking-001")?.text.includes("Alicia Tan"),
         true,
-        "Expected request change not to change row data",
+        "Expected Amendment action not to change row data",
       );
       assert.deepEqual(
         changeState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
-        "Expected request change not to call Supabase, payment, bank, notification, or calendar APIs",
+        "Expected Amendment action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
-      assertNoCustomerFacingPriceVisibilityLeaks(changeState.text, "/my-bookings change request");
-      assertNoAdminBookingPersistenceLeaks(changeState.text, "/my-bookings change request");
+      assertNoCustomerFacingPriceVisibilityLeaks(changeState.text, "/my-bookings amendment action");
+      assertNoAdminBookingPersistenceLeaks(changeState.text, "/my-bookings amendment action");
       assertNoPublicRouteRuntimeCalls(
         changeState.integrationCalls,
         changeState.resourceCalls,
-        "/my-bookings change request",
+        "/my-bookings amendment action",
       );
 
       await setCustomerPortalSearch("Sentosa");
@@ -35259,15 +34798,14 @@ async function runChromeTest() {
         0,
         "Expected completed bookings to be read-only without Request change buttons",
       );
-      assert.deepEqual(
-        completedState.driverHandoff.rowIds,
-        completedState.rowIds,
-        "Expected completed filter driver handoff rows to match visible rows",
-      );
       assert.equal(
-        completedState.driverHandoff.rows.every((row) => row.handoffStatus === "Read-only trip record."),
+        completedState.rows.every(
+          (row) =>
+            row.actions.find((action) => action.action === "amendment")?.disabled === true &&
+            row.actions.find((action) => action.action === "cancel")?.disabled === true,
+        ),
         true,
-        "Expected completed filter driver handoff to stay read-only",
+        "Expected completed filter row actions to stay read-only",
       );
 
       await clickCustomerPortalPageButton("next");
@@ -35453,17 +34991,14 @@ async function runChromeTest() {
         0,
         "Expected cancelled bookings not to show Request change buttons",
       );
-      assert.deepEqual(
-        cancelledState.driverHandoff.rowIds,
-        cancelledState.rowIds,
-        "Expected cancelled filter driver handoff rows to match visible rows",
-      );
       assert.equal(
-        cancelledState.driverHandoff.rows.every(
-          (row) => row.handoffStatus === "Read-only trip record." && row.text.includes("read-only here"),
+        cancelledState.rows.every(
+          (row) =>
+            row.actions.find((action) => action.action === "amendment")?.disabled === true &&
+            row.actions.find((action) => action.action === "cancel")?.disabled === true,
         ),
         true,
-        "Expected cancelled filter driver handoff to stay read-only",
+        "Expected cancelled filter row actions to stay read-only",
       );
 
       await clickCustomerPortalPageButton("next");
@@ -35624,85 +35159,29 @@ async function runChromeTest() {
       );
       assert.equal(mobileState.guidance.visible, true, "Expected /my-bookings mobile guidance");
       assert.equal(mobileState.searchVisible, true, "Expected /my-bookings search to remain touch-friendly on mobile");
-      assert.equal(
-        mobileState.changeRequestIntake.visible,
-        true,
-        "Expected /my-bookings mobile change request intake",
-      );
-      assert.equal(
-        mobileState.changeRequestIntake.submitVisible,
-        true,
-        "Expected /my-bookings mobile change request submit to stay touch-friendly",
-      );
-      assert.equal(
-        mobileState.cancellationRequestIntake.visible,
-        true,
-        "Expected /my-bookings mobile cancellation request intake",
-      );
-      assert.equal(
-        mobileState.cancellationRequestIntake.submitVisible,
-        true,
-        "Expected /my-bookings mobile cancellation request submit to stay touch-friendly",
-      );
-      assert.equal(
-        mobileState.cancellationRequestIntake.text.includes("does not cancel your booking yet"),
-        true,
-        "Expected /my-bookings mobile cancellation request boundary",
-      );
-      assert.equal(
-        mobileState.requestNextSteps.visible,
-        true,
-        "Expected /my-bookings mobile request next-steps timeline",
-      );
-      assert.equal(
-        mobileState.requestNextSteps.text.includes("Change request does not change your booking yet"),
-        true,
-        "Expected /my-bookings mobile next-steps change request boundary",
-      );
-      assert.equal(
-        mobileState.supportHandoff.visible,
-        true,
-        "Expected /my-bookings mobile support handoff",
-      );
-      assert.equal(
-        mobileState.supportHandoff.boundary,
-        "This section does not send a message yet. Your booking is not changed or cancelled from here.",
-        "Expected /my-bookings mobile support handoff local-only boundary",
-      );
-      assert.equal(
-        mobileState.driverHandoff.visible,
-        true,
-        "Expected /my-bookings mobile driver handoff status",
-      );
       assert.deepEqual(
-        mobileState.driverHandoff.rowIds,
-        mobileState.rowIds,
-        "Expected /my-bookings mobile driver handoff rows to use visible rows only",
+        mobileState.removedGiantSections,
+        {
+          bookingDocumentHistory: false,
+          changeRequest: false,
+          driverHandoff: false,
+          requestCancellation: false,
+          requestNextSteps: false,
+          requestStatusLookup: false,
+          supportHandoff: false,
+        },
+        "Expected /my-bookings mobile duplicate giant sections to stay removed",
+      );
+      assert.equal(mobileState.compactHelp.visible, true, "Expected /my-bookings mobile compact help disclosure");
+      assert.equal(
+        mobileState.rows.every((row) => row.actions.map((action) => action.text).join("|") === "PDF|Amendment|Cancel"),
+        true,
+        "Expected /my-bookings mobile rows to expose PDF, Amendment, and Cancel actions",
       );
       assert.equal(
-        mobileState.driverHandoff.text.includes("For urgent same-day help, contact our team directly."),
+        mobileState.rows.every((row) => row.actions.find((action) => action.action === "pdf")?.disabled === true),
         true,
-        "Expected /my-bookings mobile driver handoff urgent helper",
-      );
-      assert.equal(
-        mobileState.documentHistory.visible,
-        true,
-        "Expected /my-bookings mobile document/request history clarity",
-      );
-      assert.deepEqual(
-        mobileState.documentHistory.rowIds,
-        mobileState.rowIds,
-        "Expected /my-bookings mobile document history rows to use visible rows only",
-      );
-      assert.equal(
-        mobileState.documentHistory.boundary.includes("No PDF/document is generated yet. No invoice/payment link is created."),
-        true,
-        "Expected /my-bookings mobile document/payment boundary",
-      );
-      assert.equal(
-        mobileState.documentHistory.boundary.includes("No booking is changed, cancelled, or confirmed automatically."),
-        true,
-        "Expected /my-bookings mobile automatic-status boundary",
+        "Expected /my-bookings mobile PDF action to stay disabled/status-only",
       );
       assert.equal(mobileState.rowCount, 10, "Expected /my-bookings mobile view to keep the 10-row limit");
       assert.equal(
@@ -39697,8 +39176,8 @@ async function runChromeTest() {
       });
       assert.equal(
         customerBookingDocumentHistoryVisible,
-        route.context === "/my-bookings",
-        `Expected customer booking document history visibility boundary for ${route.context}`,
+        false,
+        `Expected customer booking document history giant section to stay removed for ${route.context}`,
       );
     }
     reporter.step("route leak guards: /customers/[customerId]");

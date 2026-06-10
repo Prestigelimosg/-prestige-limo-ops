@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { FormEvent } from "react";
 import { useState } from "react";
 
@@ -261,12 +262,23 @@ export default function CustomerBookingPage() {
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
         <header className="rounded-md border border-slate-200 bg-white px-4 py-5 shadow-sm sm:px-6">
-          <p className="text-sm font-semibold uppercase text-slate-600">Prestige Limo SG</p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-950 sm:text-4xl">Booking Request</h1>
-          <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">
-            Share the trip details you have now. Your booking is not confirmed until Prestige
-            Limo staff replies.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold uppercase text-slate-600">Prestige Limo SG</p>
+              <h1 className="mt-2 text-3xl font-bold text-slate-950 sm:text-4xl">Booking Request</h1>
+              <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">
+                Share the trip details you have now. Your booking is not confirmed until Prestige
+                Limo staff replies.
+              </p>
+            </div>
+            <Link
+              className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+              data-customer-booking-portal-link="true"
+              href="/my-bookings"
+            >
+              Portal
+            </Link>
+          </div>
           <p
             className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
             data-customer-booking-mobile-web-note="true"

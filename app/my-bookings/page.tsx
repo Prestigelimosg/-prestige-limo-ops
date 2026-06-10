@@ -30,43 +30,6 @@ type BookingRequestFeedback = {
   text: string;
 };
 
-type ChangeRequestType =
-  | "Pickup date/time"
-  | "Pickup or drop-off"
-  | "Passenger/contact details"
-  | "Other request";
-
-type CustomerChangeRequestForm = {
-  bookingId: string;
-  changeType: ChangeRequestType;
-  newPickupDate: string;
-  newPickupTime: string;
-  passengerContactChange: string;
-  routeChange: string;
-  teamNotes: string;
-};
-
-type CustomerChangeRequestFeedback = {
-  tone: BookingRequestFeedback["tone"];
-  text: string;
-};
-
-type CustomerCancellationRequestForm = {
-  bookingId: string;
-  reason: string;
-};
-
-type CustomerCancellationRequestFeedback = {
-  tone: BookingRequestFeedback["tone"];
-  text: string;
-};
-
-type CustomerSavedStatusLookupResult = {
-  detail: string;
-  status: string;
-  title: string;
-};
-
 type CustomerPortalBooking = {
   dropoffLocation: string;
   flightNumber?: string;
@@ -78,16 +41,6 @@ type CustomerPortalBooking = {
   specialRequest?: string;
   status: BookingStatus;
   vehicleType: string;
-};
-
-type CustomerDriverHandoff = {
-  detail: string;
-  label:
-    | "Details will be shared closer to pickup."
-    | "Driver assigned."
-    | "Driver details pending."
-    | "Read-only trip record.";
-  tone: "confirmed" | "pending" | "review";
 };
 
 const serviceOptions = [
@@ -182,38 +135,6 @@ const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [
   "pickupDate",
   "pickupTime",
 ];
-
-const changeRequestTypes: ChangeRequestType[] = [
-  "Pickup date/time",
-  "Pickup or drop-off",
-  "Passenger/contact details",
-  "Other request",
-];
-
-const initialCustomerChangeRequestForm: CustomerChangeRequestForm = {
-  bookingId: "",
-  changeType: "Pickup date/time",
-  newPickupDate: "",
-  newPickupTime: "",
-  passengerContactChange: "",
-  routeChange: "",
-  teamNotes: "",
-};
-
-const initialCustomerChangeRequestFeedback: CustomerChangeRequestFeedback = {
-  tone: "info",
-  text: "Choose one of the visible bookings below and prepare a change request for team review.",
-};
-
-const initialCustomerCancellationRequestForm: CustomerCancellationRequestForm = {
-  bookingId: "",
-  reason: "",
-};
-
-const initialCustomerCancellationRequestFeedback: CustomerCancellationRequestFeedback = {
-  tone: "info",
-  text: "Choose one of the visible eligible bookings below and prepare a cancellation request for team review.",
-};
 
 const samplePickupLocations = [
   "Raffles Singapore",
@@ -511,8 +432,6 @@ const bookings: CustomerPortalBooking[] = [
   ...pastCancelledMonthBookings,
 ];
 
-const customerVisibleDriverAssignedBookingIds = new Set(["booking-001", "booking-006", "booking-010"]);
-
 function rowMatchesFilter(booking: CustomerPortalBooking, filter: BookingFilter) {
   if (filter === "Completed") {
     return booking.status === "Completed";
@@ -580,151 +499,14 @@ function splitPickupTime(value: string) {
   };
 }
 
-function customerFacingStatusLabel(value: string | null | undefined) {
-  const normalized = (value || "").replace(/_/g, " ").trim().toLowerCase();
-
-  if (normalized === "confirmed") {
-    return "Confirmed";
-  }
-
-  if (normalized === "completed") {
-    return "Completed";
-  }
-
-  if (normalized === "cancelled") {
-    return "Cancelled";
-  }
-
-  if (normalized === "received") {
-    return "Request received";
-  }
-
-  if (normalized === "driver assigned") {
-    return "Driver assigned";
-  }
-
-  if (normalized === "driver pending") {
-    return "Driver pending";
-  }
-
-  if (normalized === "declined") {
-    return "Declined";
-  }
-
-  return "Pending review";
-}
-
-function statusLookupDetail(status: string) {
-  if (status === "Confirmed") {
-    return "This booking is confirmed. Please contact our team if any details need to change.";
-  }
-
-  if (status === "Completed") {
-    return "This booking has been completed.";
-  }
-
-  if (status === "Cancelled") {
-    return "This booking has been cancelled. Please contact our team if you need a new request.";
-  }
-
-  if (status === "Request received") {
-    return "We have received this request. Our team will review availability before confirming.";
-  }
-
-  if (status === "Driver assigned") {
-    return "This booking is confirmed and driver details will be shared according to our dispatch timing.";
-  }
-
-  if (status === "Driver pending") {
-    return "This booking is confirmed and driver assignment is pending.";
-  }
-
-  if (status === "Declined") {
-    return "This request was not confirmed. Please contact our team if you need help with a new request.";
-  }
-
-  return "Pending review means our team has received your request but has not confirmed availability yet.";
-}
-
-function toSavedStatusLookupResult(value: unknown): CustomerSavedStatusLookupResult | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  const record = value as { customer_facing_status?: string | null };
-  const status = customerFacingStatusLabel(record.customer_facing_status);
-
-  return {
-    detail: statusLookupDetail(status),
-    status,
-    title: status,
-  };
-}
-
-function getCustomerDriverHandoff(booking: CustomerPortalBooking): CustomerDriverHandoff {
-  if (booking.status === "Confirmed") {
-    if (customerVisibleDriverAssignedBookingIds.has(booking.id)) {
-      return {
-        detail: "Driver assigned. Customer-facing driver details will be shared closer to pickup.",
-        label: "Driver assigned.",
-        tone: "confirmed",
-      };
-    }
-
-    return {
-      detail: "Driver details will be shared after our team assigns the driver.",
-      label: "Driver details pending.",
-      tone: "pending",
-    };
-  }
-
-  if (booking.status === "Completed" || booking.status === "Cancelled") {
-    return {
-      detail: "Completed or cancelled bookings stay read-only here. Contact our team if you need help.",
-      label: "Read-only trip record.",
-      tone: "review",
-    };
-  }
-
-  return {
-    detail: "This request is not confirmed yet. Driver details are available only after team review and confirmation.",
-    label: "Details will be shared closer to pickup.",
-    tone: "review",
-  };
-}
-
-function getCustomerDocumentHistoryLabel(booking: CustomerPortalBooking) {
-  if (booking.status === "Confirmed") {
-    return "Read-only confirmed booking record.";
-  }
-
-  if (booking.status === "Completed" || booking.status === "Cancelled") {
-    return "Read-only past trip record.";
-  }
-
-  return "Request-only, pending team review.";
-}
-
-function driverHandoffClass(tone: CustomerDriverHandoff["tone"]) {
-  if (tone === "confirmed") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  }
-
-  if (tone === "pending") {
-    return "border-sky-200 bg-sky-50 text-sky-950";
-  }
-
-  return "border-slate-200 bg-slate-50 text-slate-700";
+function canRequestBookingReview(booking: CustomerPortalBooking) {
+  return booking.status !== "Completed" && booking.status !== "Cancelled";
 }
 
 export default function CustomerPortalPage() {
   const [activeSection, setActiveSection] = useState<PortalSection>("Upcoming");
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [requestStatusLookupQuery, setRequestStatusLookupQuery] = useState("");
-  const [requestStatusLookupFeedback, setRequestStatusLookupFeedback] =
-    useState<CustomerSavedStatusLookupResult | null>(null);
-  const [requestStatusLookupLoading, setRequestStatusLookupLoading] = useState(false);
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
@@ -735,16 +517,6 @@ export default function CustomerPortalPage() {
     tone: "info",
     text: "Submit a booking request and our staff will review availability before confirming.",
   });
-  const [changeRequestForm, setChangeRequestForm] =
-    useState<CustomerChangeRequestForm>(initialCustomerChangeRequestForm);
-  const [changeRequestFeedback, setChangeRequestFeedback] = useState<CustomerChangeRequestFeedback>(
-    initialCustomerChangeRequestFeedback,
-  );
-  const [cancellationRequestForm, setCancellationRequestForm] = useState<CustomerCancellationRequestForm>(
-    initialCustomerCancellationRequestForm,
-  );
-  const [cancellationRequestFeedback, setCancellationRequestFeedback] =
-    useState<CustomerCancellationRequestFeedback>(initialCustomerCancellationRequestFeedback);
 
   const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
@@ -811,16 +583,6 @@ export default function CustomerPortalPage() {
   const visibleBookings = scopedBookings.slice(firstVisibleBookingIndex, firstVisibleBookingIndex + visibleBookingLimit);
   const showingStart = scopedBookings.length === 0 ? 0 : firstVisibleBookingIndex + 1;
   const showingEnd = firstVisibleBookingIndex + visibleBookings.length;
-  const selectedChangeRequestBooking = visibleBookings.find((booking) => booking.id === changeRequestForm.bookingId);
-  const cancellationEligibleBookings = visibleBookings.filter(
-    (booking) => booking.status !== "Completed" && booking.status !== "Cancelled",
-  );
-  const hasClosedVisibleBookings = visibleBookings.some(
-    (booking) => booking.status === "Completed" || booking.status === "Cancelled",
-  );
-  const selectedCancellationRequestBooking = cancellationEligibleBookings.find(
-    (booking) => booking.id === cancellationRequestForm.bookingId,
-  );
   const selectedMonthOption = pastMonthOptions.find((month) => month.key === selectedBookingMonth);
   const activeMonthLabel = (() => {
     if (activeFilter === "Upcoming") {
@@ -835,21 +597,6 @@ export default function CustomerPortalPage() {
   })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
-  const changeRequestPickupTimeParts = splitPickupTime(changeRequestForm.newPickupTime);
-  function resetCustomerChangeRequestIntake() {
-    setChangeRequestForm(initialCustomerChangeRequestForm);
-    setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
-  }
-
-  function resetCustomerCancellationRequestIntake() {
-    setCancellationRequestForm(initialCustomerCancellationRequestForm);
-    setCancellationRequestFeedback(initialCustomerCancellationRequestFeedback);
-  }
-
-  function resetCustomerReviewIntakes() {
-    resetCustomerChangeRequestIntake();
-    resetCustomerCancellationRequestIntake();
-  }
 
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = section === "New Booking Request" ? "Upcoming" : section;
@@ -857,7 +604,6 @@ export default function CustomerPortalPage() {
     setActiveSection(section);
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerReviewIntakes();
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
   }
@@ -866,68 +612,7 @@ export default function CustomerPortalPage() {
     setSearchQuery(value);
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerReviewIntakes();
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
-  }
-
-  async function handleRequestStatusLookupSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const bookingReference = requestStatusLookupQuery.trim();
-
-    if (!bookingReference) {
-      setRequestStatusLookupFeedback(null);
-      return;
-    }
-
-    setRequestStatusLookupLoading(true);
-    setRequestStatusLookupFeedback({
-      detail: "Checking saved booking status...",
-      status: "Checking",
-      title: "Checking status",
-    });
-
-    try {
-      const response = await fetch(
-        `/api/customer-booking-statuses?booking_reference=${encodeURIComponent(bookingReference)}`,
-        {
-          headers: {
-            "x-prestige-customer-purpose": "customer-booking-status-read",
-          },
-          method: "GET",
-        },
-      );
-      const result = await response.json().catch(() => null);
-      const firstStatus = Array.isArray(result?.statuses) ? result.statuses[0] : null;
-      const savedStatus = toSavedStatusLookupResult(firstStatus);
-
-      if (response.ok && savedStatus) {
-        setRequestStatusLookupFeedback(savedStatus);
-      } else if (response.ok) {
-        setRequestStatusLookupFeedback({
-          detail: "No saved booking status was found for that reference. Please contact our team with your request details.",
-          status: "Not found",
-          title: "No saved status found",
-        });
-      } else {
-        setRequestStatusLookupFeedback({
-          detail:
-            typeof result?.error === "string"
-              ? result.error
-              : "Secure saved booking status lookup is not available yet. Please contact our team with your request details.",
-          status: "Secure access required",
-          title: "Secure lookup required",
-        });
-      }
-    } catch {
-      setRequestStatusLookupFeedback({
-        detail: "Secure saved booking status lookup is not available right now. Please contact our team with your request details.",
-        status: "Secure access required",
-        title: "Secure lookup required",
-      });
-    } finally {
-      setRequestStatusLookupLoading(false);
-    }
   }
 
   function handleMonthSelect(monthKey: string) {
@@ -935,7 +620,6 @@ export default function CustomerPortalPage() {
     setBookingPages((current) => ({ ...current, [activeFilter]: 1 }));
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerReviewIntakes();
   }
 
   function handlePageChange(direction: "next" | "previous") {
@@ -950,122 +634,23 @@ export default function CustomerPortalPage() {
     });
     setExpandedBookingId("");
     setChangeFeedback({});
-    resetCustomerReviewIntakes();
   }
 
-  function handleRequestChange(booking: CustomerPortalBooking) {
+  function handleAmendmentRequest(booking: CustomerPortalBooking) {
     setExpandedBookingId(booking.id);
-    setChangeRequestForm((current) => ({ ...current, bookingId: booking.id }));
-    setChangeRequestFeedback({
-      tone: "info",
-      text: "Add the change details below and submit for team review. This does not change your booking yet.",
-    });
-    setChangeFeedback((current) => ({
-      ...current,
-      [booking.id]: "Change request noted for review. Prestige Limo staff will review it before confirmation.",
-    }));
-  }
-
-  function updateChangeRequestField(field: keyof CustomerChangeRequestForm, value: string) {
-    setChangeRequestForm((current) => ({ ...current, [field]: value }));
-    setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
-  }
-
-  function updateCancellationRequestField(field: keyof CustomerCancellationRequestForm, value: string) {
-    setCancellationRequestForm((current) => ({ ...current, [field]: value }));
-    setCancellationRequestFeedback(initialCustomerCancellationRequestFeedback);
-  }
-
-  function updateChangeRequestPickupTimePart(part: "hour" | "minute", value: string) {
-    setChangeRequestForm((currentForm) => {
-      const current = splitPickupTime(currentForm.newPickupTime);
-      const nextHour = part === "hour" ? value : current.hour;
-      const nextMinute = part === "minute" ? value : current.minute || "00";
-
-      return {
-        ...currentForm,
-        newPickupTime: nextHour ? `${nextHour}:${nextMinute || "00"}` : "",
-      };
-    });
-    setChangeRequestFeedback(initialCustomerChangeRequestFeedback);
-  }
-
-  function handleChangeRequestSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!selectedChangeRequestBooking) {
-      setChangeRequestFeedback({
-        tone: "error",
-        text: "Choose one of the visible bookings below before preparing a change request.",
-      });
-      return;
-    }
-
-    if (selectedChangeRequestBooking.status === "Completed" || selectedChangeRequestBooking.status === "Cancelled") {
-      setChangeRequestFeedback({
-        tone: "error",
-        text: "Completed or cancelled bookings cannot be changed here. Please contact our team.",
-      });
-      return;
-    }
-
-    const hasChangeDetails = [
-      changeRequestForm.newPickupDate,
-      changeRequestForm.newPickupTime,
-      changeRequestForm.passengerContactChange,
-      changeRequestForm.routeChange,
-      changeRequestForm.teamNotes,
-    ].some((value) => value.trim());
-
-    if (!hasChangeDetails) {
-      setChangeRequestFeedback({
-        tone: "error",
-        text: "Add the change details for our team to review before submitting.",
-      });
-      return;
-    }
-
-    setChangeRequestFeedback({
-      tone: "success",
-      text:
-        "Change request prepared for team review. This does not change your booking yet. " +
-        "This is request-only and not confirmed yet. Our team will review and confirm. " +
-        "For urgent changes, please contact our team directly.",
+    setChangeFeedback({
+      [booking.id]: canRequestBookingReview(booking)
+        ? "Amendment request noted for review. Prestige Limo staff will confirm before anything changes."
+        : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
     });
   }
 
-  function handleCancellationRequestSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (cancellationEligibleBookings.length === 0) {
-      setCancellationRequestFeedback({
-        tone: "error",
-        text: "This booking cannot be cancelled here. Please contact our team if you need help.",
-      });
-      return;
-    }
-
-    if (!selectedCancellationRequestBooking) {
-      setCancellationRequestFeedback({
-        tone: "error",
-        text: "Choose one of the visible eligible bookings before preparing a cancellation request.",
-      });
-      return;
-    }
-
-    if (!cancellationRequestForm.reason.trim()) {
-      setCancellationRequestFeedback({
-        tone: "error",
-        text: "Add a short cancellation reason for our team to review before submitting.",
-      });
-      return;
-    }
-
-    setCancellationRequestFeedback({
-      tone: "success",
-      text:
-        "Cancellation request prepared for team review. Your booking is not cancelled yet. " +
-        "Our team must review first. For urgent or same-day cancellation, please contact our team directly.",
+  function handleCancelRequest(booking: CustomerPortalBooking) {
+    setExpandedBookingId(booking.id);
+    setChangeFeedback({
+      [booking.id]: canRequestBookingReview(booking)
+        ? "Cancel request noted for review. Your booking is not cancelled until Prestige Limo confirms."
+        : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
     });
   }
 
@@ -1149,172 +734,6 @@ export default function CustomerPortalPage() {
             </p>
           </div>
         </header>
-
-        <section
-          aria-labelledby="request-status-lookup-title"
-          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-          data-customer-request-status-lookup="true"
-        >
-          <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr] lg:items-start">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950" id="request-status-lookup-title">
-                Request Status Lookup
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-request-status-helper="true">
-                Have a booking reference? Check its saved status here after secure customer access is enabled.
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Pending review means our team has received your request but has not confirmed availability yet. For
-                urgent or short-notice requests, our team will review before confirming.
-              </p>
-            </div>
-
-            <form className="flex flex-col gap-3" onSubmit={handleRequestStatusLookupSubmit}>
-              <label className="text-sm font-semibold text-slate-800" htmlFor="request-status-lookup">
-                Booking reference
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base text-slate-950 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-                  data-customer-request-status-lookup-input="true"
-                  id="request-status-lookup"
-                  onChange={(event) => setRequestStatusLookupQuery(event.target.value)}
-                  placeholder="Enter booking reference"
-                  type="search"
-                  value={requestStatusLookupQuery}
-                />
-                <button
-                  className="min-h-11 rounded-md border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  data-customer-request-status-lookup-submit="true"
-                  disabled={requestStatusLookupLoading}
-                  type="submit"
-                >
-                  {requestStatusLookupLoading ? "Checking..." : "Check status"}
-                </button>
-              </div>
-
-              <div
-                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
-                data-customer-request-status-lookup-result="true"
-              >
-                {requestStatusLookupQuery.trim() || requestStatusLookupFeedback ? (
-                  requestStatusLookupFeedback ? (
-                    <>
-                      <p className="font-semibold text-slate-950" data-customer-request-status-lookup-title="true">
-                        {requestStatusLookupFeedback.title}
-                      </p>
-                      <p className="mt-1" data-customer-request-status-lookup-status="true">
-                        {requestStatusLookupFeedback.status}
-                      </p>
-                      <p className="mt-1" data-customer-request-status-lookup-detail="true">
-                        {requestStatusLookupFeedback.detail}
-                      </p>
-                    </>
-                  ) : (
-                    <p data-customer-request-status-lookup-detail="true">
-                      Enter a booking reference, then check saved status.
-                    </p>
-                  )
-                ) : (
-                  <p data-customer-request-status-lookup-detail="true">
-                    Enter your booking reference to check status.
-                  </p>
-                )}
-              </div>
-            </form>
-          </div>
-        </section>
-
-        <section
-          aria-labelledby="customer-request-next-steps-title"
-          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-          data-customer-request-next-steps="true"
-        >
-          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950" id="customer-request-next-steps-title">
-                What Happens Next
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-request-next-steps-helper="true">
-                Pending requests are not confirmed yet. Our team reviews availability before confirming your booking.
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                For urgent or short-notice requests, please contact our team directly.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ol
-                className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"
-                data-customer-request-next-steps-booking="true"
-              >
-                {["Request received", "Team reviews availability", "Team contacts you / confirms", "Booking confirmed only after review"].map(
-                  (step, index) => (
-                    <li className="flex gap-2" key={step}>
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
-                        {index + 1}
-                      </span>
-                      <span>{step}</span>
-                    </li>
-                  ),
-                )}
-              </ol>
-
-              <ol
-                className="grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950"
-                data-customer-request-next-steps-change="true"
-              >
-                {[
-                  "Change request prepared",
-                  "Team reviews the requested change",
-                  "Change request does not change your booking yet",
-                  "Team confirms before any booking change",
-                ].map((step, index) => (
-                  <li className="flex gap-2" key={step}>
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-950 text-xs font-semibold text-white">
-                      {index + 1}
-                    </span>
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </section>
-
-        <section
-          aria-labelledby="customer-support-handoff-title"
-          className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-          data-customer-support-handoff="true"
-        >
-          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950" id="customer-support-handoff-title">
-                Need urgent help?
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-support-handoff-helper="true">
-                For urgent booking help, changes, cancellation help, or short-notice trips, contact our team directly.
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-600" data-customer-support-handoff-boundary="true">
-                This section does not send a message yet. Your booking is not changed or cancelled from here.
-              </p>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2" data-customer-support-handoff-list="true">
-              {[
-                ["Urgent booking help", "Contact the team directly with your request reference or passenger name."],
-                ["Change request help", "Use the change request area below, then contact the team if timing is urgent."],
-                ["Cancellation request help", "Use the cancellation request area below, then contact the team for urgent help."],
-                ["Short-notice / same-day help", "Contact the team directly before making new plans."],
-              ].map(([title, detail]) => (
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6" key={title}>
-                  <p className="font-semibold text-slate-950">{title}</p>
-                  <p className="mt-1 text-slate-700">{detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
 
         <nav
           aria-label="Customer portal sections"
@@ -1633,423 +1052,6 @@ export default function CustomerPortalPage() {
         ) : (
           <>
             <section
-              aria-labelledby="customer-change-request-title"
-              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-              data-customer-change-request-intake="true"
-            >
-              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-950" id="customer-change-request-title">
-                    Request a Change
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-change-request-helper="true">
-                    Choose from the currently visible bookings below. This prepares a request only and does not change
-                    your booking yet.
-                  </p>
-                  {selectedChangeRequestBooking ? (
-                    <div
-                      className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
-                      data-customer-change-request-selection="true"
-                    >
-                      <p className="font-semibold text-slate-950">{selectedChangeRequestBooking.passengerName}</p>
-                      <p>
-                        {selectedChangeRequestBooking.id} - {selectedChangeRequestBooking.status}
-                      </p>
-                      <p>{selectedChangeRequestBooking.pickupDateTime}</p>
-                    </div>
-                  ) : null}
-                </div>
-
-                <form className="flex flex-col gap-3" onSubmit={handleChangeRequestSubmit}>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
-                      Booking or request reference
-                      <select
-                        className={fieldClass()}
-                        data-customer-change-request-field="bookingId"
-                        name="changeRequestBookingId"
-                        onChange={(event) => updateChangeRequestField("bookingId", event.target.value)}
-                        value={changeRequestForm.bookingId}
-                      >
-                        <option value="">Choose a visible booking or request</option>
-                        {visibleBookings.map((booking) => (
-                          <option key={booking.id} value={booking.id}>
-                            {booking.id} - {booking.passengerName} - {booking.pickupDateTime} - {booking.status}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="text-sm font-semibold text-slate-800">
-                      Change type
-                      <select
-                        className={fieldClass()}
-                        data-customer-change-request-field="changeType"
-                        name="changeRequestType"
-                        onChange={(event) =>
-                          updateChangeRequestField("changeType", event.target.value as ChangeRequestType)
-                        }
-                        value={changeRequestForm.changeType}
-                      >
-                        {changeRequestTypes.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="text-sm font-semibold text-slate-800">
-                      New pickup date request
-                      <input
-                        className={fieldClass()}
-                        data-customer-change-request-field="newPickupDate"
-                        name="changeRequestNewPickupDate"
-                        onChange={(event) => updateChangeRequestField("newPickupDate", event.target.value)}
-                        type="date"
-                        value={changeRequestForm.newPickupDate}
-                      />
-                    </label>
-
-                    <fieldset className="text-sm font-semibold text-slate-800" data-customer-change-request-time="true">
-                      <legend>New pickup time request</legend>
-                      <div className="mt-2 grid grid-cols-2 gap-3">
-                        <label className="sr-only" htmlFor="change-request-pickup-hour">
-                          New pickup hour
-                        </label>
-                        <select
-                          className={fieldClass().replace("mt-2 ", "")}
-                          data-customer-change-request-pickup-hour="true"
-                          id="change-request-pickup-hour"
-                          name="changeRequestPickupHour"
-                          onChange={(event) => updateChangeRequestPickupTimePart("hour", event.target.value)}
-                          value={changeRequestPickupTimeParts.hour}
-                        >
-                          <option value="">HH</option>
-                          {pickupHourOptions.map((hour) => (
-                            <option key={hour} value={hour}>
-                              {hour}
-                            </option>
-                          ))}
-                        </select>
-                        <label className="sr-only" htmlFor="change-request-pickup-minute">
-                          New pickup minute
-                        </label>
-                        <select
-                          className={fieldClass().replace("mt-2 ", "")}
-                          data-customer-change-request-pickup-minute="true"
-                          id="change-request-pickup-minute"
-                          name="changeRequestPickupMinute"
-                          onChange={(event) => updateChangeRequestPickupTimePart("minute", event.target.value)}
-                          value={changeRequestPickupTimeParts.minute}
-                        >
-                          <option value="">MM</option>
-                          {pickupMinuteOptions.map((minute) => (
-                            <option key={minute} value={minute}>
-                              {minute}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </fieldset>
-
-                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
-                      Pickup or drop-off change request
-                      <textarea
-                        className={`${fieldClass()} min-h-24 resize-y`}
-                        data-customer-change-request-field="routeChange"
-                        name="changeRequestRoute"
-                        onChange={(event) => updateChangeRequestField("routeChange", event.target.value)}
-                        placeholder="Share the pickup, drop-off, or extra stop change"
-                        value={changeRequestForm.routeChange}
-                      />
-                    </label>
-
-                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
-                      Passenger or contact detail change request
-                      <textarea
-                        className={`${fieldClass()} min-h-24 resize-y`}
-                        data-customer-change-request-field="passengerContactChange"
-                        name="changeRequestPassengerContact"
-                        onChange={(event) => updateChangeRequestField("passengerContactChange", event.target.value)}
-                        placeholder="Share passenger name, phone, email, or contact updates for review"
-                        value={changeRequestForm.passengerContactChange}
-                      />
-                    </label>
-
-                    <label className="text-sm font-semibold text-slate-800 sm:col-span-2">
-                      Notes for our team
-                      <textarea
-                        className={`${fieldClass()} min-h-24 resize-y`}
-                        data-customer-change-request-field="teamNotes"
-                        name="changeRequestTeamNotes"
-                        onChange={(event) => updateChangeRequestField("teamNotes", event.target.value)}
-                        placeholder="Add timing, urgency, or other details for review"
-                        value={changeRequestForm.teamNotes}
-                      />
-                    </label>
-                  </div>
-
-                  {selectedChangeRequestBooking?.status === "Completed" ||
-                  selectedChangeRequestBooking?.status === "Cancelled" ? (
-                    <p
-                      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
-                      data-customer-change-request-closed-warning="true"
-                    >
-                      Completed or cancelled bookings cannot be changed here. Please contact our team.
-                    </p>
-                  ) : selectedChangeRequestBooking?.status === "Pending Staff Review" ||
-                    selectedChangeRequestBooking?.status === "Requested" ? (
-                    <p
-                      className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950"
-                      data-customer-change-request-pending-note="true"
-                    >
-                      This booking request is still pending team review and is not confirmed yet.
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-col gap-3 border-t border-slate-200 pt-3">
-                    <button
-                      className="min-h-11 w-full rounded-md bg-slate-950 px-4 py-2 text-base font-semibold text-white transition hover:bg-slate-800 sm:w-fit"
-                      data-customer-change-request-submit="true"
-                      type="submit"
-                    >
-                      Prepare Change Request
-                    </button>
-                    <p
-                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClass(changeRequestFeedback.tone)}`}
-                      data-customer-change-request-feedback="true"
-                      data-tone={changeRequestFeedback.tone}
-                    >
-                      {changeRequestFeedback.text}
-                    </p>
-                  </div>
-                </form>
-              </div>
-            </section>
-
-            <section
-              aria-labelledby="customer-cancellation-request-title"
-              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-              data-customer-cancellation-request-intake="true"
-            >
-              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-950" id="customer-cancellation-request-title">
-                    Request Cancellation
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-cancellation-request-helper="true">
-                    Choose from the currently visible eligible bookings below. This prepares a request only and does not
-                    cancel your booking yet.
-                  </p>
-                  {selectedCancellationRequestBooking ? (
-                    <div
-                      className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700"
-                      data-customer-cancellation-request-selection="true"
-                    >
-                      <p className="font-semibold text-slate-950">
-                        {selectedCancellationRequestBooking.passengerName}
-                      </p>
-                      <p>
-                        {selectedCancellationRequestBooking.id} - {selectedCancellationRequestBooking.status}
-                      </p>
-                      <p>{selectedCancellationRequestBooking.pickupDateTime}</p>
-                    </div>
-                  ) : null}
-                </div>
-
-                <form className="flex flex-col gap-3" onSubmit={handleCancellationRequestSubmit}>
-                  <label className="text-sm font-semibold text-slate-800">
-                    Booking or request reference
-                    <select
-                      className={fieldClass()}
-                      data-customer-cancellation-request-field="bookingId"
-                      name="cancellationRequestBookingId"
-                      onChange={(event) => updateCancellationRequestField("bookingId", event.target.value)}
-                      value={cancellationRequestForm.bookingId}
-                    >
-                      <option value="">Choose a visible eligible booking or request</option>
-                      {cancellationEligibleBookings.map((booking) => (
-                        <option key={booking.id} value={booking.id}>
-                          {booking.id} - {booking.passengerName} - {booking.pickupDateTime} - {booking.status}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="text-sm font-semibold text-slate-800">
-                    Cancellation reason
-                    <textarea
-                      className={`${fieldClass()} min-h-24 resize-y`}
-                      data-customer-cancellation-request-field="reason"
-                      name="cancellationRequestReason"
-                      onChange={(event) => updateCancellationRequestField("reason", event.target.value)}
-                      placeholder="Share the reason or timing details for our team to review"
-                      value={cancellationRequestForm.reason}
-                    />
-                  </label>
-
-                  {hasClosedVisibleBookings ? (
-                    <p
-                      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950"
-                      data-customer-cancellation-request-closed-warning="true"
-                    >
-                      This booking cannot be cancelled here. Please contact our team if you need help.
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-col gap-3 border-t border-slate-200 pt-3">
-                    <button
-                      className="min-h-11 w-full rounded-md bg-slate-950 px-4 py-2 text-base font-semibold text-white transition hover:bg-slate-800 sm:w-fit"
-                      data-customer-cancellation-request-submit="true"
-                      type="submit"
-                    >
-                      Prepare Cancellation Request
-                    </button>
-                    <p
-                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClass(cancellationRequestFeedback.tone)}`}
-                      data-customer-cancellation-request-feedback="true"
-                      data-tone={cancellationRequestFeedback.tone}
-                    >
-                      {cancellationRequestFeedback.text}
-                    </p>
-                  </div>
-                </form>
-              </div>
-            </section>
-
-            <section
-              aria-labelledby="customer-driver-handoff-title"
-              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-              data-customer-driver-handoff-status="true"
-            >
-              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-950" id="customer-driver-handoff-title">
-                    Driver Details
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-700" data-customer-driver-handoff-helper="true">
-                    Driver details are shown only after booking confirmation.
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600" data-customer-driver-handoff-urgent="true">
-                    For urgent same-day help, contact our team directly.
-                  </p>
-                </div>
-
-                {visibleBookings.length === 0 ? (
-                  <div
-                    className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700"
-                    data-customer-driver-handoff-empty="true"
-                  >
-                    No visible bookings to check for driver handoff status.
-                  </div>
-                ) : (
-                  <ul className="grid gap-2" data-customer-driver-handoff-list="true">
-                    {visibleBookings.map((booking) => {
-                      const driverHandoff = getCustomerDriverHandoff(booking);
-
-                      return (
-                        <li
-                          className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6"
-                          data-booking-status={booking.status}
-                          data-customer-driver-handoff-row={booking.id}
-                          data-driver-handoff-status={driverHandoff.label}
-                          key={booking.id}
-                        >
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-950">{booking.passengerName}</p>
-                              <p className="mt-1 text-slate-700">
-                                {booking.pickupDateTime} - {booking.status}
-                              </p>
-                            </div>
-                            <p
-                              className={`rounded-md border px-2 py-1 text-xs font-semibold ${driverHandoffClass(driverHandoff.tone)}`}
-                            >
-                              {driverHandoff.label}
-                            </p>
-                          </div>
-                          <p className="mt-2 text-slate-700">{driverHandoff.detail}</p>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </section>
-
-            <section
-              aria-labelledby="customer-booking-document-history-title"
-              className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-              data-customer-booking-document-history="true"
-            >
-              <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-950" id="customer-booking-document-history-title">
-                    Booking Documents / Request History
-                  </h2>
-                  <p
-                    className="mt-2 text-sm leading-6 text-slate-700"
-                    data-customer-booking-document-history-helper="true"
-                  >
-                    Booking request history is read-only for now.
-                  </p>
-                  <div
-                    className="mt-3 grid gap-2 text-sm leading-6 text-slate-700"
-                    data-customer-booking-document-history-boundary="true"
-                  >
-                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      Change, cancellation, and support requests are request-only and reviewed by our team.
-                    </p>
-                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      No PDF/document is generated yet. No invoice/payment link is created.
-                    </p>
-                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      No request is sent automatically from this local section.
-                    </p>
-                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      No booking is changed, cancelled, or confirmed automatically. For urgent help, contact our team
-                      directly.
-                    </p>
-                  </div>
-                </div>
-
-                {visibleBookings.length === 0 ? (
-                  <div
-                    className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700"
-                    data-customer-booking-document-history-empty="true"
-                  >
-                    No visible booking records to show.
-                  </div>
-                ) : (
-                  <ul className="grid gap-2" data-customer-booking-document-history-list="true">
-                    {visibleBookings.map((booking) => (
-                      <li
-                        className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6"
-                        data-booking-status={booking.status}
-                        data-customer-booking-document-history-row={booking.id}
-                        key={booking.id}
-                      >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-950">{booking.passengerName}</p>
-                            <p className="mt-1 text-slate-700">
-                              {booking.id} - {booking.status}
-                            </p>
-                            <p className="mt-1 text-slate-700">{booking.pickupDateTime}</p>
-                          </div>
-                          <p className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
-                            {getCustomerDocumentHistoryLabel(booking)}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </section>
-
-            <section
               aria-labelledby="booking-search-title"
               className="rounded-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
             >
@@ -2181,7 +1183,7 @@ export default function CustomerPortalPage() {
               ) : (
                 <ul className="flex flex-col divide-y divide-slate-200" data-customer-portal-list="true">
                   {visibleBookings.map((booking) => {
-                    const canRequestChange = booking.status !== "Completed" && booking.status !== "Cancelled";
+                    const canRequestReview = canRequestBookingReview(booking);
                     const isExpanded = expandedBooking?.id === booking.id;
 
                     return (
@@ -2208,25 +1210,49 @@ export default function CustomerPortalPage() {
                             <p>{booking.serviceType}</p>
                             <p className="mt-1">{booking.vehicleType}</p>
                           </div>
-                          <div className="flex flex-wrap gap-2 lg:justify-end">
+                          <div
+                            className="flex flex-wrap gap-2 lg:justify-end"
+                            data-customer-portal-row-actions={booking.id}
+                          >
                             <button
-                              className="min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+                              aria-disabled="true"
+                              className="min-h-9 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1.5 text-sm font-semibold text-slate-500"
+                              data-customer-portal-pdf={booking.id}
+                              data-customer-portal-row-action="pdf"
+                              disabled
+                              title="Customer PDF is not ready yet"
+                              type="button"
+                            >
+                              PDF
+                            </button>
+                            <button
+                              className="min-h-9 rounded-md border border-sky-700 bg-sky-700 px-2.5 py-1.5 text-sm font-semibold text-white transition enabled:hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+                              data-customer-portal-request-amendment={booking.id}
+                              data-customer-portal-row-action="amendment"
+                              disabled={!canRequestReview}
+                              onClick={() => handleAmendmentRequest(booking)}
+                              type="button"
+                            >
+                              Amendment
+                            </button>
+                            <button
+                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                              data-customer-portal-request-cancel={booking.id}
+                              data-customer-portal-row-action="cancel"
+                              disabled={!canRequestReview}
+                              onClick={() => handleCancelRequest(booking)}
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
                               data-customer-portal-detail-button={booking.id}
                               onClick={() => setExpandedBookingId(isExpanded ? "" : booking.id)}
                               type="button"
                             >
                               {isExpanded ? "Hide details" : "View details"}
                             </button>
-                            {canRequestChange ? (
-                              <button
-                                className="min-h-10 rounded-md border border-sky-700 bg-sky-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-800"
-                                data-customer-portal-request-change={booking.id}
-                                onClick={() => handleRequestChange(booking)}
-                                type="button"
-                              >
-                                Request change
-                              </button>
-                            ) : null}
                           </div>
                         </div>
 
@@ -2293,6 +1319,17 @@ export default function CustomerPortalPage() {
                 </dl>
               </section>
             ) : null}
+
+            <details
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 shadow-sm"
+              data-customer-portal-help="true"
+            >
+              <summary className="cursor-pointer font-semibold text-slate-900">Help</summary>
+              <div className="mt-2 grid gap-1">
+                <p>Requests here are reviewed by the Prestige Limo team before any booking is updated.</p>
+                <p>For urgent same-day help, contact our team directly with the passenger name or pickup time.</p>
+              </div>
+            </details>
           </>
         )}
       </div>

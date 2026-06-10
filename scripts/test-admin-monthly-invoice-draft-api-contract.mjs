@@ -762,6 +762,19 @@ try {
         ],
       },
     ],
+    [
+      "duplicate linked trip references",
+      {
+        ...validCreatePayload,
+        linked_trips: [
+          validCreatePayload.linked_trips[0],
+          {
+            ...validCreatePayload.linked_trips[0],
+            closeout_id: "00000000-0000-4000-8000-000000000778",
+          },
+        ],
+      },
+    ],
   ]) {
     const parsed = persistence.parseAdminMonthlyInvoiceDraftCreatePayload(payload);
 
@@ -889,6 +902,123 @@ try {
   assert.equal(readMock.client.selectHistory[0].limit, 500);
   assert.equal(readMock.client.selectHistory[1].table, "monthly_invoice_draft_trip_links");
   assertNoLeaks(readResult, "monthly invoice draft read response should stay safe");
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
+
+  const duplicateLinkMock = installMockClient(seed);
+  const duplicateLinkResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-drafts", {
+        body: JSON.stringify({
+          ...validCreatePayload,
+          linked_trips: [
+            {
+              ...validCreatePayload.linked_trips[0],
+              booking_reference: "SAFE-JOB-001",
+            },
+          ],
+        }),
+        headers: sessionHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(duplicateLinkResult.status, 409);
+  assert.equal(duplicateLinkResult.body.ok, false);
+  assert.match(
+    duplicateLinkResult.body.error,
+    /Admin monthly invoice draft includes booking references already linked to a draft: SAFE-JOB-001\./,
+  );
+  assert.equal(duplicateLinkMock.client.operations.length, 0);
+  assert.equal(duplicateLinkMock.client.selectHistory.length, 3);
+  assert.equal(duplicateLinkMock.client.selectHistory[0].table, "monthly_invoice_drafts");
+  assert.equal(duplicateLinkMock.client.selectHistory[1].table, "monthly_invoice_drafts");
+  assert.equal(duplicateLinkMock.client.selectHistory[2].table, "monthly_invoice_draft_trip_links");
+  assert.deepEqual(duplicateLinkMock.client.selectHistory[2].filters, [
+    {
+      column: "booking_reference",
+      type: "in",
+      values: ["SAFE-JOB-001"],
+    },
+  ]);
+  assertNoLeaks(duplicateLinkResult, "duplicate linked trip response should stay safe");
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
+
+  const duplicateLinkFailureMock = installMockClient(seed, {
+    failures: {
+      "select:monthly_invoice_draft_trip_links": {
+        code: "42501",
+        message: `SQL stack with ${serviceRoleSentinel} should not leak`,
+      },
+    },
+  });
+  const duplicateLinkFailureResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-drafts", {
+        body: JSON.stringify(validCreatePayload),
+        headers: sessionHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(duplicateLinkFailureResult.status, 500);
+  assert.deepEqual(duplicateLinkFailureResult.body, {
+    error: "Admin monthly invoice draft save failed safely.",
+    ok: false,
+  });
+  assert.equal(duplicateLinkFailureMock.client.operations.length, 0);
+  assert.equal(duplicateLinkFailureMock.client.selectHistory.length, 3);
+  assert.equal(duplicateLinkFailureMock.client.selectHistory[2].table, "monthly_invoice_draft_trip_links");
+  assertNoLeaks(
+    duplicateLinkFailureResult,
+    "duplicate link read failure response should stay sanitized",
+  );
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
+
+  const sameDraftRefreshMock = installMockClient(seed);
+  const sameDraftRefreshResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-monthly-invoice-drafts", {
+        body: JSON.stringify({
+          ...validCreatePayload,
+          billing_month: "2026-06",
+          blocked_count: 0,
+          customer_account: "Acme Corporate",
+          customer_id: "customer-acme",
+          linked_trips: [
+            {
+              ...validCreatePayload.linked_trips[0],
+              booking_reference: "SAFE-JOB-001",
+            },
+          ],
+          ready_count: 1,
+          source_grouping_summary: {
+            blocked_count: 0,
+            ready_count: 1,
+            total_count: 1,
+          },
+          total_count: 1,
+        }),
+        headers: sessionHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(sameDraftRefreshResult.status, 200);
+  assert.equal(sameDraftRefreshResult.body.ok, true);
+  assert.equal(sameDraftRefreshResult.body.invoice_draft.id, draftId);
+  assert.equal(sameDraftRefreshResult.body.invoice_draft.linked_trips.length, 1);
+  assert.equal(sameDraftRefreshMock.client.operations.length, 4);
+  assert.equal(sameDraftRefreshMock.client.operations[0].action, "upsert");
+  assert.equal(sameDraftRefreshMock.client.operations[1].action, "delete");
+  assert.equal(sameDraftRefreshMock.client.operations[2].action, "insert");
+  assert.equal(sameDraftRefreshMock.client.operations[3].table, "admin_app_notification_outbox");
+  assertNoLeaks(sameDraftRefreshResult, "same draft refresh response should stay safe");
 
   setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
 

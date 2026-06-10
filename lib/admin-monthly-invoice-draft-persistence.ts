@@ -162,6 +162,10 @@ const safeInvoiceDraftServerSessionActorError =
 const safeInvoiceDraftSaveError = "Admin monthly invoice draft save failed safely.";
 const safeInvoiceDraftLoadError = "Admin monthly invoice draft load failed safely.";
 const safeInvoiceDraftUpdateError = "Admin monthly invoice draft update failed safely.";
+const invoiceDraftDuplicateLinkedTripsError =
+  "Admin monthly invoice draft linked trips include duplicate booking references";
+const invoiceDraftAlreadyLinkedTripsError =
+  "Admin monthly invoice draft includes booking references already linked to a draft";
 const allowedDraftStatuses = new Set<string>(adminMonthlyInvoiceDraftStatuses);
 const allowedReadinessStatuses = new Set<string>(
   adminMonthlyInvoiceDraftReadinessStatuses,
@@ -376,6 +380,33 @@ function optionalSafeText(value: unknown, maxLength: number) {
   }
 
   return safeText(value, maxLength);
+}
+
+function formatSafeBookingReferences(bookingReferences: string[]) {
+  const safeBookingReferences = bookingReferences
+    .map((bookingReference) => safeText(bookingReference, 120))
+    .filter((bookingReference): bookingReference is string => Boolean(bookingReference));
+  const visibleReferences = safeBookingReferences.slice(0, 5).join(", ");
+  const hiddenCount = safeBookingReferences.length - 5;
+
+  return hiddenCount > 0 ? `${visibleReferences}, and ${hiddenCount} more` : visibleReferences;
+}
+
+function duplicateBookingReferences(
+  linkedTrips: AdminMonthlyInvoiceDraftTripLinkInput[],
+) {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  for (const trip of linkedTrips) {
+    if (seen.has(trip.booking_reference)) {
+      duplicates.add(trip.booking_reference);
+    }
+
+    seen.add(trip.booking_reference);
+  }
+
+  return [...duplicates].sort((first, second) => first.localeCompare(second));
 }
 
 function parseCount(value: unknown) {
@@ -968,6 +999,19 @@ export function parseAdminMonthlyInvoiceDraftCreatePayload(
     };
   }
 
+  const parsedLinkedTrips = linkedTrips as AdminMonthlyInvoiceDraftTripLinkInput[];
+  const duplicateLinkedTripReferences = duplicateBookingReferences(parsedLinkedTrips);
+
+  if (duplicateLinkedTripReferences.length > 0) {
+    return {
+      error: `${invoiceDraftDuplicateLinkedTripsError}: ${formatSafeBookingReferences(
+        duplicateLinkedTripReferences,
+      )}.`,
+      ok: false,
+      status: 400,
+    };
+  }
+
   return {
     data: {
       billing_month: billingMonth,
@@ -975,7 +1019,7 @@ export function parseAdminMonthlyInvoiceDraftCreatePayload(
       customer_account: customerAccount,
       customer_id: customerId,
       draft_status: draftStatus,
-      linked_trips: linkedTrips as AdminMonthlyInvoiceDraftTripLinkInput[],
+      linked_trips: parsedLinkedTrips,
       ready_count: readyCount,
       readiness_status: readinessStatus,
       safe_draft_note: safeDraftNote,
@@ -1129,6 +1173,84 @@ async function loadTripLinksForDrafts(
   };
 }
 
+async function assertSubmittedTripLinksAreUnlinked(
+  client: SupabaseClient,
+  linkedTrips: AdminMonthlyInvoiceDraftTripLinkInput[],
+  allowedDraftIds: Set<string>,
+): Promise<AdminBookingResult<null>> {
+  const bookingReferences = [
+    ...new Set(linkedTrips.map((trip) => trip.booking_reference).filter(Boolean)),
+  ];
+
+  if (bookingReferences.length === 0) {
+    return {
+      data: null,
+      ok: true,
+    };
+  }
+
+  const { data, error } = await client
+    .from("monthly_invoice_draft_trip_links")
+    .select("booking_reference, draft_id")
+    .in("booking_reference", bookingReferences)
+    .limit(maxReadRows);
+
+  if (error) {
+    return safeAdapterFailure(safeInvoiceDraftSaveError, 500, error);
+  }
+
+  const alreadyLinkedBookingReferences = [
+    ...new Set(
+      asArray(data)
+        .map(asRecord)
+        .filter((row) => !allowedDraftIds.has(textOrNull(row.draft_id) || ""))
+        .map((row) => safeText(row.booking_reference, 120))
+        .filter((bookingReference): bookingReference is string => Boolean(bookingReference)),
+    ),
+  ].sort((first, second) => first.localeCompare(second));
+
+  if (alreadyLinkedBookingReferences.length > 0) {
+    return {
+      error: `${invoiceDraftAlreadyLinkedTripsError}: ${formatSafeBookingReferences(
+        alreadyLinkedBookingReferences,
+      )}.`,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  return {
+    data: null,
+    ok: true,
+  };
+}
+
+async function loadExistingDraftIdsForDuplicateGuard(
+  client: SupabaseClient,
+  input: Pick<AdminMonthlyInvoiceDraftInput, "billing_month" | "customer_account">,
+): Promise<AdminBookingResult<Set<string>>> {
+  const { data, error } = await client
+    .from("monthly_invoice_drafts")
+    .select("id, customer_account, billing_month")
+    .eq("customer_account", input.customer_account)
+    .eq("billing_month", input.billing_month)
+    .limit(25);
+
+  if (error) {
+    return safeAdapterFailure(safeInvoiceDraftSaveError, 500, error);
+  }
+
+  return {
+    data: new Set(
+      asArray(data)
+        .map(asRecord)
+        .map((row) => textOrNull(row.id))
+        .filter((draftId): draftId is string => Boolean(draftId)),
+    ),
+    ok: true,
+  };
+}
+
 export async function loadAdminMonthlyInvoiceDrafts(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
@@ -1203,6 +1325,25 @@ export async function createAdminMonthlyInvoiceDraftFromGroup(
 
   if (!lockResult.ok) {
     return lockResult;
+  }
+
+  const existingDraftIdsResult = await loadExistingDraftIdsForDuplicateGuard(
+    clientResult.data,
+    input,
+  );
+
+  if (!existingDraftIdsResult.ok) {
+    return existingDraftIdsResult;
+  }
+
+  const unlinkedTripsResult = await assertSubmittedTripLinksAreUnlinked(
+    clientResult.data,
+    input.linked_trips,
+    existingDraftIdsResult.data,
+  );
+
+  if (!unlinkedTripsResult.ok) {
+    return unlinkedTripsResult;
   }
 
   const payload = {

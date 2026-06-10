@@ -4,8 +4,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  customerPortalSavedBookingsApiPath,
-  mapCustomerSavedBookingsPayload,
+  loadCustomerPortalSavedBookings,
   type BookingStatus,
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
@@ -520,33 +519,16 @@ export default function CustomerPortalPage() {
     let isCurrent = true;
 
     async function loadSavedBookings() {
-      try {
-        const response = await fetch(`${customerPortalSavedBookingsApiPath}?limit=25&page=1`, {
-          cache: "no-store",
-          credentials: "same-origin",
-          headers: {
-            "x-prestige-customer-purpose": "customer-saved-bookings-read",
-          },
-          signal: controller.signal,
-        });
+      const loadedBookings = await loadCustomerPortalSavedBookings({
+        signal: controller.signal,
+      });
 
-        if (!response.ok) {
-          return;
-        }
-
-        const mappedBookings = mapCustomerSavedBookingsPayload(await response.json());
-
-        if (isCurrent && mappedBookings) {
-          setPortalBookings(mappedBookings);
-          setExpandedBookingId("");
-          setChangeFeedback({});
-          setBookingPages({ ...initialBookingPages });
-          setSelectedBookingMonths({ ...initialSelectedBookingMonths });
-        }
-      } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          return;
-        }
+      if (isCurrent && loadedBookings) {
+        setPortalBookings(loadedBookings);
+        setExpandedBookingId("");
+        setChangeFeedback({});
+        setBookingPages({ ...initialBookingPages });
+        setSelectedBookingMonths({ ...initialSelectedBookingMonths });
       }
     }
 

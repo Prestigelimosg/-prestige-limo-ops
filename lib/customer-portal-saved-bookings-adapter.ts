@@ -16,6 +16,7 @@ export type CustomerPortalBooking = {
 };
 
 type UnknownRecord = Record<string, unknown>;
+type CustomerPortalSavedBookingsFetch = typeof fetch;
 
 const maxSafeTextLength = 500;
 const monthNames = [
@@ -252,4 +253,31 @@ export function mapCustomerSavedBookingsPayload(payload: unknown): CustomerPorta
   }
 
   return mappedBookings;
+}
+
+export async function loadCustomerPortalSavedBookings({
+  fetcher = fetch,
+  signal,
+}: {
+  fetcher?: CustomerPortalSavedBookingsFetch;
+  signal?: AbortSignal;
+} = {}): Promise<CustomerPortalBooking[] | null> {
+  try {
+    const response = await fetcher(`${customerPortalSavedBookingsApiPath}?limit=25&page=1`, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "x-prestige-customer-purpose": "customer-saved-bookings-read",
+      },
+      signal,
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return mapCustomerSavedBookingsPayload(await response.json());
+  } catch {
+    return null;
+  }
 }

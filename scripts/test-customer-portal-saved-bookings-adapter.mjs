@@ -68,12 +68,12 @@ assert.equal(
   "The customer portal saved-bookings client path must remain read-only.",
 );
 assert.equal(
-  pageSource.includes("customerPortalSavedBookingsApiPath") &&
-    pageSource.includes("mapCustomerSavedBookingsPayload") &&
-    pageSource.includes("x-prestige-customer-purpose") &&
-    pageSource.includes("customer-saved-bookings-read"),
+  pageSource.includes("loadCustomerPortalSavedBookings") &&
+    pageSource.includes("useState<CustomerPortalBooking[]>(bookings)") &&
+    pageSource.includes("if (isCurrent && loadedBookings)") &&
+    pageSource.includes("setPortalBookings(loadedBookings)"),
   true,
-  "/my-bookings should be wired to the guarded customer saved-bookings read path.",
+  "/my-bookings should keep sample rows unless the guarded customer saved-bookings read returns usable rows.",
 );
 assert.equal(
   smokeSource.includes("customerPortalSavedBookingsApiPattern"),
@@ -86,12 +86,10 @@ const harness = await loadAdapterHarness();
 try {
   const {
     customerPortalSavedBookingsApiPath,
+    loadCustomerPortalSavedBookings,
     mapCustomerSavedBookingsPayload,
   } = harness.adapter;
-
-  assert.equal(customerPortalSavedBookingsApiPath, "/api/customer-saved-bookings");
-
-  const mapped = mapCustomerSavedBookingsPayload({
+  const safePayload = {
     ok: true,
     pagination: {
       has_next_page: false,
@@ -114,7 +112,11 @@ try {
       },
     ],
     version: "stage-customer-saved-bookings-read-api-v1",
-  });
+  };
+
+  assert.equal(customerPortalSavedBookingsApiPath, "/api/customer-saved-bookings");
+
+  const mapped = mapCustomerSavedBookingsPayload(safePayload);
 
   assert.deepEqual(mapped, [
     {
@@ -190,6 +192,71 @@ try {
     },
   ]);
   assertNoVisibleLeak(sanitized, "sanitized unsafe value booking");
+
+  const fetchCalls = [];
+  const successfulLoad = await loadCustomerPortalSavedBookings({
+    fetcher: async (url, init) => {
+      fetchCalls.push({ init, url });
+
+      return {
+        json: async () => safePayload,
+        ok: true,
+      };
+    },
+  });
+
+  assert.deepEqual(successfulLoad, mapped, "A safe API response should replace samples with mapped safe rows.");
+  assert.equal(String(fetchCalls[0].url), "/api/customer-saved-bookings?limit=25&page=1");
+  assert.equal(fetchCalls[0].init.cache, "no-store");
+  assert.equal(fetchCalls[0].init.credentials, "same-origin");
+  assert.deepEqual(fetchCalls[0].init.headers, {
+    "x-prestige-customer-purpose": "customer-saved-bookings-read",
+  });
+  assert.equal(
+    /x-prestige-customer-session-token|authorization|cookie/i.test(JSON.stringify(fetchCalls[0].init.headers)),
+    false,
+    "The customer portal saved-bookings fetch must not attach session-token, authorization, or cookie headers.",
+  );
+
+  let blockedJsonWasRead = false;
+  const blockedLoad = await loadCustomerPortalSavedBookings({
+    fetcher: async () => ({
+      json: async () => {
+        blockedJsonWasRead = true;
+
+        return {
+          error: "Customer saved bookings read requires secure customer account access before saved bookings can be read.",
+          ok: false,
+        };
+      },
+      ok: false,
+      status: 403,
+    }),
+  });
+
+  assert.equal(blockedLoad, null, "Blocked customer saved-bookings reads should keep sample fallback rows.");
+  assert.equal(blockedJsonWasRead, false, "Blocked responses should not be parsed into customer-visible state.");
+
+  const unavailableLoad = await loadCustomerPortalSavedBookings({
+    fetcher: async () => {
+      throw new Error("network unavailable");
+    },
+  });
+
+  assert.equal(unavailableLoad, null, "Unavailable customer saved-bookings reads should keep sample fallback rows.");
+
+  const unsafeLoad = await loadCustomerPortalSavedBookings({
+    fetcher: async () => ({
+      json: async () => ({
+        admin_internal_status: "confirmed",
+        ok: true,
+        saved_bookings: [],
+      }),
+      ok: true,
+    }),
+  });
+
+  assert.equal(unsafeLoad, null, "Unsafe customer saved-bookings payloads should keep sample fallback rows.");
 } finally {
   await harness.cleanup();
 }

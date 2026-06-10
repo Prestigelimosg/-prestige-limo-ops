@@ -26201,8 +26201,8 @@ async function runChromeTest() {
         dashboardState.customerFolderIndexHandoff.buttonCount +
           dashboardState.customerFolderIndexHandoff.inputCount +
           dashboardState.customerFolderIndexHandoff.formCount,
-        0,
-        "Expected customer folder index handoff to be read-only with no controls",
+        1,
+        "Expected customer folder index handoff to expose only the compact saved-account read control",
       );
       assert.deepEqual(
         [

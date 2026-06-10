@@ -19,6 +19,7 @@ const summaryCards = [
 ];
 
 const maxCustomerSearchResults = 8;
+const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 
 const customerFolderIndexHandoffRows = mockCustomers.map((customer) => {
@@ -258,6 +259,29 @@ type RegularCustomerSavedBookingReadRecord = {
   service_type?: string | null;
 };
 
+type RegularCustomerAccountReadRecord = {
+  completed_count?: number | null;
+  customer_account?: string | null;
+  customer_id?: string | null;
+  latest_booking_reference?: string | null;
+  latest_pickup_at?: string | null;
+  latest_service_type?: string | null;
+  saved_booking_count?: number | null;
+  upcoming_count?: number | null;
+};
+
+type RegularCustomerAccountReadState = {
+  accounts: RegularCustomerAccountReadRecord[];
+  message: string;
+  status: "idle" | "loading" | "loaded" | "error";
+  summary: {
+    recent_read_count?: number | null;
+    returned_count?: number | null;
+    total_account_count?: number | null;
+  } | null;
+  tone: RegularCustomerBookingFeedbackTone;
+};
+
 type RegularCustomerSavedBookingReadState = {
   message: string;
   savedBookings: RegularCustomerSavedBookingReadRecord[];
@@ -315,6 +339,27 @@ function regularCustomerBookingFeedbackClass(tone: RegularCustomerBookingFeedbac
   }
 
   return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function normalizeCustomerFolderMatch(value: string | null | undefined) {
+  return String(value ?? "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function findMockCustomerForSavedAccount(account: RegularCustomerAccountReadRecord) {
+  const accountId = normalizeCustomerFolderMatch(account.customer_id);
+  const accountName = normalizeCustomerFolderMatch(account.customer_account);
+
+  return (
+    mockCustomers.find(
+      (customer) =>
+        normalizeCustomerFolderMatch(customer.id) === accountId ||
+        normalizeCustomerFolderMatch(customer.companyName) === accountName,
+    ) ?? null
+  );
 }
 
 function hasMockBalanceDue(balanceDue: string) {
@@ -618,6 +663,14 @@ export default function MockCustomerDashboardPage() {
   );
   const [regularCustomerDraftInvoiceFeedbackTone, setRegularCustomerDraftInvoiceFeedbackTone] =
     useState<RegularCustomerBookingFeedbackTone>("info");
+  const [regularCustomerAccountReadState, setRegularCustomerAccountReadState] =
+    useState<RegularCustomerAccountReadState>({
+      accounts: [],
+      message: "Load saved customer accounts from the guarded read path when needed.",
+      status: "idle",
+      summary: null,
+      tone: "info",
+    });
   const [regularCustomerSavedBookingReadState, setRegularCustomerSavedBookingReadState] =
     useState<RegularCustomerSavedBookingReadState>({
       message: "Select a customer/account, then load saved bookings from the guarded admin read path.",
@@ -667,6 +720,36 @@ export default function MockCustomerDashboardPage() {
       )
       .slice(0, maxCustomerSearchResults);
   }, [normalizedSearchTerm]);
+  const customerFolderIndexRows = useMemo(() => {
+    if (regularCustomerAccountReadState.status !== "loaded") {
+      return customerFolderIndexHandoffRows.map((row) => ({
+        ...row,
+        latestBookingReference: null as string | null,
+        latestPickupAt: null as string | null,
+        latestServiceType: null as string | null,
+        source: "local-folder-index" as const,
+      }));
+    }
+
+    return regularCustomerAccountReadState.accounts.map((account) => {
+      const matchedCustomer = findMockCustomerForSavedAccount(account);
+      const customerAccount = String(account.customer_account ?? "").trim() || "Customer account";
+      const customerId = String(account.customer_id ?? "").trim() || customerAccount;
+
+      return {
+        completedJobs: Number(account.completed_count ?? 0),
+        customerId,
+        customerName: customerAccount,
+        folderHref: matchedCustomer ? `/customers/${matchedCustomer.id}` : "",
+        historyRows: Number(account.saved_booking_count ?? 0),
+        latestBookingReference: account.latest_booking_reference ?? null,
+        latestPickupAt: account.latest_pickup_at ?? null,
+        latestServiceType: account.latest_service_type ?? null,
+        source: "saved-account-read" as const,
+        upcomingJobs: Number(account.upcoming_count ?? 0),
+      };
+    });
+  }, [regularCustomerAccountReadState.accounts, regularCustomerAccountReadState.status]);
   const visibleOutstandingPaymentReviewItems = useMemo(
     () =>
       outstandingPaymentReviewItems
@@ -956,6 +1039,68 @@ export default function MockCustomerDashboardPage() {
       setRegularCustomerDraftInvoiceFeedback(
         "Filters changed locally. Create a new mock draft invoice preview from the currently visible rows when ready.",
       );
+    }
+  }
+
+  async function loadRegularCustomerAccounts() {
+    if (typeof fetch !== "function") {
+      setRegularCustomerAccountReadState({
+        accounts: [],
+        message: "Saved customer account read is not available in this browser.",
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+      return;
+    }
+
+    setRegularCustomerAccountReadState({
+      accounts: [],
+      message: "Loading saved customer accounts from the guarded read path...",
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+
+    try {
+      const params = new URLSearchParams({
+        limit: "10",
+      });
+      const response = await fetch(`${adminCustomerAccountsApiPath}?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Saved customer account read failed safely.");
+      }
+
+      const accounts = Array.isArray(result.accounts)
+        ? (result.accounts as RegularCustomerAccountReadRecord[])
+        : [];
+      const returnedCount = Number(result.summary?.returned_count ?? accounts.length);
+
+      setRegularCustomerAccountReadState({
+        accounts,
+        message:
+          returnedCount > 0
+            ? `Loaded ${returnedCount} saved customer account${returnedCount === 1 ? "" : "s"}.`
+            : "No saved customer accounts were returned.",
+        status: "loaded",
+        summary: result.summary || null,
+        tone: "success",
+      });
+    } catch {
+      setRegularCustomerAccountReadState({
+        accounts: [],
+        message: "Saved customer account read failed safely or is not enabled for this staff surface.",
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
     }
   }
 
@@ -1535,16 +1680,40 @@ export default function MockCustomerDashboardPage() {
                 handoff is staff-facing and not customer-facing.
               </p>
             </div>
-            <p
-              className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
-              data-customer-folder-index-handoff-count="true"
-            >
-              Visible mock folders: {customerFolderIndexHandoffRows.length}
-            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <p
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                data-customer-folder-index-handoff-count="true"
+              >
+                {regularCustomerAccountReadState.status === "loaded"
+                  ? `Saved accounts: ${customerFolderIndexRows.length}`
+                  : `Visible mock folders: ${customerFolderIndexHandoffRows.length}`}
+              </p>
+              <button
+                className="min-h-10 rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                data-customer-folder-index-load-accounts="true"
+                disabled={regularCustomerAccountReadState.status === "loading"}
+                onClick={loadRegularCustomerAccounts}
+                type="button"
+              >
+                {regularCustomerAccountReadState.status === "loading" ? "Loading..." : "Load Saved Accounts"}
+              </button>
+            </div>
           </div>
 
+          <p
+            aria-live="polite"
+            className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+              regularCustomerAccountReadState.tone,
+            )}`}
+            data-customer-folder-index-account-read-feedback="true"
+            data-customer-folder-index-account-read-feedback-tone={regularCustomerAccountReadState.tone}
+          >
+            {regularCustomerAccountReadState.message}
+          </p>
+
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            {customerFolderIndexHandoffRows.map((row) => (
+            {customerFolderIndexRows.map((row) => (
               <article
                 className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6"
                 data-customer-folder-index-handoff-row={row.customerId}
@@ -1559,18 +1728,43 @@ export default function MockCustomerDashboardPage() {
                     <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                       {row.upcomingJobs} upcoming / {row.completedJobs} completed
                     </p>
+                    {row.source === "saved-account-read" ? (
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        {[row.latestPickupAt, row.latestServiceType, row.latestBookingReference]
+                          .filter(Boolean)
+                          .join(" | ") || "Latest saved service not available"}
+                      </p>
+                    ) : null}
                   </div>
-                  <Link
-                    className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
-                    data-customer-folder-index-handoff-link={row.customerId}
-                    href={row.folderHref}
-                  >
-                    Review folder
-                  </Link>
+                  {row.folderHref ? (
+                    <Link
+                      className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-center text-xs font-bold text-white transition hover:bg-slate-700"
+                      data-customer-folder-index-handoff-link={row.customerId}
+                      href={row.folderHref}
+                    >
+                      Review folder
+                    </Link>
+                  ) : (
+                    <span
+                      className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-center text-xs font-bold text-slate-600"
+                      data-customer-folder-index-handoff-no-folder={row.customerId}
+                    >
+                      Folder route pending
+                    </span>
+                  )}
                 </div>
               </article>
             ))}
           </div>
+
+          {regularCustomerAccountReadState.status === "loaded" && customerFolderIndexRows.length === 0 ? (
+            <p
+              className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-700"
+              data-customer-folder-index-handoff-empty="true"
+            >
+              No saved customer accounts loaded.
+            </p>
+          ) : null}
 
           <p
             className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"

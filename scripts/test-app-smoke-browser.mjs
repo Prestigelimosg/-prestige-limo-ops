@@ -8915,6 +8915,7 @@ async function runChromeTest() {
             "Billing month",
             "Ready trips count",
             "Blocked trips count",
+            "Completed billing audit",
             "Total trips in month",
             "Month grouping status",
             "Admin review status",
@@ -8930,6 +8931,7 @@ async function runChromeTest() {
             "billing-month",
             "ready-trips-count",
             "blocked-trips-count",
+            "completed-billing-readiness-audit",
             "total-trips-in-month",
             "month-grouping-status",
             "admin-review-status",
@@ -8965,6 +8967,11 @@ async function runChromeTest() {
           `${viewport.label}: expected blocked trips count by default`,
         );
         assert.equal(
+          state.items.find((item) => item.key === "completed-billing-readiness-audit")?.detail,
+          "No completed saved bookings loaded for audit.",
+          `${viewport.label}: expected completed billing readiness audit to start unloaded`,
+        );
+        assert.equal(
           state.items.find((item) => item.key === "total-trips-in-month")?.detail,
           "1 total trip in this local billing month group.",
           `${viewport.label}: expected total trips count by default`,
@@ -8990,9 +8997,11 @@ async function runChromeTest() {
           `${viewport.label}: expected local grouping note status to start blank`,
         );
         for (const expectedBoundaryText of [
-          "Guarded admin API read plus monthly billing draft-plan",
+          "Guarded admin API read plus completed-booking billing-readiness audit",
+          "monthly billing draft-plan",
           "invoice draft-prep",
           "item-review",
+          "billable price review",
           "issue-review",
           "issue-record save, invoice-number reservation, and PDF-review readiness only.",
           "No direct Supabase write outside approved API routes",
@@ -26558,65 +26567,71 @@ async function runChromeTest() {
       assert.equal(
         dashboardState.regularSavedVisibilityVisible,
         true,
-        "Expected future saved booking visibility placeholder to be visible",
+        "Expected saved booking visibility read panel to be visible",
       );
       assert.equal(
         dashboardState.regularSavedVisibilityHeading,
-        "Future Saved Booking Visibility — Mock Only",
-        "Expected future saved booking visibility placeholder heading",
+        "Saved Booking Visibility",
+        "Expected saved booking visibility read panel heading",
       );
       for (const expectedSavedVisibilityBoundaryText of [
-        "Mock/local only.",
-        "No booking saved",
-        "no customer folder linked",
-        "no Supabase call",
-        "no invoice number",
-        "no payment/bank action",
-        "no notification/calendar action",
-        "no audit record",
+        "Admin-only read.",
+        "safe saved booking references",
+        "selected customer/account only",
+        "No booking write",
+        "invoice number",
+        "invoice",
+        "PDF",
+        "payment/bank action",
+        "payout",
+        "notification/calendar action",
+        "parser/debug data",
+        "contact details",
+        "internal notes",
+        "customer price",
       ]) {
         assert.equal(
           dashboardState.regularSavedVisibilityBoundary.includes(expectedSavedVisibilityBoundaryText),
           true,
-          `Expected future saved booking visibility boundary text: ${expectedSavedVisibilityBoundaryText}`,
+          `Expected saved booking visibility boundary text: ${expectedSavedVisibilityBoundaryText}`,
         );
       }
       assert.deepEqual(
         dashboardState.regularSavedVisibilityNotes.map((note) => note.label),
-        ["Customer folder", "Monthly billing review", "Future saved booking list", "Future edit/amend/cancel"],
-        "Expected future saved booking visibility placeholder notes",
+        ["Customer/account", "Returned", "Matched", "Source"],
+        "Expected saved booking visibility read panel notes",
       );
       for (const expectedSavedVisibilityText of [
-        "Future approved saves will appear in the selected customer folder",
-        "Saved regular bookings will become eligible for monthly billing review later",
-        "does not add or remove local rows",
-        "Later edit/amend/cancel workflow will use saved booking ids only",
+        "Guarded admin saved booking read",
+        "read-only customer folder context",
+        "Select a customer/account, then load saved bookings",
+        "No saved booking references loaded yet",
       ]) {
         assert.equal(
           dashboardState.regularSavedVisibilityText.includes(expectedSavedVisibilityText),
           true,
-          `Expected future saved booking visibility text: ${expectedSavedVisibilityText}`,
+          `Expected saved booking visibility read panel text: ${expectedSavedVisibilityText}`,
         );
       }
       assert.deepEqual(
         dashboardState.regularSavedVisibilityButtons,
-        [],
-        "Expected future saved booking visibility placeholder to have no action buttons",
+        ["Load Saved Bookings"],
+        "Expected saved booking visibility read panel to expose one guarded load action",
       );
       assert.equal(
-        dashboardState.regularSavedVisibilityLocalRowNote.includes("No saved booking visibility data exists now"),
+        dashboardState.regularSavedVisibilityLocalRowNote.includes("Select a customer/account"),
         true,
-        "Expected future saved booking visibility placeholder to start without saved data",
+        "Expected saved booking visibility read panel to start without loaded saved data",
       );
       assert.equal(
-        dashboardState.regularSavedVisibilityLocalRowNote.includes("does not save, link, audit, invoice"),
+        dashboardState.regularSavedVisibilityLocalRowNote.includes("load saved bookings from the guarded admin read path"),
         true,
-        "Expected future saved booking visibility placeholder to stay passive",
+        "Expected saved booking visibility read panel to name the guarded read path",
       );
       assert.equal(
         /[A-Z]{2,}-\d{3,}/.test(dashboardState.regularSavedVisibilityText),
         false,
-        "Expected future saved booking visibility placeholder not to create an invoice number",
+        "Expected saved booking visibility read panel not to create an invoice number",
       );
       assert.equal(
         dashboardState.regularBookingRequiredFieldCount,
@@ -28308,29 +28323,29 @@ async function runChromeTest() {
       assert.equal(
         invalidSavedVisibilityState.visible,
         true,
-        "Expected future saved booking visibility placeholder to remain visible after invalid mock save",
+        "Expected saved booking visibility read panel to remain visible after invalid mock save",
       );
       assert.equal(
         invalidSavedVisibilityState.rowCount,
         0,
-        "Expected future saved booking visibility placeholder not to add rows after invalid mock save",
+        "Expected saved booking visibility read panel not to add local rows after invalid mock save",
       );
       assert.deepEqual(
         invalidSavedVisibilityState.buttons,
-        [],
-        "Expected future saved booking visibility placeholder to remain read-only after invalid mock save",
+        ["Load Saved Bookings"],
+        "Expected saved booking visibility read panel to keep only the guarded read action after invalid mock save",
       );
       assert.equal(
-        invalidSavedVisibilityState.localRowNote.includes("No saved booking visibility data exists now"),
+        invalidSavedVisibilityState.localRowNote.includes("Select a customer/account"),
         true,
-        "Expected future saved booking visibility placeholder not to pretend invalid mock save created saved data",
+        "Expected saved booking visibility read panel not to pretend invalid mock save created saved data",
       );
       assert.deepEqual(
         invalidSavedVisibilityState.integrationCalls.filter((call) =>
           blockedCustomerIntegrationPattern.test(call),
         ),
         [],
-        "Expected future saved booking visibility placeholder not to call Supabase, payment, bank, notification, or calendar APIs after invalid mock save",
+        "Expected saved booking visibility read panel not to call Supabase, payment, bank, notification, or calendar APIs after invalid mock save",
       );
 
       const regularBookingInvalidClicked = await evaluate(`(() => {
@@ -28670,27 +28685,27 @@ async function runChromeTest() {
       assert.equal(
         validSavedVisibilityState.rowCount,
         0,
-        "Expected future saved booking visibility placeholder not to add rows after valid mock save",
+        "Expected saved booking visibility read panel not to add local rows after valid mock save",
       );
       assert.deepEqual(
         validSavedVisibilityState.buttons,
-        [],
-        "Expected future saved booking visibility placeholder to have no save/link action after valid mock save",
+        ["Load Saved Bookings"],
+        "Expected saved booking visibility read panel to keep only the guarded read action after valid mock save",
       );
       assert.equal(
-        validSavedVisibilityState.localRowNote.includes("No saved booking visibility data exists now"),
+        validSavedVisibilityState.localRowNote.includes("Select a customer/account"),
         true,
-        "Expected future saved booking visibility placeholder not to show saved data after valid mock save",
+        "Expected saved booking visibility read panel not to show saved data before the guarded read is clicked",
       );
       assert.equal(
         /[A-Z]{2,}-\d{3,}/.test(validSavedVisibilityState.text),
         false,
-        "Expected future saved booking visibility placeholder not to create an invoice number after valid mock save",
+        "Expected saved booking visibility read panel not to create an invoice number after valid mock save",
       );
       assert.deepEqual(
         validSavedVisibilityState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
-        "Expected future saved booking visibility placeholder not to call Supabase, payment, bank, notification, or calendar APIs after valid mock save",
+        "Expected saved booking visibility read panel not to call Supabase, payment, bank, notification, or calendar APIs after valid mock save",
       );
 
       const regularBookingClicked = await evaluate(`(() => {
@@ -28998,41 +29013,39 @@ async function runChromeTest() {
       assert.equal(
         savedVisibilityWithOneLocalRowState.rowCount,
         1,
-        "Expected future saved booking visibility placeholder to observe one local row without creating it",
+        "Expected saved booking visibility read panel to observe one local row without creating it",
       );
       assert.equal(
-        savedVisibilityWithOneLocalRowState.localRowNote.includes(
-          "1 local mock monthly billing row is present on this page",
-        ),
+        savedVisibilityWithOneLocalRowState.localRowNote.includes("Select a customer/account"),
         true,
-        "Expected future saved booking visibility placeholder to explain the local row is still mock-only",
+        "Expected saved booking visibility read panel not to treat a local mock row as a loaded saved booking",
       );
       for (const expectedSavedVisibilityAfterRowText of [
-        "Future saved booking will appear here after real save is approved",
-        "none is saved, linked, audited, invoiced, paid, synced, sent, or written to Supabase",
+        "Guarded admin saved booking read",
+        "No saved booking references loaded yet",
       ]) {
         assert.equal(
-          savedVisibilityWithOneLocalRowState.localRowNote.includes(expectedSavedVisibilityAfterRowText),
+          savedVisibilityWithOneLocalRowState.text.includes(expectedSavedVisibilityAfterRowText),
           true,
-          `Expected future saved booking visibility local-row note: ${expectedSavedVisibilityAfterRowText}`,
+          `Expected saved booking visibility text after local row: ${expectedSavedVisibilityAfterRowText}`,
         );
       }
       assert.deepEqual(
         savedVisibilityWithOneLocalRowState.buttons,
-        [],
-        "Expected future saved booking visibility placeholder not to expose actions after a local row exists",
+        ["Load Saved Bookings"],
+        "Expected saved booking visibility read panel to keep only the guarded read action after a local row exists",
       );
       assert.equal(
         /[A-Z]{2,}-\d{3,}/.test(savedVisibilityWithOneLocalRowState.text),
         false,
-        "Expected future saved booking visibility placeholder not to create an invoice number after a local row exists",
+        "Expected saved booking visibility read panel not to create an invoice number after a local row exists",
       );
       assert.deepEqual(
         savedVisibilityWithOneLocalRowState.integrationCalls.filter((call) =>
           blockedCustomerIntegrationPattern.test(call),
         ),
         [],
-        "Expected future saved booking visibility placeholder not to call Supabase, payment, bank, notification, or calendar APIs after a local row exists",
+        "Expected saved booking visibility read panel not to call Supabase, payment, bank, notification, or calendar APIs after a local row exists",
       );
 
       const billingDetailInitialState = await readRegularCustomerBillingDetailState(0);

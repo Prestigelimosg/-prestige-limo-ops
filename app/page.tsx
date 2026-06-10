@@ -18123,6 +18123,7 @@ export default function Home() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 role="tab"
+                style={{ minHeight: 44 }}
                 type="button"
               >
                 {tab.label}
@@ -18166,9 +18167,10 @@ export default function Home() {
         >
           <button
             aria-expanded={isInternalQaMockArchiveOpen}
-            className="m-1.5 flex min-h-11 w-[calc(100%-0.75rem)] cursor-pointer flex-col gap-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1.5 text-left text-xs text-slate-700 transition hover:bg-white sm:flex-row sm:items-center sm:justify-between"
+            className="m-1.5 flex min-h-12 w-[calc(100%-0.75rem)] cursor-pointer flex-col gap-1 rounded-md border border-dashed border-slate-300 bg-slate-50 px-2.5 py-2 text-left text-xs text-slate-700 transition hover:bg-white sm:flex-row sm:items-center sm:justify-between"
             data-internal-qa-mock-archive-toggle="true"
             onClick={() => setIsInternalQaMockArchiveOpen((current) => !current)}
+            style={{ minHeight: 48 }}
             type="button"
           >
             <span className="font-semibold text-slate-950">
@@ -25807,6 +25809,7 @@ export default function Home() {
                         className="min-h-10 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-900 transition hover:bg-sky-50"
                         data-admin-replacement-action={action.key}
                         onClick={() => markReplacementDriverPlaceholder(action)}
+                        style={{ minHeight: 40 }}
                         type="button"
                       >
                         {action.label}
@@ -26771,6 +26774,7 @@ export default function Home() {
                         disabled={isDisabled}
                         key={option.value}
                         onClick={() => setDriverAcknowledgementFollowUpStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -26900,6 +26904,7 @@ export default function Home() {
                         disabled={isDisabled}
                         key={option.value}
                         onClick={() => setDayOfTripDispatchMonitorStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27098,6 +27103,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setDayOfTripExceptionEscalationStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27225,6 +27231,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setDispatchRecoveryReplacementStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27350,6 +27357,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setPostRecoveryUpdateStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27477,6 +27485,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setDayOfTripCompletionHandoffStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27603,6 +27612,7 @@ export default function Home() {
                         disabled={completedBookingCloseoutAction !== null}
                         key={option.value}
                         onClick={() => saveCompletedTripCloseoutReviewStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27739,6 +27749,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setCloseoutToBillingPreparationReviewStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27867,6 +27878,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setBillingPreparationExceptionReviewStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -27995,6 +28007,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setBillingPreparationSummaryReviewStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -28122,6 +28135,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setMonthlyBillingQueueReadinessReviewStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -28251,6 +28265,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setMonthlyBillingQueueExceptionReviewStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}
@@ -28460,6 +28475,7 @@ export default function Home() {
                         }
                         key={option.value}
                         onClick={() => setMonthlyBillingMonthGroupingReviewStatus(option.value)}
+                        style={{ minHeight: 36, minWidth: 72 }}
                         type="button"
                       >
                         {option.label}

@@ -19,6 +19,7 @@ const summaryCards = [
 ];
 
 const maxCustomerSearchResults = 8;
+const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 
 const customerFolderIndexHandoffRows = mockCustomers.map((customer) => {
   const upcomingJobs = customer.bookingHistory.filter((booking) => booking.jobStatus === "Upcoming").length;
@@ -244,6 +245,29 @@ type RegularCustomerMockSaveReview = {
   pickupLocation: string;
   pickupTime: string;
   vehicleType: string;
+};
+
+type RegularCustomerSavedBookingReadRecord = {
+  admin_status?: string | null;
+  booking_month?: string | null;
+  booking_reference?: string | null;
+  customer_account?: string | null;
+  customer_id?: string | null;
+  customer_status?: string | null;
+  pickup_at?: string | null;
+  service_type?: string | null;
+};
+
+type RegularCustomerSavedBookingReadState = {
+  message: string;
+  savedBookings: RegularCustomerSavedBookingReadRecord[];
+  status: "idle" | "loading" | "loaded" | "error";
+  summary: {
+    matched_count?: number | null;
+    recent_read_count?: number | null;
+    returned_count?: number | null;
+  } | null;
+  tone: RegularCustomerBookingFeedbackTone;
 };
 
 const initialRegularCustomerBookingListFilters: RegularCustomerBookingListFilters = {
@@ -594,6 +618,14 @@ export default function MockCustomerDashboardPage() {
   );
   const [regularCustomerDraftInvoiceFeedbackTone, setRegularCustomerDraftInvoiceFeedbackTone] =
     useState<RegularCustomerBookingFeedbackTone>("info");
+  const [regularCustomerSavedBookingReadState, setRegularCustomerSavedBookingReadState] =
+    useState<RegularCustomerSavedBookingReadState>({
+      message: "Select a customer/account, then load saved bookings from the guarded admin read path.",
+      savedBookings: [],
+      status: "idle",
+      summary: null,
+      tone: "info",
+    });
   const [mockPaymentEvents, setMockPaymentEvents] = useState<MockPaymentEvent[]>([]);
   const [mockFollowUpEvents, setMockFollowUpEvents] = useState<MockFollowUpEvent[]>([]);
   const [mockStatementPreviewEvents, setMockStatementPreviewEvents] = useState<MockStatementPreviewEvent[]>([]);
@@ -924,6 +956,69 @@ export default function MockCustomerDashboardPage() {
       setRegularCustomerDraftInvoiceFeedback(
         "Filters changed locally. Create a new mock draft invoice preview from the currently visible rows when ready.",
       );
+    }
+  }
+
+  async function loadRegularCustomerSavedBookings() {
+    if (!selectedRegularCustomer) {
+      setRegularCustomerSavedBookingReadState({
+        message: "Select a customer/account before loading saved bookings.",
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
+      return;
+    }
+
+    setRegularCustomerSavedBookingReadState({
+      message: `Loading saved bookings for ${selectedRegularCustomer.companyName} through the guarded admin read path...`,
+      savedBookings: [],
+      status: "loading",
+      summary: null,
+      tone: "info",
+    });
+
+    try {
+      const params = new URLSearchParams({
+        customer_account: selectedRegularCustomer.companyName,
+        limit: "10",
+      });
+      const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Saved booking read failed safely.");
+      }
+
+      const savedBookings = Array.isArray(result.saved_bookings)
+        ? (result.saved_bookings as RegularCustomerSavedBookingReadRecord[])
+        : [];
+      const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
+
+      setRegularCustomerSavedBookingReadState({
+        message:
+          returnedCount > 0
+            ? `Loaded ${returnedCount} saved booking${returnedCount === 1 ? "" : "s"} for ${selectedRegularCustomer.companyName}.`
+            : `No saved bookings returned for ${selectedRegularCustomer.companyName}.`,
+        savedBookings,
+        status: "loaded",
+        summary: result.summary || null,
+        tone: "success",
+      });
+    } catch {
+      setRegularCustomerSavedBookingReadState({
+        message: "Saved booking read failed safely or is not enabled for this admin surface.",
+        savedBookings: [],
+        status: "error",
+        summary: null,
+        tone: "error",
+      });
     }
   }
 
@@ -2439,44 +2534,55 @@ export default function MockCustomerDashboardPage() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-800">
-                    Internal staff-only / planning placeholder
+                    Internal staff-only / guarded read
                   </p>
                   <h4
                     className="mt-2 text-base font-bold text-sky-950"
                     data-regular-customer-saved-visibility-heading="true"
                   >
-                    Future Saved Booking Visibility — Mock Only
+                    Saved Booking Visibility
                   </h4>
                   <p
                     className="mt-1 max-w-4xl text-sm font-semibold leading-6 text-sky-950"
                     data-regular-customer-saved-visibility-boundary="true"
                   >
-                    Mock/local only. No booking saved, no customer folder linked, no Supabase call, no invoice number,
-                    no payment/bank action, no notification/calendar action, and no audit record.
+                    Admin-only read. Loads safe saved booking references for the selected customer/account only. No
+                    booking write, invoice number, invoice, PDF, payment/bank action, payout, notification/calendar
+                    action, parser/debug data, contact details, internal notes, or customer price is returned.
                   </p>
                 </div>
-                <p className="rounded-md border border-sky-300 bg-white px-3 py-2 text-sm font-bold text-sky-950">
-                  Read-only placeholder. No action is available here.
-                </p>
+                <button
+                  className="rounded-md border border-sky-400 bg-white px-3 py-2 text-sm font-bold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-regular-customer-saved-visibility-action="true"
+                  disabled={!selectedRegularCustomer || regularCustomerSavedBookingReadState.status === "loading"}
+                  onClick={loadRegularCustomerSavedBookings}
+                  type="button"
+                >
+                  {regularCustomerSavedBookingReadState.status === "loading"
+                    ? "Loading..."
+                    : "Load Saved Bookings"}
+                </button>
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
                   [
-                    "Customer folder",
-                    "Future approved saves will appear in the selected customer folder. Nothing is linked here now.",
+                    "Customer/account",
+                    selectedRegularCustomer
+                      ? selectedRegularCustomer.companyName
+                      : "Select a customer/account first.",
                   ],
                   [
-                    "Monthly billing review",
-                    "Saved regular bookings will become eligible for monthly billing review later. Current rows still reset on refresh.",
+                    "Returned",
+                    `${regularCustomerSavedBookingReadState.summary?.returned_count ?? regularCustomerSavedBookingReadState.savedBookings.length} saved booking${(regularCustomerSavedBookingReadState.summary?.returned_count ?? regularCustomerSavedBookingReadState.savedBookings.length) === 1 ? "" : "s"}`,
                   ],
                   [
-                    "Future saved booking list",
-                    "This area marks where saved booking visibility will live after save/linking approval. It does not add or remove local rows.",
+                    "Matched",
+                    `${regularCustomerSavedBookingReadState.summary?.matched_count ?? 0} recent admin booking${(regularCustomerSavedBookingReadState.summary?.matched_count ?? 0) === 1 ? "" : "s"}`,
                   ],
                   [
-                    "Future edit/amend/cancel",
-                    "Later edit/amend/cancel workflow will use saved booking ids only. Mock row controls remain guidance only.",
+                    "Source",
+                    "Guarded admin saved booking read; read-only customer folder context.",
                   ],
                 ].map(([label, description]) => (
                   <div
@@ -2491,13 +2597,55 @@ export default function MockCustomerDashboardPage() {
               </div>
 
               <p
-                className="mt-4 rounded-md border border-sky-200 bg-white px-3 py-2 text-sm font-semibold leading-6 text-sky-950"
+                className={`mt-4 rounded-md border px-3 py-2 text-sm font-semibold leading-6 ${regularCustomerBookingFeedbackClass(
+                  regularCustomerSavedBookingReadState.tone,
+                )}`}
                 data-regular-customer-saved-visibility-local-row-note="true"
               >
-                {regularCustomerBookingListItems.length > 0
-                  ? `Future saved booking will appear here after real save is approved. ${regularCustomerBookingListItems.length} local mock monthly billing row${regularCustomerBookingListItems.length === 1 ? " is" : "s are"} present on this page, but none is saved, linked, audited, invoiced, paid, synced, sent, or written to Supabase.`
-                  : "Future saved booking will appear here after real save is approved. No saved booking visibility data exists now, and this placeholder does not save, link, audit, invoice, pay, sync, send, or call Supabase."}
+                {regularCustomerSavedBookingReadState.message}
               </p>
+
+              {regularCustomerSavedBookingReadState.savedBookings.length === 0 ? (
+                <p className="mt-3 rounded-md border border-sky-100 bg-white px-3 py-2 text-sm font-semibold leading-6 text-slate-700">
+                  No saved booking references loaded yet.
+                </p>
+              ) : null}
+
+              {regularCustomerSavedBookingReadState.status === "loaded" &&
+              regularCustomerSavedBookingReadState.savedBookings.length > 0 ? (
+                <div
+                  className="mt-3 grid gap-2"
+                  data-regular-customer-saved-visibility-list="true"
+                >
+                  {regularCustomerSavedBookingReadState.savedBookings.map((booking) => (
+                    <div
+                      className="rounded-md border border-sky-200 bg-white p-3 text-sm leading-6 text-slate-700"
+                      data-regular-customer-saved-visibility-row={booking.booking_reference || ""}
+                      key={booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`}
+                    >
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="font-bold text-slate-950">
+                            {booking.booking_reference || "Saved booking reference unavailable"}
+                          </p>
+                          <p className="text-slate-600">
+                            {[booking.booking_month, booking.service_type].filter(Boolean).join(" · ") ||
+                              "Month/service unavailable"}
+                          </p>
+                        </div>
+                        <p className="font-semibold text-sky-950">
+                          {[booking.admin_status, booking.customer_status].filter(Boolean).join(" / ") ||
+                            "Status unavailable"}
+                        </p>
+                      </div>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        Pickup: {booking.pickup_at || "not available"} · Account:{" "}
+                        {booking.customer_account || "not available"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <div

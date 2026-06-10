@@ -12543,6 +12543,8 @@ async function runChromeTest() {
           trip_detail_review_status: "reviewed",
         },
       ];
+      window.__prestigeMonthlyInvoiceBillablePriceReviewRequests = [];
+      window.__prestigeMonthlyInvoiceBillablePriceReviews = [];
       window.__prestigeMonthlyInvoiceIssueReviewRequests = [];
       window.__prestigeMonthlyInvoiceIssueReviews = [
         {
@@ -13193,6 +13195,106 @@ async function runChromeTest() {
           }
         }
 
+        if (String(target).includes("/api/admin-monthly-invoice-billable-item-price-reviews")) {
+          const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMonthlyInvoiceBillablePriceReviewRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const allPriceReviews = window.__prestigeMonthlyInvoiceBillablePriceReviews || [];
+            const bookingReference = url.searchParams.get("booking_reference") || "";
+            const draftId = url.searchParams.get("draft_id") || "";
+            const itemReviewId = url.searchParams.get("item_review_id") || "";
+            const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
+            const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+            const filteredPriceReviews = allPriceReviews.filter((review) => {
+              if (bookingReference && review.booking_reference !== bookingReference) {
+                return false;
+              }
+
+              if (draftId && review.draft_id !== draftId) {
+                return false;
+              }
+
+              return !itemReviewId || review.item_review_id === itemReviewId;
+            });
+            const pageCount = filteredPriceReviews.length
+              ? Math.ceil(filteredPriceReviews.length / limit)
+              : 0;
+            const priceReviews = filteredPriceReviews.slice((page - 1) * limit, page * limit);
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                pagination: {
+                  has_next_page: pageCount > 0 && page < pageCount,
+                  has_previous_page: pageCount > 0 && page > 1,
+                  page,
+                  page_count: pageCount,
+                  page_size: limit,
+                  total_price_review_count: filteredPriceReviews.length,
+                },
+                price_reviews: priceReviews,
+                version: "focused-browser-monthly-invoice-billable-price-review-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "PATCH" || method === "POST") {
+            const reviewIndex = (window.__prestigeMonthlyInvoiceBillablePriceReviews || []).findIndex(
+              (review) =>
+                review.id === parsedBody?.price_review_id ||
+                (review.draft_id === parsedBody?.draft_id &&
+                  review.item_review_id === parsedBody?.item_review_id &&
+                  review.booking_reference === parsedBody?.booking_reference),
+            );
+            const existingReview =
+              reviewIndex >= 0 ? window.__prestigeMonthlyInvoiceBillablePriceReviews[reviewIndex] : {};
+            const priceReview = {
+              ...existingReview,
+              ...parsedBody,
+              actor_label: "Focused browser monthly invoice billable price review mock",
+              actor_role: "admin",
+              created_at: existingReview.created_at || "2026-06-10T00:00:00.000Z",
+              id:
+                parsedBody?.price_review_id ||
+                existingReview.id ||
+                "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+              source_surface: "admin_api",
+              updated_at: "2026-06-10T00:00:00.000Z",
+            };
+
+            if (reviewIndex >= 0) {
+              window.__prestigeMonthlyInvoiceBillablePriceReviews[reviewIndex] = priceReview;
+            } else {
+              window.__prestigeMonthlyInvoiceBillablePriceReviews.push(priceReview);
+            }
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                price_review: priceReview,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
         if (String(target).includes("/api/admin-monthly-invoice-issue-reviews")) {
           const url = new URL(String(target), window.location.origin);
           let parsedBody = null;
@@ -13612,6 +13714,8 @@ async function runChromeTest() {
             monthlyBillingGroupingRequests: window.__prestigeMonthlyBillingGroupingRequests || [],
             monthlyInvoiceDraftItemReviewRequests: window.__prestigeMonthlyInvoiceDraftItemReviewRequests || [],
             monthlyInvoiceDraftRequests: window.__prestigeMonthlyInvoiceDraftRequests || [],
+            monthlyInvoiceBillablePriceReviewRequests:
+              window.__prestigeMonthlyInvoiceBillablePriceReviewRequests || [],
             monthlyInvoiceIssueRecordRequests: window.__prestigeMonthlyInvoiceIssueRecordRequests || [],
             monthlyInvoiceIssueReviewRequests: window.__prestigeMonthlyInvoiceIssueReviewRequests || [],
             monthlyInvoicePdfReadinessRequests:
@@ -13681,6 +13785,25 @@ async function runChromeTest() {
                     .trim() || "",
                 itemReviewSaveButton: (() => {
                   const button = section?.querySelector("[data-admin-monthly-invoice-draft-item-review-save-action='true']");
+
+                  return {
+                    disabled: button?.disabled ?? true,
+                    text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+                  };
+                })(),
+                billablePriceReviewReadFeedback:
+                  section?.querySelector("[data-admin-monthly-invoice-billable-price-review-read-feedback='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                billablePriceReviewActionSummary:
+                  section?.querySelector("[data-admin-monthly-invoice-billable-price-review-action-summary='true']")
+                    ?.textContent.replace(/\\s+/g, " ")
+                    .trim() || "",
+                billablePriceReviewAmountInput:
+                  section?.querySelector("[data-admin-monthly-invoice-billable-price-review-amount-input='true']")
+                    ?.value || "",
+                billablePriceReviewSaveButton: (() => {
+                  const button = section?.querySelector("[data-admin-monthly-invoice-billable-price-review-save-action='true']");
 
                   return {
                     disabled: button?.disabled ?? true,
@@ -13850,6 +13973,14 @@ async function runChromeTest() {
               request.method === "GET" &&
               request.search === "?limit=1&page=1&draft_id=11111111-1111-4111-8111-111111111111",
           ) &&
+          candidateState?.monthlyInvoiceBillablePriceReviewRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.search ===
+                "?limit=1&page=1&draft_id=11111111-1111-4111-8111-111111111111&item_review_id=99999999-9999-4999-8999-999999999999&booking_reference=ui-cleanup-load-fixture",
+          ) &&
+          candidateState?.monthlyBillingMonthGroupingReview?.billablePriceReviewReadFeedback ===
+            "No saved monthly invoice billable price review matched this item yet." &&
           candidateState?.monthlyInvoiceIssueReviewRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -13881,6 +14012,7 @@ async function runChromeTest() {
       "GET /api/admin-monthly-billing-draft-plans?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-drafts?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-draft-item-reviews?limit=1&page=1&draft_id=11111111-1111-4111-8111-111111111111",
+      "GET /api/admin-monthly-invoice-billable-item-price-reviews?limit=1&page=1&draft_id=11111111-1111-4111-8111-111111111111&item_review_id=99999999-9999-4999-8999-999999999999&booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-monthly-invoice-issue-reviews?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-issue-records?limit=1&page=1&billing_month=2026-05&issue_review_id=33333333-3333-4333-8333-333333333333&draft_id=11111111-1111-4111-8111-111111111111",
     ];
@@ -14056,6 +14188,24 @@ async function runChromeTest() {
       "Expected saved booking load to GET monthly invoice draft item reviews through the guarded read API path",
     );
     assert.deepEqual(
+      loadedBookingState.monthlyInvoiceBillablePriceReviewRequests.map((request) => ({
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        search: request.search,
+      })),
+      [
+        {
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          search:
+            "?limit=1&page=1&draft_id=11111111-1111-4111-8111-111111111111&item_review_id=99999999-9999-4999-8999-999999999999&booking_reference=ui-cleanup-load-fixture",
+        },
+      ],
+      "Expected saved booking load to GET billable item price review through the guarded read API path",
+    );
+    assert.deepEqual(
       loadedBookingState.monthlyInvoiceIssueReviewRequests.map((request) => ({
         hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
         method: request.method,
@@ -14140,6 +14290,21 @@ async function runChromeTest() {
       },
     );
     assert.equal(
+      loadedBookingState.monthlyBillingMonthGroupingReview.billablePriceReviewReadFeedback,
+      "No saved monthly invoice billable price review matched this item yet.",
+    );
+    assert.equal(
+      loadedBookingState.monthlyBillingMonthGroupingReview.billablePriceReviewActionSummary,
+      "No saved billable price review for this item yet.",
+    );
+    assert.deepEqual(
+      loadedBookingState.monthlyBillingMonthGroupingReview.billablePriceReviewSaveButton,
+      {
+        disabled: true,
+        text: "Save price review",
+      },
+    );
+    assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.issueReviewReadFeedback,
       "Loaded 1 of 2 saved monthly invoice issue reviews for May 2026.",
     );
@@ -14150,7 +14315,7 @@ async function runChromeTest() {
     assert.deepEqual(
       loadedBookingState.monthlyBillingMonthGroupingReview.issueReviewSaveButton,
       {
-        disabled: false,
+        disabled: true,
         text: "Refresh issue review",
       },
     );
@@ -14210,7 +14375,7 @@ async function runChromeTest() {
     assert.equal(
       loadedBookingState.monthlyBillingMonthGroupingReview.items.find((item) => item.key === "admin-review-status")
         ?.detail,
-      "Saved monthly billing draft plan: Planning. 2 ready, 1 blocked, 3 total trips. Saved monthly invoice draft status: Pending admin review. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved invoice draft page 1 of 2. Saved monthly invoice draft item review: Item reviewed. Decision: Include in draft. Saved monthly invoice issue review: Issue review pending. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved issue review page 1 of 2. Saved monthly invoice issue record: Draft locked. Draft lock: Locked for issue. Number reservation: Not reserved. PDF: Not requested. Delivery: Not sent. Payment record: Not recorded.",
+      "Saved monthly billing draft plan: Planning. 2 ready, 1 blocked, 3 total trips. Saved monthly invoice draft status: Pending admin review. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved invoice draft page 1 of 2. Saved monthly invoice draft item review: Item reviewed. Decision: Include in draft. No saved billable price review returned for this saved item yet. Saved monthly invoice issue review: Issue review pending. 2 ready, 1 blocked, 3 total trips. Readiness: Mixed. Showing saved issue review page 1 of 2. Saved monthly invoice issue record: Draft locked. Draft lock: Locked for issue. Number reservation: Not reserved. PDF: Not requested. Delivery: Not sent. Payment record: Not recorded.",
     );
     const clickedMonthlyBillingDraftPlanSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-billing-draft-plan-save-action='true']");
@@ -14501,6 +14666,157 @@ async function runChromeTest() {
         "trip_detail_review_status",
       ],
       "Expected monthly invoice draft item review refresh to avoid invoice-number/payment/PDF/payout fields",
+    );
+    await setInputValue(
+      "[data-admin-monthly-invoice-billable-price-review-amount-input='true']",
+      "188.50",
+      "billable price review amount",
+    );
+    const clickedMonthlyInvoiceBillablePriceReviewSave = await waitForCondition(
+      async () => {
+        const clicked = await evaluate(`(() => {
+          const button = document.querySelector("[data-admin-monthly-invoice-billable-price-review-save-action='true']");
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+
+        return clicked ? clicked : false;
+      },
+      10000,
+      "monthly invoice billable price review button enabled after amount entry",
+    );
+    assert.equal(
+      clickedMonthlyInvoiceBillablePriceReviewSave,
+      true,
+      "Expected billable price review save button to be clickable after amount entry",
+    );
+    const monthlyInvoiceBillablePriceReviewSaveState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const section = document.querySelector("[data-admin-monthly-billing-month-grouping-review='true']");
+
+          return {
+            amountInput:
+              section?.querySelector("[data-admin-monthly-invoice-billable-price-review-amount-input='true']")
+                ?.value || "",
+            feedback:
+              section?.querySelector("[data-admin-monthly-invoice-billable-price-review-read-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            issueReviewButton: (() => {
+              const button = section?.querySelector("[data-admin-monthly-invoice-issue-review-save-action='true']");
+
+              return {
+                disabled: button?.disabled ?? true,
+                text: button?.textContent.replace(/\\s+/g, " ").trim() || "",
+              };
+            })(),
+            requests: window.__prestigeMonthlyInvoiceBillablePriceReviewRequests || [],
+            summary:
+              section?.querySelector("[data-admin-monthly-invoice-billable-price-review-action-summary='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+          };
+        })()`);
+
+        return candidateState?.requests?.some((request) => request.method === "POST") &&
+          candidateState.feedback.includes("Created monthly invoice billable price review for ui-cleanup-load-fixture")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "monthly invoice billable price review save",
+    );
+    const monthlyInvoiceBillablePriceReviewPostRequest =
+      monthlyInvoiceBillablePriceReviewSaveState.requests.find((request) => request.method === "POST");
+    assert.deepEqual(
+      {
+        body: {
+          billing_item_type: monthlyInvoiceBillablePriceReviewPostRequest.body.billing_item_type,
+          booking_reference: monthlyInvoiceBillablePriceReviewPostRequest.body.booking_reference,
+          booking_type: monthlyInvoiceBillablePriceReviewPostRequest.body.booking_type,
+          calculation_basis: monthlyInvoiceBillablePriceReviewPostRequest.body.calculation_basis,
+          currency: monthlyInvoiceBillablePriceReviewPostRequest.body.currency,
+          draft_id: monthlyInvoiceBillablePriceReviewPostRequest.body.draft_id,
+          draft_trip_link_id: monthlyInvoiceBillablePriceReviewPostRequest.body.draft_trip_link_id,
+          item_review_id: monthlyInvoiceBillablePriceReviewPostRequest.body.item_review_id,
+          price_decision: monthlyInvoiceBillablePriceReviewPostRequest.body.price_decision,
+          price_review_status: monthlyInvoiceBillablePriceReviewPostRequest.body.price_review_status,
+          reviewed_customer_amount_cents:
+            monthlyInvoiceBillablePriceReviewPostRequest.body.reviewed_customer_amount_cents,
+        },
+        hasSessionTokenHeader: Boolean(
+          monthlyInvoiceBillablePriceReviewPostRequest.headers["x-prestige-admin-session-token"],
+        ),
+        method: monthlyInvoiceBillablePriceReviewPostRequest.method,
+        purpose: monthlyInvoiceBillablePriceReviewPostRequest.headers["x-prestige-admin-purpose"] || "",
+        search: monthlyInvoiceBillablePriceReviewPostRequest.search,
+      },
+      {
+        body: {
+          billing_item_type: "base_trip",
+          booking_reference: "ui-cleanup-load-fixture",
+          booking_type: "DEP",
+          calculation_basis: "fixed_trip",
+          currency: "SGD",
+          draft_id: "11111111-1111-4111-8111-111111111111",
+          draft_trip_link_id: "77777777-7777-4777-8777-777777777777",
+          item_review_id: "99999999-9999-4999-8999-999999999999",
+          price_decision: "include_in_invoice",
+          price_review_status: "approved_for_invoice_draft",
+          reviewed_customer_amount_cents: 18850,
+        },
+        hasSessionTokenHeader: false,
+        method: "POST",
+        purpose: "admin-booking-persistence",
+        search: "",
+      },
+      "Expected billable item price review to POST approved amount through the guarded API path",
+    );
+    assert.deepEqual(
+      Object.keys(monthlyInvoiceBillablePriceReviewPostRequest.body).sort(),
+      [
+        "billing_item_type",
+        "booking_reference",
+        "booking_type",
+        "calculation_basis",
+        "currency",
+        "draft_id",
+        "draft_trip_link_id",
+        "item_review_id",
+        "price_decision",
+        "price_review_status",
+        "reviewed_customer_amount_cents",
+        "safe_price_review_context",
+        "safe_price_review_note",
+        "source_price_context",
+      ],
+      "Expected billable item price review save to avoid invoice-number/PDF/payment/payout/send fields",
+    );
+    assert.equal(
+      /driver_payout|paynow|payment_link|pdf_url|payout|parser|raw_ai|notification|telegram|whatsapp|service_role|secret|token/i.test(
+        JSON.stringify(monthlyInvoiceBillablePriceReviewPostRequest.body),
+      ),
+      false,
+      "Expected billable price review body to avoid private, send, parser, secret, and token fields",
+    );
+    assert.equal(monthlyInvoiceBillablePriceReviewSaveState.amountInput, "188.50");
+    assert.equal(
+      monthlyInvoiceBillablePriceReviewSaveState.summary,
+      "Saved price review: Price approved / Include in invoice / SGD 188.50",
+    );
+    assert.deepEqual(
+      monthlyInvoiceBillablePriceReviewSaveState.issueReviewButton,
+      {
+        disabled: false,
+        text: "Refresh issue review",
+      },
+      "Expected issue review button to enable only after billable price review is approved",
     );
     const clickedMonthlyInvoiceIssueReviewSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-invoice-issue-review-save-action='true']");

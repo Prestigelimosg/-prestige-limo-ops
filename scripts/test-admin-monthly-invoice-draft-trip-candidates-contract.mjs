@@ -183,6 +183,7 @@ class MockSupabaseClient {
     this.tables = {
       bookings: [],
       completed_booking_closeouts: [],
+      monthly_invoice_draft_trip_links: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -344,6 +345,13 @@ const seed = {
     },
     {
       admin_internal_status: "completed",
+      booking_reference: "TRIP-CANDIDATE-UNBILLED-JUN",
+      customer_display_name: "Acme Corporate",
+      customer_id: "customer-acme",
+      pickup_at: "2026-06-27T10:00:00.000Z",
+    },
+    {
+      admin_internal_status: "completed",
       booking_reference: "TRIP-CANDIDATE-ZETA-JUN",
       customer_display_name: "Zeta Account",
       customer_id: "customer-zeta",
@@ -393,12 +401,22 @@ const seed = {
     },
     {
       billing_prep_readiness: "ready",
-      booking_reference: "TRIP-CANDIDATE-ZETA-JUN",
+      booking_reference: "TRIP-CANDIDATE-UNBILLED-JUN",
       closeout_status: "ready_for_billing_prep",
       completed_job_status: "completed",
       dsp_actual_hours_readiness: "ready",
       extra_charges_readiness: "ready",
       id: "55555555-5555-4555-8555-555555555555",
+      updated_at: "2026-06-27T12:00:00.000Z",
+    },
+    {
+      billing_prep_readiness: "ready",
+      booking_reference: "TRIP-CANDIDATE-ZETA-JUN",
+      closeout_status: "ready_for_billing_prep",
+      completed_job_status: "completed",
+      dsp_actual_hours_readiness: "ready",
+      extra_charges_readiness: "ready",
+      id: "55555555-5555-4555-8555-555555555556",
       updated_at: "2026-06-24T12:00:00.000Z",
     },
     {
@@ -412,6 +430,11 @@ const seed = {
       updated_at: "2026-06-22T12:00:00.000Z",
     },
   ],
+  monthly_invoice_draft_trip_links: [
+    {
+      booking_reference: "TRIP-CANDIDATE-READY-JUN",
+    },
+  ],
 };
 
 const harness = await loadHarness();
@@ -421,7 +444,7 @@ try {
 
   assert.equal(
     candidates.adminMonthlyInvoiceDraftTripCandidatesVersion,
-    "stage-monthly-invoice-draft-trip-candidates-v1",
+    "stage-monthly-invoice-draft-trip-candidates-v2",
   );
 
   assert.deepEqual(
@@ -639,10 +662,10 @@ try {
   assert.equal(readMock.createdClients[0].url, supabaseUrlSentinel);
   assert.equal(readMock.createdClients[0].serviceRoleKey, serviceRoleSentinel);
   assert.equal(readMock.client.operations.length, 0);
-  assert.equal(readMock.client.selectHistory.length, 2);
+  assert.equal(readMock.client.selectHistory.length, 3);
   assert.equal(readMock.client.selectHistory[0].table, "completed_booking_closeouts");
   assert.equal(readMock.client.selectHistory[0].limit, 500);
-  assert.equal(readMock.client.selectHistory[1].table, "bookings");
+  assert.equal(readMock.client.selectHistory[1].table, "monthly_invoice_draft_trip_links");
   assert.deepEqual(readMock.client.selectHistory[1].filters, [
     {
       column: "booking_reference",
@@ -652,12 +675,67 @@ try {
         "TRIP-CANDIDATE-BLOCKED-JUN",
         "TRIP-CANDIDATE-DRAFT-JUN",
         "TRIP-CANDIDATE-READY-JUL",
+        "TRIP-CANDIDATE-UNBILLED-JUN",
         "TRIP-CANDIDATE-ZETA-JUN",
         "TRIP-CANDIDATE-NOBOOK-JUN",
       ],
     },
   ]);
+  assert.equal(readMock.client.selectHistory[2].table, "bookings");
+  assert.deepEqual(readMock.client.selectHistory[2].filters, [
+    {
+      column: "booking_reference",
+      operator: "in",
+      values: [
+        "TRIP-CANDIDATE-READY-JUN",
+        "TRIP-CANDIDATE-BLOCKED-JUN",
+        "TRIP-CANDIDATE-DRAFT-JUN",
+        "TRIP-CANDIDATE-READY-JUL",
+        "TRIP-CANDIDATE-UNBILLED-JUN",
+        "TRIP-CANDIDATE-ZETA-JUN",
+        "TRIP-CANDIDATE-NOBOOK-JUN",
+      ],
+    },
+  ]);
+  assert.equal(
+    readResult.body.trip_candidates.some(
+      (candidate) => candidate.booking_reference === "TRIP-CANDIDATE-READY-JUN",
+    ),
+    false,
+  );
   assertNoLeaks(readResult, "trip candidate response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const allAcmeMock = installMockClient(seed);
+  const allAcmeResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&limit=5&page=1",
+        {
+          headers: sessionHeaders(),
+        },
+      ),
+    ),
+  );
+
+  assert.equal(allAcmeResult.status, 200);
+  assert.deepEqual(
+    allAcmeResult.body.trip_candidates.map((candidate) => candidate.booking_reference),
+    [
+      "TRIP-CANDIDATE-BLOCKED-JUN",
+      "TRIP-CANDIDATE-DRAFT-JUN",
+      "TRIP-CANDIDATE-UNBILLED-JUN",
+    ],
+  );
+  assert.equal(
+    allAcmeResult.body.trip_candidates.find(
+      (candidate) => candidate.booking_reference === "TRIP-CANDIDATE-UNBILLED-JUN",
+    )?.safe_trip_context?.readiness_reason,
+    "Ready completed booking has no draft trip link yet.",
+  );
+  assert.equal(allAcmeMock.client.operations.length, 0);
+  assertNoLeaks(allAcmeResult, "all Acme trip candidate response should stay safe");
 
   setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
 
@@ -684,6 +762,36 @@ try {
   });
   assert.equal(dispatcherMock.client.operations.length, 0);
   assertNoLeaks(dispatcherResult, "dispatcher trip candidate response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const linkFailureMock = installMockClient(seed, {
+    failures: {
+      "select:monthly_invoice_draft_trip_links": {
+        code: "42501",
+        message: `SQL stack with ${serviceRoleSentinel} should not leak`,
+      },
+    },
+  });
+  const linkFailureResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate",
+        {
+          headers: sessionHeaders(),
+        },
+      ),
+    ),
+  );
+
+  assert.equal(linkFailureResult.status, 500);
+  assert.deepEqual(linkFailureResult.body, {
+    error: "Admin monthly invoice draft trip candidate read failed safely.",
+    ok: false,
+  });
+  assert.equal(linkFailureMock.client.operations.length, 0);
+  assert.equal(linkFailureMock.client.selectHistory[1].table, "monthly_invoice_draft_trip_links");
+  assertNoLeaks(linkFailureResult, "draft link read failure response should stay sanitized");
 
   setEnv(enabledEnv());
 
@@ -738,9 +846,10 @@ try {
   assert.deepEqual(fallbackResult.body.trip_candidates.map((candidate) => candidate.booking_reference), [
     "TRIP-CANDIDATE-FOUNDATION-AUG",
   ]);
-  assert.equal(fallbackMock.client.selectHistory.length, 3);
-  assert.equal(fallbackMock.client.selectHistory[1].selectedColumns.includes("pickup_at"), true);
-  assert.equal(fallbackMock.client.selectHistory[2].selectedColumns.includes("pickup_datetime"), true);
+  assert.equal(fallbackMock.client.selectHistory.length, 4);
+  assert.equal(fallbackMock.client.selectHistory[1].table, "monthly_invoice_draft_trip_links");
+  assert.equal(fallbackMock.client.selectHistory[2].selectedColumns.includes("pickup_at"), true);
+  assert.equal(fallbackMock.client.selectHistory[3].selectedColumns.includes("pickup_datetime"), true);
   assertNoLeaks(fallbackResult, "foundation fallback response should stay safe");
 
   setEnv(enabledEnv());

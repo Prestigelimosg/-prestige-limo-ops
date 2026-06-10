@@ -13,7 +13,7 @@ import {
 import type { AdminMonthlyInvoiceDraftTripReadinessStatus } from "./admin-monthly-invoice-draft-persistence";
 
 export const adminMonthlyInvoiceDraftTripCandidatesVersion =
-  "stage-monthly-invoice-draft-trip-candidates-v1";
+  "stage-monthly-invoice-draft-trip-candidates-v2";
 
 export type AdminMonthlyInvoiceDraftTripCandidateParams = {
   billing_month: string;
@@ -83,6 +83,7 @@ const tripCandidateCurrentBookingSelect =
   "booking_reference, customer_id, customer_display_name, pickup_at, admin_internal_status";
 const tripCandidateFoundationBookingSelect =
   "booking_reference, customer_id, customer_display_name, pickup_datetime, admin_internal_status";
+const tripCandidateDraftLinkSelect = "booking_reference";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const forbiddenSafeTextFragments = [
   "amount_due",
@@ -530,6 +531,38 @@ async function loadBookingRowsWithFallback(
   };
 }
 
+async function loadLinkedDraftBookingReferences(
+  client: SupabaseClient,
+  bookingReferences: string[],
+): Promise<AdminBookingResult<Set<string>>> {
+  if (bookingReferences.length === 0) {
+    return {
+      data: new Set(),
+      ok: true,
+    };
+  }
+
+  const { data, error } = await client
+    .from("monthly_invoice_draft_trip_links")
+    .select(tripCandidateDraftLinkSelect)
+    .in("booking_reference", bookingReferences)
+    .limit(maxReadRows);
+
+  if (error) {
+    return safeAdapterFailure(safeTripCandidatesReadError, 500, error);
+  }
+
+  return {
+    data: new Set(
+      asArray(data)
+        .map(asRecord)
+        .map((row) => safeText(row.booking_reference, 120))
+        .filter((bookingReference): bookingReference is string => Boolean(bookingReference)),
+    ),
+    ok: true,
+  };
+}
+
 function closeoutIsReady(row: UnknownRecord) {
   const closeoutStatus = textOrNull(row.closeout_status);
   const completedJobStatus = textOrNull(row.completed_job_status);
@@ -610,7 +643,7 @@ function buildCandidate(
     safe_trip_context: {
       readiness_reason:
         tripReadinessStatus === "ready"
-          ? "Ready trip from completed closeout grouping."
+          ? "Ready completed booking has no draft trip link yet."
           : "Needs completed closeout or billing prep review.",
       source: "completed_booking_closeout",
     },
@@ -705,6 +738,15 @@ export async function loadAdminMonthlyInvoiceDraftTripCandidates(
     };
   }
 
+  const linkedDraftBookingReferencesResult = await loadLinkedDraftBookingReferences(
+    clientResult.data,
+    bookingReferences.slice(0, maxReadRows),
+  );
+
+  if (!linkedDraftBookingReferencesResult.ok) {
+    return linkedDraftBookingReferencesResult;
+  }
+
   const bookingRowsResult = await loadBookingRowsWithFallback(
     clientResult.data,
     bookingReferences.slice(0, maxReadRows),
@@ -720,6 +762,12 @@ export async function loadAdminMonthlyInvoiceDraftTripCandidates(
       .filter((entry): entry is [string, UnknownRecord] => Boolean(entry[0])),
   );
   const filteredCandidates = closeoutRows
+    .filter(
+      (closeoutRow) =>
+        !linkedDraftBookingReferencesResult.data.has(
+          safeText(closeoutRow.booking_reference, 120) || "",
+        ),
+    )
     .map((closeoutRow) =>
       buildCandidate(
         closeoutRow,

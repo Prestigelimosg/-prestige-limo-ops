@@ -627,37 +627,37 @@ async function runChromeTest() {
         const url = String(target);
         const method = args[1]?.method || args[0]?.method || "GET";
 
+        if (url.includes("/api/admin-rate-setup") && method === "GET") {
+          const store = window.__prestigeRateDuplicateStore;
+
+          return jsonResponse({
+            companies: store.companies,
+            ok: true,
+            settings: {
+              customer_rates: { MNG: 85, DEP: 75, TRF: 55, DSP: 65 },
+              driver_payout_rules: {
+                MNG: { min: 65, max: 75 },
+                DEP: { min: 65, max: 65 },
+                TRF: { min: 70, max: 70 },
+                DSP: { amount: 50, perHour: true },
+              },
+              midnight_surcharge: 15,
+              extra_stop_surcharge: 15,
+              midnight_payout: 10,
+              extra_stop_payout: 10,
+              child_seat_customer_surcharge: 15,
+              child_seat_driver_payout: 10,
+            },
+            travelers: store.travelers,
+            version: "test-admin-rate-setup-read",
+          });
+        }
+
         if (!url.includes("/rest/v1/")) {
           return originalFetch(...args);
         }
 
         const store = window.__prestigeRateDuplicateStore;
-
-        if (url.includes("/rest/v1/rate_settings") && method === "GET") {
-          return jsonResponse({
-            customer_rates: { MNG: 85, DEP: 75, TRF: 55, DSP: 65 },
-            driver_payout_rules: {
-              MNG: { min: 65, max: 75 },
-              DEP: { min: 65, max: 65 },
-              TRF: { min: 70, max: 70 },
-              DSP: { amount: 50, perHour: true },
-            },
-            midnight_surcharge: 15,
-            extra_stop_surcharge: 15,
-            midnight_payout: 10,
-            extra_stop_payout: 10,
-            child_seat_customer_surcharge: 15,
-            child_seat_driver_payout: 10,
-          });
-        }
-
-        if (url.includes("/rest/v1/companies") && method === "GET") {
-          return jsonResponse(store.companies);
-        }
-
-        if (url.includes("/rest/v1/travelers") && method === "GET") {
-          return jsonResponse(store.travelers);
-        }
 
         if (url.includes("/rest/v1/companies") && method === "PATCH") {
           const payload = JSON.parse(args[1]?.body || "{}");

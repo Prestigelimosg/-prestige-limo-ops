@@ -54,6 +54,7 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
+const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
@@ -408,6 +409,15 @@ type RateSettingsRecord = {
   extra_stop_surcharge?: number | null;
   midnight_payout?: number | null;
   midnight_surcharge?: number | null;
+};
+
+type AdminRateSetupReadResponse = {
+  companies?: CompanyRecord[];
+  error?: string;
+  ok?: boolean;
+  settings?: RateSettingsRecord | null;
+  travelers?: TravelerRecord[];
+  version?: string;
 };
 
 type TravelerRecord = {
@@ -10433,12 +10443,12 @@ export default function Home() {
   }
 
   async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
-    if (!adminLegacyDataClient) {
+    if (typeof fetch !== "function") {
       if (!options?.preserveAction) {
         setRateMessageTarget("header");
       }
       const errorMessage =
-        "Admin data API is not available.";
+        "Admin rate setup API is not available.";
 
       setMessage({
         tone: "error",
@@ -10455,30 +10465,24 @@ export default function Home() {
     setMessage({ tone: "info", text: "Loading rates..." });
 
     try {
-      const [settingsResult, companiesResult, travelersResult] = await Promise.all([
-        adminLegacyDataClient
-          .from(adminLegacyTables.rateSettings)
-          .select("customer_rates, driver_payout_rules, midnight_surcharge, extra_stop_surcharge, midnight_payout, extra_stop_payout, child_seat_customer_surcharge, child_seat_driver_payout")
-          .eq("id", "default")
-          .limit(1)
-          .maybeSingle(),
-        adminLegacyDataClient
-          .from(adminLegacyTables.companies)
-          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
-          .order("company_name", { ascending: true }),
-        adminLegacyDataClient
-          .from(adminLegacyTables.travelers)
-          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
-          .order("traveler_name", { ascending: true }),
-      ]);
+      const response = await fetch(adminRateSetupApiPath, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const responseBody = (await response.json().catch(() => null)) as AdminRateSetupReadResponse | null;
 
-      const loadError = settingsResult.error || companiesResult.error || travelersResult.error;
+      if (!response.ok || responseBody?.ok !== true) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          "Admin rate setup request failed.",
+        );
 
-      if (loadError) {
-        throw new Error(formatSupabaseError(loadError));
+        throw new Error(error.message);
       }
 
-      const settings = settingsResult.data as RateSettingsRecord | null;
+      const settings = responseBody.settings ?? null;
       const loadedCustomerRates = normalizeCustomerRateRules(settings?.customer_rates as RateRules | null | undefined);
       const loadedDriverPayoutRules = normalizeDriverPayoutRules(
         settings?.driver_payout_rules as DriverPayoutRules | null | undefined,
@@ -10510,14 +10514,14 @@ export default function Home() {
       });
 
       setRateCompanies(
-        ((companiesResult.data ?? []) as CompanyRecord[]).map((companyRecord) => ({
+        (responseBody.companies ?? []).map((companyRecord) => ({
           ...companyRecord,
           customer_rates: normalizeCustomerRateRules(companyRecord.customer_rates),
           driver_payout_rules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
         })),
       );
       setRateTravelers(
-        ((travelersResult.data ?? []) as TravelerRecord[]).map((travelerRecord) => ({
+        (responseBody.travelers ?? []).map((travelerRecord) => ({
           ...travelerRecord,
           customer_rates: normalizeCustomerRateRules(travelerRecord.customer_rates),
           driver_payout_rules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),

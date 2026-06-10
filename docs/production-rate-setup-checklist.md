@@ -11,8 +11,8 @@ Scope: this is a production-readiness audit and setup checklist only. It does no
 - Default driver payout rules are `MNG 65-75`, `DEP 55-65`, `TRF 45-70`, and `DSP 50/hour`.
 - Default surcharges and payouts are midnight customer `15`, midnight driver `10`, extra stop customer `15`, extra stop driver `10`, child seat customer `15`, and child seat driver `10`.
 - `initialRateSettings` seeds the dashboard state when saved settings are unavailable.
-- The admin Rates tab loads saved defaults from the legacy admin route table `rate_settings` row `id = default`, then merges saved values over the code defaults.
-- The admin Rates tab can save defaults back to `rate_settings` through the guarded legacy admin data route.
+- The admin Rates tab loads saved defaults, company/account overrides, and boss/name overrides through `/api/admin-rate-setup`, then merges saved default values over the code defaults.
+- The admin Rates tab can still save defaults and overrides back through the guarded legacy admin data route; save behavior is unchanged by the typed read path.
 
 ## Override Support
 
@@ -46,8 +46,8 @@ Customers must never see driver payout, PayNow payout, internal admin notes, par
 - List selected-driver payout rules that differ from company/default payout rules.
 - Keep effective dates, approval notes, and override reasons in admin-only review data when those fields are later added.
 
-## Safest Next Implementation Step
+## Safest Next Rate Implementation Step
 
-The safest next implementation step is a typed, admin-only, read-only rate setup API that returns the current default settings, company/account overrides, boss/name customer overrides, and driver payout rules from server code without using the generic legacy admin data shim. Keep the existing save behavior untouched until the read contract is covered by route tests and customer/driver/anonymous leak checks.
+After the typed read API, the safest rate-specific implementation step is to replace one existing Rates tab save path with a typed admin-only server API, starting with the smallest default-rate save contract. Keep pricing calculations and UI unchanged until each save contract is covered by route tests and customer/driver/anonymous leak checks.
 
 Do not add customer-facing pricing, driver-facing customer price, invoice/PDF/payment/payout behavior, notification sending, Supabase CLI changes, or live DB writes as part of that step.

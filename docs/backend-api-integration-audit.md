@@ -9,6 +9,7 @@ Scope: production-readiness status for every `app/api` route in the current app.
 | API route | Current integration status | Remaining forward work |
 | --- | --- | --- |
 | `/api/admin-app-notifications` | Admin/dispatcher internal app outbox foundation is guarded by the admin boundary; monthly billing draft prep can create a safe internal outbox event. | Keep internal only; do not add Telegram, WhatsApp, SMS, email, or customer/driver sending without explicit approval. |
+| `/api/admin-booking-calendar-events` | Admin/dispatcher-only ICS payload foundation for saved booking details; no Google/Apple Calendar API connection, live calendar write, notification sending, pricing, billing, payout, or full admin booking payload passthrough. | Add an admin download control only after mapping saved bookings into the route's safe allowlisted payload shape. |
 | `/api/admin-booking-workflow-statuses` | Integrated for existing dispatch release and driver acknowledgement workflow controls. | Connect only additional existing lifecycle controls that have a real backend need. |
 | `/api/admin-bookings` | Integrated in the admin dashboard save/load/update controls through the guarded admin persistence path. | Continue tightening full production admin workflows; no broad write expansion without approval. |
 | `/api/admin-completed-booking-closeouts` | Integrated for the existing completed trip closeout control. | Expand closeout fields only through existing UI controls and contract tests. |

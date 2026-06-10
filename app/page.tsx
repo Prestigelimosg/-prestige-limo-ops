@@ -56,6 +56,8 @@ const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminBookingCalendarEventsApiPath = "/api/admin-booking-calendar-events";
+const adminBookingCalendarSyncStatusesApiPath =
+  "/api/admin-booking-calendar-sync-statuses";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
@@ -572,11 +574,41 @@ type DriverDeleteMessage = Message & {
 
 type AdminBookingCalendarEventResponse = {
   calendar_event?: {
+    booking_reference?: string | null;
+    description?: string | null;
+    ends_at_local?: string | null;
     filename?: string | null;
+    location?: string | null;
+    starts_at_local?: string | null;
+    timezone?: string | null;
+    title?: string | null;
   } | null;
   error?: string;
   ics?: string;
   ok?: boolean;
+};
+
+type AdminBookingCalendarSyncStatus = {
+  calendar_file_matches_saved_booking?: boolean;
+  connection_mode?: "ics_file_only" | string;
+  external_calendar_edits_detectable?: boolean;
+  live_calendar_provider?: "none" | string;
+  live_calendar_write_performed?: boolean;
+  provider_connection?: "not_connected" | string;
+  safe_message?: string;
+  source_of_truth?: "prestige_saved_booking" | string;
+  status?: "calendar_file_current" | "calendar_file_not_created" | "calendar_file_outdated" | string;
+};
+
+type AdminBookingCalendarSyncStatusResponse = {
+  error?: string;
+  ok?: boolean;
+  sync_status?: AdminBookingCalendarSyncStatus | null;
+};
+
+type SavedBookingCalendarDownloadResult = {
+  syncStatus: AdminBookingCalendarSyncStatus | null;
+  syncStatusMessage: string;
 };
 
 type CopyFeedback = Message & {
@@ -3552,6 +3584,30 @@ function downloadIcsFile(filename: string, ics: string) {
   link.click();
   link.remove();
   URL.revokeObjectURL(blobUrl);
+}
+
+function compactCalendarSyncStatusMessage(syncStatus: AdminBookingCalendarSyncStatus | null) {
+  if (!syncStatus) {
+    return "Sync status unavailable; app stays source of truth.";
+  }
+
+  if (syncStatus.status === "calendar_file_current") {
+    return "File-only sync: app source of truth; calendar edits won't sync back.";
+  }
+
+  if (syncStatus.status === "calendar_file_outdated") {
+    return "File-only sync: regenerate after app changes; calendar edits won't sync back.";
+  }
+
+  if (syncStatus.status === "calendar_file_not_created") {
+    return "File-only sync: create the calendar file from the saved booking.";
+  }
+
+  return "File-only sync: app source of truth; calendar edits won't sync back.";
+}
+
+function calendarDownloadedMessage(syncStatusMessage: string) {
+  return `Calendar file downloaded. ${syncStatusMessage}`;
 }
 
 function formatCreatedAt(value: string | null | undefined) {
@@ -12697,10 +12753,40 @@ export default function Home() {
     }));
   }
 
-  async function createAndDownloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
+  async function loadSavedBookingCalendarSyncStatus(
+    savedBookingPayload: ReturnType<typeof buildSavedBookingCalendarEventPayload>,
+    calendarEvent: AdminBookingCalendarEventResponse["calendar_event"],
+  ): Promise<AdminBookingCalendarSyncStatus | null> {
+    const response = await fetch(adminBookingCalendarSyncStatusesApiPath, {
+      body: JSON.stringify({
+        calendar_event: calendarEvent ?? null,
+        saved_booking: savedBookingPayload,
+        sync_method: "ics_file_download",
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as
+      | AdminBookingCalendarSyncStatusResponse
+      | null;
+
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || "Calendar sync status could not be checked.");
+    }
+
+    return result.sync_status ?? null;
+  }
+
+  async function createAndDownloadSavedBookingCalendarEvent(
+    bookingRecord: BookingRecord,
+  ): Promise<SavedBookingCalendarDownloadResult> {
     const bookingId = String(bookingRecord.id);
+    const savedBookingPayload = buildSavedBookingCalendarEventPayload(bookingRecord);
     const response = await fetch(adminBookingCalendarEventsApiPath, {
-      body: JSON.stringify(buildSavedBookingCalendarEventPayload(bookingRecord)),
+      body: JSON.stringify(savedBookingPayload),
       headers: {
         "Content-Type": "application/json",
         "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -12714,6 +12800,23 @@ export default function Home() {
     }
 
     downloadIcsFile(result.calendar_event?.filename || `prestige-booking-${bookingId}.ics`, result.ics);
+
+    try {
+      const syncStatus = await loadSavedBookingCalendarSyncStatus(
+        savedBookingPayload,
+        result.calendar_event ?? null,
+      );
+
+      return {
+        syncStatus,
+        syncStatusMessage: compactCalendarSyncStatusMessage(syncStatus),
+      };
+    } catch {
+      return {
+        syncStatus: null,
+        syncStatusMessage: compactCalendarSyncStatusMessage(null),
+      };
+    }
   }
 
   async function downloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
@@ -12726,10 +12829,10 @@ export default function Home() {
     });
 
     try {
-      await createAndDownloadSavedBookingCalendarEvent(bookingRecord);
+      const downloadResult = await createAndDownloadSavedBookingCalendarEvent(bookingRecord);
       setBookingCalendarMessage(bookingId, {
         tone: "success",
-        text: "Calendar file downloaded.",
+        text: calendarDownloadedMessage(downloadResult.syncStatusMessage),
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
@@ -12768,7 +12871,7 @@ export default function Home() {
     });
 
     try {
-      await createAndDownloadSavedBookingCalendarEvent(savedBookingRecord);
+      const downloadResult = await createAndDownloadSavedBookingCalendarEvent(savedBookingRecord);
       const customerLabel =
         getBookingCompanyName(savedBookingRecord) ||
         getBookerName(savedBookingRecord) ||
@@ -12777,7 +12880,9 @@ export default function Home() {
 
       setJobCardCalendarMessage({
         tone: "success",
-        text: `Saved for ${customerLabel}. Calendar file downloaded.`,
+        text: `Saved for ${customerLabel}. ${calendarDownloadedMessage(
+          downloadResult.syncStatusMessage,
+        )}`,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
@@ -12804,10 +12909,10 @@ export default function Home() {
     });
 
     try {
-      await createAndDownloadSavedBookingCalendarEvent(loadedBookingRecord);
+      const downloadResult = await createAndDownloadSavedBookingCalendarEvent(loadedBookingRecord);
       setJobCardCalendarMessage({
         tone: "success",
-        text: "Calendar file downloaded.",
+        text: calendarDownloadedMessage(downloadResult.syncStatusMessage),
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";

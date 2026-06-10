@@ -5967,6 +5967,7 @@ async function runChromeTest() {
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
       window.__prestigeAdminBookingCalendarEventRequests = [];
+      window.__prestigeAdminBookingCalendarSyncStatusRequests = [];
       window.__prestigeCalendarBlobTypes = [];
       window.__prestigeCalendarDownloadClicks = [];
       window.__prestigeCalendarRevokedUrls = [];
@@ -6042,6 +6043,48 @@ async function runChromeTest() {
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
 
+        if (String(target).includes("/api/admin-booking-calendar-sync-statuses")) {
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeAdminBookingCalendarSyncStatusRequests.push({
+            body: parsedBody,
+            headers,
+            method,
+            url: String(target),
+          });
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              sync_status: {
+                app_updates_from_calendar: false,
+                booking_reference: String(parsedBody?.saved_booking?.booking_reference || "saved-booking"),
+                calendar_file_matches_saved_booking: true,
+                calendar_updates_from_app: false,
+                connection_mode: "ics_file_only",
+                external_calendar_edits_detectable: false,
+                live_calendar_provider: "none",
+                live_calendar_write_performed: false,
+                mismatched_fields: [],
+                next_admin_action: "Update the saved booking in the app first, then regenerate the calendar file after app changes.",
+                provider_connection: "not_connected",
+                safe_message: "Calendar file matches the saved booking at download time. App remains source of truth; calendar edits will not update the app.",
+                source_of_truth: "prestige_saved_booking",
+                status: "calendar_file_current",
+                sync_method: "ics_file_download",
+              },
+              version: "browser-admin-booking-calendar-sync-status-mock",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
         if (String(target).includes("/api/admin-booking-calendar-events")) {
           let parsedBody = null;
 
@@ -6064,7 +6107,13 @@ async function runChromeTest() {
             return new Response(
               JSON.stringify({
                 calendar_event: {
+                  booking_reference: bookingReference,
+                  ends_at_local: "2026-05-28T11:15:00",
                   filename: \`prestige-booking-\${bookingReference}.ics\`,
+                  location: parsedBody?.pickup_address || "",
+                  starts_at_local: "2026-05-28T09:45:00",
+                  timezone: "Asia/Singapore",
+                  title: \`Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || bookingReference}\`,
                 },
                 ics: [
                   "BEGIN:VCALENDAR",
@@ -6788,6 +6837,9 @@ async function runChromeTest() {
           const request = (window.__prestigeAdminBookingCalendarEventRequests || []).find(
             (candidate) => candidate.body?.booking_reference === "ui-cleanup-load-fixture",
           );
+          const syncRequest = (window.__prestigeAdminBookingCalendarSyncStatusRequests || []).find(
+            (candidate) => candidate.body?.saved_booking?.booking_reference === "ui-cleanup-load-fixture",
+          );
           const message =
             document
               .querySelector("[data-booking-calendar-message='ui-cleanup-load-fixture']")
@@ -6795,7 +6847,12 @@ async function runChromeTest() {
               .trim() || "";
           const downloads = window.__prestigeCalendarDownloadClicks || [];
 
-          if (!request || message !== "Calendar file downloaded." || downloads.length === 0) {
+          if (
+            !request ||
+            !syncRequest ||
+            message !== "Calendar file downloaded. File-only sync: app source of truth; calendar edits won't sync back." ||
+            downloads.length === 0
+          ) {
             return false;
           }
 
@@ -6805,6 +6862,7 @@ async function runChromeTest() {
             message,
             request,
             revokedUrls: window.__prestigeCalendarRevokedUrls || [],
+            syncRequest,
           };
         })()`),
       10000,
@@ -6846,12 +6904,48 @@ async function runChromeTest() {
       },
       "Expected calendar download to POST only safe saved booking fields through the admin ICS route",
     );
+    assert.deepEqual(
+      {
+        body: recentCalendarDownloadState.syncRequest.body,
+        hasSessionTokenHeader: Boolean(
+          recentCalendarDownloadState.syncRequest.headers["x-prestige-admin-session-token"],
+        ),
+        method: recentCalendarDownloadState.syncRequest.method,
+        purpose: recentCalendarDownloadState.syncRequest.headers["x-prestige-admin-purpose"] || "",
+      },
+      {
+        body: {
+          calendar_event: {
+            booking_reference: "ui-cleanup-load-fixture",
+            ends_at_local: "2026-05-28T11:15:00",
+            filename: "prestige-booking-ui-cleanup-load-fixture.ics",
+            location: "Raffles Hotel Singapore",
+            starts_at_local: "2026-05-28T09:45:00",
+            timezone: "Asia/Singapore",
+            title: "Prestige - DEP - LOADED SAVED TRAVELER",
+          },
+          saved_booking: recentCalendarDownloadState.request.body,
+          sync_method: "ics_file_download",
+        },
+        hasSessionTokenHeader: false,
+        method: "POST",
+        purpose: "admin-booking-persistence",
+      },
+      "Expected calendar sync status to use only the safe saved booking payload and generated event metadata",
+    );
     assert.equal(
       /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
         JSON.stringify(recentCalendarDownloadState.request.body),
       ),
       false,
       "Expected calendar download payload to omit pricing, payout, billing, parser, notes, and secret fields",
+    );
+    assert.equal(
+      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
+        JSON.stringify(recentCalendarDownloadState.syncRequest.body),
+      ),
+      false,
+      "Expected calendar sync status payload to omit pricing, payout, billing, parser, notes, and secret fields",
     );
     assert.deepEqual(
       recentCalendarDownloadState.download,
@@ -16782,6 +16876,7 @@ async function runChromeTest() {
 
       window.__prestigeFetchCalls = [];
       window.__prestigeCrmSaveCalendarRequests = [];
+      window.__prestigeCrmSaveCalendarSyncStatusRequests = [];
       window.__prestigeCrmSaveCalendarDownloads = [];
       window.__prestigeCrmSaveCalendarBlobTypes = [];
       window.URL.createObjectURL = (blob) => {
@@ -16824,6 +16919,42 @@ async function runChromeTest() {
           }
         }
 
+        if (url.includes("/api/admin-booking-calendar-sync-statuses")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeCrmSaveCalendarSyncStatusRequests.push({
+            body: parsedBody,
+            method,
+            url,
+          });
+
+          return jsonResponse({
+            ok: true,
+            sync_status: {
+              app_updates_from_calendar: false,
+              booking_reference: String(parsedBody?.saved_booking?.booking_reference || "saved-booking"),
+              calendar_file_matches_saved_booking: true,
+              calendar_updates_from_app: false,
+              connection_mode: "ics_file_only",
+              external_calendar_edits_detectable: false,
+              live_calendar_provider: "none",
+              live_calendar_write_performed: false,
+              mismatched_fields: [],
+              next_admin_action: "Update the saved booking in the app first, then regenerate the calendar file after app changes.",
+              provider_connection: "not_connected",
+              safe_message: "Calendar file matches the saved booking at download time. App remains source of truth; calendar edits will not update the app.",
+              source_of_truth: "prestige_saved_booking",
+              status: "calendar_file_current",
+              sync_method: "ics_file_download",
+            },
+            version: "crm-save-calendar-sync-status-mock",
+          });
+        }
+
         if (url.includes("/api/admin-booking-calendar-events")) {
           let parsedBody = null;
 
@@ -16839,7 +16970,13 @@ async function runChromeTest() {
 
           return jsonResponse({
             calendar_event: {
+              booking_reference: parsedBody?.booking_reference || "saved-booking",
+              ends_at_local: "2026-05-27T17:00:00",
               filename: \`prestige-booking-\${parsedBody?.booking_reference || "saved-booking"}.ics\`,
+              location: parsedBody?.pickup_address || "",
+              starts_at_local: "2026-05-27T15:30:00",
+              timezone: "Asia/Singapore",
+              title: \`Prestige - \${parsedBody?.booking_type || "Booking"} - \${parsedBody?.traveler_name || "Traveler"}\`,
             },
             ics: [
               "BEGIN:VCALENDAR",
@@ -16961,15 +17098,20 @@ async function runChromeTest() {
             (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
           );
           const calendarRequest = (window.__prestigeCrmSaveCalendarRequests || [])[0] || null;
+          const calendarSyncStatusRequest =
+            (window.__prestigeCrmSaveCalendarSyncStatusRequests || [])[0] || null;
 
           return bodyText.includes("Booking saved successfully: ${crmSavedBookingFixture.id}") &&
             bodyText.includes("Customer/account: BROWSER UI TEST COMPANY.") &&
-            bodyText.includes("Saved for BROWSER UI TEST COMPANY. Calendar file downloaded.")
+            bodyText.includes(
+              "Saved for BROWSER UI TEST COMPANY. Calendar file downloaded. File-only sync: app source of truth; calendar edits won't sync back.",
+            )
             ? {
                 bodyText,
                 calendarDownloads: window.__prestigeCrmSaveCalendarDownloads || [],
                 calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
                 calendarRequest,
+                calendarSyncStatusRequest,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeSaveRequestBodies || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -17049,12 +17191,32 @@ async function runChromeTest() {
       traveler_name: "BROWSER UI TEST TRAVELER",
       vehicle: "AVF",
     });
+    assert.deepEqual(crmSaveState.calendarSyncStatusRequest?.body, {
+      calendar_event: {
+        booking_reference: crmSavedBookingFixture.id,
+        ends_at_local: "2026-05-27T17:00:00",
+        filename: `prestige-booking-${crmSavedBookingFixture.id}.ics`,
+        location: "Changi Airport T3",
+        starts_at_local: "2026-05-27T15:30:00",
+        timezone: "Asia/Singapore",
+        title: "Prestige - MNG - BROWSER UI TEST TRAVELER",
+      },
+      saved_booking: crmSaveState.calendarRequest?.body,
+      sync_method: "ics_file_download",
+    });
     assert.equal(
       /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
         JSON.stringify(crmSaveState.calendarRequest?.body),
       ),
       false,
       "Expected Save Booking + Calendar payload to omit private finance, parser, notes, and secret fields",
+    );
+    assert.equal(
+      /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
+        JSON.stringify(crmSaveState.calendarSyncStatusRequest?.body),
+      ),
+      false,
+      "Expected Save Booking + Calendar sync status payload to omit private finance, parser, notes, and secret fields",
     );
     assert.deepEqual(crmSaveState.calendarDownloads, [
       {

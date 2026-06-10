@@ -387,6 +387,16 @@ type AdminSavedBookingReadResponse = {
   version?: string;
 };
 
+type AdminSavedBookingCreateResponse = {
+  booking?: {
+    id?: string | number;
+    status?: string | null;
+  } | null;
+  error?: string;
+  ok?: boolean;
+  version?: string;
+};
+
 type AdminSavedBookingStatusResponse = {
   booking?: {
     id?: string | number;
@@ -11691,6 +11701,20 @@ export default function Home() {
       return null;
     }
 
+    if (typeof fetch !== "function") {
+      const saveMessage = {
+        tone: "error",
+        text: "Booking save failed: Admin saved booking API is not available.",
+      } satisfies Message;
+
+      setMessage({
+        tone: saveMessage.tone,
+        text: saveMessage.text,
+      });
+      setBookingSaveMessage(saveMessage);
+      return null;
+    }
+
     setSaving(true);
     setMessage({ tone: "info", text: "Saving booking + CRM..." });
     setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
@@ -11789,14 +11813,34 @@ export default function Home() {
         pricing_source: pricingSnapshot.customerPriceSource,
         status: clean(booking.driverName) ? "assigned" : "confirmed",
       };
-      const { data: savedBooking, error } = await adminLegacyDataClient.from(adminLegacyTables.bookings).insert(bookingPayload).select("id").single();
+      const response = await fetch(adminSavedBookingsApiPath, {
+        body: JSON.stringify(bookingPayload),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingCreateResponse | null;
 
-      const savedBookingId = (savedBooking as { id?: string | number } | null)?.id;
+      const savedBookingId = responseBody?.booking?.id;
 
-      if (error || !savedBookingId) {
+      if (
+        !response.ok ||
+        responseBody?.ok !== true ||
+        !responseBody.booking ||
+        !savedBookingId ||
+        responseBody.booking.status !== bookingPayload.status
+      ) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          "Admin saved booking create request failed.",
+        );
         const saveMessage = {
           tone: "error",
-          text: `Booking save failed: ${error ? formatSupabaseError(error) : "No saved booking id returned."}`,
+          text: `Booking save failed: ${
+            responseBody?.booking && !savedBookingId ? "No saved booking id returned." : formatSupabaseError(error)
+          }`,
         } satisfies Message;
 
         setMessage(saveMessage);

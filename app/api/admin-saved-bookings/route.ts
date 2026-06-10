@@ -4,6 +4,7 @@ import {
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
+import { createAdminSavedBooking } from "../../../lib/admin-saved-booking-create";
 import { deleteAdminCompletedSavedBooking } from "../../../lib/admin-saved-booking-delete";
 import {
   loadAdminSavedBookingById,
@@ -128,6 +129,37 @@ export async function GET(request: Request) {
     });
   } catch {
     return safeFailureResponse();
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const boundary = requireAdminDispatcherBoundary(request);
+
+    if (!boundary.ok) {
+      return boundary.response;
+    }
+
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const result = await createAdminSavedBooking(await readJsonBody(request), actor);
+
+    if (!result.ok) {
+      return Response.json(
+        {
+          error: result.error,
+          ok: false,
+        },
+        { status: result.status },
+      );
+    }
+
+    return Response.json({
+      booking: result.data.booking,
+      ok: true,
+      version: result.data.version,
+    });
+  } catch {
+    return safeFailureResponse("Admin saved booking create request failed safely.");
   }
 }
 

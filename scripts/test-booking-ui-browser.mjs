@@ -10130,6 +10130,28 @@ async function runChromeTest() {
         }
 
         if (url.includes("/api/admin-saved-bookings")) {
+          if (method === "POST") {
+            const parsed = bodyText ? JSON.parse(bodyText) : {};
+            const nextId = 990510;
+            window.__prestigeDriverDeleteSavedBooking = {
+              ...(window.__prestigeDriverDeleteAssignedBooking || {}),
+              ...parsed,
+              id: nextId,
+              companies: null,
+              bookers: window.__prestigeDriverDeleteAssignedBooking?.bookers || null,
+              travelers: window.__prestigeDriverDeleteAssignedBooking?.travelers || null,
+            };
+
+            return jsonResponse({
+              booking: {
+                id: nextId,
+                status: parsed.status,
+              },
+              ok: true,
+              version: "browser-admin-saved-booking-create-mock",
+            }, 201);
+          }
+
           const savedBookingReadUrl = new URL(url, window.location.href);
           const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
           if (!savedBookingReadId) {
@@ -10221,20 +10243,6 @@ async function runChromeTest() {
             return jsonResponse(window.__prestigeLoadedBookings || []);
           }
 
-          if (method === "POST") {
-            const parsed = bodyText ? JSON.parse(bodyText) : {};
-            const nextId = 990510;
-            window.__prestigeDriverDeleteSavedBooking = {
-              ...(window.__prestigeDriverDeleteAssignedBooking || {}),
-              ...parsed,
-              id: nextId,
-              companies: null,
-              bookers: window.__prestigeDriverDeleteAssignedBooking?.bookers || null,
-              travelers: window.__prestigeDriverDeleteAssignedBooking?.travelers || null,
-            };
-
-            return jsonResponse({ id: nextId }, 201);
-          }
         }
 
         if (
@@ -12639,7 +12647,7 @@ async function runChromeTest() {
       async () => {
         const candidateState = await evaluate(`(() => {
           const bookingInsert = (window.__prestigeDriverProfileRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
           );
           const bookingDeleteOrPatchRequests = (window.__prestigeDriverProfileRequestBodies || []).filter(
             (entry) =>
@@ -12678,6 +12686,11 @@ async function runChromeTest() {
       saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
       "Expected booking save after driver delete not to read bookings through the legacy admin data shim",
+    );
+    assert.deepEqual(
+      saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected booking save after driver delete not to create bookings through the legacy admin data shim",
     );
     assert.equal(
       saveAfterDriverDeleteState.bookingInsert?.driver_id,
@@ -17619,6 +17632,23 @@ async function runChromeTest() {
         }
 
         if (url.includes("/api/admin-saved-bookings")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          if (method === "POST") {
+            return jsonResponse({
+              booking: {
+                id: savedBooking.id,
+                status: parsedBody?.status || "confirmed",
+              },
+              ok: true,
+              version: "browser-admin-saved-booking-create-mock",
+            }, 201);
+          }
+
           const savedBookingReadUrl = new URL(url, window.location.href);
           const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
 
@@ -17708,10 +17738,6 @@ async function runChromeTest() {
         }
 
         if (url.includes("/rest/v1/bookings")) {
-          if (method === "POST") {
-            return jsonResponse({ id: savedBooking.id }, 201);
-          }
-
           if (method === "GET") {
             return jsonResponse([savedBooking]);
           }
@@ -17744,7 +17770,7 @@ async function runChromeTest() {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
           const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
           );
           const calendarRequest = (window.__prestigeCrmSaveCalendarRequests || [])[0] || null;
           const calendarSyncStatusRequest =
@@ -17790,6 +17816,11 @@ async function runChromeTest() {
       crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
       "Expected post-save reload not to read bookings through the legacy admin data shim",
+    );
+    assert.deepEqual(
+      crmSaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected booking save not to create bookings through the legacy admin data shim",
     );
     const disallowedCalendarOrSendCalls = crmSaveState.fetchCalls.filter((call) => {
       const [, method = "GET", rawUrl = ""] = call.match(/^(\S+)\s+(.+)$/) || [];
@@ -18583,6 +18614,23 @@ async function runChromeTest() {
         }
 
         if (url.includes("/api/admin-saved-bookings")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          if (method === "POST") {
+            return jsonResponse({
+              booking: {
+                id: savedBooking.id,
+                status: parsedBody?.status || "confirmed",
+              },
+              ok: true,
+              version: "browser-admin-saved-booking-create-mock",
+            }, 201);
+          }
+
           const savedBookingReadUrl = new URL(url, window.location.href);
           const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
 
@@ -18616,10 +18664,6 @@ async function runChromeTest() {
         }
 
         if (url.includes("/rest/v1/bookings")) {
-          if (method === "POST") {
-            return jsonResponse({ id: savedBooking.id }, 201);
-          }
-
           if (method === "GET") {
             return jsonResponse([savedBooking]);
           }
@@ -18649,7 +18693,7 @@ async function runChromeTest() {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
           const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
           );
 
           return bodyText.includes("Booking saved successfully: ${mrLeeNoCompanySavedBookingFixture.id}")
@@ -18684,6 +18728,11 @@ async function runChromeTest() {
       mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
       "Expected Mr Lee no-company post-save reload not to read bookings through the legacy admin data shim",
+    );
+    assert.deepEqual(
+      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected Mr Lee no-company save not to create bookings through the legacy admin data shim",
     );
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.company_id, null);
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booker_id, null);
@@ -18979,6 +19028,23 @@ async function runChromeTest() {
         }
 
         if (url.includes("/api/admin-saved-bookings")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          if (method === "POST") {
+            return jsonResponse({
+              booking: {
+                id: savedBooking.id,
+                status: parsedBody?.status || "confirmed",
+              },
+              ok: true,
+              version: "browser-admin-saved-booking-create-mock",
+            }, 201);
+          }
+
           const savedBookingReadUrl = new URL(url, window.location.href);
           const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
 
@@ -19045,10 +19111,6 @@ async function runChromeTest() {
         }
 
         if (url.includes("/rest/v1/bookings")) {
-          if (method === "POST") {
-            return jsonResponse({ id: savedBooking.id }, 201);
-          }
-
           if (method === "GET") {
             return jsonResponse([savedBooking]);
           }
@@ -19082,7 +19144,7 @@ async function runChromeTest() {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
           const bookingInsert = (window.__prestigeExistingCompanySaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
           );
 
           return bodyText.includes("Booking saved successfully: ${mrLeeExistingCompanySavedBookingFixture.id}")
@@ -19117,6 +19179,11 @@ async function runChromeTest() {
       mrLeeExistingCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
       "Expected Mr Lee existing-company post-save reload not to read bookings through the legacy admin data shim",
+    );
+    assert.deepEqual(
+      mrLeeExistingCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected Mr Lee existing-company save not to create bookings through the legacy admin data shim",
     );
     assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.company_id, 901);
     assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.traveler_id, 903);
@@ -19190,6 +19257,23 @@ async function runChromeTest() {
         }
 
         if (url.includes("/api/admin-saved-bookings")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          if (method === "POST") {
+            return jsonResponse({
+              booking: {
+                id: savedBooking.id,
+                status: parsedBody?.status || "confirmed",
+              },
+              ok: true,
+              version: "browser-admin-saved-booking-create-mock",
+            }, 201);
+          }
+
           const savedBookingReadUrl = new URL(url, window.location.href);
           const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
 
@@ -19233,10 +19317,6 @@ async function runChromeTest() {
         }
 
         if (url.includes("/rest/v1/bookings")) {
-          if (method === "POST") {
-            return jsonResponse({ id: savedBooking.id }, 201);
-          }
-
           if (method === "GET") {
             return jsonResponse([savedBooking]);
           }
@@ -19266,7 +19346,7 @@ async function runChromeTest() {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
           const bookingInsert = (window.__prestigeCrmFailureSaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/rest/v1/bookings"),
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
           );
 
           return bodyText.includes("Booking saved, but CRM update failed:")
@@ -19300,6 +19380,11 @@ async function runChromeTest() {
       mrLeeCrmFailureSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
       "Expected Mr Lee CRM-failure post-save reload not to read bookings through the legacy admin data shim",
+    );
+    assert.deepEqual(
+      mrLeeCrmFailureSaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
+      [],
+      "Expected Mr Lee CRM-failure save not to create bookings through the legacy admin data shim",
     );
     assert.equal(mrLeeCrmFailureSaveState.bookingInsert?.company_id, null);
     assert.match(mrLeeCrmFailureSaveState.bodyText, /Booking saved, but CRM update failed: CRM service unavailable/);

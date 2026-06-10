@@ -3729,12 +3729,17 @@ async function runChromeTest() {
     };
 
     const waitForTravelerMemoryLookup = async (travelerName, description) => {
-      const expectedParam = `traveler_name=ilike.${travelerName}`.toLowerCase();
+      const expectedParam = `traveler_name=${encodeURIComponent(travelerName).replace(/%20/g, "+")}`.toLowerCase();
       await waitForCondition(
         () =>
-          blockedSupabaseRequests.some((request) =>
-            request.replace(/\+/g, " ").toLowerCase().includes(expectedParam),
-          ),
+          evaluate(`(() => {
+            const expectedParam = ${JSON.stringify(expectedParam)};
+
+            return (window.__prestigeFetchCalls || []).some((request) =>
+              String(request).toLowerCase().includes("/api/admin-customer-name-memory?") &&
+              String(request).toLowerCase().includes(expectedParam)
+            );
+          })()`),
         10000,
         `${description} traveler memory lookup`,
       );
@@ -3749,9 +3754,9 @@ async function runChromeTest() {
     const isExpectedBackgroundTravelerLookup = (url) => {
       const normalizedUrl = String(url).replace(/\+/g, " ").toLowerCase();
 
-      return normalizedUrl.includes("/rest/v1/travelers") &&
+      return normalizedUrl.includes("/api/admin-customer-name-memory") &&
         expectedBackgroundTravelerLookupNames.some((travelerName) =>
-          normalizedUrl.includes(`traveler_name=ilike.${travelerName.toLowerCase()}`),
+          normalizedUrl.includes(`traveler_name=${travelerName.toLowerCase()}`),
         );
     };
     const unexpectedManualExtraChargeFetchCalls = (calls) =>

@@ -53,6 +53,7 @@ const adminMonthlyInvoiceIssueRecordPdfReadinessApiPath =
 const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminMapLocationSearchApiPath = "/api/admin-map-location-search";
 const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
@@ -470,6 +471,18 @@ type NameMemory = {
   travelerId?: number;
   savedAddress?: string;
   preferredVehicle?: string;
+};
+
+type AdminCustomerNameMemoryApiRecord = {
+  company?: string | null;
+  company_id?: number | null;
+  companyId?: number | null;
+  preferred_vehicle?: string | null;
+  preferredVehicle?: string | null;
+  saved_address?: string | null;
+  savedAddress?: string | null;
+  traveler_id?: number | null;
+  travelerId?: number | null;
 };
 
 type BookingRecord = {
@@ -9783,54 +9796,42 @@ export default function Home() {
   }
 
   async function lookupNameMemory(personName: string): Promise<NameMemory | null> {
-    if (!adminLegacyDataClient || !personName) {
+    if (!personName) {
       return null;
     }
 
-    const nameResult = await adminLegacyDataClient
-      .from(adminLegacyTables.travelers)
-      .select("id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_id, booker_name, booker_contact, booker_email, customer_rates, driver_payout_rules")
-      .ilike("traveler_name", personName)
-      .limit(1)
-      .maybeSingle();
+    const searchParams = new URLSearchParams({ traveler_name: personName });
 
-    if (nameResult.error || !nameResult.data) {
+    try {
+      const response = await fetch(`${adminCustomerNameMemoryApiPath}?${searchParams.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => ({})) as {
+        name_memory?: AdminCustomerNameMemoryApiRecord | null;
+        ok?: unknown;
+      };
+
+      if (!response.ok || result.ok !== true || !result.name_memory) {
+        return null;
+      }
+
+      const nameMemory = result.name_memory;
+      const companyId = Number(nameMemory.companyId ?? nameMemory.company_id);
+      const travelerId = Number(nameMemory.travelerId ?? nameMemory.traveler_id);
+
+      return {
+        company: normalizeCompanyAccount(nameMemory.company, booking.bookerEmail),
+        companyId: Number.isSafeInteger(companyId) && companyId > 0 ? companyId : undefined,
+        preferredVehicle: clean(nameMemory.preferredVehicle ?? nameMemory.preferred_vehicle),
+        savedAddress: clean(nameMemory.savedAddress ?? nameMemory.saved_address),
+        travelerId: Number.isSafeInteger(travelerId) && travelerId > 0 ? travelerId : undefined,
+      };
+    } catch {
       return null;
     }
-
-    const nameRecord = nameResult.data as TravelerRecord;
-    const [companyResult, addressResult] = await Promise.all([
-      adminLegacyDataClient
-        .from(adminLegacyTables.companies)
-      .select("id, company_name")
-        .eq("id", nameRecord.company_id)
-        .limit(1)
-        .maybeSingle(),
-      adminLegacyDataClient
-        .from(adminLegacyTables.savedAddresses)
-        .select("id, company_id, traveler_id, label, address, address_role, is_default, use_count")
-        .eq("traveler_id", nameRecord.id)
-        .order("is_default", { ascending: false })
-        .order("use_count", { ascending: false })
-        .order("last_used_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-
-    if (companyResult.error || addressResult.error) {
-      return null;
-    }
-
-    const companyRecord = companyResult.data as CompanyRecord | null;
-    const savedAddress = addressResult.data as SavedAddressRecord | null;
-
-    return {
-      company: normalizeCompanyAccount(companyRecord?.company_name, nameRecord.booker_email),
-      companyId: nameRecord.company_id,
-      travelerId: nameRecord.id,
-      savedAddress: clean(savedAddress?.address) || clean(nameRecord.default_address),
-      preferredVehicle: clean(nameRecord.preferred_vehicle),
-    };
   }
 
   async function applyParsedBookingMessage(messageText: string) {

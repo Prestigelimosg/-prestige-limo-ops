@@ -33,7 +33,7 @@ Scope: production-readiness status for every `app/api` route in the current app.
 | `/api/admin-monthly-invoice-issue-reviews` | Integrated in the existing monthly billing review path for guarded issue review save/load. | Keep as review state only; issue records and invoice numbers remain separate guarded steps. |
 | `/api/admin-monthly-invoice-number-reservations` | Integrated in the existing monthly billing review path for guarded invoice number reservation. | Reservation is not invoice sending; do not create PDFs, payment records, or delivery events. |
 | `/api/admin-rate-setup` | Integrated in the existing Rates tab load path as a typed admin-only read replacement for the legacy rate settings/company/traveler shim reads. | Keep read-only until the save paths are separately replaced with typed write APIs and contract tests. |
-| `/api/admin-saved-bookings` | Integrated as a typed admin-only saved booking row/list read for the post-save reload path and existing Load Bookings/Refresh Loaded Bookings controls, replacing those legacy booking GET shim reads without changing booking writes or page layout. | Continue retiring remaining legacy booking update/delete and CRM/driver shim paths in small typed API slices. |
+| `/api/admin-saved-bookings` | Integrated as a typed admin-only saved booking row/list read for the post-save reload path and existing Load Bookings/Refresh Loaded Bookings controls, plus completed-only saved booking delete from the existing Completed tab control. | Continue retiring remaining legacy booking assignment/save and CRM/driver shim paths in small typed API slices. |
 | `/api/admin-saved-booking-statuses` | Integrated as the typed admin-only status update path for saved booking lifecycle controls: OTW, POB, completed, undo completed, and status revert. | Keep status-only; assignment, delete, full booking save, CRM, and rate writes remain separate typed API slices. |
 | `/api/ai-parse` | Integrated in the existing parser assist flow. | Parser learning and external parser behavior remain blocked unless separately approved. |
 | `/api/customer-app-notifications` | Deliberately blocked with customer-auth-required responses; no Supabase client is created. | Activate only after approved customer auth/RLS work. |
@@ -57,7 +57,7 @@ Scope: production-readiness status for every `app/api` route in the current app.
 
 ## Next Forward Integration Candidates
 
-1. Replace remaining legacy admin data shim writes with typed server APIs in small slices; saved booking status updates now use `/api/admin-saved-booking-statuses`.
+1. Replace remaining legacy admin data shim writes with typed server APIs in small slices; saved booking status updates use `/api/admin-saved-booking-statuses`, and completed-only saved booking delete uses `/api/admin-saved-bookings`.
 2. Connect additional existing workflow status controls only when they support a real backend lifecycle step.
 3. Move customer app notifications from blocked to readable only after approved customer auth and RLS activation.
 4. Move driver bidding from blocked to runtime access only after approved driver auth and bidding workflow boundaries.

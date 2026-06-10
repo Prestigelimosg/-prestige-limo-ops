@@ -6747,6 +6747,39 @@ async function runChromeTest() {
           });
         }
 
+        if (
+          method === "DELETE" &&
+          String(target).includes("/api/admin-saved-bookings")
+        ) {
+          let parsedBody = bodyText;
+
+          try {
+            parsedBody = JSON.parse(bodyText);
+          } catch {}
+
+          window.__prestigeCompletedDeleteRequests.push({
+            body: parsedBody,
+            id: parsedBody.booking_id,
+            method,
+            url: String(target),
+          });
+          window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).filter(
+            (booking) => String(booking.id) !== String(parsedBody.booking_id),
+          );
+
+          return new Response(JSON.stringify({
+            booking: {
+              id: parsedBody.booking_id,
+              status: "completed",
+            },
+            ok: true,
+            version: "browser-admin-saved-booking-delete-mock",
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
         if (method === "PATCH" && String(target).includes("/rest/v1/bookings")) {
           let parsedBody = bodyText;
 
@@ -9613,6 +9646,9 @@ async function runChromeTest() {
     const completedDeleteBookingCalls = confirmedCompletedDeleteState.fetchCalls.filter(
       (call) => call.startsWith("DELETE ") && call.includes("/rest/v1/bookings"),
     );
+    const completedDeleteApiCalls = confirmedCompletedDeleteState.fetchCalls.filter(
+      (call) => call.startsWith("DELETE ") && call.includes("/api/admin-saved-bookings"),
+    );
     assert.equal(
       confirmedCompletedDeleteState.deleteRequests.length,
       1,
@@ -9621,12 +9657,23 @@ async function runChromeTest() {
     assert.equal(confirmedCompletedDeleteState.deleteRequests[0]?.id, dashboardCompletionActionFixture.id);
     assert.match(
       confirmedCompletedDeleteState.deleteRequests[0]?.url || "",
-      new RegExp(`\\/rest\\/v1\\/bookings.*id=eq\\.${dashboardCompletionActionFixture.id}`),
+      /\/api\/admin-saved-bookings/,
+    );
+    assert.deepEqual(
+      confirmedCompletedDeleteState.deleteRequests[0]?.body,
+      {
+        booking_id: String(dashboardCompletionActionFixture.id),
+      },
     );
     assert.equal(
       completedDeleteBookingCalls.length,
+      0,
+      `Expected completed delete not to use the legacy booking delete shim, got ${confirmedCompletedDeleteState.fetchCalls.join(", ")}`,
+    );
+    assert.equal(
+      completedDeleteApiCalls.length,
       1,
-      `Expected one DELETE booking fetch call, got ${confirmedCompletedDeleteState.fetchCalls.join(", ")}`,
+      `Expected one typed completed delete API call, got ${confirmedCompletedDeleteState.fetchCalls.join(", ")}`,
     );
     assert.match(confirmedCompletedDeleteState.feedbackCardText, /Completed job deleted\./);
     assert.match(

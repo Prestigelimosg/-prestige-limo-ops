@@ -13319,10 +13319,10 @@ export default function Home() {
       return;
     }
 
-    if (!adminLegacyDataClient) {
+    if (typeof fetch !== "function") {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: "Delete completed job failed: Admin data API is not available.",
+        text: "Delete completed job failed: Admin saved booking API is not available.",
       });
       return;
     }
@@ -13331,10 +13331,31 @@ export default function Home() {
     setBookingCompletionMessage(bookingId, { tone: "info", text: "Deleting completed job..." });
 
     try {
-      const { error } = await adminLegacyDataClient.from(adminLegacyTables.bookings).delete().eq("id", bookingRecord.id);
+      const response = await fetch(adminSavedBookingsApiPath, {
+        body: JSON.stringify({
+          booking_id: bookingId,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "DELETE",
+      });
+      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingReadResponse | null;
 
-      if (error) {
-        throw new Error(error.message);
+      if (
+        !response.ok ||
+        responseBody?.ok !== true ||
+        !responseBody.booking ||
+        String(responseBody.booking.id) !== bookingId ||
+        clean(responseBody.booking.status).toLowerCase() !== "completed"
+      ) {
+        const error = readAdminLegacyDataError(
+          responseBody,
+          "Admin completed saved booking delete request failed.",
+        );
+
+        throw new Error(formatSupabaseError(error));
       }
 
       setBookings((current) =>

@@ -4,6 +4,7 @@ import {
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
+import { deleteAdminCompletedSavedBooking } from "../../../lib/admin-saved-booking-delete";
 import {
   loadAdminSavedBookingById,
   loadAdminSavedBookingList,
@@ -29,6 +30,14 @@ function blockedResponse(error: string) {
     },
     { status: 403 },
   );
+}
+
+async function readJsonBody(request: Request) {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
 }
 
 function isProductionRuntime() {
@@ -58,10 +67,10 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
   };
 }
 
-function safeFailureResponse() {
+function safeFailureResponse(error = "Admin saved booking read request failed safely.") {
   return Response.json(
     {
-      error: "Admin saved booking read request failed safely.",
+      error,
       ok: false,
     },
     { status: 500 },
@@ -119,5 +128,36 @@ export async function GET(request: Request) {
     });
   } catch {
     return safeFailureResponse();
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const boundary = requireAdminDispatcherBoundary(request);
+
+    if (!boundary.ok) {
+      return boundary.response;
+    }
+
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const result = await deleteAdminCompletedSavedBooking(await readJsonBody(request), actor);
+
+    if (!result.ok) {
+      return Response.json(
+        {
+          error: result.error,
+          ok: false,
+        },
+        { status: result.status },
+      );
+    }
+
+    return Response.json({
+      booking: result.data.booking,
+      ok: true,
+      version: result.data.version,
+    });
+  } catch {
+    return safeFailureResponse("Admin saved booking delete request failed safely.");
   }
 }

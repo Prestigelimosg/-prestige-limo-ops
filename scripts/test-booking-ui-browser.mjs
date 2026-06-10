@@ -10,8 +10,6 @@ import {
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const driverDemoUrl = new URL("/driver-job-demo", appUrl).toString();
-const driverJobPublicBaseUrl = process.env.NEXT_PUBLIC_APP_URL || appUrl;
-const driverJobMockUrl = new URL("/driver-job/mock-driver-job-valid-a", driverJobPublicBaseUrl).toString();
 const browserName = (process.env.BROWSER || "chrome").toLowerCase();
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -5958,6 +5956,8 @@ async function runChromeTest() {
       window.__prestigeUnhandledSupabaseCalls = [];
       window.__prestigeCompletedCloseoutRequests = [];
       window.__prestigeCompletedCloseouts = {};
+      window.__prestigeAdminDriverJobLinkRequests = [];
+      window.__prestigeAdminDriverJobLinks = [];
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
@@ -6223,6 +6223,129 @@ async function runChromeTest() {
           }
 
           return new Response(JSON.stringify({ ok: false, error: "Completed closeout method not mocked." }), {
+            status: 405,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (String(target).includes("/api/admin-driver-job-links")) {
+          const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeAdminDriverJobLinkRequests.push({
+            body: parsedBody,
+            booking_reference: url.searchParams.get("booking_reference") || parsedBody?.booking_reference || "",
+            headers,
+            link_status: url.searchParams.get("link_status") || "",
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const bookingReference = url.searchParams.get("booking_reference") || "";
+            const linkStatus = url.searchParams.get("link_status") || "";
+            const links = (window.__prestigeAdminDriverJobLinks || []).filter((link) => {
+              if (bookingReference && link.booking_reference !== bookingReference) {
+                return false;
+              }
+
+              return !linkStatus || link.link_status === linkStatus;
+            });
+
+            return new Response(
+              JSON.stringify({
+                links,
+                ok: true,
+                pagination: {
+                  has_next_page: false,
+                  has_previous_page: false,
+                  page: 1,
+                  page_count: links.length ? 1 : 0,
+                  page_size: 1,
+                  total_link_count: links.length,
+                },
+                version: "browser-admin-driver-job-link-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "POST") {
+            const payload = parsedBody?.driver_job_payload || {};
+            const link = {
+              booking_reference: parsedBody?.booking_reference || "",
+              created_at: "2026-06-09T00:00:00.000Z",
+              expires_at: "2026-06-11T00:00:00.000Z",
+              id: "11111111-2222-4333-8444-555555555555",
+              issued_at: "2026-06-09T00:00:00.000Z",
+              link_status: "active",
+              revoked_at: null,
+              safe_summary: {
+                assigned_driver: payload.assigned_driver_name || null,
+                pickup_datetime: payload.pickup_datetime || null,
+                route: payload.route || null,
+                vehicle: payload.assigned_driver_vehicle_model || null,
+              },
+              updated_at: "2026-06-09T00:00:00.000Z",
+            };
+
+            window.__prestigeAdminDriverJobLinks = [
+              link,
+              ...(window.__prestigeAdminDriverJobLinks || []).filter(
+                (candidate) => candidate.id !== link.id,
+              ),
+            ];
+
+            return new Response(
+              JSON.stringify({
+                driver_job_url: new URL("/driver-job/browser-created-driver-token", window.location.origin).toString(),
+                link,
+                ok: true,
+                token_display_once: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "PATCH") {
+            const driverJobLinkId = parsedBody?.driver_job_link_id || "";
+            let revokedLink = null;
+
+            window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) => {
+              if (link.id !== driverJobLinkId) {
+                return link;
+              }
+
+              revokedLink = {
+                ...link,
+                link_status: "revoked",
+                revoked_at: "2026-06-09T00:05:00.000Z",
+                updated_at: "2026-06-09T00:05:00.000Z",
+              };
+
+              return revokedLink;
+            });
+
+            return new Response(
+              JSON.stringify({
+                link: revokedLink,
+                ok: Boolean(revokedLink),
+              }),
+              {
+                status: revokedLink ? 200 : 404,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+
+          return new Response(JSON.stringify({ ok: false, error: "Driver job link method not mocked." }), {
             status: 405,
             headers: { "content-type": "application/json" },
           });
@@ -7830,33 +7953,149 @@ async function runChromeTest() {
       "Expected existing Driver Dispatch copy output not to include Driver Job Link text",
     );
 
-    await evaluate(`window.__prestigeCopiedTexts = []`);
+    await evaluate(`window.__prestigeCopiedTexts = []; window.__prestigeAdminDriverJobLinkRequests = []`);
 
-    const clickedDriverJobLinkCopy = await evaluate(`(() => {
-      const sectionForHeading = (headingText) => {
-        const heading = [...document.querySelectorAll("h2")].find(
-          (candidate) => candidate.textContent.trim() === headingText,
-        );
-        let node = heading;
+    const clickedCreateDriverJobLink = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const sectionForHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading;
 
-        while (node && node !== document.body) {
-          if (
-            node.querySelector?.("pre") &&
-            [...node.querySelectorAll("button")].some(
-              (button) => button.textContent.trim() === "Copy Driver Job Link",
-            )
-          ) {
-            return node;
+            while (node && node !== document.body) {
+              if (
+                node.querySelector?.("pre") &&
+                [...node.querySelectorAll("button")].some(
+                  (button) => button.textContent.trim() === "Create Link",
+                )
+              ) {
+                return node;
+              }
+
+              node = node.parentElement;
+            }
+
+            return null;
+          };
+          const section = sectionForHeading("Driver Job Link");
+          const createButton = [...(section?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Create Link",
+          );
+
+          if (!section || !createButton || createButton.disabled) {
+            return false;
           }
 
-          node = node.parentElement;
-        }
+          createButton.click();
+          return true;
+        })()`),
+      10000,
+      "Driver Job Link create button enabled",
+    );
+    assert.equal(clickedCreateDriverJobLink, true, "Expected Driver Job Link create button to be clickable");
 
-        return null;
-      };
-      const section = sectionForHeading("Driver Job Link");
+    const driverJobLinkCreateState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const sectionForHeading = (headingText) => {
+            const heading = [...document.querySelectorAll("h2")].find(
+              (candidate) => candidate.textContent.trim() === headingText,
+            );
+            let node = heading;
+
+            while (node && node !== document.body) {
+              if (
+                node.querySelector?.("pre") &&
+                [...node.querySelectorAll("button")].some(
+                  (button) => button.textContent.trim() === "Copy Link",
+                )
+              ) {
+                return node;
+              }
+
+              node = node.parentElement;
+            }
+
+            return null;
+          };
+          const section = sectionForHeading("Driver Job Link");
+          const feedback = section?.querySelector("[data-driver-job-link-api-feedback='true']");
+          const preview = section?.querySelector("[data-copy-preview='driverJobLink']");
+          const status = section?.querySelector("[data-driver-job-link-status='true']");
+          const copyButton = [...(section?.querySelectorAll("button") || [])].find(
+            (button) => button.textContent.trim() === "Copy Link",
+          );
+
+          return feedback?.textContent.includes("Driver job link created")
+            ? {
+                copyButtonDisabled: copyButton?.disabled ?? true,
+                feedbackText: feedback.textContent.trim(),
+                previewText: preview?.innerText || "",
+                requests: window.__prestigeAdminDriverJobLinkRequests || [],
+                statusText: status?.textContent.trim() || "",
+              }
+            : false;
+        })()`),
+      10000,
+      "guarded Driver Job Link create feedback",
+    );
+    assert.equal(driverJobLinkCreateState.copyButtonDisabled, false);
+    assert.match(driverJobLinkCreateState.feedbackText, /Driver job link created/);
+    assert.match(driverJobLinkCreateState.statusText, /Active saved link for ui-dashboard-driver-assignment-fixture/);
+    assert.match(driverJobLinkCreateState.previewText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
+    assert.equal(driverJobLinkCreateState.requests.length, 1);
+    assert.deepEqual(
+      driverJobLinkCreateState.requests.map((request) => ({
+        booking_reference: request.body?.booking_reference,
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        ttl_hours: request.body?.ttl_hours,
+      })),
+      [
+        {
+          booking_reference: "ui-dashboard-driver-assignment-fixture",
+          method: "POST",
+          purpose: "admin-booking-persistence",
+          ttl_hours: 48,
+        },
+      ],
+      "Expected Driver Job Link create to POST through the guarded admin API path",
+    );
+    assert.deepEqual(
+      driverJobLinkCreateState.requests[0].body?.driver_job_payload,
+      {
+        assigned_driver_contact: "+65 8555 7777",
+        assigned_driver_name: "DASHBOARD TEST DRIVER",
+        assigned_driver_plate: "SLC777D",
+        assigned_driver_vehicle_model: "AVF",
+        booking_type: "MNG",
+        dropoff_location: "The Fullerton Hotel Singapore",
+        flight_no: "SQ777",
+        passenger_name: "DASHBOARD DRIVER TEST TRAVELER",
+        pickup_date: "2026-05-29",
+        pickup_datetime: "29 May 2026, 1115hrs",
+        pickup_location: "Changi Airport",
+        pickup_time: "1115hrs",
+        route: "Changi Airport > Marina Bay Sands > The Fullerton Hotel Singapore",
+        status: "assigned",
+        waypoints: [],
+      },
+      "Expected Driver Job Link create payload to contain safe operational fields only",
+    );
+    assert.equal(
+      /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token_hash|raw_token|driver_job_token|internal_admin_note|admin_note/i.test(
+        JSON.stringify(driverJobLinkCreateState.requests),
+      ),
+      false,
+      "Expected Driver Job Link create request not to include finance, payout, parser, token, notification, or internal fields",
+    );
+
+    const clickedDriverJobLinkCopy = await evaluate(`(() => {
+      const section = [...document.querySelectorAll("[data-dispatch-workflow-step='driver-job-link']")][0];
       const copyButton = [...(section?.querySelectorAll("button") || [])].find(
-        (button) => button.textContent.trim() === "Copy Driver Job Link",
+        (button) => button.textContent.trim() === "Copy Link",
       );
 
       if (!section || !copyButton || copyButton.disabled) {
@@ -7881,7 +8120,7 @@ async function runChromeTest() {
               if (
                 node.querySelector?.("pre") &&
                 [...node.querySelectorAll("button")].some(
-                  (button) => button.textContent.trim() === "Copy Driver Job Link",
+                  (button) => button.textContent.trim() === "Copy Link",
                 )
               ) {
                 return node;
@@ -7894,7 +8133,7 @@ async function runChromeTest() {
           };
           const section = sectionForHeading("Driver Job Link");
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
-            (button) => button.textContent.trim() === "Copy Driver Job Link",
+            (button) => button.textContent.trim() === "Copy Link",
           );
           const feedback = section?.querySelector("[data-copy-feedback='driver-job-link']");
           const preview = section?.querySelector("[data-copy-preview='driverJobLink']");
@@ -7925,34 +8164,20 @@ async function runChromeTest() {
       `Expected Driver Job Link copy feedback near its button, got ${driverJobLinkCopyState.distanceFromButton}px`,
     );
     assert.match(driverJobLinkCopyState.previewText, /Driver Job Link/);
-    assert.match(driverJobLinkCopyState.previewText, /Copy Driver Job Link|Driver Job Link/);
+    assert.match(driverJobLinkCopyState.previewText, /Saved link status: active/);
     assert.match(driverJobLinkCopyState.copiedText, /^Driver Job Link/);
     assert.match(driverJobLinkCopyState.copiedText, /Hi DASHBOARD TEST DRIVER,/);
-    assert.match(driverJobLinkCopyState.copiedText, /https?:\/\/\S+\/driver-job\/mock-driver-job-valid-a/);
-    assert.ok(
-      driverJobLinkCopyState.copiedText.includes(driverJobMockUrl),
-      `Expected Driver Job Link copy to include absolute mock driver job URL ${driverJobMockUrl}`,
+    assert.match(driverJobLinkCopyState.copiedText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
+    assert.doesNotMatch(
+      driverJobLinkCopyState.copiedText,
+      /^\/driver-job\/browser-created-driver-token$/m,
+      "Expected Driver Job Link copy not to use a relative-only driver job path",
     );
     assert.doesNotMatch(
       driverJobLinkCopyState.copiedText,
-      /^\/driver-job\/mock-driver-job-valid-a$/m,
-      "Expected Driver Job Link copy not to use a relative-only mock driver job path",
+      /\/driver-job-demo|mock-driver-job-valid-a|Mock\/demo driver job link|Local demo link/,
+      "Expected Driver Job Link copy not to point to the demo token or include mock/demo wording",
     );
-    assert.doesNotMatch(
-      driverJobLinkCopyState.copiedText,
-      /\/driver-job-demo/,
-      "Expected Driver Job Link copy not to point to the old demo page",
-    );
-    assert.match(
-      driverJobLinkCopyState.copiedText,
-      /Mock\/demo driver job link only until secure production driver links are implemented\./,
-    );
-    if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(driverJobMockUrl)) {
-      assert.match(
-        driverJobLinkCopyState.copiedText,
-        /Local demo link only\. Set NEXT_PUBLIC_APP_URL before sending to drivers\./,
-      );
-    }
     assert.match(driverJobLinkCopyState.copiedText, /Reference: ui-dashboard-driver-assignment-fixture/);
     assert.match(driverJobLinkCopyState.copiedText, /29 May 2026, 1115hrs/);
     assert.match(driverJobLinkCopyState.copiedText, /Flight: SQ777/);
@@ -7963,7 +8188,7 @@ async function runChromeTest() {
       /Route:\s*Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
       "Expected Driver Job Link copy to include full route and waypoint",
     );
-    assert.match(driverJobLinkCopyState.copiedText, /Status to update:\s*OTW \/ POB \/ Job Completed/);
+    assert.match(driverJobLinkCopyState.copiedText, /Status to update:\s*OTW \/ OTS \/ POB \/ Job Completed/);
     assert.doesNotMatch(
       driverJobLinkCopyState.copiedText,
       /Thank you for choosing Prestige Limo SG\.|Customer note:|driver payout|internal payout|override reason/i,
@@ -12191,6 +12416,25 @@ async function runChromeTest() {
       window.__prestigeFetchCalls = [];
       window.__prestigeCompletedCloseoutRequests = [];
       window.__prestigeCompletedCloseouts = window.__prestigeCompletedCloseouts || {};
+      window.__prestigeAdminDriverJobLinkRequests = [];
+      window.__prestigeAdminDriverJobLinks = [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          created_at: "2026-06-09T00:00:00.000Z",
+          expires_at: "2026-06-11T00:00:00.000Z",
+          id: "22222222-3333-4444-8555-666666666666",
+          issued_at: "2026-06-09T00:00:00.000Z",
+          link_status: "active",
+          revoked_at: null,
+          safe_summary: {
+            assigned_driver: "LOADED SAVED DRIVER",
+            pickup_datetime: "28 May 2026, 0945hrs",
+            route: "Raffles Hotel Singapore > Changi Airport T2",
+            vehicle: "VAN",
+          },
+          updated_at: "2026-06-09T00:00:00.000Z",
+        },
+      ];
       window.__prestigeMonthlyBillingGroupingRequests = [];
       window.__prestigeMonthlyBillingGroupingGroups = [
         {
@@ -12492,6 +12736,57 @@ async function runChromeTest() {
               JSON.stringify({
                 closeout,
                 ok: true,
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
+        if (String(target).includes("/api/admin-driver-job-links")) {
+          const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeAdminDriverJobLinkRequests.push({
+            body: parsedBody,
+            booking_reference: url.searchParams.get("booking_reference") || parsedBody?.booking_reference || "",
+            headers,
+            link_status: url.searchParams.get("link_status") || "",
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const bookingReference = url.searchParams.get("booking_reference") || "";
+            const linkStatus = url.searchParams.get("link_status") || "";
+            const links = (window.__prestigeAdminDriverJobLinks || []).filter((link) => {
+              if (bookingReference && link.booking_reference !== bookingReference) {
+                return false;
+              }
+
+              return !linkStatus || link.link_status === linkStatus;
+            });
+
+            return new Response(
+              JSON.stringify({
+                links,
+                ok: true,
+                pagination: {
+                  has_next_page: false,
+                  has_previous_page: false,
+                  page: 1,
+                  page_count: links.length ? 1 : 0,
+                  page_size: 1,
+                  total_link_count: links.length,
+                },
+                version: "focused-browser-admin-driver-job-link-read-mock",
               }),
               { status: 200, headers: { "content-type": "application/json" } },
             );
@@ -13310,6 +13605,7 @@ async function runChromeTest() {
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
+            adminDriverJobLinkRequests: window.__prestigeAdminDriverJobLinkRequests || [],
             driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             monthlyBillingDraftPlanRequests: window.__prestigeMonthlyBillingDraftPlanRequests || [],
@@ -13520,6 +13816,12 @@ async function runChromeTest() {
               request.method === "GET" &&
               request.booking_reference === "ui-cleanup-load-fixture",
           ) &&
+          candidateState?.adminDriverJobLinkRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.link_status === "active",
+          ) &&
           candidateState?.driverJobStatusRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -13573,6 +13875,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
+      "GET /api/admin-driver-job-links?booking_reference=ui-cleanup-load-fixture&limit=1&link_status=active&page=1",
       "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-billing-draft-plans?limit=1&page=1&billing_month=2026-05",
@@ -13584,7 +13887,26 @@ async function runChromeTest() {
     assert.deepEqual(
       [...loadedBookingState.fetchCalls].sort(),
       [...expectedLoadedBookingFetchCalls].sort(),
-      `Expected Load this booking to make only workflow status, completed closeout, and monthly grouping GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
+      `Expected Load this booking to make only guarded read GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      loadedBookingState.adminDriverJobLinkRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        link_status: request.link_status,
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          hasSessionTokenHeader: false,
+          link_status: "active",
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected saved booking load to GET active driver job link through the guarded API path",
     );
     assert.deepEqual(
       loadedBookingState.workflowStatusRequests.map((request) => ({

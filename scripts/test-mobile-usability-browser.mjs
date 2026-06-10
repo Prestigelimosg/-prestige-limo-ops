@@ -13006,9 +13006,14 @@ async function runChromeTest() {
         `${viewport.label}: expected copy previews to wrap without horizontal overflow`,
       );
       assert.equal(
-        previewState.text.includes("/driver-job/mock-driver-job-valid-a"),
+        previewState.text.includes("Create a fresh driver job link to display the one-time URL for copying."),
         true,
-        `${viewport.label}: expected Driver Job Link preview to use mock public driver job route`,
+        `${viewport.label}: expected Driver Job Link preview to use guarded create-before-copy wording`,
+      );
+      assert.equal(
+        /mock-driver-job-valid-a|driver-job-demo|Mock\/demo driver job link|Local demo link/.test(previewState.text),
+        false,
+        `${viewport.label}: expected Driver Job Link preview not to use mock/demo token wording`,
       );
 
       for (const editTarget of ["jobCard", "customerCopy", "driverDispatch"]) {

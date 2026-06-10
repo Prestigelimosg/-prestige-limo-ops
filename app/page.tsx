@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   mergeParsedBookingState,
   parseBookingMessage,
@@ -29,10 +29,10 @@ import {
   type RateRules,
   type RateSettings,
 } from "../lib/pricing";
-import { mockDriverJobTokens } from "../lib/driver-job-link-mock-tokens";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
+const adminDriverJobLinksApiPath = "/api/admin-driver-job-links";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
 const adminMonthlyBillingGroupsApiPath = "/api/admin-monthly-billing-groups";
@@ -544,6 +544,31 @@ type DriverDeleteMessage = Message & {
 
 type CopyFeedback = Message & {
   target: DispatchCopyTarget;
+};
+
+type AdminDriverJobLinkRecord = {
+  booking_reference: string;
+  expires_at: string | null;
+  id: string;
+  issued_at: string | null;
+  link_status: "active" | "expired" | "revoked";
+  revoked_at: string | null;
+  safe_summary: {
+    assigned_driver: string | null;
+    pickup_datetime: string | null;
+    route: string | null;
+    vehicle: string | null;
+  };
+};
+
+type AdminDriverJobLinkAction = "create" | "load" | "revoke";
+
+type AdminDriverJobLinkState = {
+  action: AdminDriverJobLinkAction | null;
+  link: AdminDriverJobLinkRecord | null;
+  loadedReference: string;
+  message: Message | null;
+  oneTimeUrl: string;
 };
 
 type DispatchCopyTarget = "customerCopy" | "driverDispatch" | "jobCard";
@@ -1727,46 +1752,6 @@ const dispatchCopyLabels: Record<DispatchCopyTarget, string> = {
   driverDispatch: "Driver dispatch",
   jobCard: "Job card",
 };
-
-const mockDriverJobPath = `/driver-job/${mockDriverJobTokens.validA}`;
-const fallbackDriverJobUrl = `http://localhost:3000${mockDriverJobPath}`;
-const configuredDriverJobBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || "";
-
-function normalizePublicBaseUrl(value: string) {
-  const cleanValue = value.trim();
-
-  if (!cleanValue) {
-    return "";
-  }
-
-  try {
-    return new URL(cleanValue).origin;
-  } catch {
-    return "";
-  }
-}
-
-function getDriverJobBaseUrl() {
-  const configuredBaseUrl = normalizePublicBaseUrl(configuredDriverJobBaseUrl);
-
-  if (configuredBaseUrl) {
-    return configuredBaseUrl;
-  }
-
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
-  }
-
-  return "http://localhost:3000";
-}
-
-function getDriverJobUrl() {
-  return new URL(mockDriverJobPath, getDriverJobBaseUrl()).toString();
-}
-
-function subscribeToDriverJobUrlChange() {
-  return () => {};
-}
 
 function createInitialCopyEditStates(): Record<DispatchCopyTarget, CopyEditState> {
   return {
@@ -6766,11 +6751,14 @@ export default function Home() {
     tone: "info",
     text: "Ready for dispatch.",
   });
-  const driverJobLinkUrl = useSyncExternalStore(
-    subscribeToDriverJobUrlChange,
-    getDriverJobUrl,
-    () => fallbackDriverJobUrl,
-  );
+  const [adminDriverJobLinkState, setAdminDriverJobLinkState] =
+    useState<AdminDriverJobLinkState>({
+      action: null,
+      link: null,
+      loadedReference: "",
+      message: null,
+      oneTimeUrl: "",
+    });
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -6927,6 +6915,104 @@ export default function Home() {
     clean(appliedAdminBookingSnapshotReference) || clean(loadedBookingId);
   const adminMonthlyBillingGroupingBillingMonthFilter =
     adminMonthlyBillingGroupingBillingMonthFromDate(booking.date);
+
+  useEffect(() => {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    let cancelled = false;
+
+    if (!bookingReference) {
+      setAdminDriverJobLinkState({
+        action: null,
+        link: null,
+        loadedReference: "",
+        message: null,
+        oneTimeUrl: "",
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadAdminDriverJobLink() {
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        action: "load",
+        loadedReference: bookingReference,
+        message: {
+          tone: "info",
+          text: `Checking saved driver job link for ${bookingReference}...`,
+        },
+        oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
+      }));
+
+      try {
+        const params = new URLSearchParams({
+          booking_reference: bookingReference,
+          limit: "1",
+          link_status: "active",
+          page: "1",
+        });
+        const response = await fetch(`${adminDriverJobLinksApiPath}?${params.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || "Driver job link load failed.");
+        }
+
+        const links = Array.isArray(result.links) ? (result.links as AdminDriverJobLinkRecord[]) : [];
+        const activeLink = links.find((link) => link.link_status === "active") || null;
+
+        if (cancelled) {
+          return;
+        }
+
+        setAdminDriverJobLinkState((current) => ({
+          ...current,
+          action: null,
+          link: activeLink,
+          loadedReference: bookingReference,
+          message: activeLink
+            ? {
+                tone: "success",
+                text: `Loaded active driver job link for ${bookingReference}. Create a fresh link only if the current one should be replaced.`,
+              }
+            : {
+                tone: "info",
+                text: `No active driver job link loaded for ${bookingReference}.`,
+              },
+          oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
+        }));
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const errorText = error instanceof Error ? error.message : "Unknown driver job link load error.";
+        setAdminDriverJobLinkState((current) => ({
+          ...current,
+          action: null,
+          link: null,
+          loadedReference: bookingReference,
+          message: {
+            tone: "error",
+            text: `Driver job link load failed safely: ${errorText}`,
+          },
+          oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
+        }));
+      }
+    }
+
+    loadAdminDriverJobLink();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatchReleaseWorkflowBookingReference]);
 
   useEffect(() => {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
@@ -8229,12 +8315,11 @@ export default function Home() {
       .join("\n\n");
   }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
 
+  const activeAdminDriverJobLink =
+    adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
   const driverJobLinkMessage = useMemo(() => {
     const driverName = clean(booking.driverName) || "Driver";
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
-    const localDemoWarning = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(driverJobLinkUrl)
-      ? "Local demo link only. Set NEXT_PUBLIC_APP_URL before sending to drivers."
-      : "";
     const routeText = isDspItinerary
       ? [
           clean(booking.pickup) ? `Pickup: ${clean(booking.pickup)}` : "",
@@ -8245,14 +8330,22 @@ export default function Home() {
           .filter(Boolean)
           .join("\n")
       : route;
+    const linkSummary = activeAdminDriverJobLink
+      ? [
+          `Saved link status: ${activeAdminDriverJobLink.link_status}`,
+          activeAdminDriverJobLink.expires_at ? `Expires: ${activeAdminDriverJobLink.expires_at}` : "",
+        ]
+      : ["Saved link status: No active driver job link loaded."];
+    const oneTimeUrl = clean(adminDriverJobLinkState.oneTimeUrl);
     const sections = [
       [
         "Driver Job Link",
         `Hi ${driverName},`,
-        "Please open this driver job link and update your status:",
-        driverJobLinkUrl,
-        "Mock/demo driver job link only until secure production driver links are implemented.",
-        localDemoWarning,
+        oneTimeUrl
+          ? "Please open this driver job link and update your job status:"
+          : "Create a fresh driver job link to display the one-time URL for copying.",
+        oneTimeUrl,
+        ...linkSummary,
       ],
       [
         "Job:",
@@ -8274,7 +8367,7 @@ export default function Home() {
       ],
       [
         "Status to update:",
-        "OTW / POB / Job Completed",
+        "OTW / OTS / POB / Job Completed",
       ],
     ];
 
@@ -8282,7 +8375,15 @@ export default function Home() {
       .filter((section) => section.some((line) => clean(line)))
       .map((section) => section.join("\n").trim())
       .join("\n\n");
-  }, [booking, driverJobLinkUrl, isDspItinerary, itineraryDisplayStops, loadedBookingId, route]);
+  }, [
+    activeAdminDriverJobLink,
+    adminDriverJobLinkState.oneTimeUrl,
+    booking,
+    isDspItinerary,
+    itineraryDisplayStops,
+    loadedBookingId,
+    route,
+  ]);
 
   const generatedDispatchCopyMessages = useMemo(
     () => ({
@@ -11440,7 +11541,154 @@ export default function Home() {
     await copyDispatchCopy("customerCopy");
   }
 
+  function adminDriverJobLinkFailureMessage(error: unknown) {
+    const errorText = error instanceof Error ? error.message : "Unknown driver job link error.";
+
+    return `Driver job link request failed safely: ${errorText}`;
+  }
+
+  function buildAdminDriverJobLinkCreatePayload() {
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const driverName = clean(booking.driverName) || clean(assignedDriverRecord?.driver_name);
+    const driverContact = clean(booking.driverContact) || clean(assignedDriverRecord?.contact_number);
+    const driverPlate = assignedDriverPlate;
+    const vehicleModel = clean(assignedDriverRecord?.vehicle_type) || clean(booking.vehicle);
+    const pickupDateTime = formatPickupDateTime(booking.date, booking.time);
+    const pickupLocation = clean(booking.pickup);
+    const dropoffLocation = clean(booking.dropoff);
+    const passengerName = clean(booking.name);
+
+    if (!bookingReference) {
+      return {
+        error: "Load a saved booking before creating a driver job link.",
+        ok: false as const,
+      };
+    }
+
+    if (!driverName || !driverContact || !driverPlate) {
+      return {
+        error: "Driver name, contact, and car plate are required before creating a driver job link.",
+        ok: false as const,
+      };
+    }
+
+    if (!pickupLocation || !dropoffLocation || !clean(booking.date) || !clean(booking.time)) {
+      return {
+        error: "Pickup, drop-off, pickup date, and pickup time are required before creating a driver job link.",
+        ok: false as const,
+      };
+    }
+
+    return {
+      data: {
+        booking_reference: bookingReference,
+        driver_job_payload: {
+          assigned_driver_contact: driverContact,
+          assigned_driver_name: driverName,
+          assigned_driver_plate: driverPlate,
+          assigned_driver_vehicle_model: vehicleModel || "Vehicle",
+          booking_type: clean(booking.bookingType),
+          dropoff_location: dropoffLocation,
+          flight_no: clean(booking.flight),
+          passenger_name: passengerName,
+          pickup_date: clean(booking.date),
+          pickup_datetime: pickupDateTime,
+          pickup_location: pickupLocation,
+          pickup_time: clean(booking.time),
+          route: route,
+          status: clean(dispatchReleaseAppliedStatus) || "assigned",
+          waypoints: isDspItinerary
+            ? itineraryDisplayStops.map((stop) => clean(stop.location)).filter(Boolean)
+            : [],
+        },
+        ttl_hours: 48,
+      },
+      ok: true as const,
+    };
+  }
+
+  async function createDriverJobLink() {
+    const payloadResult = buildAdminDriverJobLinkCreatePayload();
+
+    if (!payloadResult.ok) {
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text: payloadResult.error,
+        },
+      }));
+      return;
+    }
+
+    setDriverJobLinkCopyMessage(null);
+    setAdminDriverJobLinkState((current) => ({
+      ...current,
+      action: "create",
+      message: {
+        tone: "info",
+        text: `Creating driver job link for ${payloadResult.data.booking_reference}...`,
+      },
+      oneTimeUrl: "",
+    }));
+
+    try {
+      const response = await fetch(adminDriverJobLinksApiPath, {
+        body: JSON.stringify(payloadResult.data),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Driver job link create failed.");
+      }
+
+      const link = result.link as AdminDriverJobLinkRecord;
+      const driverJobUrl = clean(result.driver_job_url);
+
+      if (!link || !driverJobUrl) {
+        throw new Error("Driver job link response was missing the one-time URL.");
+      }
+
+      setAdminDriverJobLinkState({
+        action: null,
+        link,
+        loadedReference: link.booking_reference,
+        message: {
+          tone: "success",
+          text: "Driver job link created. Copy the one-time link now; it will not be listed again.",
+        },
+        oneTimeUrl: driverJobUrl,
+      });
+    } catch (error) {
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        action: null,
+        message: {
+          tone: "error",
+          text: adminDriverJobLinkFailureMessage(error),
+        },
+        oneTimeUrl: "",
+      }));
+    }
+  }
+
   async function copyDriverJobLink() {
+    if (!clean(adminDriverJobLinkState.oneTimeUrl)) {
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "Create a fresh driver job link before copying. Existing saved links cannot reveal the token again.",
+        },
+      }));
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(driverJobLinkMessage);
       setDriverJobLinkCopyMessage({ tone: "success", text: "Driver job link copied." });
@@ -11449,6 +11697,69 @@ export default function Home() {
         tone: "error",
         text: "Copy failed. Select the driver job link text manually.",
       });
+    }
+  }
+
+  async function revokeDriverJobLink() {
+    const driverJobLinkId = clean(activeAdminDriverJobLink?.id);
+
+    if (!driverJobLinkId) {
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        message: {
+          tone: "info",
+          text: "No active driver job link is loaded to revoke.",
+        },
+      }));
+      return;
+    }
+
+    setDriverJobLinkCopyMessage(null);
+    setAdminDriverJobLinkState((current) => ({
+      ...current,
+      action: "revoke",
+      message: {
+        tone: "info",
+        text: "Revoking driver job link...",
+      },
+    }));
+
+    try {
+      const response = await fetch(adminDriverJobLinksApiPath, {
+        body: JSON.stringify({
+          driver_job_link_id: driverJobLinkId,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Driver job link revoke failed.");
+      }
+
+      setAdminDriverJobLinkState((current) => ({
+        action: null,
+        link: (result.link as AdminDriverJobLinkRecord) || current.link,
+        loadedReference: current.loadedReference,
+        message: {
+          tone: "success",
+          text: "Driver job link revoked.",
+        },
+        oneTimeUrl: "",
+      }));
+    } catch (error) {
+      setAdminDriverJobLinkState((current) => ({
+        ...current,
+        action: null,
+        message: {
+          tone: "error",
+          text: adminDriverJobLinkFailureMessage(error),
+        },
+      }));
     }
   }
 
@@ -12955,7 +13266,7 @@ export default function Home() {
     dispatchReleaseTripComplete &&
     dispatchReleaseDriverReady &&
     showDriverJobLinkCopy &&
-    Boolean(clean(driverJobLinkUrl));
+    Boolean(activeAdminDriverJobLink);
   const dispatchReleaseChecklist: DispatchReleaseChecklistItem[] = [
     {
       detail: dispatchReleaseTripComplete
@@ -26994,17 +27305,46 @@ export default function Home() {
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Driver Job Link</h2>
-                    <p className="text-xs text-slate-500">Status update link.</p>
+                    <p className="text-xs text-slate-500">Guarded driver status link.</p>
                   </div>
                   <div className="flex flex-col items-start gap-2 sm:items-end">
-                    <button
-                      className="min-h-9 rounded-md border border-indigo-300 px-2.5 py-1.5 text-xs font-semibold text-indigo-900 transition hover:bg-indigo-50"
-                      data-copy-driver-job-link-button="true"
-                      onClick={copyDriverJobLink}
-                      type="button"
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="min-h-9 rounded-md bg-indigo-950 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-900 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        data-create-driver-job-link-button="true"
+                        disabled={adminDriverJobLinkState.action !== null}
+                        onClick={createDriverJobLink}
+                        type="button"
+                      >
+                        {adminDriverJobLinkState.action === "create" ? "Creating..." : "Create Link"}
+                      </button>
+                      <button
+                        className="min-h-9 rounded-md border border-indigo-300 px-2.5 py-1.5 text-xs font-semibold text-indigo-900 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        data-copy-driver-job-link-button="true"
+                        disabled={!clean(adminDriverJobLinkState.oneTimeUrl)}
+                        onClick={copyDriverJobLink}
+                        type="button"
+                      >
+                        Copy Link
+                      </button>
+                      <button
+                        className="min-h-9 rounded-md border border-rose-300 px-2.5 py-1.5 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        data-revoke-driver-job-link-button="true"
+                        disabled={!activeAdminDriverJobLink || adminDriverJobLinkState.action !== null}
+                        onClick={revokeDriverJobLink}
+                        type="button"
+                      >
+                        {adminDriverJobLinkState.action === "revoke" ? "Revoking..." : "Revoke"}
+                      </button>
+                    </div>
+                    <div
+                      className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-950"
+                      data-driver-job-link-status="true"
                     >
-                      Copy Driver Job Link
-                    </button>
+                      {activeAdminDriverJobLink
+                        ? `Active saved link for ${activeAdminDriverJobLink.booking_reference}`
+                        : "No active saved link loaded"}
+                    </div>
                     {driverJobLinkCopyMessage ? (
                       <div
                         className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
@@ -27013,6 +27353,16 @@ export default function Home() {
                         data-copy-feedback="driver-job-link"
                       >
                         {driverJobLinkCopyMessage.text}
+                      </div>
+                    ) : null}
+                    {adminDriverJobLinkState.message ? (
+                      <div
+                        className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(
+                          adminDriverJobLinkState.message.tone,
+                        )}`}
+                        data-driver-job-link-api-feedback="true"
+                      >
+                        {adminDriverJobLinkState.message.text}
                       </div>
                     ) : null}
                   </div>

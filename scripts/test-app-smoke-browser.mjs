@@ -34031,9 +34031,9 @@ async function runChromeTest() {
       assert.equal(clicked, true, `Expected customer portal detail button for ${bookingId} to be clickable`);
     };
 
-    const clickCustomerPortalRequestAmendment = async (bookingId) => {
+    const clickCustomerPortalRequestEdit = async (bookingId) => {
       const clicked = await evaluate(`(() => {
-        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-request-amendment="${bookingId}"]`)});
+        const button = document.querySelector(${JSON.stringify(`[data-customer-portal-request-edit="${bookingId}"]`)});
 
         if (!button) {
           return false;
@@ -34042,7 +34042,7 @@ async function runChromeTest() {
         button.click();
         return true;
       })()`);
-      assert.equal(clicked, true, `Expected customer portal amendment button for ${bookingId} to be clickable`);
+      assert.equal(clicked, true, `Expected customer portal edit button for ${bookingId} to be clickable`);
     };
 
     const clickCustomerPortalRequestCancel = async (bookingId) => {
@@ -34316,9 +34316,9 @@ async function runChromeTest() {
         );
       }
       assert.equal(
-        initialState.rows.every((row) => row.actions.map((action) => action.text).join("|") === "PDF|Amendment|Cancel"),
+        initialState.rows.every((row) => row.actions.map((action) => action.text).join("|") === "PDF|Edit|Cancel"),
         true,
-        "Expected every visible booking row to expose PDF, Amendment, and Cancel actions",
+        "Expected every visible booking row to expose PDF, Edit, and Cancel actions",
       );
       assert.equal(
         initialState.rows.every((row) => row.actions.find((action) => action.action === "pdf")?.disabled === true),
@@ -34328,11 +34328,11 @@ async function runChromeTest() {
       assert.equal(
         initialState.rows.every(
           (row) =>
-            row.actions.find((action) => action.action === "amendment")?.disabled === false &&
+            row.actions.find((action) => action.action === "edit")?.disabled === false &&
             row.actions.find((action) => action.action === "cancel")?.disabled === false,
         ),
         true,
-        "Expected upcoming rows to allow local Amendment and Cancel review actions",
+        "Expected upcoming rows to allow local Edit and Cancel review actions",
       );
       assert.equal(initialState.searchBeforeRows, true, "Expected /my-bookings search to appear before rows");
       assert.equal(initialState.activeFilter, "Upcoming", "Expected /my-bookings to default to Upcoming");
@@ -34372,32 +34372,32 @@ async function runChromeTest() {
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
       await checkTelegramBoundary("/my-bookings desktop");
 
-      await clickCustomerPortalRequestAmendment("booking-001");
-      const amendmentState = await waitForCondition(
+      await clickCustomerPortalRequestEdit("booking-001");
+      const editState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.feedbackText.includes("Amendment request noted for review") ? candidateState : false;
+          return candidateState.feedbackText.includes("Edit request noted for review") ? candidateState : false;
         },
         10000,
-        "customer portal amendment feedback",
+        "customer portal edit feedback",
       );
       assert.equal(
-        amendmentState.feedbackText,
-        "Amendment request noted for review. Prestige Limo staff will confirm before anything changes.",
-        "Expected customer portal Amendment action to stay staff-reviewed",
+        editState.feedbackText,
+        "Edit request noted for review. Prestige Limo staff will confirm before anything changes.",
+        "Expected customer portal Edit action to stay staff-reviewed",
       );
-      assert.equal(amendmentState.feedbackRowId, "booking-001", "Expected Amendment feedback near the clicked row");
+      assert.equal(editState.feedbackRowId, "booking-001", "Expected Edit feedback near the clicked row");
       assert.deepEqual(
-        amendmentState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
+        editState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
-        "Expected Amendment action not to call Supabase, payment, bank, notification, or calendar APIs",
+        "Expected Edit action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
-      assertNoCustomerFacingPriceVisibilityLeaks(amendmentState.text, "/my-bookings amendment action");
-      assertNoAdminBookingPersistenceLeaks(amendmentState.text, "/my-bookings amendment action");
+      assertNoCustomerFacingPriceVisibilityLeaks(editState.text, "/my-bookings edit action");
+      assertNoAdminBookingPersistenceLeaks(editState.text, "/my-bookings edit action");
       assertNoPublicRouteRuntimeCalls(
-        amendmentState.integrationCalls,
-        amendmentState.resourceCalls,
-        "/my-bookings amendment action",
+        editState.integrationCalls,
+        editState.resourceCalls,
+        "/my-bookings edit action",
       );
 
       await clickCustomerPortalRequestCancel("booking-004");
@@ -34448,7 +34448,7 @@ async function runChromeTest() {
         completedForActionsState.rows.every(
           (row) =>
             row.actions.find((action) => action.action === "pdf")?.disabled === true &&
-            row.actions.find((action) => action.action === "amendment")?.disabled === true &&
+            row.actions.find((action) => action.action === "edit")?.disabled === true &&
             row.actions.find((action) => action.action === "cancel")?.disabled === true,
         ),
         true,
@@ -34728,37 +34728,37 @@ async function runChromeTest() {
         assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
       }
 
-      await clickCustomerPortalRequestAmendment("booking-001");
+      await clickCustomerPortalRequestEdit("booking-001");
       const changeState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.feedbackText.includes("Amendment request noted for review") ? candidateState : false;
+          return candidateState.feedbackText.includes("Edit request noted for review") ? candidateState : false;
         },
         10000,
-        "customer portal amendment feedback",
+        "customer portal edit feedback",
       );
       assert.equal(
         changeState.feedbackText,
-        "Amendment request noted for review. Prestige Limo staff will confirm before anything changes.",
-        "Expected customer portal Amendment action to stay staff-reviewed",
+        "Edit request noted for review. Prestige Limo staff will confirm before anything changes.",
+        "Expected customer portal Edit action to stay staff-reviewed",
       );
-      assert.equal(changeState.feedbackRowId, "booking-001", "Expected Amendment feedback near the clicked row");
+      assert.equal(changeState.feedbackRowId, "booking-001", "Expected Edit feedback near the clicked row");
       assert.equal(
         changeState.rows.find((row) => row.id === "booking-001")?.text.includes("Alicia Tan"),
         true,
-        "Expected Amendment action not to change row data",
+        "Expected Edit action not to change row data",
       );
       assert.deepEqual(
         changeState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
-        "Expected Amendment action not to call Supabase, payment, bank, notification, or calendar APIs",
+        "Expected Edit action not to call Supabase, payment, bank, notification, or calendar APIs",
       );
-      assertNoCustomerFacingPriceVisibilityLeaks(changeState.text, "/my-bookings amendment action");
-      assertNoAdminBookingPersistenceLeaks(changeState.text, "/my-bookings amendment action");
+      assertNoCustomerFacingPriceVisibilityLeaks(changeState.text, "/my-bookings edit action");
+      assertNoAdminBookingPersistenceLeaks(changeState.text, "/my-bookings edit action");
       assertNoPublicRouteRuntimeCalls(
         changeState.integrationCalls,
         changeState.resourceCalls,
-        "/my-bookings amendment action",
+        "/my-bookings edit action",
       );
 
       await setCustomerPortalSearch("Sentosa");
@@ -34801,7 +34801,7 @@ async function runChromeTest() {
       assert.equal(
         completedState.rows.every(
           (row) =>
-            row.actions.find((action) => action.action === "amendment")?.disabled === true &&
+            row.actions.find((action) => action.action === "edit")?.disabled === true &&
             row.actions.find((action) => action.action === "cancel")?.disabled === true,
         ),
         true,
@@ -34994,7 +34994,7 @@ async function runChromeTest() {
       assert.equal(
         cancelledState.rows.every(
           (row) =>
-            row.actions.find((action) => action.action === "amendment")?.disabled === true &&
+            row.actions.find((action) => action.action === "edit")?.disabled === true &&
             row.actions.find((action) => action.action === "cancel")?.disabled === true,
         ),
         true,
@@ -35174,9 +35174,9 @@ async function runChromeTest() {
       );
       assert.equal(mobileState.compactHelp.visible, true, "Expected /my-bookings mobile compact help disclosure");
       assert.equal(
-        mobileState.rows.every((row) => row.actions.map((action) => action.text).join("|") === "PDF|Amendment|Cancel"),
+        mobileState.rows.every((row) => row.actions.map((action) => action.text).join("|") === "PDF|Edit|Cancel"),
         true,
-        "Expected /my-bookings mobile rows to expose PDF, Amendment, and Cancel actions",
+        "Expected /my-bookings mobile rows to expose PDF, Edit, and Cancel actions",
       );
       assert.equal(
         mobileState.rows.every((row) => row.actions.find((action) => action.action === "pdf")?.disabled === true),

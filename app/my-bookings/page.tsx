@@ -636,11 +636,11 @@ export default function CustomerPortalPage() {
     setChangeFeedback({});
   }
 
-  function handleAmendmentRequest(booking: CustomerPortalBooking) {
+  function handleEditRequest(booking: CustomerPortalBooking) {
     setExpandedBookingId(booking.id);
     setChangeFeedback({
       [booking.id]: canRequestBookingReview(booking)
-        ? "Amendment request noted for review. Prestige Limo staff will confirm before anything changes."
+        ? "Edit request noted for review. Prestige Limo staff will confirm before anything changes."
         : "Completed or cancelled bookings are read-only here. Please contact our team if you need help.",
     });
   }
@@ -1227,13 +1227,13 @@ export default function CustomerPortalPage() {
                             </button>
                             <button
                               className="min-h-9 rounded-md border border-sky-700 bg-sky-700 px-2.5 py-1.5 text-sm font-semibold text-white transition enabled:hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
-                              data-customer-portal-request-amendment={booking.id}
-                              data-customer-portal-row-action="amendment"
+                              data-customer-portal-request-edit={booking.id}
+                              data-customer-portal-row-action="edit"
                               disabled={!canRequestReview}
-                              onClick={() => handleAmendmentRequest(booking)}
+                              onClick={() => handleEditRequest(booking)}
                               type="button"
                             >
-                              Amendment
+                              Edit
                             </button>
                             <button
                               className="min-h-9 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 transition enabled:hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"

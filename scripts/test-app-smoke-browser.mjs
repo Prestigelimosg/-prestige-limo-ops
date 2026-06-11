@@ -390,6 +390,7 @@ const adminBookingPersistenceSupabaseSavePattern = /\bsupabase\s+save\b/gi;
 const publicRouteRuntimeResourcePattern =
   /\/api\/(?:admin-bookings?|bookings\/admin|persistence|save-booking|load-booking)(?:[/?#]|$)|supabase|\/rest\/v1\/|\/storage\/v1\/|\/api\/|storage\.google|storage\.googleapis|sendBeacon|websocket|stripe|hitpay|paypal|twilio|sendgrid|mailgun|postmark|api\.telegram\.org|telegram\.org/i;
 const customerBookingRequestApiPattern = /\/api\/customer-booking-requests(?:[/?#]|$)/i;
+const customerBookingMemoryApiPattern = /\/api\/customer-booking-memory(?:[/?#]|$)/i;
 const customerPortalSavedBookingsApiPattern = /\/api\/customer-saved-bookings(?:[/?#]|$)/i;
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
@@ -31772,6 +31773,34 @@ async function runChromeTest() {
             );
           }
 
+          if (url.includes("/api/customer-booking-memory")) {
+            return new Response(
+              JSON.stringify({
+                memories: [
+                  {
+                    dropoff_location: "Changi Airport Terminal 3",
+                    last_used_at: "2026-06-09T03:00:00.000Z",
+                    passenger_name: "Boss A",
+                    pickup_location: "West Coast Residence",
+                    service_type: "Airport Departure",
+                    vehicle_type: "Mercedes S-Class",
+                  },
+                  {
+                    dropoff_location: "Raffles Singapore",
+                    last_used_at: "2026-06-09T02:00:00.000Z",
+                    passenger_name: "Boss B",
+                    pickup_location: "Orchard Office",
+                    service_type: "Point-to-Point Transfer",
+                    vehicle_type: "Alphard / Vellfire",
+                  },
+                ],
+                ok: true,
+                version: "customer-booking-memory-read-v1",
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
+          }
+
           return originalFetch(...args);
         };
 
@@ -31844,6 +31873,28 @@ async function runChromeTest() {
         return input.value;
       })()`);
       assert.equal(actualValue, value, `Expected customer booking field ${field} to accept test value`);
+    };
+
+    const selectCustomerBookingMemoryPassenger = async (value) => {
+      const selected = await evaluate(`(async () => {
+        const input = document.querySelector("[data-customer-booking-memory-passenger-input]");
+
+        if (!input) {
+          return false;
+        }
+
+        input.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        input.focus();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
+        descriptor?.set?.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return input.value === ${JSON.stringify(value)};
+      })()`);
+      assert.equal(selected, true, `Expected customer booking memory passenger ${value} to be selectable`);
     };
 
     const clickCustomerBookingSubmit = async (description) => {
@@ -32255,6 +32306,14 @@ async function runChromeTest() {
           pickupMinuteOptions: [
             ...document.querySelectorAll("[data-customer-booking-time-part='minute'] option"),
           ].map((option) => option.value),
+          bookingMemory: {
+            calls: (window.__customerBookingIntegrationCalls || []).filter((call) =>
+              call.includes("/api/customer-booking-memory"),
+            ),
+            options: [
+              ...document.querySelectorAll("[data-customer-booking-memory-passenger-option]"),
+            ].map((option) => option.value),
+          },
           missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
             field.textContent.trim(),
           ),
@@ -32735,6 +32794,55 @@ async function runChromeTest() {
         false,
         "Expected invalid /book submit not to create an invoice-style number",
       );
+
+      await setCustomerBookingField("pickupDate", "2026-06-05");
+      await setCustomerBookingField("pickupTime", "09:30");
+      await setCustomerBookingField("flightNumber", "SQ888");
+      await selectCustomerBookingMemoryPassenger("Boss A");
+      const memoryState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.fieldState.pickupLocation.value === "West Coast Residence"
+            ? candidateState
+            : false;
+        },
+        10000,
+        "customer booking memory autofill",
+      );
+      assert.deepEqual(memoryState.bookingMemory.options, ["Boss A", "Boss B"]);
+      assert.equal(memoryState.bookingMemory.calls.length, 1);
+      assert.deepEqual(
+        {
+          dropoffLocation: memoryState.fieldState.dropoffLocation.value,
+          flightNumber: memoryState.fieldState.flightNumber.value,
+          passengerName: memoryState.fieldState.passengerName.value,
+          pickupDate: memoryState.fieldState.pickupDate.value,
+          pickupLocation: memoryState.fieldState.pickupLocation.value,
+          pickupTime: memoryState.fieldState.pickupTime.value,
+          serviceType: memoryState.fieldState.serviceType.value,
+          vehicleType: memoryState.fieldState.vehicleType.value,
+        },
+        {
+          dropoffLocation: "Changi Airport Terminal 3",
+          flightNumber: "SQ888",
+          passengerName: "Boss A",
+          pickupDate: "2026-06-05",
+          pickupLocation: "West Coast Residence",
+          pickupTime: "09:30",
+          serviceType: "Airport Departure",
+          vehicleType: "Mercedes S-Class",
+        },
+        "Expected /book memory selection to fill saved passenger trip fields without changing date, time, or flight.",
+      );
+      assertNoPublicRouteRuntimeCalls(
+        memoryState.integrationCalls,
+        memoryState.resourceCalls,
+        "/book memory autofill",
+        customerBookingMemoryApiPattern,
+      );
+      await evaluate(`(() => {
+        window.__customerBookingIntegrationCalls = [];
+      })()`);
 
       await setCustomerBookingField("contactNo", "+65 9000 1111");
       await setCustomerBookingField("emailAddress", "customer-test@example.com");

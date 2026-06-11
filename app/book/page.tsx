@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   loadCustomerBookingMemorySuggestions,
   type CustomerBookingMemorySuggestion,
@@ -165,9 +165,9 @@ function applyBookingMemoryToForm(
 export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
-  const [bookingMemoryLoaded, setBookingMemoryLoaded] = useState(false);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const bookingMemoryLoadStarted = useRef(false);
   const [confirmationStatus, setConfirmationStatus] = useState<CustomerBookingConfirmationStatus | null>(null);
   const [feedback, setFeedback] = useState<Feedback>({
     tone: "info",
@@ -181,11 +181,11 @@ export default function CustomerBookingPage() {
   }
 
   async function ensureBookingMemorySuggestions() {
-    if (bookingMemoryLoaded) {
+    if (bookingMemoryLoadStarted.current) {
       return;
     }
 
-    setBookingMemoryLoaded(true);
+    bookingMemoryLoadStarted.current = true;
 
     const suggestions = await loadCustomerBookingMemorySuggestions();
 

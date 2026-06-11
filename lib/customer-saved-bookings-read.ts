@@ -12,7 +12,7 @@ export const customerSavedBookingsReadVersion =
 
 export type CustomerSavedBookingsBoundaryContext = {
   auth_user_id: string;
-  mode: "server-session-token";
+  mode: "server-session-cookie" | "server-session-token";
   source_surface: "customer_api";
 };
 
@@ -48,6 +48,11 @@ export type CustomerSavedBookingsReadResult = {
 
 type UnknownRecord = Record<string, unknown>;
 type CustomerSavedBookingsClient = Pick<SupabaseClient, "from">;
+type CustomerSavedBookingsSessionTokenSource =
+  | "ambiguous-cookie"
+  | "missing"
+  | "request-cookie"
+  | "request-header";
 
 const defaultSavedBookingsLimit = 10;
 const maxSavedBookingsLimit = 25;
@@ -66,6 +71,10 @@ const customerSavedBookingsConfigError =
   "Customer saved bookings read configuration is not ready.";
 const customerSavedBookingsReadError =
   "Customer saved bookings read failed safely.";
+const customerSavedBookingsSessionCookieName =
+  "prestige_customer_saved_bookings_session";
+const customerSavedBookingsFallbackSessionCookieName =
+  "prestige_customer_session";
 const allowedQueryParams = new Set(["booking_reference", "limit", "page"]);
 const allowedCustomerStatuses = new Set([
   "cancelled",
@@ -129,6 +138,7 @@ const forbiddenCustomerSavedBookingsFragments = [
 ];
 const placeholderConfigPattern =
   /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
+const safeCookieNamePattern = /^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,79}$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -306,6 +316,118 @@ function configValueOrNull(value: string | undefined) {
   const trimmed = value?.trim();
 
   return trimmed ? trimmed : null;
+}
+
+function safeCookieName(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  return cleaned &&
+    safeCookieNamePattern.test(cleaned) &&
+    !includesForbiddenFragment(cleaned)
+    ? cleaned
+    : null;
+}
+
+function decodeCookieValue(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseCookieHeader(value: string | null) {
+  const cookies = new Map<string, string[]>();
+
+  if (!value) {
+    return cookies;
+  }
+
+  for (const cookie of value.split(";")) {
+    const trimmed = cookie.trim();
+
+    if (!trimmed) {
+      continue;
+    }
+
+    const equalsIndex = trimmed.indexOf("=");
+    const rawName = equalsIndex >= 0 ? trimmed.slice(0, equalsIndex).trim() : trimmed;
+    const name = safeCookieName(rawName);
+
+    if (!name) {
+      continue;
+    }
+
+    const rawValue = equalsIndex >= 0 ? trimmed.slice(equalsIndex + 1) : "";
+    const decodedValue = decodeCookieValue(rawValue).trim();
+
+    if (!decodedValue) {
+      continue;
+    }
+
+    cookies.set(name, [...(cookies.get(name) || []), decodedValue]);
+  }
+
+  return cookies;
+}
+
+function customerSavedBookingsSessionCookieNames() {
+  const configuredValue = configValueOrNull(
+    process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME,
+  );
+  const configuredName = safeCookieName(configuredValue);
+
+  if (configuredValue && !configuredName) {
+    return [];
+  }
+
+  if (configuredName) {
+    return [configuredName];
+  }
+
+  return [
+    customerSavedBookingsSessionCookieName,
+    customerSavedBookingsFallbackSessionCookieName,
+  ];
+}
+
+function readCustomerSavedBookingsSessionToken(request: Request): {
+  source: CustomerSavedBookingsSessionTokenSource;
+  token: string;
+} {
+  const headerToken = request.headers.get("x-prestige-customer-session-token")?.trim();
+
+  if (headerToken) {
+    return {
+      source: "request-header",
+      token: headerToken,
+    };
+  }
+
+  const cookies = parseCookieHeader(request.headers.get("cookie"));
+
+  const cookieValues = customerSavedBookingsSessionCookieNames().flatMap(
+    (cookieName) => cookies.get(cookieName) || [],
+  );
+
+  if (cookieValues.length === 1) {
+    return {
+      source: "request-cookie",
+      token: cookieValues[0],
+    };
+  }
+
+  if (cookieValues.length > 1) {
+    return {
+      source: "ambiguous-cookie",
+      token: "",
+    };
+  }
+
+  return {
+    source: "missing",
+    token: "",
+  };
 }
 
 function classifyAdapterDatabaseFailure(
@@ -550,14 +672,14 @@ export function resolveCustomerSavedBookingsBoundary(
   }
 
   const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
-  const providedToken = request.headers.get("x-prestige-customer-session-token")?.trim() || "";
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
   const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
   const authUserId = safeUuid(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
 
   if (
     mode !== "server-session-token" ||
     !validServerCredential(expectedToken) ||
-    providedToken !== expectedToken ||
+    providedToken.token !== expectedToken ||
     !authUserId
   ) {
     return customerSavedBookingsAuthRequiredResult();
@@ -566,7 +688,7 @@ export function resolveCustomerSavedBookingsBoundary(
   return {
     data: {
       auth_user_id: authUserId,
-      mode: "server-session-token",
+      mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
       source_surface: "customer_api",
     },
     ok: true,

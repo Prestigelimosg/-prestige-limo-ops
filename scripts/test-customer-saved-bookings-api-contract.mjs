@@ -8,6 +8,8 @@ import ts from "typescript";
 const customerAuthRequiredMessage =
   "Customer saved bookings read requires secure customer account access before saved bookings can be read.";
 const sessionToken = "mock-customer-saved-bookings-session-token";
+const sessionCookieName = "prestige_customer_saved_bookings_session";
+const customSessionCookieName = "prestige_customer_portal_session";
 const authUserId = "33333333-3333-4333-8333-333333333333";
 const customerAccountReference = "44444444-4444-4444-8444-444444444444";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_SAVED_BOOKINGS_SENTINEL";
@@ -40,6 +42,8 @@ const originalEnv = {
     process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE,
   PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID:
     process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID,
+  PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME:
+    process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME,
   PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN:
     process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -89,6 +93,19 @@ function validHeaders(extra = {}) {
     referer: "http://localhost/my-bookings",
     "x-prestige-customer-purpose": "customer-saved-bookings-read",
     "x-prestige-customer-session-token": sessionToken,
+    ...extra,
+  };
+}
+
+function sessionCookie(token = sessionToken, name = sessionCookieName) {
+  return `${name}=${encodeURIComponent(token)}`;
+}
+
+function validCookieHeaders(extra = {}) {
+  return {
+    referer: "http://localhost/my-bookings",
+    "x-prestige-customer-purpose": "customer-saved-bookings-read",
+    cookie: sessionCookie(),
     ...extra,
   };
 }
@@ -516,6 +533,36 @@ try {
         headers: validHeaders({ "x-prestige-customer-session-token": "wrong-token" }),
       }),
     ],
+    [
+      "wrong cookie token",
+      new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+        headers: validCookieHeaders({ cookie: sessionCookie("wrong-token") }),
+      }),
+    ],
+    [
+      "ambiguous cookie token",
+      new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+        headers: validCookieHeaders({
+          cookie: `${sessionCookie("wrong-token")}; ${sessionCookie()}`,
+        }),
+      }),
+    ],
+    [
+      "ambiguous trusted cookie names",
+      new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+        headers: validCookieHeaders({
+          cookie: `${sessionCookie()}; ${sessionCookie("wrong-token", "prestige_customer_session")}`,
+        }),
+      }),
+    ],
+    [
+      "unsafe cookie name",
+      new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+        headers: validCookieHeaders({
+          cookie: sessionCookie(sessionToken, "prestige_customer_session_token"),
+        }),
+      }),
+    ],
   ]) {
     const blockedResponse = await harness.route.GET(request);
     const blockedBody = await json(blockedResponse);
@@ -524,6 +571,69 @@ try {
     assert.equal(blockedBody.error, customerAuthRequiredMessage, `${label} should use auth-required message.`);
     assertSafeApiBody(blockedBody, `${label} blocked body`);
   }
+
+  validEnv();
+  const tokenBoundary = harness.read.resolveCustomerSavedBookingsBoundary(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validHeaders(),
+    }),
+  );
+  assert.equal(tokenBoundary.ok, true, "Expected existing server-session-token boundary to keep passing.");
+  assert.equal(tokenBoundary.data.mode, "server-session-token");
+  assert.equal(tokenBoundary.data.auth_user_id, authUserId);
+
+  validEnv();
+  const cookieBoundary = harness.read.resolveCustomerSavedBookingsBoundary(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validCookieHeaders(),
+    }),
+  );
+  assert.equal(cookieBoundary.ok, true, "Expected cookie-backed customer boundary to pass.");
+  assert.equal(cookieBoundary.data.mode, "server-session-cookie");
+  assert.equal(cookieBoundary.data.auth_user_id, authUserId);
+
+  validEnv({
+    PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME: customSessionCookieName,
+  });
+  const configuredCookieBoundary = harness.read.resolveCustomerSavedBookingsBoundary(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validCookieHeaders({
+        cookie: sessionCookie(sessionToken, customSessionCookieName),
+      }),
+    }),
+  );
+  assert.equal(configuredCookieBoundary.ok, true, "Expected configured safe cookie name to pass.");
+  assert.equal(configuredCookieBoundary.data.mode, "server-session-cookie");
+
+  validEnv({
+    PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME: customSessionCookieName,
+  });
+  const configuredDefaultCookieBoundary = harness.read.resolveCustomerSavedBookingsBoundary(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validCookieHeaders(),
+    }),
+  );
+  assert.equal(
+    configuredDefaultCookieBoundary.ok,
+    false,
+    "Configured cookie names should not also accept the default session cookie.",
+  );
+  assert.equal(configuredDefaultCookieBoundary.status, 403);
+
+  validEnv({
+    PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME: "prestige_customer_session_token",
+  });
+  const unsafeConfiguredCookieBoundary = harness.read.resolveCustomerSavedBookingsBoundary(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validCookieHeaders(),
+    }),
+  );
+  assert.equal(
+    unsafeConfiguredCookieBoundary.ok,
+    false,
+    "Unsafe configured cookie names should fail closed instead of falling back to defaults.",
+  );
+  assert.equal(unsafeConfiguredCookieBoundary.status, 403);
 
   validEnv();
   const routeMock = installMockClient(seedSavedBookingRows());
@@ -583,6 +693,28 @@ try {
     ),
     false,
     "Select columns should avoid private customer/admin/finance/payout/parser fields.",
+  );
+
+  validEnv();
+  const cookieRouteMock = installMockClient(seedSavedBookingRows());
+  const cookieResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validCookieHeaders(),
+    }),
+  );
+  const cookieBody = await json(cookieResponse);
+  assert.equal(cookieResponse.status, 200, "Expected route read to pass with same-origin session cookie.");
+  assert.equal(cookieBody.ok, true);
+  assert.equal(cookieBody.saved_bookings.length, 1);
+  assertAllowedSavedBookingShape(cookieBody.saved_bookings[0], "cookie-backed booking response");
+  assertSafeApiBody(cookieBody, "cookie-backed route success body");
+  assert.equal(cookieRouteMock.client.operations.length, 0, "Cookie-backed customer saved bookings read must not write.");
+  assert.equal(
+    /admin_internal_status|contact_phone|contact_email|passenger_phone|customer_price|driver_payout|paynow|invoice|payment|payout|parser_source_reference/.test(
+      cookieRouteMock.client.selectHistory[1].selectedColumns,
+    ),
+    false,
+    "Cookie-backed select columns should avoid private customer/admin/finance/payout/parser fields.",
   );
 
   validEnv();

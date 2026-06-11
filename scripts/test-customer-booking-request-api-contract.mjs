@@ -7,6 +7,7 @@ import ts from "typescript";
 
 const routePath = "app/api/customer-booking-requests/route.ts";
 const pagePath = "app/book/page.tsx";
+const requestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const smokePath = "scripts/test-app-smoke-browser.mjs";
 const unsafeCustomerRequestLeakPattern =
   /admin_internal_status|short_notice_review_status|internal_admin_note|internal_finance_note|driver_payout|paynow|pay_now|invoice|payment|billing|finance|parser_debug|raw_ai|mock_archive|mock_qa|dev_workbench|session_token|service_role|secret|sql|stack/i;
@@ -132,11 +133,13 @@ function assertSafeCustomerBody(value, label) {
   );
 }
 
-const [routeSource, pageSource, smokeSource] = await Promise.all(
-  [routePath, pagePath, smokePath].map((relativePath) =>
+const [routeSource, pageSource, requestAdapterSource, smokeSource] = await Promise.all(
+  [routePath, pagePath, requestAdapterPath, smokePath].map((relativePath) =>
     readFile(path.join(process.cwd(), relativePath), "utf8"),
   ),
 );
+const requestAdapterAllowedResponseFields =
+  requestAdapterSource.match(/const allowedApiRequestFields = new Set\(\[[\s\S]+?\]\);/)?.[0] || "";
 
 assert.equal(
   /admin_internal_status\s*:|short_notice_review_status\s*:/.test(routeSource.match(/return Response\.json\(\{[\s\S]+?\n    \}\);/)?.[0] || ""),
@@ -144,9 +147,12 @@ assert.equal(
   "Customer booking request API response must not include internal admin status fields.",
 );
 assert.equal(
-  pageSource.includes("short_notice_review_required") &&
+  pageSource.includes("submitCustomerBookingRequest") &&
+    requestAdapterAllowedResponseFields.includes("short_notice_review_required") &&
     !pageSource.includes("short_notice_review_status") &&
-    !pageSource.includes("admin_internal_status"),
+    !pageSource.includes("admin_internal_status") &&
+    !requestAdapterAllowedResponseFields.includes("short_notice_review_status") &&
+    !requestAdapterAllowedResponseFields.includes("admin_internal_status"),
   true,
   "/book should consume only customer-safe booking request response fields.",
 );

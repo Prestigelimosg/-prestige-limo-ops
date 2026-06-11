@@ -11,6 +11,7 @@ import {
   applyCustomerBookingMemoryToRequestForm,
   findCustomerBookingMemorySuggestion,
 } from "../../lib/customer-booking-memory-form";
+import { submitCustomerBookingRequest } from "../../lib/customer-booking-request-adapter";
 
 const serviceOptions = [
   "Airport Arrival",
@@ -256,36 +257,13 @@ export default function CustomerBookingPage() {
     });
 
     try {
-      const response = await fetch("/api/customer-booking-requests", {
-        body: JSON.stringify({
-          companyName: form.companyName,
-          contactNo: form.contactNo,
-          emailAddress: form.emailAddress,
-          passengerName: form.passengerName,
-          pickupDate: form.pickupDate,
-          pickupTime: form.pickupTime,
-          flightNumber: form.flightNumber,
-          pickupLocation: form.pickupLocation,
-          dropoffLocation: form.dropoffLocation,
-          serviceType: form.serviceType,
-          vehicleType: form.vehicleType,
-          passengerCount: form.passengerCount,
-          luggage: form.luggage,
-          extraStops: form.extraStops,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-customer-purpose": "customer-booking-request",
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
+      const result = await submitCustomerBookingRequest(form);
 
-      if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Booking request could not be submitted.");
+      if (!result.ok) {
+        throw new Error("Booking request could not be submitted.");
       }
 
-      const shortNoticeReviewRequired = result?.request?.short_notice_review_required === true;
+      const shortNoticeReviewRequired = result.shortNoticeReviewRequired;
       setFeedback({
         tone: "success",
         text:

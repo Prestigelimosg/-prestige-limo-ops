@@ -11,13 +11,18 @@ const requiredFragments = [
   "flight_api_status",
   "provider_lookup_status",
   "live_eta_status",
+  "admin_eta_monitoring_status",
+  "driver_eta_notification_status",
   "driver_eta_acknowledgement_status",
   "customer_update_status",
   "disabled",
-  "allowed_later",
-  "not_required_by_default",
-  "arrival_eta_monitoring",
+  "mng_arrival_allowed_later",
+  "disabled_not_arrival",
+  "mng_arrival_eta_monitoring",
   "manual_review_only",
+  "future_driver_eta_notification_minutes_before_pickup: 60",
+  "admin_and_driver_only",
+  "Flight ETA monitoring is for MNG/Arrival jobs only.",
 ];
 
 for (const fragment of requiredFragments) {

@@ -10246,7 +10246,6 @@ async function runChromeTest() {
         }
 
         if (
-          url.includes("/rest/v1/bookers") ||
           url.includes("/rest/v1/companies") ||
           url.includes("/rest/v1/travelers")
         ) {
@@ -17669,6 +17668,23 @@ async function runChromeTest() {
           return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
+        if (url.includes("/api/admin-bookers")) {
+          if (method === "GET") {
+            return jsonResponse({ booker: null, ok: true, version: "browser-admin-bookers-mock" });
+          }
+
+          if (method === "POST") {
+            return jsonResponse({ booker: bookerRecord, ok: true, version: "browser-admin-bookers-mock" });
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({ booker: bookerRecord, ok: true, version: "browser-admin-bookers-mock" });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled booker mock" }, 500);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -17684,23 +17700,6 @@ async function runChromeTest() {
 
           window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
           return jsonResponse({ message: "Unhandled company mock" }, 500);
-        }
-
-        if (url.includes("/rest/v1/bookers")) {
-          if (method === "GET") {
-            return jsonResponse([]);
-          }
-
-          if (method === "POST") {
-            return jsonResponse(bookerRecord, 201);
-          }
-
-          if (method === "PATCH") {
-            return jsonResponse({});
-          }
-
-          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-          return jsonResponse({ message: "Unhandled booker mock" }, 500);
         }
 
         if (url.includes("/rest/v1/travelers")) {
@@ -18651,12 +18650,17 @@ async function runChromeTest() {
           return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
-        if (!url.includes("/rest/v1/")) {
-          return window.__prestigeOriginalFetch(...args);
+        if (url.includes("/api/admin-bookers")) {
+          if (method === "GET") {
+            return jsonResponse({ booker: null, ok: true, version: "browser-admin-bookers-mock" });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled booker mock" }, 500);
         }
 
-        if (url.includes("/rest/v1/bookers") && method === "GET") {
-          return jsonResponse([]);
+        if (!url.includes("/rest/v1/")) {
+          return window.__prestigeOriginalFetch(...args);
         }
 
         if (url.includes("/rest/v1/travelers") && method === "GET") {
@@ -18763,7 +18767,7 @@ async function runChromeTest() {
     assert.equal(
       mrLeeNoCompanySaveState.fetchCalls.some(
         (call) =>
-          (call.includes("/rest/v1/bookers") || call.includes("/rest/v1/travelers")) &&
+          (call.includes("/api/admin-bookers") || call.includes("/rest/v1/travelers")) &&
           call.startsWith("POST "),
       ),
       false,
@@ -19065,6 +19069,31 @@ async function runChromeTest() {
           return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
+        if (url.includes("/api/admin-bookers")) {
+          if (method === "GET") {
+            return jsonResponse({ booker: null, ok: true, version: "browser-admin-bookers-mock" });
+          }
+
+          if (method === "POST" || method === "PATCH") {
+            const parsedBody = bodyText ? JSON.parse(bodyText) : {};
+
+            return jsonResponse({
+              booker: {
+                id: 923,
+                company_id: parsedBody.company_id || companyRecord.id,
+                booker_name: parsedBody.booker_name || "Existing Company Booker",
+                email: parsedBody.email || null,
+                phone: parsedBody.phone || null,
+              },
+              ok: true,
+              version: "browser-admin-bookers-mock",
+            });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled booker mock" }, 500);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -19294,6 +19323,15 @@ async function runChromeTest() {
           return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
         }
 
+        if (url.includes("/api/admin-bookers")) {
+          if (method === "GET") {
+            return jsonResponse({ booker: null, ok: true, version: "browser-admin-bookers-mock" });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled booker mock" }, 500);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -19306,10 +19344,6 @@ async function runChromeTest() {
           if (method === "POST") {
             return jsonResponse({ message: "CRM service unavailable" }, 500);
           }
-        }
-
-        if (url.includes("/rest/v1/bookers") && method === "GET") {
-          return jsonResponse([]);
         }
 
         if (url.includes("/rest/v1/travelers") && method === "GET") {

@@ -55,6 +55,7 @@ const adminMonthlyInvoiceIssueRecordPdfReadinessApiPath =
 const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
@@ -69,7 +70,6 @@ const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
 const adminLegacyTables = {
-  bookers: "bookers",
   bookings: "bookings",
   companies: "companies",
   drivers: "drivers",
@@ -304,6 +304,71 @@ function createAdminLegacyDataClient() {
 
 const adminLegacyDataClient = createAdminLegacyDataClient();
 
+function adminBookerError(message: string): AdminLegacyDataResult<BookerRecord> {
+  return {
+    data: null,
+    error: {
+      message,
+    },
+  };
+}
+
+async function adminBookerRequest(
+  method: "GET" | "PATCH" | "POST",
+  {
+    body,
+    params,
+  }: {
+    body?: Record<string, unknown>;
+    params?: Record<string, string | number | null | undefined>;
+  },
+): Promise<AdminLegacyDataResult<BookerRecord>> {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== null && value !== undefined && String(value).trim()) {
+      searchParams.set(key, String(value));
+    }
+  }
+
+  const url = `${adminBookersApiPath}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+
+  try {
+    const response = await fetch(url, {
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      headers: {
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method,
+    });
+    const responseBody = (await response.json().catch(() => null)) as AdminBookerApiResponse | null;
+
+    if (!response.ok || responseBody?.ok !== true) {
+      return adminBookerError(responseBody?.error || "Admin booker request failed.");
+    }
+
+    return {
+      data: responseBody.booker || null,
+      error: null,
+    };
+  } catch {
+    return adminBookerError("Admin booker request failed.");
+  }
+}
+
+function findAdminBooker(params: Record<string, string | number | null | undefined>) {
+  return adminBookerRequest("GET", { params });
+}
+
+function createAdminBooker(body: Record<string, unknown>) {
+  return adminBookerRequest("POST", { body });
+}
+
+function updateAdminBooker(body: Record<string, unknown>) {
+  return adminBookerRequest("PATCH", { body });
+}
+
 type BookingForm = {
   company: string;
   bookingType: string;
@@ -376,6 +441,13 @@ type AdminRateSetupReadResponse = {
   ok?: boolean;
   settings?: RateSettingsRecord | null;
   travelers?: TravelerRecord[];
+  version?: string;
+};
+
+type AdminBookerApiResponse = {
+  booker?: BookerRecord | null;
+  error?: string;
+  ok?: boolean;
   version?: string;
 };
 
@@ -10430,12 +10502,7 @@ export default function Home() {
     }
 
     if (bookerContact) {
-      const existingByContact = await client
-        .from(adminLegacyTables.bookers)
-        .select("company_id")
-        .eq("phone", bookerContact)
-        .limit(1)
-        .maybeSingle();
+      const existingByContact = await findAdminBooker({ phone: bookerContact });
 
       if (existingByContact.error) {
         throw new Error(existingByContact.error.message);
@@ -10467,12 +10534,7 @@ export default function Home() {
     }
 
     if (bookerName) {
-      const existingByBooker = await client
-        .from(adminLegacyTables.bookers)
-        .select("company_id")
-        .ilike("booker_name", bookerName)
-        .limit(1)
-        .maybeSingle();
+      const existingByBooker = await findAdminBooker({ booker_name: bookerName });
 
       if (existingByBooker.error) {
         throw new Error(existingByBooker.error.message);
@@ -10545,11 +10607,6 @@ export default function Home() {
   }
 
   async function resolveBooker(companyId: number) {
-    if (!adminLegacyDataClient) {
-      throw new Error("Admin data API is not available.");
-    }
-
-    const client = adminLegacyDataClient;
     const email = normaliseEmail(booking.bookerEmail);
     const phone = normalizePhone(booking.bookerContact);
     const bookerName = clean(booking.booker) || (!clean(booking.company) ? clean(booking.name) : "");
@@ -10565,26 +10622,23 @@ export default function Home() {
         phone: bookerRecord.phone || phone || null,
       };
 
-      const { error } = await client.from(adminLegacyTables.bookers).update(updatePayload).eq("id", bookerRecord.id);
+      const { error, data } = await updateAdminBooker({
+        id: bookerRecord.id,
+        ...updatePayload,
+      });
 
       if (error) {
         throw new Error(error.message);
       }
 
-      return {
+      return data || {
         ...bookerRecord,
         ...updatePayload,
       };
     }
 
     if (phone) {
-      const existingByPhone = await client
-        .from(adminLegacyTables.bookers)
-        .select("id, company_id, booker_name, email, phone")
-        .eq("company_id", companyId)
-        .eq("phone", phone)
-        .limit(1)
-        .maybeSingle();
+      const existingByPhone = await findAdminBooker({ company_id: companyId, phone });
 
       if (existingByPhone.error) {
         throw new Error(existingByPhone.error.message);
@@ -10596,13 +10650,7 @@ export default function Home() {
     }
 
     if (email) {
-      const existingByEmail = await client
-        .from(adminLegacyTables.bookers)
-        .select("id, company_id, booker_name, email, phone")
-        .eq("company_id", companyId)
-        .eq("email", email)
-        .limit(1)
-        .maybeSingle();
+      const existingByEmail = await findAdminBooker({ company_id: companyId, email });
 
       if (existingByEmail.error) {
         throw new Error(existingByEmail.error.message);
@@ -10613,13 +10661,7 @@ export default function Home() {
       }
     }
 
-    const existingByName = await client
-      .from(adminLegacyTables.bookers)
-      .select("id, company_id, booker_name, email, phone")
-      .eq("company_id", companyId)
-      .ilike("booker_name", bookerName)
-      .limit(1)
-      .maybeSingle();
+    const existingByName = await findAdminBooker({ company_id: companyId, booker_name: bookerName });
 
     if (existingByName.error) {
       throw new Error(existingByName.error.message);
@@ -10629,22 +10671,18 @@ export default function Home() {
       return updateBookerIfNeeded(existingByName.data as BookerRecord);
     }
 
-    const createdBooker = await client
-      .from(adminLegacyTables.bookers)
-      .insert({
-        company_id: companyId,
-        booker_name: bookerName,
-        email: email || null,
-        phone: phone || null,
-      })
-      .select("id, company_id, booker_name, email, phone")
-      .single();
+    const createdBooker = await createAdminBooker({
+      booker_name: bookerName,
+      company_id: companyId,
+      email: email || null,
+      phone: phone || null,
+    });
 
     if (createdBooker.error) {
       throw new Error(createdBooker.error.message);
     }
 
-    return createdBooker.data as BookerRecord;
+    return createdBooker.data as BookerRecord | null;
   }
 
   async function resolveName(companyId: number, booker: BookerRecord | null) {

@@ -7,7 +7,6 @@ const appPagePath = path.join(process.cwd(), "app/page.tsx");
 const routePath = path.join(process.cwd(), "app/api/admin-legacy-data/rest/v1/[table]/route.ts");
 
 const legacyTables = [
-  "bookers",
   "companies",
   "drivers",
   "rate_settings",
@@ -16,7 +15,6 @@ const legacyTables = [
 ];
 
 const routeBackedTableReferences = {
-  bookers: "adminLegacyTables.bookers",
   companies: "adminLegacyTables.companies",
   drivers: "adminLegacyTables.drivers",
   rate_settings: "adminLegacyTables.rateSettings",
@@ -56,6 +54,8 @@ assertNotMatches(appPage, /\bSUPABASE_URL\b/, "server Supabase URL env in browse
 assertIncludes(appPage, "/api/admin-legacy-data/rest/v1/", "route-backed admin data endpoint");
 assertIncludes(appPage, "adminLegacyDataClient", "route-backed client adapter");
 assertIncludes(appPage, "x-prestige-admin-purpose", "admin purpose header");
+assertIncludes(appPage, "/api/admin-bookers", "typed admin bookers endpoint");
+assertNotIncludes(appPage, "adminLegacyTables.bookers", "retired legacy bookers table reference");
 
 for (const table of legacyTables) {
   assertNotIncludes(appPage, `.from("${table}")`, `direct double-quoted ${table} browser table access`);

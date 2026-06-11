@@ -28,7 +28,6 @@ type SupabaseRouteQuery = PromiseLike<SupabaseRouteQueryResult> & {
 };
 
 const allowedColumnsByTable: Record<string, Set<string>> = {
-  bookers: new Set(["id", "company_id", "booker_name", "email", "phone", "created_at", "updated_at"]),
   bookings: new Set([
     "id",
     "company_id",

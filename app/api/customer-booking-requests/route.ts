@@ -129,8 +129,8 @@ export async function POST(request: Request) {
       request: {
         booking_reference: result.data.booking_reference,
         customer_facing_status: result.data.customer_facing_status,
-        admin_internal_status: result.data.admin_internal_status,
-        short_notice_review_status: result.data.short_notice_review_status,
+        short_notice_review_required:
+          result.data.short_notice_review_status === "Admin Review Required",
       },
     });
   } catch {

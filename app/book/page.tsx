@@ -285,8 +285,7 @@ export default function CustomerBookingPage() {
         throw new Error(result?.error || "Booking request could not be submitted.");
       }
 
-      const requestStatus = result?.request?.short_notice_review_status;
-      const shortNoticeReviewRequired = requestStatus === "Admin Review Required";
+      const shortNoticeReviewRequired = result?.request?.short_notice_review_required === true;
       setFeedback({
         tone: "success",
         text:

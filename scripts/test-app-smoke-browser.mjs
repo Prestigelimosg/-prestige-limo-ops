@@ -31764,9 +31764,7 @@ async function runChromeTest() {
                 request: {
                   booking_reference: "CUST-REQUEST-001",
                   customer_facing_status: "Request Received",
-                  admin_internal_status: "Admin Review Required",
-                  short_notice_review_status:
-                    body.pickupDate === "2026-06-02" ? "Admin Review Required" : "Not Required",
+                  short_notice_review_required: body.pickupDate === "2026-06-02",
                 },
               }),
               { headers: { "Content-Type": "application/json" }, status: 200 },

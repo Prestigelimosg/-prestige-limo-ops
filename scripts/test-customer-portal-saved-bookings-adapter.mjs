@@ -69,11 +69,23 @@ assert.equal(
 );
 assert.equal(
   pageSource.includes("loadCustomerPortalSavedBookings") &&
-    pageSource.includes("useState<CustomerPortalBooking[]>(bookings)") &&
-    pageSource.includes("if (isCurrent && loadedBookings)") &&
+    pageSource.includes("useState<CustomerPortalBooking[]>([])") &&
+    pageSource.includes("if (isCurrent && loadedBookings !== null)") &&
     pageSource.includes("setPortalBookings(loadedBookings)"),
   true,
-  "/my-bookings should keep sample rows unless the guarded customer saved-bookings read returns usable rows.",
+  "/my-bookings should start empty and use only guarded customer saved-bookings API rows.",
+);
+assert.equal(
+  /const bookings: CustomerPortalBooking\[\]|buildSampleBooking|samplePickupLocations|Alicia Tan|Daniel Lim|Priya Shah|Completed Guest|Cancelled Guest/.test(
+    pageSource,
+  ),
+  false,
+  "/my-bookings must not keep sample booking rows as customer-visible data.",
+);
+assert.equal(
+  pageSource.includes("getCurrentPortalMonthInfo") && !/portalCurrentMonthKey|portalCurrentMonthLabel/.test(pageSource),
+  true,
+  "/my-bookings past-booking filters should not use stale sample-month constants.",
 );
 assert.equal(
   smokeSource.includes("customerPortalSavedBookingsApiPattern"),
@@ -234,7 +246,7 @@ try {
     }),
   });
 
-  assert.equal(blockedLoad, null, "Blocked customer saved-bookings reads should keep sample fallback rows.");
+  assert.equal(blockedLoad, null, "Blocked customer saved-bookings reads should keep the portal empty.");
   assert.equal(blockedJsonWasRead, false, "Blocked responses should not be parsed into customer-visible state.");
 
   const unavailableLoad = await loadCustomerPortalSavedBookings({
@@ -243,7 +255,7 @@ try {
     },
   });
 
-  assert.equal(unavailableLoad, null, "Unavailable customer saved-bookings reads should keep sample fallback rows.");
+  assert.equal(unavailableLoad, null, "Unavailable customer saved-bookings reads should keep the portal empty.");
 
   const unsafeLoad = await loadCustomerPortalSavedBookings({
     fetcher: async () => ({
@@ -256,7 +268,7 @@ try {
     }),
   });
 
-  assert.equal(unsafeLoad, null, "Unsafe customer saved-bookings payloads should keep sample fallback rows.");
+  assert.equal(unsafeLoad, null, "Unsafe customer saved-bookings payloads should keep the portal empty.");
 } finally {
   await harness.cleanup();
 }

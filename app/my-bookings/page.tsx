@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   loadCustomerPortalSavedBookings,
-  type BookingStatus,
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
 
@@ -70,8 +69,6 @@ const pickupMinuteOptions = [
 ];
 
 const visibleBookingLimit = 10;
-const portalCurrentMonthKey = "2026-05";
-const portalCurrentMonthLabel = "May 2026";
 
 const monthNames = [
   "January",
@@ -128,302 +125,6 @@ const requiredBookingRequestFields: Array<keyof BookingRequestForm> = [
   "pickupTime",
 ];
 
-const samplePickupLocations = [
-  "Raffles Singapore",
-  "Marina Bay Sands",
-  "The St. Regis Singapore",
-  "Changi Airport T1",
-  "Four Seasons Hotel Singapore",
-  "Capella Singapore",
-];
-
-const sampleDropoffLocations = [
-  "Changi Airport T3",
-  "Mandarin Oriental Singapore",
-  "Singapore Expo",
-  "Fullerton Hotel",
-  "Gardens by the Bay",
-  "Pan Pacific Singapore",
-];
-
-const sampleServices = [
-  "Airport Arrival",
-  "Airport Departure",
-  "Point-to-Point Transfer",
-  "Hourly / Disposal",
-  "Event / VIP Movement",
-  "Other / To Confirm",
-];
-
-const sampleVehicles = [
-  "Alphard / Vellfire",
-  "Mercedes Viano / V-Class",
-  "Hi-roof Minibus",
-  "Mercedes E-Class",
-  "Mercedes S-Class",
-];
-
-function buildSampleBooking({
-  day,
-  id,
-  month,
-  passengerPrefix,
-  status,
-  year,
-}: {
-  day: number;
-  id: string;
-  month: string;
-  passengerPrefix: string;
-  status: BookingStatus;
-  year: number;
-}): CustomerPortalBooking {
-  const sequence = Number(id.replace(/\D/g, "").slice(-2)) || day;
-  const hour = String(8 + (sequence % 10)).padStart(2, "0");
-  const minute = pickupMinuteOptions[sequence % pickupMinuteOptions.length];
-
-  return {
-    dropoffLocation: sampleDropoffLocations[sequence % sampleDropoffLocations.length],
-    id,
-    passengerName: `${passengerPrefix} ${sequence}`,
-    pickupDateTime: `${day} ${month} ${year}, ${hour}:${minute}`,
-    pickupLocation: samplePickupLocations[sequence % samplePickupLocations.length],
-    serviceType: sampleServices[sequence % sampleServices.length],
-    specialRequest: "No extra request.",
-    status,
-    vehicleType: sampleVehicles[sequence % sampleVehicles.length],
-  };
-}
-
-const additionalCompletedCurrentMonthBookings = Array.from({ length: 11 }, (_, index) =>
-  buildSampleBooking({
-    day: 15 - index,
-    id: `booking-completed-may-${String(index + 1).padStart(2, "0")}`,
-    month: "May",
-    passengerPrefix: "Completed Guest",
-    status: "Completed",
-    year: 2026,
-  }),
-);
-
-const additionalCancelledCurrentMonthBookings = Array.from({ length: 11 }, (_, index) =>
-  buildSampleBooking({
-    day: 19 - index,
-    id: `booking-cancelled-may-${String(index + 1).padStart(2, "0")}`,
-    month: "May",
-    passengerPrefix: "Cancelled Guest",
-    status: "Cancelled",
-    year: 2026,
-  }),
-);
-
-const pastCompletedMonthBookings = [
-  ...Array.from({ length: 11 }, (_, index) =>
-    buildSampleBooking({
-      day: 22 - index,
-      id: `booking-completed-march-${String(index + 1).padStart(2, "0")}`,
-      month: "March",
-      passengerPrefix: "March Guest",
-      status: "Completed",
-      year: 2026,
-    }),
-  ),
-  buildSampleBooking({
-    day: 18,
-    id: "booking-completed-february-01",
-    month: "February",
-    passengerPrefix: "February Guest",
-    status: "Completed",
-    year: 2026,
-  }),
-];
-
-const pastCancelledMonthBookings = [
-  ...Array.from({ length: 11 }, (_, index) =>
-    buildSampleBooking({
-      day: 24 - index,
-      id: `booking-cancelled-april-${String(index + 1).padStart(2, "0")}`,
-      month: "April",
-      passengerPrefix: "April Guest",
-      status: "Cancelled",
-      year: 2026,
-    }),
-  ),
-  buildSampleBooking({
-    day: 12,
-    id: "booking-cancelled-january-01",
-    month: "January",
-    passengerPrefix: "January Guest",
-    status: "Cancelled",
-    year: 2026,
-  }),
-];
-
-const bookings: CustomerPortalBooking[] = [
-  {
-    dropoffLocation: "Raffles Singapore",
-    flightNumber: "SQ318",
-    id: "booking-001",
-    passengerName: "Alicia Tan",
-    pickupDateTime: "29 May 2026, 09:30",
-    pickupLocation: "Changi Airport T3",
-    serviceType: "Airport Arrival",
-    specialRequest: "Meet at arrival hall.",
-    status: "Confirmed",
-    vehicleType: "Mercedes S-Class",
-  },
-  {
-    dropoffLocation: "Marina Bay Sands",
-    id: "booking-002",
-    passengerName: "Daniel Lim",
-    pickupDateTime: "31 May 2026, 14:00",
-    pickupLocation: "Orchard Hotel Singapore",
-    serviceType: "Point-to-Point Transfer",
-    status: "Pending Staff Review",
-    vehicleType: "Alphard / Vellfire",
-  },
-  {
-    dropoffLocation: "Fullerton Hotel",
-    id: "booking-003",
-    passengerName: "Priya Shah",
-    pickupDateTime: "2 Jun 2026, 08:15",
-    pickupLocation: "Sentosa Cove",
-    serviceType: "Hourly / Disposal",
-    specialRequest: "Two extra stops to confirm.",
-    status: "Requested",
-    vehicleType: "Mercedes Viano / V-Class",
-  },
-  {
-    dropoffLocation: "Capella Singapore",
-    flightNumber: "JL711",
-    id: "booking-004",
-    passengerName: "Kenji Mori",
-    pickupDateTime: "3 Jun 2026, 20:05",
-    pickupLocation: "Changi Airport T1",
-    serviceType: "Airport Arrival",
-    status: "Confirmed",
-    vehicleType: "Mercedes E-Class",
-  },
-  {
-    dropoffLocation: "Singapore Expo",
-    id: "booking-005",
-    passengerName: "Maya Wong",
-    pickupDateTime: "4 Jun 2026, 10:45",
-    pickupLocation: "Mandarin Oriental Singapore",
-    serviceType: "Event / VIP Movement",
-    status: "Pending Staff Review",
-    vehicleType: "Hi-roof Minibus",
-  },
-  {
-    dropoffLocation: "Changi Airport T2",
-    flightNumber: "EK355",
-    id: "booking-006",
-    passengerName: "Omar Hassan",
-    pickupDateTime: "6 Jun 2026, 06:20",
-    pickupLocation: "Four Seasons Hotel Singapore",
-    serviceType: "Airport Departure",
-    specialRequest: "Early luggage pickup.",
-    status: "Confirmed",
-    vehicleType: "Mercedes Viano / V-Class",
-  },
-  {
-    dropoffLocation: "The Ritz-Carlton, Millenia Singapore",
-    id: "booking-007",
-    passengerName: "Sofia Chen",
-    pickupDateTime: "7 Jun 2026, 12:10",
-    pickupLocation: "National Gallery Singapore",
-    serviceType: "Point-to-Point Transfer",
-    status: "Requested",
-    vehicleType: "Mercedes E-Class",
-  },
-  {
-    dropoffLocation: "Gardens by the Bay",
-    id: "booking-008",
-    passengerName: "Lucas Meyer",
-    pickupDateTime: "8 Jun 2026, 18:35",
-    pickupLocation: "Conrad Centennial Singapore",
-    serviceType: "Event / VIP Movement",
-    status: "Confirmed",
-    vehicleType: "Mercedes S-Class",
-  },
-  {
-    dropoffLocation: "Pan Pacific Singapore",
-    id: "booking-009",
-    passengerName: "Nadia Rahman",
-    pickupDateTime: "9 Jun 2026, 16:25",
-    pickupLocation: "Seletar Aerospace Park",
-    serviceType: "Other / To Confirm",
-    status: "Pending Staff Review",
-    vehicleType: "Alphard / Vellfire",
-  },
-  {
-    dropoffLocation: "Changi Airport T4",
-    flightNumber: "QF82",
-    id: "booking-010",
-    passengerName: "Ethan Brooks",
-    pickupDateTime: "10 Jun 2026, 22:50",
-    pickupLocation: "JW Marriott Singapore South Beach",
-    serviceType: "Airport Departure",
-    status: "Confirmed",
-    vehicleType: "Mercedes S-Class",
-  },
-  {
-    dropoffLocation: "Singapore Botanic Gardens",
-    id: "booking-011",
-    passengerName: "Hannah Lee",
-    pickupDateTime: "11 Jun 2026, 11:00",
-    pickupLocation: "The St. Regis Singapore",
-    serviceType: "Point-to-Point Transfer",
-    status: "Requested",
-    vehicleType: "Mercedes E-Class",
-  },
-  {
-    dropoffLocation: "Singapore Sports Hub",
-    id: "booking-012",
-    passengerName: "Victor Ng",
-    pickupDateTime: "12 Jun 2026, 19:15",
-    pickupLocation: "W Singapore Sentosa Cove",
-    serviceType: "Event / VIP Movement",
-    status: "Pending Staff Review",
-    vehicleType: "Hi-roof Minibus",
-  },
-  {
-    dropoffLocation: "Changi Airport T3",
-    flightNumber: "SQ321",
-    id: "booking-013",
-    passengerName: "Amelia Stone",
-    pickupDateTime: "18 May 2026, 13:40",
-    pickupLocation: "Raffles Singapore",
-    serviceType: "Airport Departure",
-    status: "Completed",
-    vehicleType: "Mercedes S-Class",
-  },
-  {
-    dropoffLocation: "Mandarin Oriental Singapore",
-    id: "booking-014",
-    passengerName: "Marcus Ho",
-    pickupDateTime: "16 May 2026, 17:10",
-    pickupLocation: "Marina Bay Cruise Centre",
-    serviceType: "Point-to-Point Transfer",
-    status: "Completed",
-    vehicleType: "Alphard / Vellfire",
-  },
-  {
-    dropoffLocation: "Sentosa Golf Club",
-    id: "booking-015",
-    passengerName: "Clara Lim",
-    pickupDateTime: "20 May 2026, 07:30",
-    pickupLocation: "The Fullerton Bay Hotel",
-    serviceType: "Hourly / Disposal",
-    status: "Cancelled",
-    vehicleType: "Mercedes Viano / V-Class",
-  },
-  ...additionalCompletedCurrentMonthBookings,
-  ...additionalCancelledCurrentMonthBookings,
-  ...pastCompletedMonthBookings,
-  ...pastCancelledMonthBookings,
-];
-
 function rowMatchesFilter(booking: CustomerPortalBooking, filter: BookingFilter) {
   if (filter === "Completed") {
     return booking.status === "Completed";
@@ -459,6 +160,16 @@ function getBookingMonthInfo(booking: CustomerPortalBooking) {
     key: `${yearText}-${String(monthIndex + 1).padStart(2, "0")}`,
     label: `${monthText} ${yearText}`,
     sortValue: Date.UTC(year, monthIndex, day),
+  };
+}
+
+function getCurrentPortalMonthInfo(date = new Date()) {
+  const year = date.getFullYear();
+  const monthIndex = date.getMonth();
+
+  return {
+    key: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
+    label: `${monthNames[monthIndex]} ${year}`,
   };
 }
 
@@ -500,7 +211,7 @@ export default function CustomerPortalPage() {
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
-  const [portalBookings, setPortalBookings] = useState<CustomerPortalBooking[]>(bookings);
+  const [portalBookings, setPortalBookings] = useState<CustomerPortalBooking[]>([]);
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
@@ -513,6 +224,7 @@ export default function CustomerPortalPage() {
 
   const activeFilter: BookingFilter = activeSection === "New Booking Request" ? "Upcoming" : activeSection;
   const selectedBookingMonth = selectedBookingMonths[activeFilter] || "";
+  const currentPortalMonth = useMemo(() => getCurrentPortalMonthInfo(), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -523,7 +235,7 @@ export default function CustomerPortalPage() {
         signal: controller.signal,
       });
 
-      if (isCurrent && loadedBookings) {
+      if (isCurrent && loadedBookings !== null) {
         setPortalBookings(loadedBookings);
         setExpandedBookingId("");
         setChangeFeedback({});
@@ -578,23 +290,23 @@ export default function CustomerPortalPage() {
     filteredBookings.forEach((booking) => {
       const monthInfo = getBookingMonthInfo(booking);
 
-      if (monthInfo.key && monthInfo.key !== portalCurrentMonthKey) {
+      if (monthInfo.key && monthInfo.key !== currentPortalMonth.key) {
         months.set(monthInfo.key, monthInfo);
       }
     });
 
     return [...months.values()].sort((left, right) => right.key.localeCompare(left.key));
-  }, [activeFilter, filteredBookings]);
+  }, [activeFilter, currentPortalMonth.key, filteredBookings]);
 
   const scopedBookings = useMemo(() => {
     if (activeFilter === "Upcoming") {
       return filteredBookings;
     }
 
-    const monthKey = selectedBookingMonth || portalCurrentMonthKey;
+    const monthKey = selectedBookingMonth || currentPortalMonth.key;
 
     return filteredBookings.filter((booking) => getBookingMonthInfo(booking).key === monthKey);
-  }, [activeFilter, filteredBookings, selectedBookingMonth]);
+  }, [activeFilter, currentPortalMonth.key, filteredBookings, selectedBookingMonth]);
 
   const totalBookingPages = Math.max(1, Math.ceil(scopedBookings.length / visibleBookingLimit));
   const currentBookingPage = Math.min(bookingPages[activeFilter] || 1, totalBookingPages);
@@ -612,7 +324,7 @@ export default function CustomerPortalPage() {
       return selectedMonthOption?.label || selectedBookingMonth;
     }
 
-    return portalCurrentMonthLabel;
+    return currentPortalMonth.label;
   })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
@@ -1116,7 +828,7 @@ export default function CustomerPortalPage() {
                         onClick={() => handleMonthSelect("")}
                         type="button"
                       >
-                        {portalCurrentMonthLabel}
+                        {currentPortalMonth.label}
                       </button>
 
                       {pastMonthOptions.map((month) => {

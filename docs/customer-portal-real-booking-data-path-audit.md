@@ -32,6 +32,20 @@ The current handoff is intentionally small and server-side:
 
 The static readiness check is `node scripts/test-customer-saved-bookings-auth-handoff-readiness.mjs`.
 
+## Customer Session Issue Contract
+
+The customer session issue contract now exists, but it is not wired to visible UI:
+
+- `/api/customer-portal-sessions` is POST-only for issuance and blocks GET, PUT, PATCH, and DELETE.
+- It remains disabled unless `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_ENABLED=true`.
+- It requires `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_MODE=server-session-token`.
+- It requires `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_TOKEN`, same-origin `/my-bookings` context, and `x-prestige-customer-purpose: customer-portal-session-issue`.
+- On success it sets the customer saved-bookings cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, `Max-Age=3600`, and `Priority=High`.
+- Response bodies must not expose the issue token, saved-bookings session token, cookie value, server config, admin fields, finance fields, payout fields, parser internals, or mock/archive fields.
+- `app/my-bookings/page.tsx` and `lib/customer-portal-saved-bookings-adapter.ts` must not call this route or expose issue-token plumbing.
+
+The session issue contract check is `node scripts/test-customer-portal-session-issue-api-contract.mjs`.
+
 ## Customer-Safe Future Row Fields
 
 - Booking reference or booking id.
@@ -49,9 +63,9 @@ Keep these out of any customer portal booking list unless a later approved role 
 
 ## Safest Next Implementation Step
 
-Add real customer session issuance only after the owner approves the exact auth/login path:
+Connect real customer auth only after the owner approves the exact login path:
 
-- The session setter must create a secure HTTP-only, same-site customer cookie for one customer account.
+- The approved login path must call the session issue contract without exposing issue tokens to browser code.
 - The customer portal client should stay compact and continue using same-origin credentials only.
 - Keep sample/fallback behavior until the real session issuer and customer account mapping are approved and tested.
 - Keep proving that no admin finance, payout, invoice/payment, parser/debug, mock/dev archive, or other-customer data can leak.

@@ -192,6 +192,11 @@ export default function CustomerBookingPage() {
 
     if (suggestions) {
       setBookingMemorySuggestions(suggestions);
+      setForm((current) => {
+        const suggestion = findCustomerBookingMemorySuggestion(suggestions, current.passengerName);
+
+        return suggestion ? applyBookingMemoryToForm(current, suggestion) : current;
+      });
     }
   }
 

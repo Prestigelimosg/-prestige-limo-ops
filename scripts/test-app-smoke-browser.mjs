@@ -68,6 +68,27 @@ const driverJobWorkflowApiUrl = new URL(`/api/driver-job/${driverJobWorkflowToke
 const customerDashboardUrl = new URL("/customers", appUrl).toString();
 const customerBookingUrl = new URL("/book", appUrl).toString();
 const customerPortalUrl = new URL("/my-bookings", appUrl).toString();
+const customerPortalSmokeMonthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const customerPortalSmokeCurrentDate = new Date();
+const customerPortalSmokeCurrentYear = customerPortalSmokeCurrentDate.getFullYear();
+const customerPortalSmokeCurrentMonth = customerPortalSmokeCurrentDate.getMonth() + 1;
+const customerPortalSmokeCurrentMonthKey =
+  `${customerPortalSmokeCurrentYear}-${String(customerPortalSmokeCurrentMonth).padStart(2, "0")}`;
+const customerPortalSmokeCurrentMonthLabel =
+  `${customerPortalSmokeMonthNames[customerPortalSmokeCurrentMonth - 1]} ${customerPortalSmokeCurrentYear}`;
 const nonShortNoticeAdminSnapshotPickupDate = singaporeDateFormatter
   .formatToParts(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
   .reduce((parts, part) => {
@@ -81,6 +102,225 @@ const nonShortNoticeAdminSnapshotPickupDateText = [
   nonShortNoticeAdminSnapshotPickupDate.month,
   nonShortNoticeAdminSnapshotPickupDate.day,
 ].join("-");
+function customerPortalSmokePickupAt(monthKey, day, hour = 9, minute = 0) {
+  return `${monthKey}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`;
+}
+function customerPortalSmokeSavedBooking({
+  bookingReference,
+  day,
+  dropoffLocation,
+  monthKey = customerPortalSmokeCurrentMonthKey,
+  passengerName,
+  pickupLocation,
+  serviceType = "Point-to-Point Transfer",
+  status = "confirmed",
+}) {
+  const sequence = Number(bookingReference.replace(/\D/g, "").slice(-2)) || day;
+
+  return {
+    booking_month: monthKey,
+    booking_reference: bookingReference,
+    created_at: customerPortalSmokePickupAt(monthKey, Math.max(1, day - 1), 8, 0),
+    customer_facing_status: status,
+    dropoff_location: dropoffLocation,
+    passenger_name: passengerName,
+    pickup_at: customerPortalSmokePickupAt(monthKey, day, 8 + (sequence % 10), (sequence * 5) % 60),
+    pickup_location: pickupLocation,
+    service_type: serviceType,
+    updated_at: customerPortalSmokePickupAt(monthKey, Math.max(1, day - 1), 8, 30),
+  };
+}
+function customerPortalSmokeRows({
+  count,
+  monthKey = customerPortalSmokeCurrentMonthKey,
+  passengerPrefix,
+  referencePrefix,
+  status,
+}) {
+  return Array.from({ length: count }, (_, index) => {
+    const sequence = index + 1;
+
+    return customerPortalSmokeSavedBooking({
+      bookingReference: `${referencePrefix}-${String(sequence).padStart(2, "0")}`,
+      day: Math.max(1, 24 - index),
+      dropoffLocation: sequence % 2 === 0 ? "Mandarin Oriental Singapore" : "Changi Airport T3",
+      monthKey,
+      passengerName: `${passengerPrefix} ${sequence}`,
+      pickupLocation: sequence % 2 === 0 ? "Raffles Singapore" : "Marina Bay Sands",
+      serviceType: sequence % 2 === 0 ? "Airport Departure" : "Point-to-Point Transfer",
+      status,
+    });
+  });
+}
+const customerPortalSavedBookingsSmokePayload = {
+  ok: true,
+  pagination: {
+    has_next_page: false,
+    has_previous_page: false,
+    page: 1,
+    page_size: 25,
+  },
+  saved_bookings: [
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-001",
+      day: 13,
+      dropoffLocation: "Raffles Singapore",
+      passengerName: "Alicia Tan",
+      pickupLocation: "Changi Airport T3",
+      serviceType: "Airport Arrival",
+      status: "confirmed",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-002",
+      day: 14,
+      dropoffLocation: "Marina Bay Sands",
+      passengerName: "Daniel Lim",
+      pickupLocation: "Orchard Hotel Singapore",
+      status: "pending_review",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-003",
+      day: 15,
+      dropoffLocation: "Fullerton Hotel",
+      passengerName: "Priya Shah",
+      pickupLocation: "Sentosa Cove",
+      serviceType: "Hourly / Disposal",
+      status: "received",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-004",
+      day: 16,
+      dropoffLocation: "Capella Singapore",
+      passengerName: "Kenji Mori",
+      pickupLocation: "Changi Airport T1",
+      serviceType: "Airport Arrival",
+      status: "confirmed",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-005",
+      day: 17,
+      dropoffLocation: "Singapore Expo",
+      passengerName: "Maya Wong",
+      pickupLocation: "Mandarin Oriental Singapore",
+      serviceType: "Event / VIP Movement",
+      status: "pending_review",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-006",
+      day: 18,
+      dropoffLocation: "Changi Airport T2",
+      passengerName: "Omar Hassan",
+      pickupLocation: "Four Seasons Hotel Singapore",
+      serviceType: "Airport Departure",
+      status: "confirmed",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-007",
+      day: 19,
+      dropoffLocation: "Sentosa Boardwalk",
+      passengerName: "Sofia Chen",
+      pickupLocation: "National Gallery Singapore",
+      status: "received",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-008",
+      day: 20,
+      dropoffLocation: "Gardens by the Bay",
+      passengerName: "Lucas Meyer",
+      pickupLocation: "Conrad Centennial Singapore",
+      serviceType: "Event / VIP Movement",
+      status: "confirmed",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-009",
+      day: 21,
+      dropoffLocation: "Pan Pacific Singapore",
+      passengerName: "Nadia Rahman",
+      pickupLocation: "Seletar Aerospace Park",
+      status: "pending_review",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-010",
+      day: 22,
+      dropoffLocation: "Changi Airport T4",
+      passengerName: "Ethan Brooks",
+      pickupLocation: "JW Marriott Singapore South Beach",
+      serviceType: "Airport Departure",
+      status: "confirmed",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-011",
+      day: 23,
+      dropoffLocation: "Singapore Botanic Gardens",
+      passengerName: "Hannah Lee",
+      pickupLocation: "The St. Regis Singapore",
+      status: "received",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-012",
+      day: 24,
+      dropoffLocation: "Singapore Sports Hub",
+      passengerName: "Victor Ng",
+      pickupLocation: "The Westin Singapore",
+      serviceType: "Event / VIP Movement",
+      status: "pending_review",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-013",
+      day: 12,
+      dropoffLocation: "Changi Airport T3",
+      passengerName: "Amelia Stone",
+      pickupLocation: "Raffles Singapore",
+      serviceType: "Airport Departure",
+      status: "completed",
+    }),
+    ...customerPortalSmokeRows({
+      count: 12,
+      passengerPrefix: "Completed Guest",
+      referencePrefix: "booking-completed-current",
+      status: "completed",
+    }),
+    ...customerPortalSmokeRows({
+      count: 12,
+      passengerPrefix: "Cancelled Guest",
+      referencePrefix: "booking-cancelled-current",
+      status: "cancelled",
+    }),
+    ...customerPortalSmokeRows({
+      count: 11,
+      monthKey: "2026-03",
+      passengerPrefix: "March Guest",
+      referencePrefix: "booking-completed-march",
+      status: "completed",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-completed-february-01",
+      day: 18,
+      dropoffLocation: "Mandarin Oriental Singapore",
+      monthKey: "2026-02",
+      passengerName: "February Guest 1",
+      pickupLocation: "Raffles Singapore",
+      status: "completed",
+    }),
+    ...customerPortalSmokeRows({
+      count: 11,
+      monthKey: "2026-04",
+      passengerPrefix: "April Guest",
+      referencePrefix: "booking-cancelled-april",
+      status: "cancelled",
+    }),
+    customerPortalSmokeSavedBooking({
+      bookingReference: "booking-cancelled-january-01",
+      day: 12,
+      dropoffLocation: "Sentosa Golf Club",
+      monthKey: "2026-01",
+      passengerName: "January Guest 1",
+      pickupLocation: "The Fullerton Bay Hotel",
+      status: "cancelled",
+    }),
+  ],
+  version: "stage-customer-saved-bookings-read-api-v1",
+};
 const replacementLeakSentinels = {
   carPlate: "SXX9999Z-DO-NOT-LEAK",
   driverContact: "+65 9000 0000 DO NOT LEAK",
@@ -616,6 +856,35 @@ async function runChromeTest() {
     await client.send("Runtime.enable");
     await client.send("Page.enable");
     await client.send("Network.enable");
+    await client.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `(() => {
+        const savedBookingsPayload = ${JSON.stringify(customerPortalSavedBookingsSmokePayload)};
+        const savedBookingsPattern = /\\/api\\/customer-saved-bookings(?:[/?#]|$)/i;
+        const isCustomerPortalPage = () => window.location.pathname === "/my-bookings";
+        const originalFetch = window.fetch.bind(window);
+
+        window.fetch = (input, init = {}) => {
+          const target = input?.url || input;
+          const method = init?.method || input?.method || "GET";
+          const url = String(target);
+
+          if (isCustomerPortalPage() && savedBookingsPattern.test(url)) {
+            if (Array.isArray(window.__customerPortalIntegrationCalls)) {
+              window.__customerPortalIntegrationCalls.push(\`\${method} \${url}\`);
+            }
+
+            return Promise.resolve(
+              new Response(JSON.stringify(savedBookingsPayload), {
+                headers: { "Content-Type": "application/json" },
+                status: 200,
+              }),
+            );
+          }
+
+          return originalFetch(input, init);
+        };
+      })();`,
+    });
 
     await navigateWithLoadEvent(client, appUrl);
     reporter.step("admin app loaded");
@@ -34223,7 +34492,14 @@ async function runChromeTest() {
 
       await setCustomerPortalViewportAndLoad(desktopViewport);
 
-      const initialState = await readCustomerPortalState();
+      const initialState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.showingText === "Showing 1-10 of 12 bookings" ? candidateState : false;
+        },
+        10000,
+        "customer portal saved bookings API rows",
+      );
       assert.equal(initialState.text.includes("My Bookings"), true, "Expected /my-bookings page title");
       assert.equal(
         initialState.text.includes("Customers can view booking requests and booking history here after staff confirmation."),
@@ -34480,7 +34756,7 @@ async function runChromeTest() {
       assertNoPaymentIntegrationResources(initialState.resourceCalls, "customer portal page load");
       await checkTelegramBoundary("/my-bookings desktop");
 
-      await clickCustomerPortalRequestEdit("booking-001");
+      await clickCustomerPortalRequestEdit("saved-booking-001");
       const editState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
@@ -34494,7 +34770,7 @@ async function runChromeTest() {
         "Edit request noted for review. Prestige Limo staff will confirm before anything changes.",
         "Expected customer portal Edit action to stay staff-reviewed",
       );
-      assert.equal(editState.feedbackRowId, "booking-001", "Expected Edit feedback near the clicked row");
+      assert.equal(editState.feedbackRowId, "saved-booking-001", "Expected Edit feedback near the clicked row");
       assert.deepEqual(
         editState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
         [],
@@ -34509,7 +34785,7 @@ async function runChromeTest() {
         customerPortalSavedBookingsApiPattern,
       );
 
-      await clickCustomerPortalRequestCancel("booking-004");
+      await clickCustomerPortalRequestCancel("saved-booking-004");
       const cancelState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
@@ -34523,9 +34799,9 @@ async function runChromeTest() {
         "Cancel request noted for review. Your booking is not cancelled until Prestige Limo confirms.",
         "Expected customer portal Cancel action not to directly cancel the booking",
       );
-      assert.equal(cancelState.feedbackRowId, "booking-004", "Expected Cancel feedback near the clicked row");
+      assert.equal(cancelState.feedbackRowId, "saved-booking-004", "Expected Cancel feedback near the clicked row");
       assert.equal(
-        cancelState.rows.find((row) => row.id === "booking-004")?.status,
+        cancelState.rows.find((row) => row.id === "saved-booking-004")?.status,
         "Confirmed",
         "Expected Cancel action not to change row status",
       );
@@ -34547,7 +34823,8 @@ async function runChromeTest() {
       const completedForActionsState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.activeFilter === "Completed" && candidateState.rowIds.includes("booking-013")
+          return candidateState.activeFilter === "Completed" &&
+            candidateState.rowIds.some((id) => id.includes("booking-013"))
             ? candidateState
             : false;
         },
@@ -34609,7 +34886,7 @@ async function runChromeTest() {
       );
       assertCustomerPortalPagedState(completedAfterUpcomingPageTwoState, {
         activeFilter: "Completed",
-        activeMonthLabel: "May 2026",
+        activeMonthLabel: customerPortalSmokeCurrentMonthLabel,
         currentMonthActive: true,
         label: "Completed after Upcoming page two",
         nextDisabled: false,
@@ -34818,11 +35095,11 @@ async function runChromeTest() {
         "customer portal returned to Upcoming bookings",
       );
 
-      await clickCustomerPortalDetail("booking-001");
+      await clickCustomerPortalDetail("saved-booking-001");
       const detailState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.detailId === "booking-001" ? candidateState : false;
+          return candidateState.detailId === "saved-booking-001" ? candidateState : false;
         },
         10000,
         "customer portal expanded detail",
@@ -34841,7 +35118,7 @@ async function runChromeTest() {
         assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
       }
 
-      await clickCustomerPortalRequestEdit("booking-001");
+      await clickCustomerPortalRequestEdit("saved-booking-001");
       const changeState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
@@ -34855,9 +35132,9 @@ async function runChromeTest() {
         "Edit request noted for review. Prestige Limo staff will confirm before anything changes.",
         "Expected customer portal Edit action to stay staff-reviewed",
       );
-      assert.equal(changeState.feedbackRowId, "booking-001", "Expected Edit feedback near the clicked row");
+      assert.equal(changeState.feedbackRowId, "saved-booking-001", "Expected Edit feedback near the clicked row");
       assert.equal(
-        changeState.rows.find((row) => row.id === "booking-001")?.text.includes("Alicia Tan"),
+        changeState.rows.find((row) => row.id === "saved-booking-001")?.text.includes("Alicia Tan"),
         true,
         "Expected Edit action not to change row data",
       );
@@ -34947,7 +35224,7 @@ async function runChromeTest() {
       );
       assertCustomerPortalPagedState(cancelledAfterCompletedPageTwoState, {
         activeFilter: "Cancelled",
-        activeMonthLabel: "May 2026",
+        activeMonthLabel: customerPortalSmokeCurrentMonthLabel,
         currentMonthActive: true,
         label: "Cancelled after Completed page two",
         nextDisabled: false,
@@ -34972,7 +35249,7 @@ async function runChromeTest() {
       );
       assertCustomerPortalPagedState(completedAfterCancelledSwitchState, {
         activeFilter: "Completed",
-        activeMonthLabel: "May 2026",
+        activeMonthLabel: customerPortalSmokeCurrentMonthLabel,
         currentMonthActive: true,
         label: "Completed after Cancelled switch",
         nextDisabled: false,
@@ -35161,7 +35438,7 @@ async function runChromeTest() {
       );
       assertCustomerPortalPagedState(cancelledAfterUpcomingSwitchState, {
         activeFilter: "Cancelled",
-        activeMonthLabel: "May 2026",
+        activeMonthLabel: customerPortalSmokeCurrentMonthLabel,
         currentMonthActive: true,
         label: "Cancelled after Upcoming switch",
         nextDisabled: false,

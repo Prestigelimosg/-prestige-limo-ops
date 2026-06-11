@@ -70,10 +70,18 @@ assert.equal(
 assert.equal(
   pageSource.includes("loadCustomerPortalSavedBookings") &&
     pageSource.includes("useState<CustomerPortalBooking[]>([])") &&
-    pageSource.includes("if (isCurrent && loadedBookings !== null)") &&
-    pageSource.includes("setPortalBookings(loadedBookings)"),
+    pageSource.includes('useState<PortalBookingsLoadState>("loading")') &&
+    pageSource.includes("setPortalBookings(loadedBookings || [])") &&
+    pageSource.includes('setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready")') &&
+    pageSource.includes('data-customer-portal-access-state={portalBookingsLoadState}'),
   true,
-  "/my-bookings should start empty and use only guarded customer saved-bookings API rows.",
+  "/my-bookings should start empty, clear rows after blocked reads, and use only guarded customer saved-bookings API rows.",
+);
+assert.equal(
+  pageSource.includes('"Sign in to view bookings."') &&
+    pageSource.includes("portalBookingsLoadState === \"blocked\""),
+  true,
+  "/my-bookings should fail closed to a compact sign-in-required state when saved-bookings read is blocked.",
 );
 assert.equal(
   /const bookings: CustomerPortalBooking\[\]|buildSampleBooking|samplePickupLocations|Alicia Tan|Daniel Lim|Priya Shah|Completed Guest|Cancelled Guest/.test(
@@ -160,7 +168,7 @@ try {
       saved_bookings: [],
     }),
     null,
-    "Unsafe top-level API fields should fail closed to sample fallback.",
+    "Unsafe top-level API fields should fail closed to an empty portal.",
   );
   assert.equal(
     mapCustomerSavedBookingsPayload({
@@ -173,7 +181,7 @@ try {
       ],
     }),
     null,
-    "Unsafe saved-booking fields should fail closed to sample fallback.",
+    "Unsafe saved-booking fields should fail closed to an empty portal.",
   );
 
   const sanitized = mapCustomerSavedBookingsPayload({

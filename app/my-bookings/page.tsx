@@ -10,6 +10,7 @@ import {
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type PortalSection = "New Booking Request" | BookingFilter;
+type PortalBookingsLoadState = "blocked" | "loading" | "ready";
 
 type BookingRequestForm = {
   companyName: string;
@@ -212,6 +213,8 @@ export default function CustomerPortalPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, string>>({});
   const [portalBookings, setPortalBookings] = useState<CustomerPortalBooking[]>([]);
+  const [portalBookingsLoadState, setPortalBookingsLoadState] =
+    useState<PortalBookingsLoadState>("loading");
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
     useState<Record<BookingFilter, string>>(initialSelectedBookingMonths);
@@ -235,13 +238,16 @@ export default function CustomerPortalPage() {
         signal: controller.signal,
       });
 
-      if (isCurrent && loadedBookings !== null) {
-        setPortalBookings(loadedBookings);
-        setExpandedBookingId("");
-        setChangeFeedback({});
-        setBookingPages({ ...initialBookingPages });
-        setSelectedBookingMonths({ ...initialSelectedBookingMonths });
+      if (!isCurrent) {
+        return;
       }
+
+      setPortalBookings(loadedBookings || []);
+      setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
+      setExpandedBookingId("");
+      setChangeFeedback({});
+      setBookingPages({ ...initialBookingPages });
+      setSelectedBookingMonths({ ...initialSelectedBookingMonths });
     }
 
     loadSavedBookings();
@@ -328,6 +334,12 @@ export default function CustomerPortalPage() {
   })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const pickupTimeParts = splitPickupTime(bookingRequestForm.pickupTime);
+  const emptyBookingsMessage =
+    portalBookingsLoadState === "loading"
+      ? "Loading bookings."
+      : portalBookingsLoadState === "blocked"
+        ? "Sign in to view bookings."
+        : "No bookings match the current search.";
 
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = section === "New Booking Request" ? "Upcoming" : section;
@@ -907,9 +919,10 @@ export default function CustomerPortalPage() {
               {visibleBookings.length === 0 ? (
                 <div
                   className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-700"
+                  data-customer-portal-access-state={portalBookingsLoadState}
                   data-customer-portal-empty="true"
                 >
-                  No bookings match the current search.
+                  {emptyBookingsMessage}
                 </div>
               ) : (
                 <ul className="flex flex-col divide-y divide-slate-200" data-customer-portal-list="true">

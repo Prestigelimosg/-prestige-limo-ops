@@ -10,7 +10,6 @@ const legacyTables = [
   "companies",
   "drivers",
   "rate_settings",
-  "saved_addresses",
   "travelers",
 ];
 
@@ -18,7 +17,6 @@ const routeBackedTableReferences = {
   companies: "adminLegacyTables.companies",
   drivers: "adminLegacyTables.drivers",
   rate_settings: "adminLegacyTables.rateSettings",
-  saved_addresses: "adminLegacyTables.savedAddresses",
   travelers: "adminLegacyTables.travelers",
 };
 
@@ -56,6 +54,8 @@ assertIncludes(appPage, "adminLegacyDataClient", "route-backed client adapter");
 assertIncludes(appPage, "x-prestige-admin-purpose", "admin purpose header");
 assertIncludes(appPage, "/api/admin-bookers", "typed admin bookers endpoint");
 assertNotIncludes(appPage, "adminLegacyTables.bookers", "retired legacy bookers table reference");
+assertIncludes(appPage, "/api/admin-saved-addresses", "typed admin saved addresses endpoint");
+assertNotIncludes(appPage, "adminLegacyTables.savedAddresses", "retired legacy saved addresses table reference");
 
 for (const table of legacyTables) {
   assertNotIncludes(appPage, `.from("${table}")`, `direct double-quoted ${table} browser table access`);

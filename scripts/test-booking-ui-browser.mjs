@@ -6936,11 +6936,17 @@ async function runChromeTest() {
           method === "GET" &&
           (
             String(target).includes("/rest/v1/travelers") ||
-            String(target).includes("/rest/v1/companies") ||
-            String(target).includes("/rest/v1/saved_addresses")
+            String(target).includes("/rest/v1/companies")
           )
         ) {
           return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (method === "GET" && String(target).includes("/api/admin-saved-addresses")) {
+          return new Response(JSON.stringify({ ok: true, saved_address: null }), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
@@ -17719,17 +17725,17 @@ async function runChromeTest() {
           return jsonResponse({ message: "Unhandled traveler mock" }, 500);
         }
 
-        if (url.includes("/rest/v1/saved_addresses")) {
+        if (url.includes("/api/admin-saved-addresses")) {
           if (method === "GET") {
-            return jsonResponse([]);
+            return jsonResponse({ ok: true, saved_address: null });
           }
 
           if (method === "POST") {
-            return jsonResponse(savedAddressRecord, 201);
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord }, 201);
           }
 
           if (method === "PATCH") {
-            return jsonResponse({});
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord });
           }
 
           window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
@@ -19129,13 +19135,17 @@ async function runChromeTest() {
           }
         }
 
-        if (url.includes("/rest/v1/saved_addresses")) {
+        if (url.includes("/api/admin-saved-addresses")) {
           if (method === "GET") {
-            return jsonResponse([]);
+            return jsonResponse({ ok: true, saved_address: null });
           }
 
           if (method === "POST") {
-            return jsonResponse(savedAddressRecord, 201);
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord }, 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord });
           }
         }
 
@@ -20313,11 +20323,17 @@ async function runChromeTest() {
           method === "GET" &&
           (
             String(target).includes("/rest/v1/companies") ||
-            String(target).includes("/rest/v1/travelers") ||
-            String(target).includes("/rest/v1/saved_addresses")
+            String(target).includes("/rest/v1/travelers")
           )
         ) {
           return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        if (method === "GET" && String(target).includes("/api/admin-saved-addresses")) {
+          return new Response(JSON.stringify({ ok: true, saved_address: null }), {
             status: 200,
             headers: { "content-type": "application/json" },
           });

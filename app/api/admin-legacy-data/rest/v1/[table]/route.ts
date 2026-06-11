@@ -112,18 +112,6 @@ const allowedColumnsByTable: Record<string, Set<string>> = {
     "created_at",
     "updated_at",
   ]),
-  saved_addresses: new Set([
-    "id",
-    "company_id",
-    "traveler_id",
-    "label",
-    "address",
-    "address_role",
-    "is_default",
-    "use_count",
-    "created_at",
-    "updated_at",
-  ]),
   travelers: new Set([
     "id",
     "company_id",

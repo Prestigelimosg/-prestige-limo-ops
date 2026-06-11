@@ -257,7 +257,6 @@ class MockSupabaseClient {
       companies: [{ id: 1, company_name: "Safe Company", domain: "safe.example.invalid" }],
       drivers: [{ id: 1, availability_status: "available", driver_name: "Safe Driver" }],
       rate_settings: [{ id: "default", midnight_surcharge: 10 }],
-      saved_addresses: [{ id: 1, address: "Safe Address", company_id: 1, traveler_id: 1 }],
       travelers: [{ id: 1, company_id: 1, traveler_name: "Safe Traveler" }],
     };
   }
@@ -443,28 +442,17 @@ try {
   mock = installMockClient();
   response = await readResponse(
     await route.POST(
-      postJson(
-        "http://localhost/api/admin-legacy-data/rest/v1/saved_addresses?select=id&single=single",
-        {
-          address: "Safe Address",
-          address_role: "pickup",
-          company_id: 1,
-          is_default: true,
-          label: "Office",
-          traveler_id: 1,
-        },
-      ),
+      postJson("http://localhost/api/admin-legacy-data/rest/v1/saved_addresses?select=id&single=single", {
+        address: "Safe Address",
+        traveler_id: 1,
+      }),
       routeContext("saved_addresses"),
     ),
   );
 
-  assert.equal(response.status, 200, "valid admin session write reaches mocked handler");
-  assert.equal(response.body.id, "mock-row-1");
-  assert.deepEqual(
-    mock.client.operations.map((operation) => `${operation.action}:${operation.table}`),
-    ["insert:saved_addresses"],
-  );
-  assertNoLeaks(response.body, "valid write response");
+  assert.equal(response.status, 404, "retired saved_addresses table stays blocked on the legacy route");
+  assertNoSupabaseTouched(mock, "retired saved_addresses table");
+  assertNoLeaks(response.body, "retired saved_addresses table response");
 
   setEnv(enabledSessionEnv());
   mock = installMockClient();

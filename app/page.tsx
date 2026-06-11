@@ -58,6 +58,7 @@ const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
+const adminSavedAddressesApiPath = "/api/admin-saved-addresses";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminSavedBookingDriverAssignmentsApiPath =
@@ -74,7 +75,6 @@ const adminLegacyTables = {
   companies: "companies",
   drivers: "drivers",
   rateSettings: "rate_settings",
-  savedAddresses: "saved_addresses",
   travelers: "travelers",
 } as const;
 
@@ -369,6 +369,71 @@ function updateAdminBooker(body: Record<string, unknown>) {
   return adminBookerRequest("PATCH", { body });
 }
 
+function adminSavedAddressError(message: string): AdminLegacyDataResult<SavedAddressRecord> {
+  return {
+    data: null,
+    error: {
+      message,
+    },
+  };
+}
+
+async function adminSavedAddressRequest(
+  method: "GET" | "PATCH" | "POST",
+  {
+    body,
+    params,
+  }: {
+    body?: Record<string, unknown>;
+    params?: Record<string, string | number | null | undefined>;
+  },
+): Promise<AdminLegacyDataResult<SavedAddressRecord>> {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== null && value !== undefined && String(value).trim()) {
+      searchParams.set(key, String(value));
+    }
+  }
+
+  const url = `${adminSavedAddressesApiPath}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+
+  try {
+    const response = await fetch(url, {
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      headers: {
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method,
+    });
+    const responseBody = (await response.json().catch(() => null)) as AdminSavedAddressApiResponse | null;
+
+    if (!response.ok || responseBody?.ok !== true) {
+      return adminSavedAddressError(responseBody?.error || "Admin saved address request failed.");
+    }
+
+    return {
+      data: responseBody.saved_address || null,
+      error: null,
+    };
+  } catch {
+    return adminSavedAddressError("Admin saved address request failed.");
+  }
+}
+
+function findAdminSavedAddress(params: Record<string, string | number | null | undefined>) {
+  return adminSavedAddressRequest("GET", { params });
+}
+
+function createAdminSavedAddress(body: Record<string, unknown>) {
+  return adminSavedAddressRequest("POST", { body });
+}
+
+function updateAdminSavedAddress(body: Record<string, unknown>) {
+  return adminSavedAddressRequest("PATCH", { body });
+}
+
 type BookingForm = {
   company: string;
   bookingType: string;
@@ -451,6 +516,13 @@ type AdminBookerApiResponse = {
   version?: string;
 };
 
+type AdminSavedAddressApiResponse = {
+  error?: string;
+  ok?: boolean;
+  saved_address?: SavedAddressRecord | null;
+  version?: string;
+};
+
 type AdminSavedBookingReadResponse = {
   booking?: BookingRecord | null;
   bookings?: BookingRecord[];
@@ -515,6 +587,7 @@ type SavedAddressRecord = {
   address: string | null;
   address_role: string | null;
   is_default: boolean | null;
+  last_used_at?: string | null;
   use_count: number | null;
 };
 
@@ -10786,13 +10859,7 @@ export default function Home() {
       return;
     }
 
-    const existingAddress = await adminLegacyDataClient
-      .from(adminLegacyTables.savedAddresses)
-      .select("id, company_id, traveler_id, label, address, address_role, is_default, use_count")
-      .eq("traveler_id", travelerId)
-      .ilike("address", address)
-      .limit(1)
-      .maybeSingle();
+    const existingAddress = await findAdminSavedAddress({ address, traveler_id: travelerId });
 
     if (existingAddress.error) {
       throw new Error(existingAddress.error.message);
@@ -10800,16 +10867,14 @@ export default function Home() {
 
     if (existingAddress.data) {
       const savedAddress = existingAddress.data as SavedAddressRecord;
-      const { error } = await adminLegacyDataClient
-        .from(adminLegacyTables.savedAddresses)
-        .update({
-          company_id: companyId,
-          address,
-          is_default: true,
-          use_count: (savedAddress.use_count ?? 0) + 1,
-          last_used_at: new Date().toISOString(),
-        })
-        .eq("id", savedAddress.id);
+      const { error } = await updateAdminSavedAddress({
+        address,
+        company_id: companyId,
+        id: savedAddress.id,
+        is_default: true,
+        last_used_at: new Date().toISOString(),
+        use_count: (savedAddress.use_count ?? 0) + 1,
+      });
 
       if (error) {
         throw new Error(error.message);
@@ -10818,15 +10883,15 @@ export default function Home() {
       return;
     }
 
-    const { error } = await adminLegacyDataClient.from(adminLegacyTables.savedAddresses).insert({
-      company_id: companyId,
-      traveler_id: travelerId,
-      label: "Default",
+    const { error } = await createAdminSavedAddress({
       address,
       address_role: "traveler_default",
+      company_id: companyId,
       is_default: true,
-      use_count: 1,
+      label: "Default",
       last_used_at: new Date().toISOString(),
+      traveler_id: travelerId,
+      use_count: 1,
     });
 
     if (error) {

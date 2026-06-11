@@ -57,6 +57,7 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
+const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminSavedAddressesApiPath = "/api/admin-saved-addresses";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
@@ -434,6 +435,42 @@ function updateAdminSavedAddress(body: Record<string, unknown>) {
   return adminSavedAddressRequest("PATCH", { body });
 }
 
+function adminDriverAvailabilityError(message: string): AdminLegacyDataResult<DriverAvailabilityRecord> {
+  return {
+    data: null,
+    error: {
+      message,
+    },
+  };
+}
+
+async function updateAdminDriverAvailability(
+  body: Record<string, unknown>,
+): Promise<AdminLegacyDataResult<DriverAvailabilityRecord>> {
+  try {
+    const response = await fetch(adminDriverAvailabilityApiPath, {
+      body: JSON.stringify(body),
+      headers: {
+        "Content-Type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "PATCH",
+    });
+    const responseBody = (await response.json().catch(() => null)) as AdminDriverAvailabilityApiResponse | null;
+
+    if (!response.ok || responseBody?.ok !== true) {
+      return adminDriverAvailabilityError(responseBody?.error || "Admin driver availability request failed.");
+    }
+
+    return {
+      data: responseBody.driver || null,
+      error: null,
+    };
+  } catch {
+    return adminDriverAvailabilityError("Admin driver availability request failed.");
+  }
+}
+
 type BookingForm = {
   company: string;
   bookingType: string;
@@ -523,6 +560,13 @@ type AdminSavedAddressApiResponse = {
   version?: string;
 };
 
+type AdminDriverAvailabilityApiResponse = {
+  driver?: DriverAvailabilityRecord | null;
+  error?: string;
+  ok?: boolean;
+  version?: string;
+};
+
 type AdminSavedBookingReadResponse = {
   booking?: BookingRecord | null;
   bookings?: BookingRecord[];
@@ -603,6 +647,12 @@ type DriverRecord = {
   notes: string | null;
   preferred_areas: string | null;
   airport_permit_notes: string | null;
+};
+
+type DriverAvailabilityRecord = {
+  availability_status: string | null;
+  id: number;
+  updated_at?: string | null;
 };
 
 type DashboardDriverCandidate = {
@@ -11612,9 +11662,10 @@ export default function Home() {
     try {
       const payload = {
         availability_status: "inactive",
+        id: driverId,
         updated_at: new Date().toISOString(),
       };
-      const result = await adminLegacyDataClient.from(adminLegacyTables.drivers).update(payload).eq("id", driverId);
+      const result = await updateAdminDriverAvailability(payload);
 
       if (result.error) {
         throw new Error(result.error.message);

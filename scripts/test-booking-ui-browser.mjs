@@ -10188,6 +10188,26 @@ async function runChromeTest() {
           }, method === "GET" ? 200 : 405);
         }
 
+        if (url.includes("/api/admin-driver-availability")) {
+          if (method === "PATCH") {
+            persistDriverBody(bodyText);
+            const parsedBody = bodyText ? JSON.parse(bodyText) : {};
+
+            return jsonResponse({
+              driver: {
+                id: parsedBody.id || savedDriver.id,
+                availability_status: parsedBody.availability_status || "inactive",
+                updated_at: parsedBody.updated_at || new Date().toISOString(),
+              },
+              ok: true,
+              version: "browser-admin-driver-availability-mock",
+            });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled driver availability mock" }, 500);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -12085,7 +12105,7 @@ async function runChromeTest() {
           const deactivateButtonRect = deactivateButton?.getBoundingClientRect();
           const statusRect = statusPanel?.getBoundingClientRect();
           const deactivateRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
-            (entry) => entry.method === "PATCH" && String(entry.url).includes("/rest/v1/drivers"),
+            (entry) => entry.method === "PATCH" && String(entry.url).includes("/api/admin-driver-availability"),
           );
           const bookingRequests = (window.__prestigeDriverProfileRequestBodies || []).filter((entry) =>
             String(entry.url).includes("/rest/v1/bookings"),
@@ -12123,8 +12143,10 @@ async function runChromeTest() {
       `Expected driver deactivation Supabase calls to be mocked, got ${deactivatedDriverProfileState.unhandledSupabaseCalls.join(", ")}`,
     );
     assert.ok(
-      deactivatedDriverProfileState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
-      `Expected driver deactivation to call only drivers REST endpoints, got ${deactivatedDriverProfileState.fetchCalls.join(", ")}`,
+      deactivatedDriverProfileState.fetchCalls.every(
+        (call) => call.includes("/api/admin-driver-availability") || call.includes("/rest/v1/drivers"),
+      ),
+      `Expected driver deactivation to call only driver endpoints, got ${deactivatedDriverProfileState.fetchCalls.join(", ")}`,
     );
     assert.equal(
       deactivatedDriverProfileState.bookingRequestCount,
@@ -12133,8 +12155,9 @@ async function runChromeTest() {
     );
     assert.match(
       deactivatedDriverProfileState.deactivateRequest?.url || "",
-      /\/rest\/v1\/drivers.*id=eq\.901/,
+      /\/api\/admin-driver-availability/,
     );
+    assert.equal(deactivatedDriverProfileState.deactivateRequest?.body?.id, "901");
     assert.equal(deactivatedDriverProfileState.deactivateRequest?.body?.availability_status, "inactive");
     assert.ok(
       typeof deactivatedDriverProfileState.deactivateRequest?.body?.updated_at === "string" &&

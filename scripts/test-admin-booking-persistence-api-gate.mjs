@@ -106,6 +106,16 @@ async function writeMockModules(tempDir) {
       "module.exports = { createClient };",
     ].join("\n"),
   );
+  await mkdir(path.join(tempDir, "lib"), { recursive: true });
+  await writeFile(
+    path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
+    [
+      "async function maybePersistCustomerDriverAppNotification() {",
+      "  return { data: null, ok: true };",
+      "}",
+      "module.exports = { maybePersistCustomerDriverAppNotification };",
+    ].join("\n"),
+  );
 }
 
 async function loadHarness() {
@@ -592,7 +602,7 @@ function assertSafeCreateOperations(mock, expectedActorRole) {
   assert.equal(insertedOperation(mock, "bookings").payload.pickup_at, "2026-06-08T10:30:00+08:00");
   assert.equal(insertedOperation(mock, "bookings").payload.route_summary, "Gate Safe Pickup > Gate Safe Dropoff");
   assert.equal(insertedOperation(mock, "bookings").payload.service_type, "MNG");
-  assert.equal(insertedOperation(mock, "bookings").payload.admin_internal_status, "needs_review");
+  assert.equal(insertedOperation(mock, "bookings").payload.admin_internal_status, "admin_review_required");
   assert.equal(insertedOperation(mock, "audit_logs").payload.actor_role, expectedActorRole);
   assert.equal(insertedOperation(mock, "audit_logs").payload.action_type, "booking_created");
   assertNoLeaks(mock.client.operations, "safe mocked persistence operations should not include unsafe fields");
@@ -770,7 +780,7 @@ try {
     assert.equal(result.body.booking.customer_display_name, "Gate Safe Account");
     assert.equal(result.body.booking.pickup_at, "2026-06-08T10:30:00+08:00");
     assert.equal(result.body.booking.route_summary, "Gate Safe Pickup > Gate Safe Dropoff");
-    assert.equal(result.body.booking.admin_internal_status, "Needs Review");
+    assert.equal(result.body.booking.admin_internal_status, "Admin Review Required");
     assert.equal(mock.createdClients.length, 1);
     assert.equal(mock.createdClients[0].url, supabaseUrlSentinel);
     assert.equal(mock.createdClients[0].serviceRoleKey, serviceRoleSentinel);

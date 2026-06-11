@@ -3,6 +3,11 @@
 import Link from "next/link";
 import type { FormEvent } from "react";
 import { useState } from "react";
+import {
+  applyCustomerBookingMemorySuggestion,
+  loadCustomerBookingMemorySuggestions,
+  type CustomerBookingMemorySuggestion,
+} from "../../lib/customer-booking-memory-adapter";
 
 const serviceOptions = [
   "Airport Arrival",
@@ -37,6 +42,8 @@ const pickupMinuteOptions = [
   "50",
   "55",
 ];
+
+const bookingMemoryPassengerListId = "customer-booking-memory-passengers";
 
 type BookingRequestForm = {
   companyName: string;
@@ -140,9 +147,40 @@ function splitPickupTime(value: string) {
   };
 }
 
+function findBookingMemorySuggestion(
+  suggestions: CustomerBookingMemorySuggestion[],
+  passengerName: string,
+) {
+  const normalizedPassengerName = passengerName.trim().toLowerCase();
+
+  return suggestions.find(
+    (suggestion) => suggestion.passengerName.trim().toLowerCase() === normalizedPassengerName,
+  );
+}
+
+function applyBookingMemoryToForm(
+  currentForm: BookingRequestForm,
+  suggestion: CustomerBookingMemorySuggestion,
+) {
+  const nextForm = applyCustomerBookingMemorySuggestion(currentForm, suggestion);
+
+  return {
+    ...nextForm,
+    serviceType: serviceOptions.includes(nextForm.serviceType)
+      ? nextForm.serviceType
+      : currentForm.serviceType,
+    vehicleType:
+      !nextForm.vehicleType || vehicleOptions.includes(nextForm.vehicleType)
+        ? nextForm.vehicleType
+        : currentForm.vehicleType,
+  };
+}
+
 export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
+  const [bookingMemoryLoaded, setBookingMemoryLoaded] = useState(false);
+  const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [confirmationStatus, setConfirmationStatus] = useState<CustomerBookingConfirmationStatus | null>(null);
   const [feedback, setFeedback] = useState<Feedback>({
@@ -153,6 +191,44 @@ export default function CustomerBookingPage() {
   function updateField(field: keyof BookingRequestForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
     setMissingFields((current) => current.filter((item) => item !== field));
+    setConfirmationStatus(null);
+  }
+
+  async function ensureBookingMemorySuggestions() {
+    if (bookingMemoryLoaded) {
+      return;
+    }
+
+    setBookingMemoryLoaded(true);
+
+    const suggestions = await loadCustomerBookingMemorySuggestions();
+
+    if (suggestions) {
+      setBookingMemorySuggestions(suggestions);
+    }
+  }
+
+  function updatePassengerName(value: string) {
+    const suggestion = findBookingMemorySuggestion(bookingMemorySuggestions, value);
+
+    setForm((current) => {
+      const nextForm = {
+        ...current,
+        passengerName: value,
+      };
+
+      return suggestion ? applyBookingMemoryToForm(nextForm, suggestion) : nextForm;
+    });
+    setMissingFields((current) =>
+      current.filter(
+        (item) =>
+          !(
+            item === "passengerName" ||
+            (Boolean(suggestion) &&
+              ["dropoffLocation", "pickupLocation", "serviceType", "vehicleType"].includes(item))
+          ),
+      ),
+    );
     setConfirmationStatus(null);
   }
 
@@ -374,15 +450,34 @@ export default function CustomerBookingPage() {
                   Passenger name *
                   <input
                     aria-invalid={isMissing("passengerName")}
+                    autoComplete="off"
                     className={fieldClass(isMissing("passengerName"))}
                     data-customer-booking-field="passengerName"
+                    data-customer-booking-memory-passenger-input="true"
+                    list={bookingMemorySuggestions.length > 0 ? bookingMemoryPassengerListId : undefined}
                     name="passengerName"
-                    onChange={(event) => updateField("passengerName", event.target.value)}
+                    onChange={(event) => updatePassengerName(event.target.value)}
+                    onFocus={ensureBookingMemorySuggestions}
+                    onPointerDown={ensureBookingMemorySuggestions}
                     placeholder="Passenger name"
                     required
                     type="text"
                     value={form.passengerName}
                   />
+                  {bookingMemorySuggestions.length > 0 ? (
+                    <datalist
+                      data-customer-booking-memory-passenger-list="true"
+                      id={bookingMemoryPassengerListId}
+                    >
+                      {bookingMemorySuggestions.map((suggestion) => (
+                        <option
+                          data-customer-booking-memory-passenger-option={suggestion.passengerName}
+                          key={`${suggestion.passengerName}-${suggestion.pickupLocation}-${suggestion.dropoffLocation}`}
+                          value={suggestion.passengerName}
+                        />
+                      ))}
+                    </datalist>
+                  ) : null}
                 </label>
 
                 <label className="text-sm font-semibold text-slate-800">

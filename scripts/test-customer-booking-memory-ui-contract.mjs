@@ -67,11 +67,22 @@ assert.equal(
   "The customer booking memory client path must remain read-only.",
 );
 assert.equal(
-  /customerBookingMemoryApiPath|loadCustomerBookingMemorySuggestions|customer-booking-memory-read|\/api\/customer-booking-memory/.test(
-    pageSource,
-  ),
+  pageSource.includes("loadCustomerBookingMemorySuggestions") &&
+    pageSource.includes("applyCustomerBookingMemorySuggestion") &&
+    pageSource.includes("data-customer-booking-memory-passenger-input") &&
+    pageSource.includes("data-customer-booking-memory-passenger-list") &&
+    pageSource.includes("<datalist") &&
+    pageSource.includes('autoComplete="off"') &&
+    pageSource.includes("onFocus={ensureBookingMemorySuggestions}") &&
+    pageSource.includes("onPointerDown={ensureBookingMemorySuggestions}") &&
+    pageSource.includes("onChange={(event) => updatePassengerName(event.target.value)}"),
+  true,
+  "/book should wire booking memory through the safe compact passenger datalist only.",
+);
+assert.equal(
+  /saved passenger|saved address|memory helper|choose boss|select boss|booking memory/i.test(pageSource),
   false,
-  "/book should not surface the memory read until the UI is intentionally wired.",
+  "/book should not add extra visible booking-memory instructional text.",
 );
 for (const field of [
   "passengerName",

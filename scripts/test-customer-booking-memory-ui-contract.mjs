@@ -77,6 +77,8 @@ assert.equal(
     pageSource.includes("loadCustomerBookingMemorySuggestions") &&
     pageSource.includes("applyCustomerBookingMemoryToRequestForm") &&
     pageSource.includes("findCustomerBookingMemorySuggestion") &&
+    pageSource.includes("bookingMemoryLoadStarted = useRef(false)") &&
+    pageSource.includes("bookingMemoryLoadStarted.current = true") &&
     pageSource.includes("data-customer-booking-memory-passenger-input") &&
     pageSource.includes("data-customer-booking-memory-passenger-list") &&
     pageSource.includes("<datalist") &&
@@ -86,6 +88,13 @@ assert.equal(
     pageSource.includes("onChange={(event) => updatePassengerName(event.target.value)}"),
   true,
   "/book should wire booking memory through the safe compact passenger datalist only.",
+);
+assert.equal(
+  /setFeedback|bookingMemoryError|login required|please log in|sign in/i.test(
+    pageSource.match(/async function ensureBookingMemorySuggestions\(\) {[\s\S]+?\n  }/)?.[0] || "",
+  ),
+  false,
+  "/book memory auth failures should stay silent and not add customer-facing text.",
 );
 assert.equal(
   /saved passenger|saved address|memory helper|choose boss|select boss|booking memory/i.test(pageSource),
@@ -234,17 +243,30 @@ try {
     "The booking memory fetch must not attach session-token, authorization, or cookie headers.",
   );
 
+  let blockedJsonWasRead = false;
+  const blockedFetchCalls = [];
   const blockedLoad = await loadCustomerBookingMemorySuggestions({
-    fetcher: async () => ({
-      json: async () => {
-        throw new Error("blocked JSON should not be read");
-      },
-      ok: false,
-      status: 403,
-    }),
+    fetcher: async (url, init) => {
+      blockedFetchCalls.push({ init, url });
+
+      return {
+        json: async () => {
+          blockedJsonWasRead = true;
+
+          throw new Error("blocked JSON should not be read");
+        },
+        ok: false,
+        status: 403,
+      };
+    },
   });
 
   assert.equal(blockedLoad, null, "Blocked customer booking memory reads should fail closed.");
+  assert.equal(blockedJsonWasRead, false, "Blocked customer booking memory reads should not parse body text.");
+  assert.equal(blockedFetchCalls.length, 1, "Blocked customer booking memory reads should use one quiet request.");
+  assert.deepEqual(blockedFetchCalls[0].init.headers, {
+    "x-prestige-customer-purpose": "customer-booking-memory-read",
+  });
 
   const unsafeQueryLoad = await loadCustomerBookingMemorySuggestions({
     fetcher: async () => {

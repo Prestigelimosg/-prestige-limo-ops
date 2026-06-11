@@ -6,8 +6,8 @@ Scope: this is a production-readiness audit only. It does not change pricing beh
 
 ## Current State
 
-- `/my-bookings` keeps compact in-file sample bookings as the fallback state in `app/my-bookings/page.tsx`.
-- The customer portal adapter attempts the guarded read through `lib/customer-portal-saved-bookings-adapter.ts`.
+- `/my-bookings` starts with no booking rows and loads only guarded saved-bookings API rows through `lib/customer-portal-saved-bookings-adapter.ts`.
+- Blocked, unavailable, or unsafe saved-bookings reads clear the booking rows and show the compact `Sign in to view bookings.` state.
 - The adapter fetches `/api/customer-saved-bookings?limit=25&page=1` with `credentials: "same-origin"` and only the `x-prestige-customer-purpose: customer-saved-bookings-read` header.
 - The browser must not manually attach `Cookie`, `Authorization`, or `x-prestige-customer-session-token` headers.
 - `/api/customer-saved-bookings` uses the server-only `lib/customer-saved-bookings-read.ts` boundary and blocks POST, PUT, PATCH, and DELETE.
@@ -27,7 +27,7 @@ The current handoff is intentionally small and server-side:
 - A configured cookie name is exclusive; default names are not accepted when the override is set.
 - Unsafe, duplicate, ambiguous, wrong, missing, or placeholder values fail closed with the customer auth-required response.
 - The read path still needs server-only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; those values must never be exposed to the browser.
-- No UI change is included in this handoff contract.
+- The UI fail-closes to an empty/sign-in-required booking list when the guarded read is blocked.
 - No Supabase CLI command, migration, live DB write, invoice/PDF/payment/payout, or notification send is included.
 
 The static readiness check is `node scripts/test-customer-saved-bookings-auth-handoff-readiness.mjs`.
@@ -67,5 +67,5 @@ Connect real customer auth only after the owner approves the exact login path:
 
 - The approved login path must call the session issue contract without exposing issue tokens to browser code.
 - The customer portal client should stay compact and continue using same-origin credentials only.
-- Keep sample/fallback behavior until the real session issuer and customer account mapping are approved and tested.
+- Keep the portal fail-closed until the real session issuer and customer account mapping are approved and tested.
 - Keep proving that no admin finance, payout, invoice/payment, parser/debug, mock/dev archive, or other-customer data can leak.

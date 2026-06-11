@@ -94,7 +94,7 @@ for (const requiredText of [
   "configured cookie name is exclusive",
   "Unsafe, duplicate, ambiguous, wrong, missing, or placeholder values fail closed",
   "The browser must not manually attach `Cookie`, `Authorization`, or `x-prestige-customer-session-token` headers.",
-  "No UI change is included in this handoff contract.",
+  "The UI fail-closes to an empty/sign-in-required booking list when the guarded read is blocked.",
   "No Supabase CLI command, migration, live DB write, invoice/PDF/payment/payout, or notification send is included.",
   "node scripts/test-customer-saved-bookings-auth-handoff-readiness.mjs",
 ]) {

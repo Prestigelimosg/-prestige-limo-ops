@@ -85,6 +85,7 @@ This index is a docs-only cross-reference for existing Prestige Limo Ops testing
 - [Customer Payment Supabase Migration Planning](customer-payment-supabase-migration-planning.md) owns future migration planning boundaries without creating or applying migrations.
 - [Regular Customer Monthly Billing Workflow Plan](regular-customer-monthly-billing-workflow-plan.md) owns regular-customer booking, monthly billing, draft invoice preview, and bank-transfer billing workflow planning.
 - [Customer Portal Plan](customer-portal-plan.md) owns future portal separation, customer-safe booking views, auth/security planning, edit/amend requests, and mobile/search-first portal expectations.
+- [Customer Portal Real Booking Data Path Audit](customer-portal-real-booking-data-path-audit.md) owns the customer saved-bookings read path, same-origin cookie handoff, customer-safe field boundary, sample fallback posture, and no-live-write/no-send scope.
 
 ## UI And Mobile Safety
 

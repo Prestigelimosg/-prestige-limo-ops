@@ -4,10 +4,13 @@ import Link from "next/link";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import {
-  applyCustomerBookingMemorySuggestion,
   loadCustomerBookingMemorySuggestions,
   type CustomerBookingMemorySuggestion,
 } from "../../lib/customer-booking-memory-adapter";
+import {
+  applyCustomerBookingMemoryToRequestForm,
+  findCustomerBookingMemorySuggestion,
+} from "../../lib/customer-booking-memory-form";
 
 const serviceOptions = [
   "Airport Arrival",
@@ -147,33 +150,16 @@ function splitPickupTime(value: string) {
   };
 }
 
-function findBookingMemorySuggestion(
-  suggestions: CustomerBookingMemorySuggestion[],
-  passengerName: string,
-) {
-  const normalizedPassengerName = passengerName.trim().toLowerCase();
-
-  return suggestions.find(
-    (suggestion) => suggestion.passengerName.trim().toLowerCase() === normalizedPassengerName,
-  );
-}
-
 function applyBookingMemoryToForm(
   currentForm: BookingRequestForm,
   suggestion: CustomerBookingMemorySuggestion,
 ) {
-  const nextForm = applyCustomerBookingMemorySuggestion(currentForm, suggestion);
-
-  return {
-    ...nextForm,
-    serviceType: serviceOptions.includes(nextForm.serviceType)
-      ? nextForm.serviceType
-      : currentForm.serviceType,
-    vehicleType:
-      !nextForm.vehicleType || vehicleOptions.includes(nextForm.vehicleType)
-        ? nextForm.vehicleType
-        : currentForm.vehicleType,
-  };
+  return applyCustomerBookingMemoryToRequestForm({
+    form: currentForm,
+    serviceOptions,
+    suggestion,
+    vehicleOptions,
+  });
 }
 
 export default function CustomerBookingPage() {
@@ -209,7 +195,7 @@ export default function CustomerBookingPage() {
   }
 
   function updatePassengerName(value: string) {
-    const suggestion = findBookingMemorySuggestion(bookingMemorySuggestions, value);
+    const suggestion = findCustomerBookingMemorySuggestion(bookingMemorySuggestions, value);
 
     setForm((current) => {
       const nextForm = {

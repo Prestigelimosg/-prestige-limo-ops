@@ -6,6 +6,7 @@ import path from "node:path";
 import ts from "typescript";
 
 const adapterPath = "lib/customer-booking-memory-adapter.ts";
+const formHelperPath = "lib/customer-booking-memory-form.ts";
 const pagePath = "app/book/page.tsx";
 const forbiddenVisibleTextPattern =
   /admin_internal_status|admin_status|billing|contact_phone|contact_email|passenger_phone|customer_price|quoted_price|rate_amount|driver_payout|paynow|pay_now|invoice|payment|pdf|payout|finance|parser_debug|parser_learning|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|internal_finance_note|internal_note|admin_note|server_secret|session_token|raw_token|token_hash|driver_token/i;
@@ -23,16 +24,20 @@ function transpileTypescript(source, filename) {
 
 async function loadAdapterHarness() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-customer-booking-memory-ui-"));
-  const sourcePath = path.join(process.cwd(), adapterPath);
-  const outputPath = path.join(tempDir, adapterPath.replace(/\.ts$/, ".js"));
-  const source = await readFile(sourcePath, "utf8");
 
-  await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, transpileTypescript(source, sourcePath));
+  for (const relativePath of [adapterPath, formHelperPath]) {
+    const sourcePath = path.join(process.cwd(), relativePath);
+    const outputPath = path.join(tempDir, relativePath.replace(/\.ts$/, ".js"));
+    const source = await readFile(sourcePath, "utf8");
+
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, transpileTypescript(source, sourcePath));
+  }
 
   return {
-    adapter: createRequire(import.meta.url)(outputPath),
+    adapter: createRequire(import.meta.url)(path.join(tempDir, adapterPath.replace(/\.ts$/, ".js"))),
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
+    form: createRequire(import.meta.url)(path.join(tempDir, formHelperPath.replace(/\.ts$/, ".js"))),
   };
 }
 
@@ -44,10 +49,12 @@ function assertNoVisibleLeak(value, label) {
   );
 }
 
-const [adapterSource, pageSource] = await Promise.all(
-  [adapterPath, pagePath].map((relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8")),
+const [adapterSource, formHelperSource, pageSource] = await Promise.all(
+  [adapterPath, formHelperPath, pagePath].map((relativePath) =>
+    readFile(path.join(process.cwd(), relativePath), "utf8"),
+  ),
 );
-const clientSource = `${adapterSource}\n${pageSource}`;
+const clientSource = `${adapterSource}\n${formHelperSource}\n${pageSource}`;
 
 assert.equal(
   /from\s+["'].*customer-booking-memory-read["']|lib\/customer-booking-memory-read/.test(clientSource),
@@ -67,8 +74,9 @@ assert.equal(
   "The customer booking memory client path must remain read-only.",
 );
 assert.equal(
-  pageSource.includes("loadCustomerBookingMemorySuggestions") &&
-    pageSource.includes("applyCustomerBookingMemorySuggestion") &&
+    pageSource.includes("loadCustomerBookingMemorySuggestions") &&
+    pageSource.includes("applyCustomerBookingMemoryToRequestForm") &&
+    pageSource.includes("findCustomerBookingMemorySuggestion") &&
     pageSource.includes("data-customer-booking-memory-passenger-input") &&
     pageSource.includes("data-customer-booking-memory-passenger-list") &&
     pageSource.includes("<datalist") &&
@@ -104,6 +112,10 @@ try {
     loadCustomerBookingMemorySuggestions,
     mapCustomerBookingMemoryPayload,
   } = harness.adapter;
+  const {
+    applyCustomerBookingMemoryToRequestForm,
+    findCustomerBookingMemorySuggestion,
+  } = harness.form;
   const safePayload = {
     memories: [
       {
@@ -148,6 +160,16 @@ try {
     },
   ]);
   assertNoVisibleLeak(mapped, "safe mapped memory suggestions");
+  assert.deepEqual(
+    findCustomerBookingMemorySuggestion(mapped, "boss a"),
+    mapped[0],
+    "Passenger lookup should match exact names case-insensitively.",
+  );
+  assert.equal(
+    findCustomerBookingMemorySuggestion(mapped, "Boss"),
+    undefined,
+    "Passenger lookup should not partial-match and fill the wrong traveler.",
+  );
 
   assert.equal(
     mapCustomerBookingMemoryPayload({
@@ -260,6 +282,39 @@ try {
     "Applying Boss A should fill saved passenger/address/service/vehicle while preserving date and pickup time.",
   );
   assertNoVisibleLeak(applied, "applied booking memory suggestion");
+
+  assert.deepEqual(
+    applyCustomerBookingMemoryToRequestForm({
+      form: {
+        dropoffLocation: "",
+        passengerName: "",
+        pickupDate: "2026-06-22",
+        pickupLocation: "",
+        pickupTime: "09:30",
+        serviceType: "Other / To Confirm",
+        vehicleType: "Alphard / Vellfire",
+      },
+      serviceOptions: ["Airport Arrival", "Other / To Confirm"],
+      suggestion: {
+        dropoffLocation: "Safe Dropoff",
+        passengerName: "Boss C",
+        pickupLocation: "Safe Pickup",
+        serviceType: "Unknown Private Service",
+        vehicleType: "Unknown Private Vehicle",
+      },
+      vehicleOptions: ["Alphard / Vellfire"],
+    }),
+    {
+      dropoffLocation: "Safe Dropoff",
+      passengerName: "Boss C",
+      pickupDate: "2026-06-22",
+      pickupLocation: "Safe Pickup",
+      pickupTime: "09:30",
+      serviceType: "Other / To Confirm",
+      vehicleType: "Alphard / Vellfire",
+    },
+    "Unsupported saved service/vehicle values should not replace customer-safe form choices.",
+  );
 } finally {
   await harness.cleanup();
 }

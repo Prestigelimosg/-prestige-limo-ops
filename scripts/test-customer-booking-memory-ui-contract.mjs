@@ -74,7 +74,7 @@ assert.equal(
   "The customer booking memory client path must remain read-only.",
 );
 assert.equal(
-    pageSource.includes("loadCustomerBookingMemorySuggestions") &&
+  pageSource.includes("loadCustomerBookingMemorySuggestions") &&
     pageSource.includes("applyCustomerBookingMemoryToRequestForm") &&
     pageSource.includes("findCustomerBookingMemorySuggestion") &&
     pageSource.includes("bookingMemoryLoadStarted = useRef(false)") &&
@@ -276,6 +276,45 @@ try {
   });
 
   assert.equal(unsafeQueryLoad, null, "Unsafe customer booking memory queries should fail before fetch.");
+
+  const manualFormBeforeUnsafeApi = {
+    dropoffLocation: "Manual Dropoff",
+    passengerName: "Manual Passenger",
+    pickupDate: "2026-06-22",
+    pickupLocation: "Manual Pickup",
+    pickupTime: "09:30",
+    serviceType: "Other / To Confirm",
+    vehicleType: "Alphard / Vellfire",
+  };
+  const unsafeApiLoad = await loadCustomerBookingMemorySuggestions({
+    fetcher: async () => ({
+      json: async () => ({
+        memories: [
+          {
+            admin_internal_status: "confirmed",
+            passenger_name: "Boss Unsafe",
+          },
+        ],
+        ok: true,
+      }),
+      ok: true,
+    }),
+  });
+
+  assert.equal(unsafeApiLoad, null, "Unsafe customer booking memory API payloads should fail closed.");
+  assert.deepEqual(
+    manualFormBeforeUnsafeApi,
+    {
+      dropoffLocation: "Manual Dropoff",
+      passengerName: "Manual Passenger",
+      pickupDate: "2026-06-22",
+      pickupLocation: "Manual Pickup",
+      pickupTime: "09:30",
+      serviceType: "Other / To Confirm",
+      vehicleType: "Alphard / Vellfire",
+    },
+    "Unsafe memory API payloads should leave manual form state unchanged by producing no suggestions.",
+  );
 
   const applied = applyCustomerBookingMemorySuggestion(
     {

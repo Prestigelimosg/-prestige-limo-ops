@@ -89,6 +89,30 @@ function customerSafeError(rawError: string) {
   return "Booking request could not be saved safely.";
 }
 
+export async function GET() {
+  return blockedResponse();
+}
+
+export async function PUT() {
+  return blockedResponse();
+}
+
+export async function PATCH() {
+  return blockedResponse();
+}
+
+export async function DELETE() {
+  return blockedResponse();
+}
+
+export async function HEAD() {
+  return blockedResponse();
+}
+
+export async function OPTIONS() {
+  return blockedResponse();
+}
+
 export async function POST(request: Request) {
   try {
     if (!isCustomerBookingRequest(request)) {

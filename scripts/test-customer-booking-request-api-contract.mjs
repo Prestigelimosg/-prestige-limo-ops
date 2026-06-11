@@ -212,6 +212,20 @@ try {
   assert.equal(blocked.status, 403);
   assertSafeCustomerBody(blocked.body, "blocked boundary body");
 
+  for (const method of ["GET", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]) {
+    const methodMock = installMock();
+    const blockedMethod = await readJson(await harness.route[method]());
+
+    assert.equal(blockedMethod.status, 403, `${method} should fail closed.`);
+    assert.deepEqual(blockedMethod.body, {
+      error: "Booking requests can be submitted only from the customer booking form.",
+      ok: false,
+    });
+    assert.equal(methodMock.parseCalls.length, 0, `${method} must not parse a customer payload.`);
+    assert.equal(methodMock.createCalls.length, 0, `${method} must not create a booking.`);
+    assertSafeCustomerBody(blockedMethod.body, `${method} blocked body`);
+  }
+
   const validationMock = installMock({
     parseResult: {
       error: "Forbidden customerPrice rejected before persistence.",

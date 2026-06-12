@@ -9,11 +9,15 @@ for (const fragment of [
   "setup_only",
   "acknowledgement_status",
   "driver_action_status",
+  "resend_status",
+  "admin_escalation_status",
   "disabled",
   "mng_arrival_only",
   "disabled_not_arrival",
   "mng_arrival_flight_eta",
   "future_required_before_otw: true",
+  "future_resend_attempts_before_admin_escalation: 2",
+  "get_replacement_driver",
   "customer_update_status",
 ]) {
   assert.ok(source.includes(fragment), `Missing fragment: ${fragment}`);

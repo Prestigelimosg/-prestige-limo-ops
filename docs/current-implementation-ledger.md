@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-976c40f Add customer driver details email readiness setup
+6978217 Add disabled email send adapter setup
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -71,6 +71,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver job notifications API.
 - Telegram disabled adapter foundation.
 - WhatsApp disabled adapter foundation.
+- Disabled email send adapter setup foundation.
 - Email notification setup foundation.
 - Email sender selection setup foundation.
 - Email recipient safety setup foundation.

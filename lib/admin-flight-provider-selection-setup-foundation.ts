@@ -4,7 +4,8 @@ export const adminFlightProviderSelectionSetupFoundationVersion =
 export type AdminFlightProviderSelectionSetupResult = {
   version: typeof adminFlightProviderSelectionSetupFoundationVersion;
   status: "setup_only";
-  provider_selection_status: "not_selected";
+  provider_selection_status: "selected_later";
+  selected_provider: "flightaware_aeroapi";
   provider_lookup_status: "disabled";
   token_status: "not_configured";
   live_eta_status: "disabled";
@@ -18,7 +19,8 @@ export function buildAdminFlightProviderSelectionSetupFoundation(): AdminFlightP
   return {
     version: adminFlightProviderSelectionSetupFoundationVersion,
     status: "setup_only",
-    provider_selection_status: "not_selected",
+    provider_selection_status: "selected_later",
+    selected_provider: "flightaware_aeroapi",
     provider_lookup_status: "disabled",
     token_status: "not_configured",
     live_eta_status: "disabled",
@@ -27,7 +29,7 @@ export function buildAdminFlightProviderSelectionSetupFoundation(): AdminFlightP
     future_scope: "mng_arrival_eta_only",
     notes: [
       "Setup foundation only.",
-      "No flight provider is selected.",
+      "Future provider selected: FlightAware AeroAPI.",
       "No provider token is configured.",
       "No live ETA lookup is active.",
       "Future use is limited to MNG/Arrival driver ETA support.",

@@ -97,10 +97,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/api/admin-driver-flight-eta-notification-payload-setup`.
 - Flight provider selection setup foundation.
 - `/api/admin-flight-provider-selection-setup`.
+- Future flight provider recorded: FlightAware AeroAPI, setup-only/disabled.
 
 ## Not Live / Not Implemented
 
-- Real flight provider selected.
+- Real flight provider activation.
 - External flight API call.
 - Provider token/env.
 - Live ETA lookup.

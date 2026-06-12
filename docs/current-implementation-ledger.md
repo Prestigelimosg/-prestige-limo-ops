@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-7aa8b40 Add email sender selection setup foundation
+c782409 Add email recipient safety setup foundation
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -73,6 +73,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - WhatsApp disabled adapter foundation.
 - Email notification setup foundation.
 - Email sender selection setup foundation.
+- Email recipient safety setup foundation.
 - No real sending active.
 
 ### Live location

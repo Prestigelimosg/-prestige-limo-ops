@@ -78,6 +78,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email send policy setup foundation.
 - Customer driver details email setup foundation.
 - Customer driver details email readiness setup foundation.
+- Customer driver details email preview/readiness setup API.
 - No real sending active.
 
 ### Live location

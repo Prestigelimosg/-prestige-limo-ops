@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-289c03a Add driver flight ETA live readiness setup foundation
+7b24b48 Add flight ETA result normalization setup foundation
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -99,6 +99,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/api/admin-flight-provider-selection-setup`.
 - Future flight provider recorded: FlightAware AeroAPI, setup-only/disabled.
 - Driver flight ETA live readiness setup foundation.
+- Flight ETA result normalization setup foundation.
 
 ## Not Live / Not Implemented
 

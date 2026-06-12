@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-df3c3b6 Add driver flight ETA notification payload setup endpoint
+289c03a Add driver flight ETA live readiness setup foundation
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -98,6 +98,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Flight provider selection setup foundation.
 - `/api/admin-flight-provider-selection-setup`.
 - Future flight provider recorded: FlightAware AeroAPI, setup-only/disabled.
+- Driver flight ETA live readiness setup foundation.
 
 ## Not Live / Not Implemented
 
@@ -128,4 +129,3 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - If driver does not acknowledge, resend later.
 - After 2 no-ack attempts, alert admin to get replacement driver.
 - Current state is setup-only; no live sending or external API.
-

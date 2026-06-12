@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-c782409 Add email recipient safety setup foundation
+f9e4c75 Add customer driver details email setup foundation
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -74,6 +74,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email notification setup foundation.
 - Email sender selection setup foundation.
 - Email recipient safety setup foundation.
+- Customer driver details email setup foundation.
 - No real sending active.
 
 ### Live location

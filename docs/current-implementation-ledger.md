@@ -74,6 +74,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email notification setup foundation.
 - Email sender selection setup foundation.
 - Email recipient safety setup foundation.
+- Email send policy setup foundation.
 - Customer driver details email setup foundation.
 - No real sending active.
 

@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-38847a8 Add flight ETA comparison update setup foundation
+bf42091 Cover lifecycle monitor missing checkpoints
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -25,6 +25,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin booking workflow statuses.
 - Admin driver job statuses.
 - Job lifecycle monitor helper and typed read-only API.
+- Job lifecycle monitor missing-checkpoint contract coverage.
 
 ### Customer
 - `/book` customer booking request foundation.

@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-7f1d8a4 Add ledger not-live guard
+7a671ee Add email notification setup foundation
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -71,6 +71,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver job notifications API.
 - Telegram disabled adapter foundation.
 - WhatsApp disabled adapter foundation.
+- Email notification setup foundation.
 - No real sending active.
 
 ### Live location

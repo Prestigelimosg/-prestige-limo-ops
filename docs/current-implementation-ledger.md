@@ -6,6 +6,14 @@ Latest known clean checkpoint:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+## Next GPT Lock / Uncompleted Backlog
+
+- Latest repo commit to preserve as handoff baseline: `9f7dc1a Update ledger for disabled email send adapter`.
+- Latest implementation checkpoint to preserve: `6978217 Add disabled email send adapter setup`.
+- Completed foundations not to repeat: Flight ETA setup-only chain, email setup-only chain, ledger guards.
+- Uncompleted backlog: email APIs; provider/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
+- Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
+
 ## Locked Workflow Rules
 
 - Inspect first.

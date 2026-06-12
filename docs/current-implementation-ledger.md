@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-3561b65 Add implementation ledger alignment guard
+7f1d8a4 Add ledger not-live guard
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -27,6 +27,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Job lifecycle monitor helper and typed read-only API.
 - Job lifecycle monitor missing-checkpoint contract coverage.
 - Implementation ledger alignment guard.
+- Implementation ledger not-live guard.
 
 ### Customer
 - `/book` customer booking request foundation.

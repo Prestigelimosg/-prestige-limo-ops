@@ -1,17 +1,17 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest known clean checkpoint:
-6978217 Add disabled email send adapter setup
+Latest implementation checkpoint:
+30c5e90 Add customer driver details email preview readiness API
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `9f7dc1a Update ledger for disabled email send adapter`.
-- Latest implementation checkpoint to preserve: `6978217 Add disabled email send adapter setup`.
-- Completed foundations not to repeat: Flight ETA setup-only chain, email setup-only chain, ledger guards.
-- Uncompleted backlog: email APIs; provider/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
+- Latest repo commit to preserve as handoff baseline: `93531d6 Add next GPT backlog lock`.
+- Latest implementation checkpoint to preserve: `30c5e90 Add customer driver details email preview readiness API`.
+- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, ledger guards.
+- Uncompleted backlog: disabled email send API route; provider/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
 ## Locked Workflow Rules

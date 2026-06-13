@@ -30171,7 +30171,7 @@ export default function Home() {
                 }
               >
                 <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <span
                       className="block truncate font-semibold"
                       data-admin-customer-driver-details-email-review-label="true"
@@ -30179,10 +30179,10 @@ export default function Home() {
                       {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
                         "Customer driver details ready"}
                     </span>
-                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                    <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5 sm:flex-nowrap">
                       <button
                         aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
-                        className="inline-flex min-h-7 max-w-full items-center rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
                         data-admin-customer-driver-details-email-disabled-send-action="true"
                         data-admin-customer-driver-details-email-review-action="true"
                         disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
@@ -30197,7 +30197,7 @@ export default function Home() {
                       </button>
                       <button
                         aria-label="Customer driver details WhatsApp - Review WhatsApp to customer"
-                        className="inline-flex min-h-7 max-w-full items-center rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
                         data-admin-customer-driver-details-whatsapp-disabled-send-action="true"
                         data-admin-customer-driver-details-whatsapp-disabled-send-action-state={
                           adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus
@@ -30229,7 +30229,7 @@ export default function Home() {
                       </button>
                       <button
                         aria-label="Customer driver details SMS - Review SMS to customer"
-                        className="inline-flex min-h-7 max-w-full items-center rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
                         data-admin-customer-driver-details-sms-disabled-send-action="true"
                         data-admin-customer-driver-details-sms-disabled-send-action-state={
                           adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus

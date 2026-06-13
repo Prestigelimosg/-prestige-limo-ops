@@ -8,10 +8,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `15b966f Add customer driver auth no-live guard`.
+- Latest repo commit to preserve as handoff baseline: `7810af8 Update ledger for customer driver auth no-live guard`.
 - Latest implementation checkpoint to preserve: `15b966f Add customer driver auth no-live guard`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, and no-live guard, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
-- Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location activation; OTS photo activation; auth; billing/payment; shim cleanup; production.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
+- Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp activation; FlightAware live; live location activation; OTS photo activation; customer/driver auth activation; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
 ## Email Pre-Activation Completion Audit Lock
@@ -101,6 +101,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Access/upload audit payload setup foundation is done.
 - OTS photo proof no-live guard is done.
 - Live camera/file upload, Supabase Storage bucket, storage policies, DB/write, admin viewer, customer visibility, and auth/live access remain blocked until explicit approval.
+
+## Customer/Driver Auth Pre-Activation Completion Audit Lock
+
+- Customer/driver auth is complete up to the activation stop.
+- Readiness foundation is done.
+- Preview/readiness API is done.
+- Disabled auth access API is done.
+- Access audit payload setup foundation is done.
+- Customer/driver auth no-live guard is done.
+- Customer auth, driver auth, Supabase Auth, session creation, token issuing, saved booking access, driver-only job visibility, and DB/write remain blocked until explicit approval.
 
 ## Locked Workflow Rules
 

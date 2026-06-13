@@ -22,6 +22,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Reuse existing setup-only foundations.
 - Terminal 2 checks before Codex whenever possible.
 - No live DB, migrations, payment, PDF, payout, auth activation, live sending, external APIs, live location, or photo upload unless explicitly approved.
+- After every Codex task, provide a short "ChatGPT record message" for the user to paste back into ChatGPT. Include implementation commit if any, ledger/docs commit if any, files changed, checks run, final `git status --short`, applicable boundaries (no live DB/provider/env/sending/payment/etc.), and next suggested task if obvious.
 
 ## Required Check Lock
 

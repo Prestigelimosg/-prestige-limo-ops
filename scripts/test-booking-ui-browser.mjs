@@ -1665,6 +1665,20 @@ function assertBookingUiState(state) {
     "Add driver contact before acknowledgement.",
   );
   assert.equal(state.driverAcknowledgementReadiness.markReadyDisabled, true);
+  assert.deepEqual(
+    state.driverAcknowledgementReadiness.customerEmailReviewItem,
+    {
+      action: "Review email to customer",
+      label: "Customer driver details ready",
+      loadedReference: "",
+      readState: "idle",
+      readyState: "blocked",
+      readyStatus: "Blocked",
+      sendState: "Setup-only / send disabled",
+      visible: true,
+    },
+    "Expected compact customer driver details email review row to start setup-only and blocked",
+  );
   assert.match(state.driverAcknowledgementReadiness.boundary, /UI\/local-state/);
   assert.match(state.driverAcknowledgementReadiness.boundary, /workflow-status API/);
   assert.match(state.driverAcknowledgementReadiness.boundary, /No Supabase write/);
@@ -4095,6 +4109,9 @@ async function runChromeTest() {
       };
       const driverAcknowledgementReadiness = () => {
         const section = document.querySelector("[data-admin-driver-acknowledgement-readiness='true']");
+        const customerEmailReviewItem = section?.querySelector(
+          "[data-admin-customer-driver-details-email-review-item='true']",
+        );
         const rect = section?.getBoundingClientRect();
         const text = section?.innerText || "";
         const lowerText = text.toLowerCase();
@@ -4131,6 +4148,41 @@ async function runChromeTest() {
           })),
           markReadyDisabled:
             section?.querySelector("[data-admin-driver-acknowledgement-mark-ready='true']")?.disabled ?? null,
+          customerEmailReviewItem: {
+            action:
+              customerEmailReviewItem
+                ?.querySelector("[data-admin-customer-driver-details-email-review-action='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            label:
+              customerEmailReviewItem
+                ?.querySelector("[data-admin-customer-driver-details-email-review-label='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            loadedReference:
+              customerEmailReviewItem?.getAttribute(
+                "data-admin-customer-driver-details-email-review-loaded-reference",
+              ) || "",
+            readState:
+              customerEmailReviewItem?.getAttribute(
+                "data-admin-customer-driver-details-email-review-read-state",
+              ) || "",
+            readyState:
+              customerEmailReviewItem?.getAttribute(
+                "data-admin-customer-driver-details-email-review-ready-state",
+              ) || "",
+            readyStatus:
+              customerEmailReviewItem
+                ?.querySelector("[data-admin-customer-driver-details-email-review-ready-status='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            sendState:
+              customerEmailReviewItem
+                ?.querySelector("[data-admin-customer-driver-details-email-review-send-state='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "",
+            visible: Boolean(customerEmailReviewItem),
+          },
           status:
             section?.querySelector("[data-admin-driver-acknowledgement-status='true']")?.textContent
               .replace(/\\s+/g, " ")
@@ -6014,6 +6066,7 @@ async function runChromeTest() {
       window.__prestigeCompletedCloseouts = {};
       window.__prestigeAdminDriverJobLinkRequests = [];
       window.__prestigeAdminDriverJobLinks = [];
+      window.__prestigeCustomerDriverDetailsEmailReviewItemRequests = [];
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
@@ -6094,6 +6147,68 @@ async function runChromeTest() {
         })();
 
         window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+
+        if (String(target).includes("/api/admin-customer-driver-details-email-review-item-setup")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeCustomerDriverDetailsEmailReviewItemRequests.push({
+            booking_reference: url.searchParams.get("booking_reference") || "",
+            body: null,
+            customer_email: url.searchParams.get("customer_email") || "",
+            driver_ack_status: url.searchParams.get("driver_ack_status") || "",
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method !== "GET") {
+            return new Response(
+              JSON.stringify({
+                error: "Customer driver details email review item method not mocked.",
+                ok: false,
+              }),
+              { status: 405, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          const missingRequirements = [
+            url.searchParams.get("driver_ack_status") === "driver_acknowledged" ? "" : "driver_acknowledged",
+            url.searchParams.get("booking_reference") ? "" : "booking_reference",
+            url.searchParams.get("customer_email") ? "" : "customer_email",
+            url.searchParams.get("driver_name") ? "" : "driver_name",
+            url.searchParams.get("driver_phone") ? "" : "driver_phone",
+            url.searchParams.get("vehicle_type") ? "" : "vehicle_type",
+            url.searchParams.get("vehicle_plate") ? "" : "vehicle_plate",
+          ].filter(Boolean);
+          const customerEmailReady = missingRequirements.length === 0;
+
+          return new Response(
+            JSON.stringify({
+              adminReviewRequired: true,
+              customerEmailReady,
+              external_send: false,
+              ok: true,
+              reviewItem: {
+                actionLabel: "Review email to customer",
+                adminReviewRequired: true,
+                customerEmailReady,
+                disabled_send_status: "blocked",
+                external_send: false,
+                item_key: "customer_driver_details_email",
+                label: "Customer driver details ready",
+                missing_requirements: missingRequirements,
+                readiness_status: customerEmailReady ? "ready" : "blocked",
+                sendingEnabled: false,
+                status: "setup_only",
+              },
+              sendingEnabled: false,
+              status: "setup_only",
+              version: "browser-customer-driver-details-email-review-item-mock",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
 
         if (String(target).includes("/api/admin-booking-calendar-sync-statuses")) {
           let parsedBody = null;
@@ -14515,6 +14630,8 @@ async function runChromeTest() {
             adminDriverJobLinkRequests: window.__prestigeAdminDriverJobLinkRequests || [],
             adminDriverJobDspActualTimeRequests:
               window.__prestigeAdminDriverJobDspActualTimeRequests || [],
+            customerDriverDetailsEmailReviewItemRequests:
+              window.__prestigeCustomerDriverDetailsEmailReviewItemRequests || [],
             driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             completedBillingReadinessAuditRequests:
@@ -14778,6 +14895,12 @@ async function runChromeTest() {
               request.booking_reference === "ui-cleanup-load-fixture" &&
               request.link_status === "active",
           ) &&
+          candidateState?.customerDriverDetailsEmailReviewItemRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.driver_ack_status === "pending",
+          ) &&
           candidateState?.driverJobStatusRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -14840,6 +14963,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-driver-job-links?booking_reference=ui-cleanup-load-fixture&limit=1&link_status=active&page=1",
+      "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VAN",
       "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-billing-draft-plans?limit=1&page=1&billing_month=2026-05",
@@ -14872,6 +14996,29 @@ async function runChromeTest() {
         },
       ],
       "Expected saved booking load to GET active driver job link through the guarded API path",
+    );
+    assert.deepEqual(
+      loadedBookingState.customerDriverDetailsEmailReviewItemRequests.map((request) => ({
+        booking_reference: request.booking_reference,
+        body: request.body,
+        customer_email: request.customer_email,
+        driver_ack_status: request.driver_ack_status,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          booking_reference: "ui-cleanup-load-fixture",
+          body: null,
+          customer_email: "booker@loadedsaved.example.com",
+          driver_ack_status: "pending",
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+        },
+      ],
+      "Expected saved booking load to GET the customer driver details email review item through the guarded setup-only API path",
     );
     assert.deepEqual(
       loadedBookingState.workflowStatusRequests.map((request) => ({

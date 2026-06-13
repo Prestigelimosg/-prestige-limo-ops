@@ -33,7 +33,7 @@ function restoreEnv() {
   }
 }
 
-function useLocalAdminBoundary() {
+function applyLocalAdminBoundary() {
   delete process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED;
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE;
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE;
@@ -138,7 +138,7 @@ for (const fragment of [
 const harness = await loadHarness();
 
 try {
-  useLocalAdminBoundary();
+  applyLocalAdminBoundary();
 
   const anonymousResponse = await harness.route.GET(new Request(apiUrl()));
   const anonymous = await anonymousResponse.json();

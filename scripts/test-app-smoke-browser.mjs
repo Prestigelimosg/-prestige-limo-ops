@@ -6024,6 +6024,9 @@ async function runChromeTest() {
               }
 
               const rect = section.getBoundingClientRect();
+              const customerEmailReviewItem = section.querySelector(
+                "[data-admin-customer-driver-details-email-review-item]",
+              );
               const items = [...section.querySelectorAll("[data-admin-driver-acknowledgement-item]")].map((item) => {
                 const itemRect = item.getBoundingClientRect();
 
@@ -6051,6 +6054,33 @@ async function runChromeTest() {
                   section.querySelector("[data-admin-driver-acknowledgement-boundary]")?.textContent
                     .replace(/\\s+/g, " ")
                     .trim() || "",
+                customerEmailReviewItem: {
+                  action:
+                    customerEmailReviewItem
+                      ?.querySelector("[data-admin-customer-driver-details-email-review-action]")
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                  label:
+                    customerEmailReviewItem
+                      ?.querySelector("[data-admin-customer-driver-details-email-review-label]")
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                  readyState:
+                    customerEmailReviewItem?.getAttribute(
+                      "data-admin-customer-driver-details-email-review-ready-state",
+                    ) || "",
+                  readyStatus:
+                    customerEmailReviewItem
+                      ?.querySelector("[data-admin-customer-driver-details-email-review-ready-status]")
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                  sendState:
+                    customerEmailReviewItem
+                      ?.querySelector("[data-admin-customer-driver-details-email-review-send-state]")
+                      ?.textContent.replace(/\\s+/g, " ")
+                      .trim() || "",
+                  visible: Boolean(customerEmailReviewItem),
+                },
                 docClientWidth: document.documentElement.clientWidth,
                 docScrollWidth: document.documentElement.scrollWidth,
                 forbiddenPrivateText: [
@@ -6121,6 +6151,18 @@ async function runChromeTest() {
           1,
           `${viewport.label}: expected one acknowledgement readiness action`,
         );
+        assert.deepEqual(
+          state.customerEmailReviewItem,
+          {
+            action: "Review email to customer",
+            label: "Customer driver details ready",
+            readyState: "blocked",
+            readyStatus: "Blocked",
+            sendState: "Setup-only / send disabled",
+            visible: true,
+          },
+          `${viewport.label}: expected compact setup-only customer driver details email review row`,
+        );
         for (const expectedBoundaryText of [
           "UI/local-state",
           "workflow-status API",
@@ -6148,7 +6190,7 @@ async function runChromeTest() {
           `${viewport.label}: expected no private/customer/driver forbidden text in acknowledgement readiness`,
         );
         assert.equal(
-          state.height <= (viewport.width < 640 ? 620 : 360),
+          state.height <= (viewport.width < 640 ? 680 : 420),
           true,
           `${viewport.label}: expected compact acknowledgement readiness, got ${state.height}px`,
         );

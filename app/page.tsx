@@ -55,6 +55,8 @@ const adminMonthlyInvoiceIssueRecordPdfReadinessApiPath =
 const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminCustomerDriverDetailsEmailReviewItemApiPath =
+  "/api/admin-customer-driver-details-email-review-item-setup";
 const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
@@ -851,6 +853,50 @@ type DispatchReleaseChecklistItem = {
   label: string;
   state: DispatchReleaseReadinessState;
 };
+
+type AdminCustomerDriverDetailsEmailReviewItem = {
+  actionLabel?: string | null;
+  adminReviewRequired?: boolean | null;
+  customerEmailReady?: boolean | null;
+  disabled_send_status?: string | null;
+  external_send?: boolean | null;
+  item_key?: string | null;
+  label?: string | null;
+  readiness_status?: string | null;
+  sendingEnabled?: boolean | null;
+  status?: string | null;
+};
+
+type AdminCustomerDriverDetailsEmailReviewItemResponse = {
+  customerEmailReady?: boolean;
+  external_send?: boolean;
+  ok?: boolean;
+  reviewItem?: AdminCustomerDriverDetailsEmailReviewItem | null;
+  sendingEnabled?: boolean;
+  status?: string;
+};
+
+type AdminCustomerDriverDetailsEmailReviewItemReadState = {
+  item: AdminCustomerDriverDetailsEmailReviewItem;
+  loadedReference: string;
+  message: string;
+  status: "idle" | "loading" | "loaded" | "error";
+};
+
+function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDriverDetailsEmailReviewItem {
+  return {
+    actionLabel: "Review email to customer",
+    adminReviewRequired: true,
+    customerEmailReady: false,
+    disabled_send_status: "blocked",
+    external_send: false,
+    item_key: "customer_driver_details_email",
+    label: "Customer driver details ready",
+    readiness_status: "blocked",
+    sendingEnabled: false,
+    status: "setup_only",
+  };
+}
 
 type AdminBookingWorkflowStatusRecord = {
   booking_reference?: string | null;
@@ -7722,6 +7768,15 @@ export default function Home() {
     useState<Message | null>(null);
   const [dispatchReleaseLocalNote, setDispatchReleaseLocalNote] = useState("");
   const [driverAcknowledgementMessage, setDriverAcknowledgementMessage] = useState<Message | null>(null);
+  const [
+    adminCustomerDriverDetailsEmailReviewItemState,
+    setAdminCustomerDriverDetailsEmailReviewItemState,
+  ] = useState<AdminCustomerDriverDetailsEmailReviewItemReadState>(() => ({
+    item: adminCustomerDriverDetailsEmailReviewFallbackItem(),
+    loadedReference: "",
+    message: "Load or apply a saved booking before customer email review.",
+    status: "idle",
+  }));
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
     useState<DriverAcknowledgementFollowUpStatus>("pending");
   const [driverAcknowledgementFollowUpNote, setDriverAcknowledgementFollowUpNote] = useState("");
@@ -15101,6 +15156,172 @@ export default function Home() {
       state: driverAcknowledgementCoreReady ? "ready" : "needs-action",
     },
   ];
+  const customerDriverDetailsEmailReviewVehicleType =
+    clean(assignedDriverRecord?.vehicle_type) || clean(booking.vehicle);
+  const adminCustomerDriverDetailsEmailReviewBookingReference = clean(dispatchReleaseWorkflowBookingReference);
+  const adminCustomerDriverDetailsEmailReviewCustomerEmail = clean(booking.bookerEmail);
+  const adminCustomerDriverDetailsEmailReviewCanReadApi = Boolean(
+    adminCustomerDriverDetailsEmailReviewBookingReference &&
+      adminCustomerDriverDetailsEmailReviewCustomerEmail,
+  );
+
+  useEffect(() => {
+    const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
+    const customerEmail = adminCustomerDriverDetailsEmailReviewCustomerEmail;
+    const driverName = clean(dispatchReleaseDriverName);
+    const driverPhone = clean(dispatchReleaseDriverContact);
+    const vehiclePlate = clean(dispatchReleaseDriverPlate);
+    const vehicleType = clean(customerDriverDetailsEmailReviewVehicleType);
+    const driverAckStatus =
+      driverAcknowledgementFollowUpStatus === "acknowledged"
+        ? "driver_acknowledged"
+        : driverAcknowledgementFollowUpStatus === "needs-call"
+          ? "needs_call"
+          : "pending";
+    let cancelled = false;
+
+    if (activeTab !== "dispatch") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!bookingReference || !customerEmail) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadAdminCustomerDriverDetailsEmailReviewItem() {
+      setAdminCustomerDriverDetailsEmailReviewItemState((current) => ({
+        item:
+          current.loadedReference === bookingReference
+            ? current.item
+            : adminCustomerDriverDetailsEmailReviewFallbackItem(),
+        loadedReference: bookingReference,
+        message: `Checking customer driver details email review item for ${bookingReference}...`,
+        status: "loading",
+      }));
+
+      try {
+        const params = new URLSearchParams({
+          booking_reference: bookingReference,
+          driver_ack_status: driverAckStatus,
+        });
+
+        if (customerEmail) {
+          params.set("customer_email", customerEmail);
+        }
+
+        if (driverName) {
+          params.set("driver_name", driverName);
+        }
+
+        if (driverPhone) {
+          params.set("driver_phone", driverPhone);
+        }
+
+        if (vehiclePlate) {
+          params.set("vehicle_plate", vehiclePlate);
+        }
+
+        if (vehicleType) {
+          params.set("vehicle_type", vehicleType);
+        }
+
+        const response = await fetch(`${adminCustomerDriverDetailsEmailReviewItemApiPath}?${params.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const result =
+          (await response.json().catch(() => null)) as
+            | AdminCustomerDriverDetailsEmailReviewItemResponse
+            | null;
+
+        if (!response.ok || result?.ok !== true || !result.reviewItem) {
+          throw new Error("Customer driver details email review item read failed safely.");
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setAdminCustomerDriverDetailsEmailReviewItemState({
+          item: result.reviewItem,
+          loadedReference: bookingReference,
+          message: `Customer driver details email review item checked for ${bookingReference}.`,
+          status: "loaded",
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const errorText =
+          error instanceof Error
+            ? error.message
+            : "Customer driver details email review item read failed safely.";
+        setAdminCustomerDriverDetailsEmailReviewItemState({
+          item: adminCustomerDriverDetailsEmailReviewFallbackItem(),
+          loadedReference: bookingReference,
+          message: errorText,
+          status: "error",
+        });
+      }
+    }
+
+    loadAdminCustomerDriverDetailsEmailReviewItem();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    adminCustomerDriverDetailsEmailReviewBookingReference,
+    adminCustomerDriverDetailsEmailReviewCustomerEmail,
+    customerDriverDetailsEmailReviewVehicleType,
+    dispatchReleaseDriverContact,
+    dispatchReleaseDriverName,
+    dispatchReleaseDriverPlate,
+    driverAcknowledgementFollowUpStatus,
+  ]);
+
+  const adminCustomerDriverDetailsEmailReviewStateMatchesReference =
+    adminCustomerDriverDetailsEmailReviewItemState.loadedReference ===
+    adminCustomerDriverDetailsEmailReviewBookingReference;
+  const adminCustomerDriverDetailsEmailReviewDisplayState =
+    adminCustomerDriverDetailsEmailReviewCanReadApi &&
+    adminCustomerDriverDetailsEmailReviewStateMatchesReference
+      ? adminCustomerDriverDetailsEmailReviewItemState.status
+      : "idle";
+  const adminCustomerDriverDetailsEmailReviewLoadedReference =
+    adminCustomerDriverDetailsEmailReviewCanReadApi &&
+    adminCustomerDriverDetailsEmailReviewStateMatchesReference
+      ? adminCustomerDriverDetailsEmailReviewItemState.loadedReference
+      : adminCustomerDriverDetailsEmailReviewBookingReference;
+  const adminCustomerDriverDetailsEmailReviewItem =
+    adminCustomerDriverDetailsEmailReviewCanReadApi &&
+    adminCustomerDriverDetailsEmailReviewStateMatchesReference
+      ? adminCustomerDriverDetailsEmailReviewItemState.item
+      : adminCustomerDriverDetailsEmailReviewFallbackItem();
+  const adminCustomerDriverDetailsEmailReviewReady =
+    Boolean(adminCustomerDriverDetailsEmailReviewItem.customerEmailReady) ||
+    clean(adminCustomerDriverDetailsEmailReviewItem.readiness_status) === "ready";
+  const adminCustomerDriverDetailsEmailReviewSendDisabled =
+    adminCustomerDriverDetailsEmailReviewItem.sendingEnabled !== true &&
+    adminCustomerDriverDetailsEmailReviewItem.external_send !== true;
+  const adminCustomerDriverDetailsEmailReviewReadyLabel =
+    adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
+      ? "Checking"
+      : adminCustomerDriverDetailsEmailReviewReady
+        ? "Ready"
+        : "Blocked";
+  const adminCustomerDriverDetailsEmailReviewSendStateLabel =
+    adminCustomerDriverDetailsEmailReviewSendDisabled
+      ? "Setup-only / send disabled"
+      : "Review required";
   const driverAcknowledgementFollowUpStatusLabel =
     driverAcknowledgementFollowUpStatus === "acknowledged"
       ? "Acknowledged locally"
@@ -26973,6 +27194,56 @@ export default function Home() {
                     </p>
                   </div>
                 ))}
+              </div>
+              <div
+                className="mt-2 flex min-w-0 flex-col gap-1 rounded-md border border-indigo-200 bg-white/80 px-2 py-1.5 text-[11px] leading-4 text-indigo-950 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                data-admin-customer-driver-details-email-review-item="true"
+                data-admin-customer-driver-details-email-review-loaded-reference={
+                  adminCustomerDriverDetailsEmailReviewLoadedReference
+                }
+                data-admin-customer-driver-details-email-review-read-state={
+                  adminCustomerDriverDetailsEmailReviewDisplayState
+                }
+                data-admin-customer-driver-details-email-review-ready-state={
+                  adminCustomerDriverDetailsEmailReviewReady ? "ready" : "blocked"
+                }
+              >
+                <div className="min-w-0">
+                  <span
+                    className="block truncate font-semibold"
+                    data-admin-customer-driver-details-email-review-label="true"
+                  >
+                    {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
+                      "Customer driver details ready"}
+                  </span>
+                  <span
+                    className="block truncate text-indigo-800"
+                    data-admin-customer-driver-details-email-review-action="true"
+                  >
+                    {clean(adminCustomerDriverDetailsEmailReviewItem.actionLabel) ||
+                      "Review email to customer"}
+                  </span>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                      adminCustomerDriverDetailsEmailReviewReady
+                        ? "bg-emerald-100 text-emerald-900"
+                        : adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
+                          ? "bg-sky-100 text-sky-900"
+                          : "bg-amber-100 text-amber-900"
+                    }`}
+                    data-admin-customer-driver-details-email-review-ready-status="true"
+                  >
+                    {adminCustomerDriverDetailsEmailReviewReadyLabel}
+                  </span>
+                  <span
+                    className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                    data-admin-customer-driver-details-email-review-send-state="true"
+                  >
+                    {adminCustomerDriverDetailsEmailReviewSendStateLabel}
+                  </span>
+                </div>
               </div>
               {driverAcknowledgementMessage ? (
                 <p

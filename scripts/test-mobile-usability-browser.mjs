@@ -838,7 +838,7 @@ async function runChromeTest() {
         `${viewport.label}: expected Driver Acknowledgement Readiness workflow-status API boundary`,
       );
       assert.equal(
-        state.height <= (viewport.width < 640 ? 700 : 390),
+        state.height <= (viewport.width < 640 ? 760 : 450),
         true,
         `${viewport.label}: expected compact Driver Acknowledgement Readiness, got ${state.height}px`,
       );

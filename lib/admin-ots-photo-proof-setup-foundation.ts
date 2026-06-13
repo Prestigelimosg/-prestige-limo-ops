@@ -11,6 +11,14 @@ export type AdminOtsPhotoProofSetupResult = {
   version: typeof adminOtsPhotoProofSetupFoundationVersion;
   booking_ref: string;
   status: "setup_only";
+  photoUploadEnabled: false;
+  storageEnabled: false;
+  adminViewerEnabled: false;
+  customerVisible: false;
+  liveAccessEnabled: false;
+  driver_ots_photo_proof_planned: true;
+  admin_photo_viewer_planned: true;
+  storage_bucket_planned: true;
   ots_photo_proof_status: "disabled";
   camera_capture_status: "disabled";
   file_upload_status: "disabled";
@@ -19,6 +27,16 @@ export type AdminOtsPhotoProofSetupResult = {
   future_trigger: "driver_ots";
   future_visibility: "admin_only";
   future_customer_visibility: "disabled_by_default";
+  policy: {
+    adminViewerEnabled: false;
+    admin_photo_viewer_planned: true;
+    customerVisible: false;
+    driver_ots_photo_proof_planned: true;
+    liveAccessEnabled: false;
+    photoUploadEnabled: false;
+    storageEnabled: false;
+    storage_bucket_planned: true;
+  };
   notes: string[];
 };
 
@@ -33,6 +51,14 @@ export function buildAdminOtsPhotoProofSetupFoundation(
     version: adminOtsPhotoProofSetupFoundationVersion,
     booking_ref: safeText(input.booking_ref),
     status: "setup_only",
+    photoUploadEnabled: false,
+    storageEnabled: false,
+    adminViewerEnabled: false,
+    customerVisible: false,
+    liveAccessEnabled: false,
+    driver_ots_photo_proof_planned: true,
+    admin_photo_viewer_planned: true,
+    storage_bucket_planned: true,
     ots_photo_proof_status: "disabled",
     camera_capture_status: "disabled",
     file_upload_status: "disabled",
@@ -41,11 +67,23 @@ export function buildAdminOtsPhotoProofSetupFoundation(
     future_trigger: "driver_ots",
     future_visibility: "admin_only",
     future_customer_visibility: "disabled_by_default",
+    policy: {
+      adminViewerEnabled: false,
+      admin_photo_viewer_planned: true,
+      customerVisible: false,
+      driver_ots_photo_proof_planned: true,
+      liveAccessEnabled: false,
+      photoUploadEnabled: false,
+      storageEnabled: false,
+      storage_bucket_planned: true,
+    },
     notes: [
       "Setup foundation only.",
       "No real camera capture is active.",
       "No real file upload is active.",
       "No storage write is active.",
+      "Future storage bucket is planned but not active.",
+      "Future admin photo viewer is planned but not active.",
       "Future proof must attach to the assigned job only.",
       "Future customer visibility stays disabled unless separately approved.",
     ],

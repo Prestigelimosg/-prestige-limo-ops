@@ -215,6 +215,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Risk requiring explicit approval: `customer_rates`, `driver_payout_rules`, pricing, payout, driver payout preferences, PayNow/payout-adjacent fields, and any customer/driver-visible finance exposure.
 - Rule: no new shims. Replace remaining shim usage only with typed helpers, typed API routes, and direct contract tests.
 
+### Rate settings shim risk lock
+- `rate_settings` touches `customer_rates`, `driver_payout_rules`, customer surcharges, and driver payout fields.
+- Those fields feed `resolvePricing` and booking save price/payout snapshots.
+- Safe read-only rate setup already exists through `GET /api/admin-rate-setup`.
+- Unsafe remaining `rate_settings` family is default-rate save/upsert.
+- Do not replace `saveDefaultRates` or the `rate_settings` write path without explicit approval.
+- Do not touch company/traveler overrides, pricing, payout, `customer_rates`, or `driver_payout_rules` in the same pass.
+
 ### Notifications
 - Admin app notifications API.
 - Customer app notifications API.

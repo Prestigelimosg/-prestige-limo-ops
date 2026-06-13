@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-713d7f5 Add email provider selection API
+a740314 Add email activation preflight API
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `713d7f5 Add email provider selection API`.
-- Latest implementation checkpoint to preserve: `713d7f5 Add email provider selection API`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email review item API, Customer Copy customer driver details email review UI and disabled-send button, email provider readiness setup foundation/API, email provider selection setup foundation/API, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `a740314 Add email activation preflight API`.
+- Latest implementation checkpoint to preserve: `a740314 Add email activation preflight API`.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email review item API, Customer Copy customer driver details email review UI and disabled-send button, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -100,6 +100,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email provider readiness setup API.
 - Email provider selection setup foundation.
 - Email provider selection setup API.
+- Email activation preflight setup API.
 - Customer driver details email setup foundation.
 - Customer driver details email readiness setup foundation.
 - Customer driver details email preview/readiness setup API.

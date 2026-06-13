@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-4b50f92 Add email no-live guard
+4d10fdf Add Telegram admin alert setup foundation
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `4b50f92 Add email no-live guard`.
-- Latest implementation checkpoint to preserve: `4b50f92 Add email no-live guard`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, and email activation preflight status UI, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `4d10fdf Add Telegram admin alert setup foundation`.
+- Latest implementation checkpoint to preserve: `4d10fdf Add Telegram admin alert setup foundation`.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, and email activation preflight status UI, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -103,6 +103,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer-driver app notifications API.
 - Driver job notifications API.
 - Telegram disabled adapter foundation.
+- Telegram internal admin alert setup foundation.
 - WhatsApp disabled adapter foundation.
 - Disabled email send adapter setup foundation.
 - Email notification setup foundation.

@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-d7106c8 Compact Customer Copy multi-channel buttons row
+fcab24b Fix Customer Copy multi-channel button row layout
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `d7106c8 Compact Customer Copy multi-channel buttons row`.
-- Latest implementation checkpoint to preserve: `d7106c8 Compact Customer Copy multi-channel buttons row`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row, and multi-channel no-live guard, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `fcab24b Fix Customer Copy multi-channel button row layout`.
+- Latest implementation checkpoint to preserve: `fcab24b Fix Customer Copy multi-channel button row layout`.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, and multi-channel no-live guard, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -65,7 +65,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ## Customer Copy Multi-Channel Pre-Activation Completion Audit Lock
 
 - Customer Copy Email/WhatsApp/SMS customer driver-details messaging is complete up to the activation stop.
-- Compact Customer Copy UI and multi-channel buttons row are done.
+- Compact Customer Copy UI and multi-channel buttons row/layout fix are done.
 - Disabled send APIs are done.
 - Preview/readiness APIs are done.
 - Send audit payload setup foundations are done.
@@ -185,7 +185,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver ack customer message handoff setup foundation.
 - Driver ack customer message handoff setup API.
 - Customer driver details email review item setup API.
-- Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, compact Email/WhatsApp/SMS disabled-send buttons row, and multi-channel no-live guard.
+- Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, compact Email/WhatsApp/SMS disabled-send buttons row/layout fix, and multi-channel no-live guard.
 - No real sending active.
 
 ### Live location

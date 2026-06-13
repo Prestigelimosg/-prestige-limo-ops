@@ -6019,12 +6019,15 @@ async function runChromeTest() {
           () =>
             evaluate(`(() => {
               const section = document.querySelector("[data-admin-driver-acknowledgement-readiness]");
-              if (!section) {
+              const customerCopySection = document.querySelector(
+                "[data-dispatch-workflow-step='customer-whatsapp-copy']",
+              );
+              if (!section || !customerCopySection) {
                 return false;
               }
 
               const rect = section.getBoundingClientRect();
-              const customerEmailReviewItem = section.querySelector(
+              const customerEmailReviewItem = customerCopySection.querySelector(
                 "[data-admin-customer-driver-details-email-review-item]",
               );
               const items = [...section.querySelectorAll("[data-admin-driver-acknowledgement-item]")].map((item) => {
@@ -6161,7 +6164,7 @@ async function runChromeTest() {
             sendState: "Setup-only / send disabled",
             visible: true,
           },
-          `${viewport.label}: expected compact setup-only customer driver details email review row`,
+          `${viewport.label}: expected compact setup-only customer driver details email review row in Customer Copy`,
         );
         for (const expectedBoundaryText of [
           "UI/local-state",

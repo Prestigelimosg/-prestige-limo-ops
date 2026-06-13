@@ -1666,7 +1666,7 @@ function assertBookingUiState(state) {
   );
   assert.equal(state.driverAcknowledgementReadiness.markReadyDisabled, true);
   assert.deepEqual(
-    state.driverAcknowledgementReadiness.customerEmailReviewItem,
+    state.customerCopyEmailReviewItem,
     {
       action: "Review email to customer",
       label: "Customer driver details ready",
@@ -1677,7 +1677,7 @@ function assertBookingUiState(state) {
       sendState: "Setup-only / send disabled",
       visible: true,
     },
-    "Expected compact customer driver details email review row to start setup-only and blocked",
+    "Expected compact customer driver details email review row to start in Customer Copy setup-only and blocked",
   );
   assert.match(state.driverAcknowledgementReadiness.boundary, /UI\/local-state/);
   assert.match(state.driverAcknowledgementReadiness.boundary, /workflow-status API/);
@@ -4012,6 +4012,40 @@ async function runChromeTest() {
           visible: Boolean(rect && rect.width > 0 && rect.height > 0),
         };
       };
+      const customerCopyEmailReviewItem = () => {
+        const section = document.querySelector("[data-dispatch-workflow-step='customer-whatsapp-copy']");
+        const item = section?.querySelector("[data-admin-customer-driver-details-email-review-item='true']");
+
+        return {
+          action:
+            item
+              ?.querySelector("[data-admin-customer-driver-details-email-review-action='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          label:
+            item
+              ?.querySelector("[data-admin-customer-driver-details-email-review-label='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          loadedReference:
+            item?.getAttribute("data-admin-customer-driver-details-email-review-loaded-reference") || "",
+          readState:
+            item?.getAttribute("data-admin-customer-driver-details-email-review-read-state") || "",
+          readyState:
+            item?.getAttribute("data-admin-customer-driver-details-email-review-ready-state") || "",
+          readyStatus:
+            item
+              ?.querySelector("[data-admin-customer-driver-details-email-review-ready-status='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          sendState:
+            item
+              ?.querySelector("[data-admin-customer-driver-details-email-review-send-state='true']")
+              ?.textContent.replace(/\\s+/g, " ")
+              .trim() || "",
+          visible: Boolean(item),
+        };
+      };
       const dispatchReleaseChecklist = () => {
         const checklist = document.querySelector("[data-admin-dispatch-release-checklist='true']");
         const rect = checklist?.getBoundingClientRect();
@@ -4109,9 +4143,6 @@ async function runChromeTest() {
       };
       const driverAcknowledgementReadiness = () => {
         const section = document.querySelector("[data-admin-driver-acknowledgement-readiness='true']");
-        const customerEmailReviewItem = section?.querySelector(
-          "[data-admin-customer-driver-details-email-review-item='true']",
-        );
         const rect = section?.getBoundingClientRect();
         const text = section?.innerText || "";
         const lowerText = text.toLowerCase();
@@ -4148,41 +4179,6 @@ async function runChromeTest() {
           })),
           markReadyDisabled:
             section?.querySelector("[data-admin-driver-acknowledgement-mark-ready='true']")?.disabled ?? null,
-          customerEmailReviewItem: {
-            action:
-              customerEmailReviewItem
-                ?.querySelector("[data-admin-customer-driver-details-email-review-action='true']")
-                ?.textContent.replace(/\\s+/g, " ")
-                .trim() || "",
-            label:
-              customerEmailReviewItem
-                ?.querySelector("[data-admin-customer-driver-details-email-review-label='true']")
-                ?.textContent.replace(/\\s+/g, " ")
-                .trim() || "",
-            loadedReference:
-              customerEmailReviewItem?.getAttribute(
-                "data-admin-customer-driver-details-email-review-loaded-reference",
-              ) || "",
-            readState:
-              customerEmailReviewItem?.getAttribute(
-                "data-admin-customer-driver-details-email-review-read-state",
-              ) || "",
-            readyState:
-              customerEmailReviewItem?.getAttribute(
-                "data-admin-customer-driver-details-email-review-ready-state",
-              ) || "",
-            readyStatus:
-              customerEmailReviewItem
-                ?.querySelector("[data-admin-customer-driver-details-email-review-ready-status='true']")
-                ?.textContent.replace(/\\s+/g, " ")
-                .trim() || "",
-            sendState:
-              customerEmailReviewItem
-                ?.querySelector("[data-admin-customer-driver-details-email-review-send-state='true']")
-                ?.textContent.replace(/\\s+/g, " ")
-                .trim() || "",
-            visible: Boolean(customerEmailReviewItem),
-          },
           status:
             section?.querySelector("[data-admin-driver-acknowledgement-status='true']")?.textContent
               .replace(/\\s+/g, " ")
@@ -5051,6 +5047,7 @@ async function runChromeTest() {
         completedTripCloseoutReview: completedTripCloseoutReview(),
         consoleErrors: window.__prestigeConsoleErrors || [],
         customerCopy: preTextByHeading("Customer Copy"),
+        customerCopyEmailReviewItem: customerCopyEmailReviewItem(),
         dayOfTripExceptionEscalation: dayOfTripExceptionEscalation(),
         dayOfTripDispatchMonitor: dayOfTripDispatchMonitor(),
         dispatchRecoveryReplacementReadiness: dispatchRecoveryReplacementReadiness(),

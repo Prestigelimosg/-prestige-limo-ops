@@ -27195,56 +27195,6 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <div
-                className="mt-2 flex min-w-0 flex-col gap-1 rounded-md border border-indigo-200 bg-white/80 px-2 py-1.5 text-[11px] leading-4 text-indigo-950 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
-                data-admin-customer-driver-details-email-review-item="true"
-                data-admin-customer-driver-details-email-review-loaded-reference={
-                  adminCustomerDriverDetailsEmailReviewLoadedReference
-                }
-                data-admin-customer-driver-details-email-review-read-state={
-                  adminCustomerDriverDetailsEmailReviewDisplayState
-                }
-                data-admin-customer-driver-details-email-review-ready-state={
-                  adminCustomerDriverDetailsEmailReviewReady ? "ready" : "blocked"
-                }
-              >
-                <div className="min-w-0">
-                  <span
-                    className="block truncate font-semibold"
-                    data-admin-customer-driver-details-email-review-label="true"
-                  >
-                    {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
-                      "Customer driver details ready"}
-                  </span>
-                  <span
-                    className="block truncate text-indigo-800"
-                    data-admin-customer-driver-details-email-review-action="true"
-                  >
-                    {clean(adminCustomerDriverDetailsEmailReviewItem.actionLabel) ||
-                      "Review email to customer"}
-                  </span>
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
-                      adminCustomerDriverDetailsEmailReviewReady
-                        ? "bg-emerald-100 text-emerald-900"
-                        : adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
-                          ? "bg-sky-100 text-sky-900"
-                          : "bg-amber-100 text-amber-900"
-                    }`}
-                    data-admin-customer-driver-details-email-review-ready-status="true"
-                  >
-                    {adminCustomerDriverDetailsEmailReviewReadyLabel}
-                  </span>
-                  <span
-                    className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
-                    data-admin-customer-driver-details-email-review-send-state="true"
-                  >
-                    {adminCustomerDriverDetailsEmailReviewSendStateLabel}
-                  </span>
-                </div>
-              </div>
               {driverAcknowledgementMessage ? (
                 <p
                   className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
@@ -29622,6 +29572,56 @@ export default function Home() {
                 data-customer-live-location-helper="true"
               >
                 {customerLiveLocation.helperText}
+              </div>
+              <div
+                className="mb-3 flex min-w-0 flex-col gap-1 rounded-md border border-emerald-200 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-4 text-emerald-950 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                data-admin-customer-driver-details-email-review-item="true"
+                data-admin-customer-driver-details-email-review-loaded-reference={
+                  adminCustomerDriverDetailsEmailReviewLoadedReference
+                }
+                data-admin-customer-driver-details-email-review-read-state={
+                  adminCustomerDriverDetailsEmailReviewDisplayState
+                }
+                data-admin-customer-driver-details-email-review-ready-state={
+                  adminCustomerDriverDetailsEmailReviewReady ? "ready" : "blocked"
+                }
+              >
+                <div className="min-w-0">
+                  <span
+                    className="block truncate font-semibold"
+                    data-admin-customer-driver-details-email-review-label="true"
+                  >
+                    {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
+                      "Customer driver details ready"}
+                  </span>
+                  <span
+                    className="block truncate text-emerald-800"
+                    data-admin-customer-driver-details-email-review-action="true"
+                  >
+                    {clean(adminCustomerDriverDetailsEmailReviewItem.actionLabel) ||
+                      "Review email to customer"}
+                  </span>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                      adminCustomerDriverDetailsEmailReviewReady
+                        ? "bg-emerald-100 text-emerald-900"
+                        : adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
+                          ? "bg-sky-100 text-sky-900"
+                          : "bg-amber-100 text-amber-900"
+                    }`}
+                    data-admin-customer-driver-details-email-review-ready-status="true"
+                  >
+                    {adminCustomerDriverDetailsEmailReviewReadyLabel}
+                  </span>
+                  <span
+                    className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                    data-admin-customer-driver-details-email-review-send-state="true"
+                  >
+                    {adminCustomerDriverDetailsEmailReviewSendStateLabel}
+                  </span>
+                </div>
               </div>
               {customerCopyEditState.isEditing ? (
                 <textarea

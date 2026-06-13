@@ -59,6 +59,10 @@ const adminCustomerDriverDetailsEmailReviewItemApiPath =
   "/api/admin-customer-driver-details-email-review-item-setup";
 const adminCustomerDriverDetailsEmailSendDisabledApiPath =
   "/api/admin-customer-driver-details-email-send-disabled-setup";
+const adminWhatsAppCustomerDriverDetailsSendDisabledApiPath =
+  "/api/admin-whatsapp-customer-driver-details-send-disabled-setup";
+const adminSmsCustomerDriverDetailsSendDisabledApiPath =
+  "/api/admin-sms-customer-driver-details-send-disabled-setup";
 const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
 const adminBookersApiPath = "/api/admin-bookers";
@@ -880,7 +884,7 @@ type AdminCustomerDriverDetailsEmailReviewItemResponse = {
   status?: string;
 };
 
-type AdminCustomerDriverDetailsEmailDisabledSendResponse = {
+type AdminCustomerDriverDetailsDisabledSendResponse = {
   external_send?: boolean;
   ok?: boolean;
   reason?: string;
@@ -893,6 +897,9 @@ type AdminCustomerDriverDetailsEmailDisabledSendResponse = {
   sendingEnabled?: boolean;
   status?: string;
 };
+
+type AdminCustomerDriverDetailsEmailDisabledSendResponse =
+  AdminCustomerDriverDetailsDisabledSendResponse;
 
 type AdminEmailActivationPreflightResponse = {
   activationReady?: boolean;
@@ -929,7 +936,7 @@ type AdminEmailActivationPreflightReadState = {
   status: "idle" | "loading" | "loaded" | "error";
 };
 
-type AdminCustomerDriverDetailsEmailDisabledSendActionState = {
+type AdminCustomerDriverDetailsDisabledSendActionState = {
   actionStatus: "idle" | "loading" | "loaded" | "error";
   external_send: boolean;
   loadedReference: string;
@@ -938,6 +945,9 @@ type AdminCustomerDriverDetailsEmailDisabledSendActionState = {
   sendingEnabled: boolean;
   status: string;
 };
+
+type AdminCustomerDriverDetailsEmailDisabledSendActionState =
+  AdminCustomerDriverDetailsDisabledSendActionState;
 
 function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDriverDetailsEmailReviewItem {
   return {
@@ -972,9 +982,9 @@ function adminEmailActivationPreflightFallbackState(
   };
 }
 
-function adminCustomerDriverDetailsEmailDisabledSendFallbackState(
-  message = "Disabled email send is setup-only.",
-): AdminCustomerDriverDetailsEmailDisabledSendActionState {
+function adminCustomerDriverDetailsDisabledSendFallbackState(
+  message = "Disabled send is setup-only.",
+): AdminCustomerDriverDetailsDisabledSendActionState {
   return {
     actionStatus: "idle",
     external_send: false,
@@ -984,6 +994,30 @@ function adminCustomerDriverDetailsEmailDisabledSendFallbackState(
     sendingEnabled: false,
     status: "blocked",
   };
+}
+
+function adminCustomerDriverDetailsEmailDisabledSendFallbackState(
+  message = "Disabled email send is setup-only.",
+): AdminCustomerDriverDetailsEmailDisabledSendActionState {
+  return adminCustomerDriverDetailsDisabledSendFallbackState(message);
+}
+
+function adminCustomerDriverDetailsDisabledSendStatusText(
+  state: AdminCustomerDriverDetailsDisabledSendActionState,
+  idleText = "Setup-only / send disabled",
+) {
+  if (state.actionStatus !== "loaded" && state.actionStatus !== "error") {
+    return idleText;
+  }
+
+  const statusLabel =
+    clean(state.status).toLowerCase() === "blocked"
+      ? "Blocked"
+      : clean(state.status) || "Blocked";
+
+  return `${statusLabel}/no-op, sendingEnabled ${
+    state.sendingEnabled ? "true" : "false"
+  }, external_send ${state.external_send ? "true" : "false"}`;
 }
 
 type AdminBookingWorkflowStatusRecord = {
@@ -7876,6 +7910,18 @@ export default function Home() {
     setAdminCustomerDriverDetailsEmailDisabledSendActionState,
   ] = useState<AdminCustomerDriverDetailsEmailDisabledSendActionState>(() =>
     adminCustomerDriverDetailsEmailDisabledSendFallbackState(),
+  );
+  const [
+    adminCustomerDriverDetailsWhatsAppDisabledSendActionState,
+    setAdminCustomerDriverDetailsWhatsAppDisabledSendActionState,
+  ] = useState<AdminCustomerDriverDetailsDisabledSendActionState>(() =>
+    adminCustomerDriverDetailsDisabledSendFallbackState("Disabled WhatsApp send is setup-only."),
+  );
+  const [
+    adminCustomerDriverDetailsSmsDisabledSendActionState,
+    setAdminCustomerDriverDetailsSmsDisabledSendActionState,
+  ] = useState<AdminCustomerDriverDetailsDisabledSendActionState>(() =>
+    adminCustomerDriverDetailsDisabledSendFallbackState("Disabled SMS send is setup-only."),
   );
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
     useState<DriverAcknowledgementFollowUpStatus>("pending");
@@ -15622,6 +15668,121 @@ export default function Home() {
     }
   }
 
+  async function checkAdminCustomerDriverDetailsMessageDisabledSend(
+    channel: "sms" | "whatsapp",
+  ) {
+    const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
+    const channelLabel = channel === "whatsapp" ? "WhatsApp" : "SMS";
+    const setActionState =
+      channel === "whatsapp"
+        ? setAdminCustomerDriverDetailsWhatsAppDisabledSendActionState
+        : setAdminCustomerDriverDetailsSmsDisabledSendActionState;
+    const apiPath =
+      channel === "whatsapp"
+        ? adminWhatsAppCustomerDriverDetailsSendDisabledApiPath
+        : adminSmsCustomerDriverDetailsSendDisabledApiPath;
+
+    if (!bookingReference) {
+      setActionState({
+        ...adminCustomerDriverDetailsDisabledSendFallbackState(
+          `Load a saved booking before checking disabled ${channelLabel} send.`,
+        ),
+        actionStatus: "error",
+        loadedReference: bookingReference,
+      });
+      return;
+    }
+
+    setActionState({
+      ...adminCustomerDriverDetailsDisabledSendFallbackState(
+        `Checking disabled customer driver details ${channelLabel} send for ${bookingReference}...`,
+      ),
+      actionStatus: "loading",
+      loadedReference: bookingReference,
+    });
+
+    try {
+      const params = new URLSearchParams({
+        booking_reference: bookingReference,
+      });
+      const driverName = clean(dispatchReleaseDriverName);
+      const driverPhone = clean(dispatchReleaseDriverContact);
+      const pickupTime = formatPickupDateTime(booking.date, booking.time);
+      const safeRoute = formatPrivacySafeRoute(booking);
+      const vehiclePlate = clean(dispatchReleaseDriverPlate);
+      const vehicleType = clean(customerDriverDetailsEmailReviewVehicleType);
+
+      if (driverName) {
+        params.set("driver_name", driverName);
+      }
+
+      if (driverPhone) {
+        params.set("driver_phone", driverPhone);
+      }
+
+      if (pickupTime) {
+        params.set("pickup_time", pickupTime);
+      }
+
+      if (channel === "whatsapp" && safeRoute) {
+        params.set("route", safeRoute);
+      }
+
+      if (vehiclePlate) {
+        params.set("vehicle_plate", vehiclePlate);
+      }
+
+      if (vehicleType) {
+        params.set("vehicle_type", vehicleType);
+      }
+
+      const response = await fetch(`${apiPath}?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result =
+        (await response.json().catch(() => null)) as
+          | AdminCustomerDriverDetailsDisabledSendResponse
+          | null;
+
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(`Disabled customer driver details ${channelLabel} send check failed safely.`);
+      }
+
+      const sendingEnabled = result.sendingEnabled === true || result.send?.sendingEnabled === true;
+      const externalSend = result.external_send === true || result.send?.external_send === true;
+      const resultStatus = clean(result.status) || clean(result.send?.status) || "blocked";
+      const reason = clean(result.reason) || clean(result.send?.reason) || "setup_only_disabled";
+
+      setActionState({
+        actionStatus: "loaded",
+        external_send: externalSend,
+        loadedReference: bookingReference,
+        message: `Disabled customer driver details ${channelLabel} send returned ${resultStatus}/no-op for ${bookingReference}.`,
+        reason,
+        sendingEnabled,
+        status: resultStatus,
+      });
+    } catch (error) {
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : `Disabled customer driver details ${channelLabel} send check failed safely.`;
+
+      setActionState({
+        actionStatus: "error",
+        external_send: false,
+        loadedReference: bookingReference,
+        message: errorText,
+        reason: "setup_only_disabled",
+        sendingEnabled: false,
+        status: "blocked",
+      });
+    }
+  }
+
   const adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference =
     adminCustomerDriverDetailsEmailDisabledSendActionState.loadedReference ===
     adminCustomerDriverDetailsEmailReviewBookingReference;
@@ -15637,18 +15798,52 @@ export default function Home() {
       ? "Checking disabled send"
       : clean(adminCustomerDriverDetailsEmailReviewItem.actionLabel) || "Review email to customer";
   const adminCustomerDriverDetailsEmailDisabledSendStatusText =
-    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loaded" ||
-    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "error"
-      ? `${
-          clean(adminCustomerDriverDetailsEmailDisabledSendDisplayState.status).toLowerCase() === "blocked"
-            ? "Blocked"
-            : clean(adminCustomerDriverDetailsEmailDisabledSendDisplayState.status) || "Blocked"
-        }/no-op, sendingEnabled ${
-          adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled ? "true" : "false"
-        }, external_send ${
-          adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send ? "true" : "false"
-        }`
-      : adminCustomerDriverDetailsEmailReviewSendStateLabel;
+    adminCustomerDriverDetailsDisabledSendStatusText(
+      adminCustomerDriverDetailsEmailDisabledSendDisplayState,
+      adminCustomerDriverDetailsEmailReviewSendStateLabel,
+    );
+  const adminCustomerDriverDetailsWhatsAppDisabledSendStateMatchesReference =
+    adminCustomerDriverDetailsWhatsAppDisabledSendActionState.loadedReference ===
+    adminCustomerDriverDetailsEmailReviewBookingReference;
+  const adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState =
+    adminCustomerDriverDetailsWhatsAppDisabledSendStateMatchesReference
+      ? adminCustomerDriverDetailsWhatsAppDisabledSendActionState
+      : adminCustomerDriverDetailsDisabledSendFallbackState(
+          "Disabled WhatsApp send is setup-only.",
+        );
+  const adminCustomerDriverDetailsWhatsAppDisabledSendCanCall =
+    Boolean(adminCustomerDriverDetailsEmailReviewBookingReference) &&
+    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus !== "loading";
+  const adminCustomerDriverDetailsWhatsAppDisabledSendActionLabel =
+    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus === "loading"
+      ? "Checking disabled send"
+      : "Review WhatsApp to customer";
+  const adminCustomerDriverDetailsWhatsAppDisabledSendStatusText =
+    adminCustomerDriverDetailsDisabledSendStatusText(
+      adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState,
+      "Setup-only / send disabled, sendingEnabled false, external_send false",
+    );
+  const adminCustomerDriverDetailsSmsDisabledSendStateMatchesReference =
+    adminCustomerDriverDetailsSmsDisabledSendActionState.loadedReference ===
+    adminCustomerDriverDetailsEmailReviewBookingReference;
+  const adminCustomerDriverDetailsSmsDisabledSendDisplayState =
+    adminCustomerDriverDetailsSmsDisabledSendStateMatchesReference
+      ? adminCustomerDriverDetailsSmsDisabledSendActionState
+      : adminCustomerDriverDetailsDisabledSendFallbackState(
+          "Disabled SMS send is setup-only.",
+        );
+  const adminCustomerDriverDetailsSmsDisabledSendCanCall =
+    Boolean(adminCustomerDriverDetailsEmailReviewBookingReference) &&
+    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus !== "loading";
+  const adminCustomerDriverDetailsSmsDisabledSendActionLabel =
+    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "loading"
+      ? "Checking disabled send"
+      : "Review SMS to customer";
+  const adminCustomerDriverDetailsSmsDisabledSendStatusText =
+    adminCustomerDriverDetailsDisabledSendStatusText(
+      adminCustomerDriverDetailsSmsDisabledSendDisplayState,
+      "Setup-only / send disabled, sendingEnabled false, external_send false",
+    );
   const adminEmailActivationPreflightStateMatchesReference =
     adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
   const adminEmailActivationPreflightDisplayState =
@@ -29926,7 +30121,7 @@ export default function Home() {
                 {customerLiveLocation.helperText}
               </div>
               <div
-                className="mb-3 flex min-w-0 flex-col gap-1 rounded-md border border-emerald-200 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-4 text-emerald-950 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                className="mb-3 flex min-w-0 flex-col gap-1.5 rounded-md border border-emerald-200 bg-emerald-50/70 px-2 py-1.5 text-[11px] leading-4 text-emerald-950"
                 data-admin-customer-driver-details-email-review-item="true"
                 data-admin-customer-driver-details-email-review-loaded-reference={
                   adminCustomerDriverDetailsEmailReviewLoadedReference
@@ -29968,52 +30163,136 @@ export default function Home() {
                   adminEmailActivationPreflightDisplayState.status
                 }
               >
-                <div className="min-w-0">
-                  <span
-                    className="block truncate font-semibold"
-                    data-admin-customer-driver-details-email-review-label="true"
-                  >
-                    {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
-                      "Customer driver details ready"}
-                  </span>
-                  <button
-                    className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
-                    data-admin-customer-driver-details-email-disabled-send-action="true"
-                    data-admin-customer-driver-details-email-review-action="true"
-                    disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
-                    onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}
-                    type="button"
-                  >
-                    {adminCustomerDriverDetailsEmailDisabledSendActionLabel}
-                  </button>
+                <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                  <div className="min-w-0">
+                    <span
+                      className="block truncate font-semibold"
+                      data-admin-customer-driver-details-email-review-label="true"
+                    >
+                      {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
+                        "Customer driver details ready"}
+                    </span>
+                    <button
+                      className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
+                      data-admin-customer-driver-details-email-disabled-send-action="true"
+                      data-admin-customer-driver-details-email-review-action="true"
+                      disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
+                      onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}
+                      type="button"
+                    >
+                      {adminCustomerDriverDetailsEmailDisabledSendActionLabel}
+                    </button>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                        adminCustomerDriverDetailsEmailReviewReady
+                          ? "bg-emerald-100 text-emerald-900"
+                          : adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
+                            ? "bg-sky-100 text-sky-900"
+                            : "bg-amber-100 text-amber-900"
+                      }`}
+                      data-admin-customer-driver-details-email-review-ready-status="true"
+                    >
+                      {adminCustomerDriverDetailsEmailReviewReadyLabel}
+                    </span>
+                    <span
+                      className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                      data-admin-customer-driver-details-email-disabled-send-status="true"
+                      data-admin-customer-driver-details-email-review-send-state="true"
+                      title={adminCustomerDriverDetailsEmailDisabledSendDisplayState.message}
+                    >
+                      {adminCustomerDriverDetailsEmailDisabledSendStatusText}
+                    </span>
+                    <span
+                      className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                      data-admin-email-activation-preflight-status="true"
+                      title={adminEmailActivationPreflightDisplayState.message}
+                    >
+                      {adminEmailActivationPreflightStatusText}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                <div
+                  className="flex min-w-0 flex-col gap-1 border-t border-emerald-200 pt-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                  data-admin-customer-driver-details-whatsapp-disabled-send-item="true"
+                  data-admin-customer-driver-details-whatsapp-disabled-send-action-state={
+                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus
+                  }
+                  data-admin-customer-driver-details-whatsapp-disabled-send-external-send={
+                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.external_send ? "true" : "false"
+                  }
+                  data-admin-customer-driver-details-whatsapp-disabled-send-loaded-reference={
+                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.loadedReference
+                  }
+                  data-admin-customer-driver-details-whatsapp-disabled-send-sending-enabled={
+                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.sendingEnabled ? "true" : "false"
+                  }
+                >
+                  <div className="min-w-0">
+                    <span
+                      className="block truncate font-semibold"
+                      data-admin-customer-driver-details-whatsapp-disabled-send-label="true"
+                    >
+                      Customer driver details WhatsApp
+                    </span>
+                    <button
+                      className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
+                      data-admin-customer-driver-details-whatsapp-disabled-send-action="true"
+                      disabled={!adminCustomerDriverDetailsWhatsAppDisabledSendCanCall}
+                      onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}
+                      type="button"
+                    >
+                      {adminCustomerDriverDetailsWhatsAppDisabledSendActionLabel}
+                    </button>
+                  </div>
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
-                      adminCustomerDriverDetailsEmailReviewReady
-                        ? "bg-emerald-100 text-emerald-900"
-                        : adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
-                          ? "bg-sky-100 text-sky-900"
-                          : "bg-amber-100 text-amber-900"
-                    }`}
-                    data-admin-customer-driver-details-email-review-ready-status="true"
+                    className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                    data-admin-customer-driver-details-whatsapp-disabled-send-status="true"
+                    title={adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.message}
                   >
-                    {adminCustomerDriverDetailsEmailReviewReadyLabel}
+                    {adminCustomerDriverDetailsWhatsAppDisabledSendStatusText}
                   </span>
+                </div>
+                <div
+                  className="flex min-w-0 flex-col gap-1 border-t border-emerald-200 pt-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
+                  data-admin-customer-driver-details-sms-disabled-send-item="true"
+                  data-admin-customer-driver-details-sms-disabled-send-action-state={
+                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus
+                  }
+                  data-admin-customer-driver-details-sms-disabled-send-external-send={
+                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.external_send ? "true" : "false"
+                  }
+                  data-admin-customer-driver-details-sms-disabled-send-loaded-reference={
+                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.loadedReference
+                  }
+                  data-admin-customer-driver-details-sms-disabled-send-sending-enabled={
+                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.sendingEnabled ? "true" : "false"
+                  }
+                >
+                  <div className="min-w-0">
+                    <span
+                      className="block truncate font-semibold"
+                      data-admin-customer-driver-details-sms-disabled-send-label="true"
+                    >
+                      Customer driver details SMS
+                    </span>
+                    <button
+                      className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
+                      data-admin-customer-driver-details-sms-disabled-send-action="true"
+                      disabled={!adminCustomerDriverDetailsSmsDisabledSendCanCall}
+                      onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}
+                      type="button"
+                    >
+                      {adminCustomerDriverDetailsSmsDisabledSendActionLabel}
+                    </button>
+                  </div>
                   <span
-                    className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
-                    data-admin-customer-driver-details-email-disabled-send-status="true"
-                    data-admin-customer-driver-details-email-review-send-state="true"
-                    title={adminCustomerDriverDetailsEmailDisabledSendDisplayState.message}
+                    className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                    data-admin-customer-driver-details-sms-disabled-send-status="true"
+                    title={adminCustomerDriverDetailsSmsDisabledSendDisplayState.message}
                   >
-                    {adminCustomerDriverDetailsEmailDisabledSendStatusText}
-                  </span>
-                  <span
-                    className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
-                    data-admin-email-activation-preflight-status="true"
-                    title={adminEmailActivationPreflightDisplayState.message}
-                  >
-                    {adminEmailActivationPreflightStatusText}
+                    {adminCustomerDriverDetailsSmsDisabledSendStatusText}
                   </span>
                 </div>
               </div>

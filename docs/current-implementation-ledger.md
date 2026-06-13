@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-5a879a9 Add email provider readiness setup foundation
+c57aba8 Add driver ack customer message handoff setup
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `5a879a9 Add email provider readiness setup foundation`.
-- Latest implementation checkpoint to preserve: `5a879a9 Add email provider readiness setup foundation`.
-- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, email provider readiness setup foundation, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `c57aba8 Add driver ack customer message handoff setup`.
+- Latest implementation checkpoint to preserve: `c57aba8 Add driver ack customer message handoff setup`.
+- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, email provider readiness setup foundation, driver ack customer message handoff setup foundation, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -89,6 +89,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer driver details email readiness setup foundation.
 - Customer driver details email preview/readiness setup API.
 - Disabled customer driver details email send setup API.
+- Driver ack customer message handoff setup foundation.
 - No real sending active.
 
 ### Live location

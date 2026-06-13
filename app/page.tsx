@@ -57,6 +57,8 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
 const adminCustomerDriverDetailsEmailReviewItemApiPath =
   "/api/admin-customer-driver-details-email-review-item-setup";
+const adminCustomerDriverDetailsEmailSendDisabledApiPath =
+  "/api/admin-customer-driver-details-email-send-disabled-setup";
 const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
@@ -876,11 +878,35 @@ type AdminCustomerDriverDetailsEmailReviewItemResponse = {
   status?: string;
 };
 
+type AdminCustomerDriverDetailsEmailDisabledSendResponse = {
+  external_send?: boolean;
+  ok?: boolean;
+  reason?: string;
+  send?: {
+    external_send?: boolean;
+    reason?: string;
+    sendingEnabled?: boolean;
+    status?: string;
+  } | null;
+  sendingEnabled?: boolean;
+  status?: string;
+};
+
 type AdminCustomerDriverDetailsEmailReviewItemReadState = {
   item: AdminCustomerDriverDetailsEmailReviewItem;
   loadedReference: string;
   message: string;
   status: "idle" | "loading" | "loaded" | "error";
+};
+
+type AdminCustomerDriverDetailsEmailDisabledSendActionState = {
+  actionStatus: "idle" | "loading" | "loaded" | "error";
+  external_send: boolean;
+  loadedReference: string;
+  message: string;
+  reason: string;
+  sendingEnabled: boolean;
+  status: string;
 };
 
 function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDriverDetailsEmailReviewItem {
@@ -895,6 +921,20 @@ function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDrive
     readiness_status: "blocked",
     sendingEnabled: false,
     status: "setup_only",
+  };
+}
+
+function adminCustomerDriverDetailsEmailDisabledSendFallbackState(
+  message = "Disabled email send is setup-only.",
+): AdminCustomerDriverDetailsEmailDisabledSendActionState {
+  return {
+    actionStatus: "idle",
+    external_send: false,
+    loadedReference: "",
+    message,
+    reason: "setup_only_disabled",
+    sendingEnabled: false,
+    status: "blocked",
   };
 }
 
@@ -7777,6 +7817,12 @@ export default function Home() {
     message: "Load or apply a saved booking before customer email review.",
     status: "idle",
   }));
+  const [
+    adminCustomerDriverDetailsEmailDisabledSendActionState,
+    setAdminCustomerDriverDetailsEmailDisabledSendActionState,
+  ] = useState<AdminCustomerDriverDetailsEmailDisabledSendActionState>(() =>
+    adminCustomerDriverDetailsEmailDisabledSendFallbackState(),
+  );
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
     useState<DriverAcknowledgementFollowUpStatus>("pending");
   const [driverAcknowledgementFollowUpNote, setDriverAcknowledgementFollowUpNote] = useState("");
@@ -15322,6 +15368,145 @@ export default function Home() {
     adminCustomerDriverDetailsEmailReviewSendDisabled
       ? "Setup-only / send disabled"
       : "Review required";
+
+  async function checkAdminCustomerDriverDetailsEmailDisabledSend() {
+    const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
+    const customerEmail = adminCustomerDriverDetailsEmailReviewCustomerEmail;
+
+    if (!bookingReference || !customerEmail) {
+      setAdminCustomerDriverDetailsEmailDisabledSendActionState({
+        ...adminCustomerDriverDetailsEmailDisabledSendFallbackState(
+          "Load a saved booking with a customer email before checking disabled send.",
+        ),
+        actionStatus: "error",
+        loadedReference: bookingReference,
+      });
+      return;
+    }
+
+    setAdminCustomerDriverDetailsEmailDisabledSendActionState({
+      ...adminCustomerDriverDetailsEmailDisabledSendFallbackState(
+        `Checking disabled customer driver details email send for ${bookingReference}...`,
+      ),
+      actionStatus: "loading",
+      loadedReference: bookingReference,
+    });
+
+    try {
+      const params = new URLSearchParams({
+        booking_reference: bookingReference,
+        customer_email: customerEmail,
+      });
+      const driverName = clean(dispatchReleaseDriverName);
+      const driverPhone = clean(dispatchReleaseDriverContact);
+      const vehiclePlate = clean(dispatchReleaseDriverPlate);
+      const vehicleType = clean(customerDriverDetailsEmailReviewVehicleType);
+      const customerAccountLabel = normalizeCompanyAccount(booking.company, booking.bookerEmail);
+      const pickupTime = formatPickupDateTime(booking.date, booking.time);
+      const safeRoute = formatPrivacySafeRoute(booking);
+
+      if (customerAccountLabel) {
+        params.set("customer_account_label", customerAccountLabel);
+      }
+
+      if (driverName) {
+        params.set("driver_name", driverName);
+      }
+
+      if (driverPhone) {
+        params.set("driver_phone", driverPhone);
+      }
+
+      if (pickupTime) {
+        params.set("pickup_time", pickupTime);
+      }
+
+      if (safeRoute) {
+        params.set("route", safeRoute);
+      }
+
+      if (vehiclePlate) {
+        params.set("vehicle_plate", vehiclePlate);
+      }
+
+      if (vehicleType) {
+        params.set("vehicle_type", vehicleType);
+      }
+
+      const response = await fetch(`${adminCustomerDriverDetailsEmailSendDisabledApiPath}?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result =
+        (await response.json().catch(() => null)) as
+          | AdminCustomerDriverDetailsEmailDisabledSendResponse
+          | null;
+
+      if (!response.ok || !result) {
+        throw new Error("Disabled customer driver details email send check failed safely.");
+      }
+
+      const sendingEnabled = result.sendingEnabled === true || result.send?.sendingEnabled === true;
+      const externalSend = result.external_send === true || result.send?.external_send === true;
+      const resultStatus = clean(result.status) || clean(result.send?.status) || "blocked";
+      const reason = clean(result.reason) || clean(result.send?.reason) || "setup_only_disabled";
+
+      setAdminCustomerDriverDetailsEmailDisabledSendActionState({
+        actionStatus: "loaded",
+        external_send: externalSend,
+        loadedReference: bookingReference,
+        message: `Disabled customer driver details email send returned ${resultStatus}/no-op for ${bookingReference}.`,
+        reason,
+        sendingEnabled,
+        status: resultStatus,
+      });
+    } catch (error) {
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : "Disabled customer driver details email send check failed safely.";
+
+      setAdminCustomerDriverDetailsEmailDisabledSendActionState({
+        actionStatus: "error",
+        external_send: false,
+        loadedReference: bookingReference,
+        message: errorText,
+        reason: "setup_only_disabled",
+        sendingEnabled: false,
+        status: "blocked",
+      });
+    }
+  }
+
+  const adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference =
+    adminCustomerDriverDetailsEmailDisabledSendActionState.loadedReference ===
+    adminCustomerDriverDetailsEmailReviewBookingReference;
+  const adminCustomerDriverDetailsEmailDisabledSendDisplayState =
+    adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference
+      ? adminCustomerDriverDetailsEmailDisabledSendActionState
+      : adminCustomerDriverDetailsEmailDisabledSendFallbackState();
+  const adminCustomerDriverDetailsEmailDisabledSendCanCall =
+    adminCustomerDriverDetailsEmailReviewCanReadApi &&
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus !== "loading";
+  const adminCustomerDriverDetailsEmailDisabledSendActionLabel =
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loading"
+      ? "Checking disabled send"
+      : clean(adminCustomerDriverDetailsEmailReviewItem.actionLabel) || "Review email to customer";
+  const adminCustomerDriverDetailsEmailDisabledSendStatusText =
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "loaded" ||
+    adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus === "error"
+      ? `${
+          clean(adminCustomerDriverDetailsEmailDisabledSendDisplayState.status).toLowerCase() === "blocked"
+            ? "Blocked"
+            : clean(adminCustomerDriverDetailsEmailDisabledSendDisplayState.status) || "Blocked"
+        }/no-op, sendingEnabled ${
+          adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled ? "true" : "false"
+        }, external_send ${
+          adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send ? "true" : "false"
+        }`
+      : adminCustomerDriverDetailsEmailReviewSendStateLabel;
   const driverAcknowledgementFollowUpStatusLabel =
     driverAcknowledgementFollowUpStatus === "acknowledged"
       ? "Acknowledged locally"
@@ -29585,6 +29770,18 @@ export default function Home() {
                 data-admin-customer-driver-details-email-review-ready-state={
                   adminCustomerDriverDetailsEmailReviewReady ? "ready" : "blocked"
                 }
+                data-admin-customer-driver-details-email-disabled-send-action-state={
+                  adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus
+                }
+                data-admin-customer-driver-details-email-disabled-send-external-send={
+                  adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send ? "true" : "false"
+                }
+                data-admin-customer-driver-details-email-disabled-send-loaded-reference={
+                  adminCustomerDriverDetailsEmailDisabledSendDisplayState.loadedReference
+                }
+                data-admin-customer-driver-details-email-disabled-send-sending-enabled={
+                  adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled ? "true" : "false"
+                }
               >
                 <div className="min-w-0">
                   <span
@@ -29594,13 +29791,16 @@ export default function Home() {
                     {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
                       "Customer driver details ready"}
                   </span>
-                  <span
-                    className="block truncate text-emerald-800"
+                  <button
+                    className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
+                    data-admin-customer-driver-details-email-disabled-send-action="true"
                     data-admin-customer-driver-details-email-review-action="true"
+                    disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
+                    onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}
+                    type="button"
                   >
-                    {clean(adminCustomerDriverDetailsEmailReviewItem.actionLabel) ||
-                      "Review email to customer"}
-                  </span>
+                    {adminCustomerDriverDetailsEmailDisabledSendActionLabel}
+                  </button>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                   <span
@@ -29617,9 +29817,11 @@ export default function Home() {
                   </span>
                   <span
                     className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                    data-admin-customer-driver-details-email-disabled-send-status="true"
                     data-admin-customer-driver-details-email-review-send-state="true"
+                    title={adminCustomerDriverDetailsEmailDisabledSendDisplayState.message}
                   >
-                    {adminCustomerDriverDetailsEmailReviewSendStateLabel}
+                    {adminCustomerDriverDetailsEmailDisabledSendStatusText}
                   </span>
                 </div>
               </div>

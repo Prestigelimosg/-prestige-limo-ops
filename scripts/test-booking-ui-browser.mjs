@@ -1669,6 +1669,11 @@ function assertBookingUiState(state) {
     state.customerCopyEmailReviewItem,
     {
       action: "Review email to customer",
+      actionDisabled: true,
+      disabledSendActionState: "idle",
+      disabledSendExternalSend: "false",
+      disabledSendLoadedReference: "",
+      disabledSendSendingEnabled: "false",
       label: "Customer driver details ready",
       loadedReference: "",
       readState: "idle",
@@ -4015,13 +4020,19 @@ async function runChromeTest() {
       const customerCopyEmailReviewItem = () => {
         const section = document.querySelector("[data-dispatch-workflow-step='customer-whatsapp-copy']");
         const item = section?.querySelector("[data-admin-customer-driver-details-email-review-item='true']");
+        const action = item?.querySelector("[data-admin-customer-driver-details-email-review-action='true']");
 
         return {
-          action:
-            item
-              ?.querySelector("[data-admin-customer-driver-details-email-review-action='true']")
-              ?.textContent.replace(/\\s+/g, " ")
-              .trim() || "",
+          action: action?.textContent.replace(/\\s+/g, " ").trim() || "",
+          actionDisabled: action?.disabled ?? null,
+          disabledSendActionState:
+            item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-action-state") || "",
+          disabledSendExternalSend:
+            item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-external-send") || "",
+          disabledSendLoadedReference:
+            item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-loaded-reference") || "",
+          disabledSendSendingEnabled:
+            item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-sending-enabled") || "",
           label:
             item
               ?.querySelector("[data-admin-customer-driver-details-email-review-label='true']")
@@ -6064,6 +6075,7 @@ async function runChromeTest() {
       window.__prestigeAdminDriverJobLinkRequests = [];
       window.__prestigeAdminDriverJobLinks = [];
       window.__prestigeCustomerDriverDetailsEmailReviewItemRequests = [];
+      window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests = [];
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
@@ -6202,6 +6214,67 @@ async function runChromeTest() {
               sendingEnabled: false,
               status: "setup_only",
               version: "browser-customer-driver-details-email-review-item-mock",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        if (String(target).includes("/api/admin-customer-driver-details-email-send-disabled-setup")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests.push({
+            body: null,
+            booking_reference: url.searchParams.get("booking_reference") || "",
+            customer_email: url.searchParams.get("customer_email") || "",
+            external_send: false,
+            headers,
+            method,
+            search: url.search,
+            sendingEnabled: false,
+            status: "blocked",
+            url: String(target),
+          });
+
+          if (method !== "GET") {
+            return new Response(
+              JSON.stringify({
+                error: "Customer driver details email disabled send method not mocked.",
+                external_send: false,
+                ok: false,
+                sendingEnabled: false,
+                status: "blocked",
+              }),
+              { status: 405, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              delivery_surface: "email_disabled",
+              external_send: false,
+              ok: true,
+              reason: "setup_only_disabled",
+              send: {
+                delivery_surface: "email_disabled",
+                external_send: false,
+                payload_preview: {
+                  booking_reference: url.searchParams.get("booking_reference") || null,
+                  body_line_count: 6,
+                  recipient_email: url.searchParams.get("customer_email") || null,
+                  sender_key: null,
+                  subject: url.searchParams.get("booking_reference")
+                    ? "Assigned driver details for " + url.searchParams.get("booking_reference")
+                    : "Assigned driver details",
+                  template_key: "customer_assigned_driver_details",
+                },
+                reason: "setup_only_disabled",
+                sendingEnabled: false,
+                status: "blocked",
+                version: "admin-email-send-disabled-adapter-v1",
+              },
+              sendingEnabled: false,
+              status: "blocked",
+              version: "browser-customer-driver-details-email-disabled-send-mock",
             }),
             { status: 200, headers: { "content-type": "application/json" } },
           );
@@ -14629,6 +14702,8 @@ async function runChromeTest() {
               window.__prestigeAdminDriverJobDspActualTimeRequests || [],
             customerDriverDetailsEmailReviewItemRequests:
               window.__prestigeCustomerDriverDetailsEmailReviewItemRequests || [],
+            customerDriverDetailsEmailDisabledSendRequests:
+              window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [],
             driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
             fetchCalls: window.__prestigeFetchCalls || [],
             completedBillingReadinessAuditRequests:
@@ -15016,6 +15091,79 @@ async function runChromeTest() {
         },
       ],
       "Expected saved booking load to GET the customer driver details email review item through the guarded setup-only API path",
+    );
+
+    const clickedCustomerCopyEmailDisabledSend = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedCustomerCopyEmailDisabledSend,
+      true,
+      "Expected Customer Copy disabled email send button to be clickable after saved booking load",
+    );
+
+    const customerCopyEmailDisabledSendState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const item = document.querySelector("[data-dispatch-workflow-step='customer-whatsapp-copy'] [data-admin-customer-driver-details-email-review-item='true']");
+          const status = item
+            ?.querySelector("[data-admin-customer-driver-details-email-disabled-send-status='true']")
+            ?.textContent.replace(/\\s+/g, " ")
+            .trim() || "";
+          const requests = window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [];
+
+          return status.includes("Blocked/no-op") && requests.length === 1
+            ? {
+                externalSend: item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-external-send") || "",
+                loadedReference:
+                  item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-loaded-reference") || "",
+                requests,
+                sendingEnabled:
+                  item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-sending-enabled") || "",
+                status,
+              }
+            : false;
+        })()`),
+      10000,
+      "Customer Copy disabled email send no-op result",
+    );
+    assert.equal(customerCopyEmailDisabledSendState.status, "Blocked/no-op, sendingEnabled false, external_send false");
+    assert.equal(customerCopyEmailDisabledSendState.externalSend, "false");
+    assert.equal(customerCopyEmailDisabledSendState.sendingEnabled, "false");
+    assert.equal(customerCopyEmailDisabledSendState.loadedReference, "ui-cleanup-load-fixture");
+    assert.deepEqual(
+      customerCopyEmailDisabledSendState.requests.map((request) => ({
+        body: request.body,
+        booking_reference: request.booking_reference,
+        customer_email: request.customer_email,
+        external_send: request.external_send,
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        sendingEnabled: request.sendingEnabled,
+        status: request.status,
+      })),
+      [
+        {
+          body: null,
+          booking_reference: "ui-cleanup-load-fixture",
+          customer_email: "booker@loadedsaved.example.com",
+          external_send: false,
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          sendingEnabled: false,
+          status: "blocked",
+        },
+      ],
+      "Expected Customer Copy disabled email send button to GET the no-op setup-only API",
     );
     assert.deepEqual(
       loadedBookingState.workflowStatusRequests.map((request) => ({

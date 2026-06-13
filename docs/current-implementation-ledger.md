@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-e0b47d3 Wire customer copy email button to disabled send API
+e4dea7e Add email provider readiness API
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `e0b47d3 Wire customer copy email button to disabled send API`.
-- Latest implementation checkpoint to preserve: `e0b47d3 Wire customer copy email button to disabled send API`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email review item API, Customer Copy customer driver details email review UI and disabled-send button, email provider readiness setup foundation, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `e4dea7e Add email provider readiness API`.
+- Latest implementation checkpoint to preserve: `e4dea7e Add email provider readiness API`.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email review item API, Customer Copy customer driver details email review UI and disabled-send button, email provider readiness setup foundation/API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -97,6 +97,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email recipient safety setup foundation.
 - Email send policy setup foundation.
 - Email provider readiness setup foundation.
+- Email provider readiness setup API.
 - Customer driver details email setup foundation.
 - Customer driver details email readiness setup foundation.
 - Customer driver details email preview/readiness setup API.

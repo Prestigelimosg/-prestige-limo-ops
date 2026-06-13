@@ -26287,7 +26287,7 @@ export default function Home() {
 
             <section
               aria-label="OneMap Route Assist"
-              className="order-[90] rounded-md border border-cyan-200 bg-cyan-50/70 p-3"
+              className="order-[79] rounded-md border border-cyan-200 bg-cyan-50/70 p-3"
               data-dispatch-workflow-step="onemap-route-assist"
               data-admin-onemap-route-assist="true"
             >
@@ -26516,7 +26516,7 @@ export default function Home() {
               </section>
             ) : null}
 
-            <div className="order-[100]" data-dispatch-workflow-step="admin-lower-pricing">
+            <div className="order-[32]" data-dispatch-workflow-step="admin-lower-pricing">
               {pricingPanel}
             </div>
 
@@ -27028,7 +27028,7 @@ export default function Home() {
             ) : null}
 
             {hasNeedsReviewWarnings ? (
-              <div className="order-[100] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div className="order-[33] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                 <p className="font-semibold">Needs review before saving</p>
                 <p className="mt-1">Please check these fields before saving this booking.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">

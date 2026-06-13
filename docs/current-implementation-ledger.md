@@ -37,6 +37,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Telegram no-live guard is done.
 - Live bot token/env/Telegram API/send activation remains blocked until explicit approval.
 
+## WhatsApp Pre-Activation Completion Audit Lock
+
+- WhatsApp customer driver-details is complete up to the activation stop.
+- Setup foundation is done.
+- Preview/readiness API is done.
+- Disabled send API is done.
+- Send audit payload setup foundation is done.
+- WhatsApp no-live guard is done.
+- Live provider/env/WhatsApp API/send activation remains blocked until explicit approval.
+
 ## Locked Workflow Rules
 
 - Inspect first.

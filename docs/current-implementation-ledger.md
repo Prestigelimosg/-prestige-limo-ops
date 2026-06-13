@@ -27,6 +27,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email no-live guard is done.
 - Live provider/env/send activation remains blocked until explicit approval.
 
+## Telegram Pre-Activation Completion Audit Lock
+
+- Telegram internal admin alerts are complete up to the activation stop.
+- Setup foundation is done.
+- Preview/readiness API is done.
+- Disabled send API is done.
+- Send audit payload setup foundation is done.
+- Telegram no-live guard is done.
+- Live bot token/env/Telegram API/send activation remains blocked until explicit approval.
+
 ## Locked Workflow Rules
 
 - Inspect first.

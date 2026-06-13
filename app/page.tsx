@@ -59,6 +59,8 @@ const adminCustomerDriverDetailsEmailReviewItemApiPath =
   "/api/admin-customer-driver-details-email-review-item-setup";
 const adminCustomerDriverDetailsEmailSendDisabledApiPath =
   "/api/admin-customer-driver-details-email-send-disabled-setup";
+const adminEmailActivationPreflightApiPath =
+  "/api/admin-email-activation-preflight-setup";
 const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
@@ -892,10 +894,38 @@ type AdminCustomerDriverDetailsEmailDisabledSendResponse = {
   status?: string;
 };
 
+type AdminEmailActivationPreflightResponse = {
+  activationReady?: boolean;
+  blockers?: string[];
+  external_send?: boolean;
+  liveSendingEnabled?: boolean;
+  missing_requirements?: string[];
+  ok?: boolean;
+  providerConfigured?: boolean;
+  providerSelected?: boolean;
+  selectedProvider?: string | null;
+  sendingEnabled?: boolean;
+  status?: string;
+};
+
 type AdminCustomerDriverDetailsEmailReviewItemReadState = {
   item: AdminCustomerDriverDetailsEmailReviewItem;
   loadedReference: string;
   message: string;
+  status: "idle" | "loading" | "loaded" | "error";
+};
+
+type AdminEmailActivationPreflightReadState = {
+  activationReady: boolean;
+  blockers: string[];
+  external_send: boolean;
+  liveSendingEnabled: boolean;
+  loadedReference: string;
+  message: string;
+  providerConfigured: boolean;
+  providerSelected: boolean;
+  selectedProvider: string | null;
+  sendingEnabled: boolean;
   status: "idle" | "loading" | "loaded" | "error";
 };
 
@@ -921,6 +951,24 @@ function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDrive
     readiness_status: "blocked",
     sendingEnabled: false,
     status: "setup_only",
+  };
+}
+
+function adminEmailActivationPreflightFallbackState(
+  message = "Email activation preflight is setup-only.",
+): AdminEmailActivationPreflightReadState {
+  return {
+    activationReady: false,
+    blockers: ["provider", "env", "approval", "live_sending"],
+    external_send: false,
+    liveSendingEnabled: false,
+    loadedReference: "",
+    message,
+    providerConfigured: false,
+    providerSelected: false,
+    selectedProvider: null,
+    sendingEnabled: false,
+    status: "idle",
   };
 }
 
@@ -7817,6 +7865,12 @@ export default function Home() {
     message: "Load or apply a saved booking before customer email review.",
     status: "idle",
   }));
+  const [
+    adminEmailActivationPreflightReadState,
+    setAdminEmailActivationPreflightReadState,
+  ] = useState<AdminEmailActivationPreflightReadState>(() =>
+    adminEmailActivationPreflightFallbackState(),
+  );
   const [
     adminCustomerDriverDetailsEmailDisabledSendActionState,
     setAdminCustomerDriverDetailsEmailDisabledSendActionState,
@@ -15210,6 +15264,94 @@ export default function Home() {
     adminCustomerDriverDetailsEmailReviewBookingReference &&
       adminCustomerDriverDetailsEmailReviewCustomerEmail,
   );
+  const adminEmailActivationPreflightReference =
+    adminCustomerDriverDetailsEmailReviewBookingReference || "customer-copy";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (activeTab !== "dispatch") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadAdminEmailActivationPreflight() {
+      setAdminEmailActivationPreflightReadState((current) => ({
+        ...adminEmailActivationPreflightFallbackState(
+          "Checking email activation preflight setup...",
+        ),
+        blockers: current.blockers.length > 0
+          ? current.blockers
+          : adminEmailActivationPreflightFallbackState().blockers,
+        loadedReference: adminEmailActivationPreflightReference,
+        status: "loading",
+      }));
+
+      try {
+        const response = await fetch(adminEmailActivationPreflightApiPath, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const result =
+          (await response.json().catch(() => null)) as
+            | AdminEmailActivationPreflightResponse
+            | null;
+
+        if (!response.ok || result?.ok !== true) {
+          throw new Error("Email activation preflight read failed safely.");
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        const blockers =
+          Array.isArray(result.blockers) && result.blockers.length > 0
+            ? result.blockers
+            : Array.isArray(result.missing_requirements) && result.missing_requirements.length > 0
+              ? result.missing_requirements
+              : adminEmailActivationPreflightFallbackState().blockers;
+
+        setAdminEmailActivationPreflightReadState({
+          activationReady: result.activationReady === true,
+          blockers,
+          external_send: result.external_send === true,
+          liveSendingEnabled: result.liveSendingEnabled === true,
+          loadedReference: adminEmailActivationPreflightReference,
+          message: "Email activation preflight checked: provider/env/approval blocked.",
+          providerConfigured: result.providerConfigured === true,
+          providerSelected: result.providerSelected === true,
+          selectedProvider: clean(result.selectedProvider),
+          sendingEnabled: result.sendingEnabled === true,
+          status: "loaded",
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const errorText =
+          error instanceof Error
+            ? error.message
+            : "Email activation preflight read failed safely.";
+
+        setAdminEmailActivationPreflightReadState({
+          ...adminEmailActivationPreflightFallbackState(errorText),
+          loadedReference: adminEmailActivationPreflightReference,
+          status: "error",
+        });
+      }
+    }
+
+    loadAdminEmailActivationPreflight();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, adminEmailActivationPreflightReference]);
 
   useEffect(() => {
     const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
@@ -15507,6 +15649,31 @@ export default function Home() {
           adminCustomerDriverDetailsEmailDisabledSendDisplayState.external_send ? "true" : "false"
         }`
       : adminCustomerDriverDetailsEmailReviewSendStateLabel;
+  const adminEmailActivationPreflightStateMatchesReference =
+    adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
+  const adminEmailActivationPreflightDisplayState =
+    adminEmailActivationPreflightStateMatchesReference
+      ? adminEmailActivationPreflightReadState
+      : adminEmailActivationPreflightFallbackState();
+  const adminEmailActivationPreflightBlockedRequirements =
+    adminEmailActivationPreflightDisplayState.blockers.filter((blocker) =>
+      ["provider", "env", "approval"].includes(blocker),
+    );
+  const adminEmailActivationPreflightBlockedText = `${
+    adminEmailActivationPreflightBlockedRequirements.length > 0
+      ? adminEmailActivationPreflightBlockedRequirements.join("/")
+      : "provider/env/approval"
+  } blocked`;
+  const adminEmailActivationPreflightStatusText =
+    adminEmailActivationPreflightDisplayState.status === "loading"
+      ? "Preflight checking"
+      : `Preflight: activationReady ${
+          adminEmailActivationPreflightDisplayState.activationReady ? "true" : "false"
+        }, liveSendingEnabled ${
+          adminEmailActivationPreflightDisplayState.liveSendingEnabled ? "true" : "false"
+        }, external_send ${
+          adminEmailActivationPreflightDisplayState.external_send ? "true" : "false"
+        }, ${adminEmailActivationPreflightBlockedText}`;
   const driverAcknowledgementFollowUpStatusLabel =
     driverAcknowledgementFollowUpStatus === "acknowledged"
       ? "Acknowledged locally"
@@ -29782,6 +29949,24 @@ export default function Home() {
                 data-admin-customer-driver-details-email-disabled-send-sending-enabled={
                   adminCustomerDriverDetailsEmailDisabledSendDisplayState.sendingEnabled ? "true" : "false"
                 }
+                data-admin-email-activation-preflight-activation-ready={
+                  adminEmailActivationPreflightDisplayState.activationReady ? "true" : "false"
+                }
+                data-admin-email-activation-preflight-blockers={
+                  adminEmailActivationPreflightDisplayState.blockers.join(",")
+                }
+                data-admin-email-activation-preflight-external-send={
+                  adminEmailActivationPreflightDisplayState.external_send ? "true" : "false"
+                }
+                data-admin-email-activation-preflight-live-sending-enabled={
+                  adminEmailActivationPreflightDisplayState.liveSendingEnabled ? "true" : "false"
+                }
+                data-admin-email-activation-preflight-loaded-reference={
+                  adminEmailActivationPreflightDisplayState.loadedReference
+                }
+                data-admin-email-activation-preflight-read-state={
+                  adminEmailActivationPreflightDisplayState.status
+                }
               >
                 <div className="min-w-0">
                   <span
@@ -29822,6 +30007,13 @@ export default function Home() {
                     title={adminCustomerDriverDetailsEmailDisabledSendDisplayState.message}
                   >
                     {adminCustomerDriverDetailsEmailDisabledSendStatusText}
+                  </span>
+                  <span
+                    className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                    data-admin-email-activation-preflight-status="true"
+                    title={adminEmailActivationPreflightDisplayState.message}
+                  >
+                    {adminEmailActivationPreflightStatusText}
                   </span>
                 </div>
               </div>

@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-ab3977e Add SMS customer driver details preview readiness API
+462c447 Add disabled SMS customer driver details send API
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `ab3977e Add SMS customer driver details preview readiness API`.
-- Latest implementation checkpoint to preserve: `ab3977e Add SMS customer driver details preview readiness API`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation and preview/readiness API, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, and email activation preflight status UI, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `462c447 Add disabled SMS customer driver details send API`.
+- Latest implementation checkpoint to preserve: `462c447 Add disabled SMS customer driver details send API`.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, and disabled send API, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, and email activation preflight status UI, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -136,6 +136,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - WhatsApp customer driver details no-live guard.
 - SMS customer driver details setup foundation.
 - SMS customer driver details preview/readiness setup API.
+- Disabled SMS customer driver details send setup API.
 - Disabled email send adapter setup foundation.
 - Email notification setup foundation.
 - Email sender selection setup foundation.

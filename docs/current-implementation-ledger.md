@@ -23,6 +23,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Terminal 2 checks before Codex whenever possible.
 - No live DB, migrations, payment, PDF, payout, auth activation, live sending, external APIs, live location, or photo upload unless explicitly approved.
 
+## Required Check Lock
+
+| Task type | Required checks |
+| --- | --- |
+| Docs-only ledger update | `git diff --check`, `git status --short` |
+| Helper/setup foundation | Direct contract test, `git diff --check`, `git status --short` |
+| API route | API contract test + related helper test, `git diff --check`, `git status --short` |
+| Compact UI change | Relevant test if any + `npm run lint`; build only if risky |
+| Big UI/page change | `npm run lint` + `npm run build` |
+| Live DB/API/payment/auth/provider changes | Full relevant tests + lint + build + smoke |
+
 ## Implemented
 
 ### Admin / booking

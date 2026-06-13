@@ -7768,6 +7768,12 @@ export default function Home() {
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
   const [saving, setSaving] = useState(false);
+  const bookingSaveInFlightKeyRef = useRef<string | null>(null);
+  const lastSuccessfulBookingSaveRef = useRef<{
+    bookingId: string;
+    key: string;
+    record: BookingRecord | null;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [rateSettings, setRateSettings] = useState<RateSettings>(initialRateSettings);
   const [rateOverrideDraft, setRateOverrideDraft] =
@@ -9550,6 +9556,20 @@ export default function Home() {
       ),
     };
   }, [booking, drivers, rateCompanies, rateSettings, rateTravelers]);
+
+  function getBookingSaveGuardKey() {
+    const normalizedBooking = Object.fromEntries(
+      Object.entries(booking).map(([key, value]) => [key, clean(value)]),
+    );
+
+    return JSON.stringify({
+      appliedSnapshotReference: clean(appliedAdminBookingSnapshotReference),
+      booking: normalizedBooking,
+      jobCard,
+      pricing: draftPricing,
+      route,
+    });
+  }
 
   const visibleChildSeatTypeOptions = useMemo(() => {
     const currentChildSeatType = clean(booking.childSeatType);
@@ -12119,6 +12139,33 @@ export default function Home() {
       return null;
     }
 
+    const bookingSaveGuardKey = getBookingSaveGuardKey();
+
+    if (bookingSaveInFlightKeyRef.current) {
+      const saveMessage = {
+        tone: "info",
+        text: "Booking save already in progress.",
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      return null;
+    }
+
+    const lastSuccessfulBookingSave = lastSuccessfulBookingSaveRef.current;
+
+    if (lastSuccessfulBookingSave?.key === bookingSaveGuardKey) {
+      const saveMessage = {
+        tone: "info",
+        text: `Booking already saved: ${lastSuccessfulBookingSave.bookingId}. Change details before saving again.`,
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      return lastSuccessfulBookingSave.record;
+    }
+
+    bookingSaveInFlightKeyRef.current = bookingSaveGuardKey;
     setSaving(true);
     setMessage({ tone: "info", text: "Saving booking + CRM..." });
     setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
@@ -12276,6 +12323,11 @@ export default function Home() {
           });
           setBookingSaveMessage(saveMessage);
           setAcceptedReviewWarningKey("");
+          lastSuccessfulBookingSaveRef.current = {
+            bookingId: String(savedBookingId),
+            key: bookingSaveGuardKey,
+            record: null,
+          };
           return null;
         }
 
@@ -12302,6 +12354,11 @@ export default function Home() {
         setMessage(saveMessage);
         setBookingSaveMessage(saveMessage);
         setAcceptedReviewWarningKey("");
+        lastSuccessfulBookingSaveRef.current = {
+          bookingId: String(savedBookingRecord.id),
+          key: bookingSaveGuardKey,
+          record: savedBookingRecord,
+        };
         return savedBookingRecord;
       }
     } catch (error) {
@@ -12311,6 +12368,9 @@ export default function Home() {
       setBookingSaveMessage(saveMessage);
       return null;
     } finally {
+      if (bookingSaveInFlightKeyRef.current === bookingSaveGuardKey) {
+        bookingSaveInFlightKeyRef.current = null;
+      }
       setSaving(false);
     }
   }

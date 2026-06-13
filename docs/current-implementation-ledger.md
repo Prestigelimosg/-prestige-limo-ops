@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-c04559d Add driver ack customer message handoff API
+d4eebe5 Add customer driver details email review item API
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `c04559d Add driver ack customer message handoff API`.
-- Latest implementation checkpoint to preserve: `c04559d Add driver ack customer message handoff API`.
-- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, email provider readiness setup foundation, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `d4eebe5 Add customer driver details email review item API`.
+- Latest implementation checkpoint to preserve: `d4eebe5 Add customer driver details email review item API`.
+- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email review item API, email provider readiness setup foundation, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -91,6 +91,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Disabled customer driver details email send setup API.
 - Driver ack customer message handoff setup foundation.
 - Driver ack customer message handoff setup API.
+- Customer driver details email review item setup API.
 - No real sending active.
 
 ### Live location

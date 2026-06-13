@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-23ae859 Add customer driver details link setup foundation
+4e29567 Add customer driver details link preview readiness API
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `23ae859 Add customer driver details link setup foundation`.
-- Latest implementation checkpoint to preserve: `23ae859 Add customer driver details link setup foundation`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, secure customer driver-details link setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, and multi-channel no-live guard, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `4e29567 Add customer driver details link preview readiness API`.
+- Latest implementation checkpoint to preserve: `4e29567 Add customer driver details link preview readiness API`.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, secure customer driver-details link setup foundation and preview/readiness API, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, and multi-channel no-live guard, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -165,7 +165,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Disabled SMS customer driver details send setup API.
 - SMS customer driver details send audit payload setup foundation.
 - SMS customer driver details no-live guard.
-- Secure customer driver details link setup foundation.
+- Secure customer driver details link setup foundation and preview/readiness setup API.
 - Disabled email send adapter setup foundation.
 - Email notification setup foundation.
 - Email sender selection setup foundation.

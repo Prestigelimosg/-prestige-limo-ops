@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-f81af20 Add SMS no-live guard
+f16ae64 Add customer copy WhatsApp SMS disabled send UI
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `f81af20 Add SMS no-live guard`.
-- Latest implementation checkpoint to preserve: `f81af20 Add SMS no-live guard`.
-- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, and email activation preflight status UI, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
+- Latest repo commit to preserve as handoff baseline: `f16ae64 Add customer copy WhatsApp SMS disabled send UI`.
+- Latest implementation checkpoint to preserve: `f16ae64 Add customer copy WhatsApp SMS disabled send UI`.
+- Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, and WhatsApp/SMS disabled-send UI, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
@@ -45,6 +45,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Disabled send API is done.
 - Send audit payload setup foundation is done.
 - WhatsApp no-live guard is done.
+- Customer Copy compact disabled-send UI is done.
 - Live provider/env/WhatsApp API/send activation remains blocked until explicit approval.
 
 ## SMS Pre-Activation Completion Audit Lock
@@ -55,6 +56,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Disabled send API is done.
 - Send audit payload setup foundation is done.
 - SMS no-live guard is done.
+- Customer Copy compact disabled-send UI is done.
 - Live provider/env/SMS API/send activation remains blocked until explicit approval.
 
 ## Locked Workflow Rules
@@ -168,7 +170,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver ack customer message handoff setup foundation.
 - Driver ack customer message handoff setup API.
 - Customer driver details email review item setup API.
-- Customer Copy customer driver details email review UI, disabled-send button, and email activation preflight status UI.
+- Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, and WhatsApp/SMS disabled-send buttons.
 - No real sending active.
 
 ### Live location

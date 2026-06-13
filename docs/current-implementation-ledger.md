@@ -62,6 +62,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy multi-channel no-live guard is done.
 - Live provider/env/SMS API/send activation remains blocked until explicit approval.
 
+## Customer Copy Multi-Channel Pre-Activation Completion Audit Lock
+
+- Customer Copy Email/WhatsApp/SMS customer driver-details messaging is complete up to the activation stop.
+- Compact Customer Copy UI is done.
+- Disabled send APIs are done.
+- Preview/readiness APIs are done.
+- Send audit payload setup foundations are done.
+- Channel no-live guards are done.
+- Customer Copy multi-channel no-live guard is done.
+- Live provider/env/send activation remains blocked until explicit approval.
+
 ## Locked Workflow Rules
 
 - Inspect first.

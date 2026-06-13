@@ -865,6 +865,9 @@ type SavedBookingCalendarDownloadResult = {
   syncStatus: AdminBookingCalendarSyncStatus | null;
   syncStatusMessage: string;
 };
+type BookingCalendarEventPayload = ReturnType<typeof buildSavedBookingCalendarEventPayload> & {
+  job_card?: string;
+};
 
 type CopyFeedback = Message & {
   target: DispatchCopyTarget;
@@ -7741,7 +7744,7 @@ export default function Home() {
   const [bookingCalendarDownloadId, setBookingCalendarDownloadId] = useState<string | null>(null);
   const [jobCardCalendarMessage, setJobCardCalendarMessage] = useState<Message | null>(null);
   const [jobCardCalendarAction, setJobCardCalendarAction] =
-    useState<"download-calendar" | "save-calendar" | null>(null);
+    useState<"download-calendar" | null>(null);
   const [loadedBookingId, setLoadedBookingId] = useState("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
@@ -9571,6 +9574,56 @@ export default function Home() {
     });
   }
 
+  function currentFormCalendarReference() {
+    const reference = [
+      "draft",
+      clean(booking.date) || "date-tbc",
+      clean(booking.time).replace(/\D/g, "") || "time-tbc",
+      clean(booking.name) || clean(booking.company) || "booking",
+    ]
+      .join("-")
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+
+    return reference || "draft-booking";
+  }
+
+  function buildCurrentFormCalendarEventPayload(): BookingCalendarEventPayload | null {
+    const pickup = clean(booking.pickup);
+    const dropoff = clean(booking.dropoff);
+    const pickupDate = clean(booking.date);
+    const pickupTime = clean(booking.time);
+
+    if (!pickupDate || !pickupTime || (!pickup && !dropoff)) {
+      return null;
+    }
+
+    const bookingReference = currentFormCalendarReference();
+
+    return {
+      booking_reference: bookingReference,
+      booking_type: clean(booking.bookingType),
+      booker_name: clean(booking.booker),
+      company_name: normalizeCompanyAccount(booking.company, booking.bookerEmail),
+      date: pickupDate,
+      driver_contact: clean(booking.driverContact),
+      driver_name: clean(booking.driverName),
+      driver_plate_number: clean(booking.driverPlate),
+      dropoff_address: dropoff,
+      flight_no: clean(booking.flight),
+      id: bookingReference,
+      job_card: jobCard,
+      pax: Number(clean(booking.pax)) || 1,
+      pickup_address: pickup,
+      pickup_time: formatPickupTime(pickupTime),
+      route,
+      status: clean(booking.driverName) ? "assigned" : "draft",
+      traveler_name: clean(booking.name),
+      vehicle: clean(booking.vehicle),
+    };
+  }
+
   const visibleChildSeatTypeOptions = useMemo(() => {
     const currentChildSeatType = clean(booking.childSeatType);
 
@@ -9640,13 +9693,6 @@ export default function Home() {
   }, [driverSearchTerm, drivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
-  const loadedBookingRecord = useMemo(
-    () =>
-      clean(loadedBookingId)
-        ? bookings.find((bookingRecord) => String(bookingRecord.id) === clean(loadedBookingId)) ?? null
-        : null,
-    [bookings, loadedBookingId],
-  );
   const dashboardDriverCandidates = useMemo(() => {
     const candidateMap = new Map<string, DashboardDriverCandidate>();
     const driversById = new Map(drivers.map((driver) => [driver.id, driver]));
@@ -13510,7 +13556,7 @@ export default function Home() {
   }
 
   async function loadSavedBookingCalendarSyncStatus(
-    savedBookingPayload: ReturnType<typeof buildSavedBookingCalendarEventPayload>,
+    savedBookingPayload: BookingCalendarEventPayload,
     calendarEvent: AdminBookingCalendarEventResponse["calendar_event"],
   ): Promise<AdminBookingCalendarSyncStatus | null> {
     const response = await fetch(adminBookingCalendarSyncStatusesApiPath, {
@@ -13536,13 +13582,12 @@ export default function Home() {
     return result.sync_status ?? null;
   }
 
-  async function createAndDownloadSavedBookingCalendarEvent(
-    bookingRecord: BookingRecord,
+  async function createAndDownloadCalendarEventPayload(
+    calendarPayload: BookingCalendarEventPayload,
   ): Promise<SavedBookingCalendarDownloadResult> {
-    const bookingId = String(bookingRecord.id);
-    const savedBookingPayload = buildSavedBookingCalendarEventPayload(bookingRecord);
+    const bookingId = String(calendarPayload.booking_reference || calendarPayload.id || "draft-booking");
     const response = await fetch(adminBookingCalendarEventsApiPath, {
-      body: JSON.stringify(savedBookingPayload),
+      body: JSON.stringify(calendarPayload),
       headers: {
         "Content-Type": "application/json",
         "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -13559,7 +13604,7 @@ export default function Home() {
 
     try {
       const syncStatus = await loadSavedBookingCalendarSyncStatus(
-        savedBookingPayload,
+        calendarPayload,
         result.calendar_event ?? null,
       );
 
@@ -13573,6 +13618,12 @@ export default function Home() {
         syncStatusMessage: compactCalendarSyncStatusMessage(null),
       };
     }
+  }
+
+  async function createAndDownloadSavedBookingCalendarEvent(
+    bookingRecord: BookingRecord,
+  ): Promise<SavedBookingCalendarDownloadResult> {
+    return createAndDownloadCalendarEventPayload(buildSavedBookingCalendarEventPayload(bookingRecord));
   }
 
   async function downloadSavedBookingCalendarEvent(bookingRecord: BookingRecord) {
@@ -13602,59 +13653,14 @@ export default function Home() {
     }
   }
 
-  async function saveBookingAndDownloadCalendar() {
-    setJobCardCalendarAction("save-calendar");
-    setJobCardCalendarMessage({
-      tone: "info",
-      text: "Saving booking before calendar...",
-    });
-
-    const savedBookingRecord = await saveBooking();
-
-    if (!savedBookingRecord) {
-      setJobCardCalendarMessage({
-        tone: "error",
-        text: "Calendar not created because booking save did not complete.",
-      });
-      setJobCardCalendarAction(null);
-      return;
-    }
-
-    setJobCardCalendarAction("download-calendar");
-    setJobCardCalendarMessage({
-      tone: "info",
-      text: "Preparing calendar file...",
-    });
-
-    try {
-      const downloadResult = await createAndDownloadSavedBookingCalendarEvent(savedBookingRecord);
-      const customerLabel =
-        getBookingCompanyName(savedBookingRecord) ||
-        getBookerName(savedBookingRecord) ||
-        getBookingName(savedBookingRecord) ||
-        "customer/account";
-
-      setJobCardCalendarMessage({
-        tone: "success",
-        text: `Saved for ${customerLabel}. ${calendarDownloadedMessage(
-          downloadResult.syncStatusMessage,
-        )}`,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown calendar download error.";
-
-      setJobCardCalendarMessage({
-        tone: "error",
-        text: `Booking saved, but calendar download failed: ${errorMessage}`,
-      });
-    } finally {
-      setJobCardCalendarAction(null);
-    }
-  }
-
   async function downloadJobCardCalendarEvent() {
-    if (!loadedBookingRecord) {
-      await saveBookingAndDownloadCalendar();
+    const calendarPayload = buildCurrentFormCalendarEventPayload();
+
+    if (!calendarPayload) {
+      setJobCardCalendarMessage({
+        tone: "error",
+        text: "Calendar event needs date, time, and pickup or drop-off before download.",
+      });
       return;
     }
 
@@ -13665,7 +13671,7 @@ export default function Home() {
     });
 
     try {
-      const downloadResult = await createAndDownloadSavedBookingCalendarEvent(loadedBookingRecord);
+      const downloadResult = await createAndDownloadCalendarEventPayload(calendarPayload);
       setJobCardCalendarMessage({
         tone: "success",
         text: calendarDownloadedMessage(downloadResult.syncStatusMessage),
@@ -30050,13 +30056,9 @@ export default function Home() {
                       onClick={downloadJobCardCalendarEvent}
                       type="button"
                     >
-                      {jobCardCalendarAction === "save-calendar"
-                        ? "Saving..."
-                        : jobCardCalendarAction === "download-calendar"
-                          ? "Calendar..."
-                          : loadedBookingRecord
-                            ? "Add to Calendar"
-                            : "Save Booking + Calendar"}
+                      {jobCardCalendarAction === "download-calendar"
+                        ? "Calendar..."
+                        : "Create Calendar Event"}
                     </button>
                     {jobCardCopyEditState.isEditing ? (
                       <>

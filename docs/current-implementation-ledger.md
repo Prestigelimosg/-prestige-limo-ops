@@ -1,17 +1,17 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-4e98376 Add disabled customer driver details email send API
+5a879a9 Add email provider readiness setup foundation
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `ec276b6 Update ledger for disabled customer driver details email send API`.
-- Latest implementation checkpoint to preserve: `4e98376 Add disabled customer driver details email send API`.
-- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, ledger guards.
-- Uncompleted backlog: provider/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
+- Latest repo commit to preserve as handoff baseline: `5a879a9 Add email provider readiness setup foundation`.
+- Latest implementation checkpoint to preserve: `5a879a9 Add email provider readiness setup foundation`.
+- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, email provider readiness setup foundation, ledger guards.
+- Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
 ## Locked Workflow Rules
@@ -84,6 +84,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email sender selection setup foundation.
 - Email recipient safety setup foundation.
 - Email send policy setup foundation.
+- Email provider readiness setup foundation.
 - Customer driver details email setup foundation.
 - Customer driver details email readiness setup foundation.
 - Customer driver details email preview/readiness setup API.

@@ -1,6 +1,6 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest implementation checkpoint:
+Latest known clean checkpoint:
 4e98376 Add disabled customer driver details email send API
 
 Purpose:
@@ -8,7 +8,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `4e98376 Add disabled customer driver details email send API`.
+- Latest repo commit to preserve as handoff baseline: `ec276b6 Update ledger for disabled customer driver details email send API`.
 - Latest implementation checkpoint to preserve: `4e98376 Add disabled customer driver details email send API`.
 - Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, ledger guards.
 - Uncompleted backlog: provider/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.

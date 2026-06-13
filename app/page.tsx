@@ -15844,6 +15844,13 @@ export default function Home() {
       adminCustomerDriverDetailsSmsDisabledSendDisplayState,
       "Setup-only / send disabled, sendingEnabled false, external_send false",
     );
+  const adminCustomerDriverDetailsMultiChannelDisabledStatusText =
+    "Setup-only / send disabled, sendingEnabled false, external_send false";
+  const adminCustomerDriverDetailsMultiChannelDisabledStatusTitle = [
+    `Email: ${adminCustomerDriverDetailsEmailDisabledSendStatusText}`,
+    `WhatsApp: ${adminCustomerDriverDetailsWhatsAppDisabledSendStatusText}`,
+    `SMS: ${adminCustomerDriverDetailsSmsDisabledSendStatusText}`,
+  ].join(" | ");
   const adminEmailActivationPreflightStateMatchesReference =
     adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
   const adminEmailActivationPreflightDisplayState =
@@ -30163,7 +30170,7 @@ export default function Home() {
                   adminEmailActivationPreflightDisplayState.status
                 }
               >
-                <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
                   <div className="min-w-0">
                     <span
                       className="block truncate font-semibold"
@@ -30172,16 +30179,87 @@ export default function Home() {
                       {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
                         "Customer driver details ready"}
                     </span>
-                    <button
-                      className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
-                      data-admin-customer-driver-details-email-disabled-send-action="true"
-                      data-admin-customer-driver-details-email-review-action="true"
-                      disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
-                      onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}
-                      type="button"
-                    >
-                      {adminCustomerDriverDetailsEmailDisabledSendActionLabel}
-                    </button>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <button
+                        aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
+                        className="inline-flex min-h-7 max-w-full items-center rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        data-admin-customer-driver-details-email-disabled-send-action="true"
+                        data-admin-customer-driver-details-email-review-action="true"
+                        disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
+                        onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}
+                        title={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
+                        type="button"
+                      >
+                        {adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus ===
+                        "loading"
+                          ? "Checking Email"
+                          : "Review Email"}
+                      </button>
+                      <button
+                        aria-label="Customer driver details WhatsApp - Review WhatsApp to customer"
+                        className="inline-flex min-h-7 max-w-full items-center rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        data-admin-customer-driver-details-whatsapp-disabled-send-action="true"
+                        data-admin-customer-driver-details-whatsapp-disabled-send-action-state={
+                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus
+                        }
+                        data-admin-customer-driver-details-whatsapp-disabled-send-external-send={
+                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.external_send
+                            ? "true"
+                            : "false"
+                        }
+                        data-admin-customer-driver-details-whatsapp-disabled-send-item="true"
+                        data-admin-customer-driver-details-whatsapp-disabled-send-label="true"
+                        data-admin-customer-driver-details-whatsapp-disabled-send-loaded-reference={
+                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.loadedReference
+                        }
+                        data-admin-customer-driver-details-whatsapp-disabled-send-sending-enabled={
+                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.sendingEnabled
+                            ? "true"
+                            : "false"
+                        }
+                        disabled={!adminCustomerDriverDetailsWhatsAppDisabledSendCanCall}
+                        onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}
+                        title={adminCustomerDriverDetailsWhatsAppDisabledSendActionLabel}
+                        type="button"
+                      >
+                        {adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus ===
+                        "loading"
+                          ? "Checking WhatsApp"
+                          : "Review WhatsApp"}
+                      </button>
+                      <button
+                        aria-label="Customer driver details SMS - Review SMS to customer"
+                        className="inline-flex min-h-7 max-w-full items-center rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        data-admin-customer-driver-details-sms-disabled-send-action="true"
+                        data-admin-customer-driver-details-sms-disabled-send-action-state={
+                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus
+                        }
+                        data-admin-customer-driver-details-sms-disabled-send-external-send={
+                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.external_send
+                            ? "true"
+                            : "false"
+                        }
+                        data-admin-customer-driver-details-sms-disabled-send-item="true"
+                        data-admin-customer-driver-details-sms-disabled-send-label="true"
+                        data-admin-customer-driver-details-sms-disabled-send-loaded-reference={
+                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.loadedReference
+                        }
+                        data-admin-customer-driver-details-sms-disabled-send-sending-enabled={
+                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.sendingEnabled
+                            ? "true"
+                            : "false"
+                        }
+                        disabled={!adminCustomerDriverDetailsSmsDisabledSendCanCall}
+                        onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}
+                        title={adminCustomerDriverDetailsSmsDisabledSendActionLabel}
+                        type="button"
+                      >
+                        {adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus ===
+                        "loading"
+                          ? "Checking SMS"
+                          : "Review SMS"}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                     <span
@@ -30200,9 +30278,11 @@ export default function Home() {
                       className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
                       data-admin-customer-driver-details-email-disabled-send-status="true"
                       data-admin-customer-driver-details-email-review-send-state="true"
-                      title={adminCustomerDriverDetailsEmailDisabledSendDisplayState.message}
+                      data-admin-customer-driver-details-sms-disabled-send-status="true"
+                      data-admin-customer-driver-details-whatsapp-disabled-send-status="true"
+                      title={adminCustomerDriverDetailsMultiChannelDisabledStatusTitle}
                     >
-                      {adminCustomerDriverDetailsEmailDisabledSendStatusText}
+                      {adminCustomerDriverDetailsMultiChannelDisabledStatusText}
                     </span>
                     <span
                       className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
@@ -30212,88 +30292,6 @@ export default function Home() {
                       {adminEmailActivationPreflightStatusText}
                     </span>
                   </div>
-                </div>
-                <div
-                  className="flex min-w-0 flex-col gap-1 border-t border-emerald-200 pt-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
-                  data-admin-customer-driver-details-whatsapp-disabled-send-item="true"
-                  data-admin-customer-driver-details-whatsapp-disabled-send-action-state={
-                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus
-                  }
-                  data-admin-customer-driver-details-whatsapp-disabled-send-external-send={
-                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.external_send ? "true" : "false"
-                  }
-                  data-admin-customer-driver-details-whatsapp-disabled-send-loaded-reference={
-                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.loadedReference
-                  }
-                  data-admin-customer-driver-details-whatsapp-disabled-send-sending-enabled={
-                    adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.sendingEnabled ? "true" : "false"
-                  }
-                >
-                  <div className="min-w-0">
-                    <span
-                      className="block truncate font-semibold"
-                      data-admin-customer-driver-details-whatsapp-disabled-send-label="true"
-                    >
-                      Customer driver details WhatsApp
-                    </span>
-                    <button
-                      className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
-                      data-admin-customer-driver-details-whatsapp-disabled-send-action="true"
-                      disabled={!adminCustomerDriverDetailsWhatsAppDisabledSendCanCall}
-                      onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}
-                      type="button"
-                    >
-                      {adminCustomerDriverDetailsWhatsAppDisabledSendActionLabel}
-                    </button>
-                  </div>
-                  <span
-                    className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
-                    data-admin-customer-driver-details-whatsapp-disabled-send-status="true"
-                    title={adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.message}
-                  >
-                    {adminCustomerDriverDetailsWhatsAppDisabledSendStatusText}
-                  </span>
-                </div>
-                <div
-                  className="flex min-w-0 flex-col gap-1 border-t border-emerald-200 pt-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
-                  data-admin-customer-driver-details-sms-disabled-send-item="true"
-                  data-admin-customer-driver-details-sms-disabled-send-action-state={
-                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus
-                  }
-                  data-admin-customer-driver-details-sms-disabled-send-external-send={
-                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.external_send ? "true" : "false"
-                  }
-                  data-admin-customer-driver-details-sms-disabled-send-loaded-reference={
-                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.loadedReference
-                  }
-                  data-admin-customer-driver-details-sms-disabled-send-sending-enabled={
-                    adminCustomerDriverDetailsSmsDisabledSendDisplayState.sendingEnabled ? "true" : "false"
-                  }
-                >
-                  <div className="min-w-0">
-                    <span
-                      className="block truncate font-semibold"
-                      data-admin-customer-driver-details-sms-disabled-send-label="true"
-                    >
-                      Customer driver details SMS
-                    </span>
-                    <button
-                      className="block min-h-6 max-w-full truncate rounded-sm text-left font-semibold text-emerald-800 underline-offset-2 transition hover:text-emerald-950 hover:underline disabled:cursor-not-allowed disabled:text-slate-500 disabled:no-underline"
-                      data-admin-customer-driver-details-sms-disabled-send-action="true"
-                      disabled={!adminCustomerDriverDetailsSmsDisabledSendCanCall}
-                      onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}
-                      type="button"
-                    >
-                      {adminCustomerDriverDetailsSmsDisabledSendActionLabel}
-                    </button>
-                  </div>
-                  <span
-                    className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
-                    data-admin-customer-driver-details-sms-disabled-send-status="true"
-                    title={adminCustomerDriverDetailsSmsDisabledSendDisplayState.message}
-                  >
-                    {adminCustomerDriverDetailsSmsDisabledSendStatusText}
-                  </span>
                 </div>
               </div>
               {customerCopyEditState.isEditing ? (

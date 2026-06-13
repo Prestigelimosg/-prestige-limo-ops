@@ -67,6 +67,7 @@ const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
 const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
+const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminSavedAddressesApiPath = "/api/admin-saved-addresses";
@@ -378,6 +379,52 @@ function createAdminBooker(body: Record<string, unknown>) {
 
 function updateAdminBooker(body: Record<string, unknown>) {
   return adminBookerRequest("PATCH", { body });
+}
+
+function adminTravelerCrmIdentityError(message: string): AdminLegacyDataResult<CompanyIdLookupRecord> {
+  return {
+    data: null,
+    error: {
+      message,
+    },
+  };
+}
+
+async function findAdminTravelerCrmIdentity(
+  params: Record<string, string | number | null | undefined>,
+): Promise<AdminLegacyDataResult<CompanyIdLookupRecord>> {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== null && value !== undefined && String(value).trim()) {
+      searchParams.set(key, String(value));
+    }
+  }
+
+  const url = `${adminTravelersCrmIdentityApiPath}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "GET",
+    });
+    const responseBody = (await response.json().catch(() => null)) as AdminTravelerCrmIdentityApiResponse | null;
+
+    if (!response.ok || responseBody?.ok !== true) {
+      return adminTravelerCrmIdentityError(
+        responseBody?.error || "Admin traveler CRM identity request failed.",
+      );
+    }
+
+    return {
+      data: responseBody.traveler || null,
+      error: null,
+    };
+  } catch {
+    return adminTravelerCrmIdentityError("Admin traveler CRM identity request failed.");
+  }
 }
 
 function adminSavedAddressError(message: string): AdminLegacyDataResult<SavedAddressRecord> {
@@ -697,6 +744,13 @@ type AdminCustomerNameMemoryApiRecord = {
   savedAddress?: string | null;
   traveler_id?: number | null;
   travelerId?: number | null;
+};
+
+type AdminTravelerCrmIdentityApiResponse = {
+  error?: string;
+  ok?: boolean;
+  traveler?: CompanyIdLookupRecord | null;
+  version?: string;
 };
 
 type BookingRecord = {
@@ -10873,12 +10927,7 @@ export default function Home() {
     }
 
     if (personName) {
-      const existingByName = await client
-        .from(adminLegacyTables.travelers)
-        .select("company_id")
-        .ilike("traveler_name", personName)
-        .limit(1)
-        .maybeSingle();
+      const existingByName = await findAdminTravelerCrmIdentity({ traveler_name: personName });
 
       if (existingByName.error) {
         throw new Error(existingByName.error.message);

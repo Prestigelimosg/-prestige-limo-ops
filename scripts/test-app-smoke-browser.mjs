@@ -368,6 +368,14 @@ const telegramBlockedUrlPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications\/telegram\b|\/api\/driver-alerts\/telegram\b|getUpdates|sendMessage|\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/i;
 const telegramPreviewBlockedCallPattern =
   /api\.telegram\.org|telegram\.org|(?:^|[/:.])t\.me(?:[/:?]|$)|\/telegram\b|\/api\/telegram\b|\/api\/notifications(?:\/|$)|\/api\/driver-alerts(?:\/|$)|notification[-_/ ]?logs?|getUpdates|sendMessage|\/rest\/v1\/|supabase\.co|\/storage\/v1\/|twilio|sendgrid|mailgun|postmark|api\/sms|api\/email|api\/whatsapp|whatsapp|sms|email/i;
+const telegramPreviewAllowedSetupOnlyCallPattern =
+  /\/api\/admin-email-activation-preflight-setup(?:[?#\s]|$)/i;
+function isBlockedTelegramPreviewBrowserRequest(url) {
+  return (
+    telegramPreviewBlockedCallPattern.test(url) &&
+    !telegramPreviewAllowedSetupOnlyCallPattern.test(url)
+  );
+}
 const telegramAlertPreviewTitle = "Telegram Alert Preview — Mock Only";
 const telegramAlertPreviewSafetyText =
   "Mock/local only. Does not send Telegram, WhatsApp, SMS, or email. Does not update booking, driver status, Supabase, notification logs, or customer/driver records.";
@@ -6157,11 +6165,11 @@ async function runChromeTest() {
         assert.deepEqual(
           state.customerEmailReviewItem,
           {
-            action: "Review email to customer",
+            action: "Review Email",
             label: "Customer driver details ready",
             readyState: "blocked",
             readyStatus: "Blocked",
-            sendState: "Setup-only / send disabled",
+            sendState: "Setup-only / send disabled, sendingEnabled false, external_send false",
             visible: true,
           },
           `${viewport.label}: expected compact setup-only customer driver details email review row in Customer Copy`,
@@ -25463,10 +25471,14 @@ async function runChromeTest() {
         evaluate(`(() => {
           const blockedPattern =
             /api\\.telegram\\.org|telegram\\.org|(?:^|[/:.])t\\.me(?:[/:?]|$)|\\/telegram\\b|\\/api\\/telegram\\b|\\/api\\/notifications(?:\\/|$)|\\/api\\/driver-alerts(?:\\/|$)|notification[-_/ ]?logs?|getUpdates|sendMessage|\\/rest\\/v1\\/|supabase\\.co|\\/storage\\/v1\\/|twilio|sendgrid|mailgun|postmark|api\\/sms|api\\/email|api\\/whatsapp|whatsapp|sms|email/i;
+          const allowedSetupOnlyPattern =
+            /\\/api\\/admin-email-activation-preflight-setup(?:[?#\\s]|$)/i;
           const calls = window.__telegramPreviewIntegrationCalls || [];
 
           return {
-            blockedCalls: calls.filter((call) => blockedPattern.test(call)),
+            blockedCalls: calls.filter((call) =>
+              blockedPattern.test(call) && !allowedSetupOnlyPattern.test(call),
+            ),
             calls,
           };
         })()`);
@@ -25557,12 +25569,12 @@ async function runChromeTest() {
       const assertNoPreviewBrowserRequests = (description) => {
         const blockedRequests = networkRequestUrls
           .slice(previewBrowserRequestStartIndex)
-          .filter((url) => telegramPreviewBlockedCallPattern.test(url));
+          .filter(isBlockedTelegramPreviewBrowserRequest);
 
         assert.deepEqual(
           blockedRequests,
           [],
-          `${description}: expected no Telegram, notification, driver-alert, Supabase, or provider browser requests`,
+          `${description}: expected no Telegram, notification, driver-alert, Supabase, or provider browser requests beyond setup-only email preflight`,
         );
       };
 
@@ -25710,7 +25722,7 @@ async function runChromeTest() {
         persistence: {
           blockedBrowserRequests: networkRequestUrls
             .slice(previewBrowserRequestStartIndex)
-            .filter((url) => telegramPreviewBlockedCallPattern.test(url)).length,
+            .filter(isBlockedTelegramPreviewBrowserRequest).length,
           postNavigationFeedback: postNavigationState.feedback,
           postNavigationSelectedLabel: postNavigationState.selectedLabel,
           postReloadFeedback: postReloadState.feedback,

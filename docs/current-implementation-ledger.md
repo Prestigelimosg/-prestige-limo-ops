@@ -92,6 +92,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Live location no-live guard is done.
 - GPS capture, admin live map, customer map link, storage/policies, and auth/customer access remain blocked until explicit approval.
 
+## OTS Photo Proof Pre-Activation Completion Audit Lock
+
+- OTS photo proof is complete up to the activation stop.
+- Setup foundation is done.
+- Preview/readiness API is done.
+- Disabled access/upload API is done.
+- Access/upload audit payload setup foundation is done.
+- OTS photo proof no-live guard is done.
+- Live camera/file upload, Supabase Storage bucket, storage policies, DB/write, admin viewer, customer visibility, and auth/live access remain blocked until explicit approval.
+
 ## Locked Workflow Rules
 
 - Inspect first.
@@ -259,7 +269,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Real Telegram/WhatsApp/email/SMS/push sending.
 - Real customer driver-details link token issuance/access.
 - Real GPS/live map.
-- Real OTS photo upload/storage.
+- Real OTS camera/file upload, Supabase Storage bucket/policies, admin viewer, customer visibility, and auth/live access.
 - Customer/driver auth activation.
 - Invoice PDF generation.
 - Payment links.

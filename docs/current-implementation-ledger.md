@@ -1,14 +1,14 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-3890b4f Reorder Dispatch pricing review and OneMap sections
+98a8346 Update ledger for Dispatch section reorder
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `3890b4f Reorder Dispatch pricing review and OneMap sections`.
+- Latest repo commit to preserve as handoff baseline: `98a8346 Update ledger for Dispatch section reorder`.
 - Latest implementation checkpoint to preserve: `3890b4f Reorder Dispatch pricing review and OneMap sections`.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
@@ -72,6 +72,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Channel no-live guards are done.
 - Customer Copy multi-channel no-live guard is done.
 - Live provider/env/send activation remains blocked until explicit approval.
+
+## Secure Customer Driver Details Link Pre-Activation Completion Audit Lock
+
+- Secure customer driver-details link is complete up to the activation stop.
+- Setup foundation is done.
+- Preview/readiness API is done.
+- Disabled link access API is done.
+- Access audit payload setup foundation is done.
+- Customer driver-details link no-live guard is done.
+- Live token issuing/auth/DB/write/customer access remains blocked until explicit approval.
 
 ## Locked Workflow Rules
 

@@ -14,6 +14,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
+## Email Pre-Activation Completion Audit Lock
+
+- Customer driver-details email is complete up to the activation stop.
+- Preview/readiness API is done.
+- Disabled send API is done.
+- Driver ack handoff foundation/API is done.
+- Admin review item API is done.
+- Customer Copy compact review UI/button and preflight status are done.
+- Provider readiness, provider selection, and activation preflight setup are done.
+- Send audit payload setup foundation is done.
+- Email no-live guard is done.
+- Live provider/env/send activation remains blocked until explicit approval.
+
 ## Locked Workflow Rules
 
 - Inspect first.

@@ -1,17 +1,17 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest implementation checkpoint:
-30c5e90 Add customer driver details email preview readiness API
+4e98376 Add disabled customer driver details email send API
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `93531d6 Add next GPT backlog lock`.
-- Latest implementation checkpoint to preserve: `30c5e90 Add customer driver details email preview readiness API`.
-- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, ledger guards.
-- Uncompleted backlog: disabled email send API route; provider/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
+- Latest repo commit to preserve as handoff baseline: `4e98376 Add disabled customer driver details email send API`.
+- Latest implementation checkpoint to preserve: `4e98376 Add disabled customer driver details email send API`.
+- Completed foundations/APIs not to repeat: Flight ETA setup-only chain, email setup-only chain, customer driver details email preview/readiness API, disabled customer driver details email send API, ledger guards.
+- Uncompleted backlog: provider/live sending later; Telegram/WhatsApp; FlightAware live; live location; OTS photo; auth; billing/payment; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
 
 ## Locked Workflow Rules
@@ -87,6 +87,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer driver details email setup foundation.
 - Customer driver details email readiness setup foundation.
 - Customer driver details email preview/readiness setup API.
+- Disabled customer driver details email send setup API.
 - No real sending active.
 
 ### Live location

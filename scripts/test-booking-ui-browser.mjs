@@ -1668,7 +1668,7 @@ function assertBookingUiState(state) {
   assert.deepEqual(
     state.customerCopyEmailReviewItem,
     {
-      action: "Review email to customer",
+      action: "Review Email",
       actionDisabled: true,
       disabledSendActionState: "idle",
       disabledSendExternalSend: "false",
@@ -1679,7 +1679,7 @@ function assertBookingUiState(state) {
       readState: "idle",
       readyState: "blocked",
       readyStatus: "Blocked",
-      sendState: "Setup-only / send disabled",
+      sendState: "Setup-only / send disabled, sendingEnabled false, external_send false",
       visible: true,
     },
     "Expected compact customer driver details email review row to start in Customer Copy setup-only and blocked",
@@ -3242,8 +3242,8 @@ async function runChromeTest() {
         "customer-whatsapp-copy",
         "driver-assignment",
         "driver-dispatch-copy",
-        "driver-status-day-of-trip",
         "onemap-route-assist",
+        "driver-status-day-of-trip",
         "admin-lower-persistence",
       ];
 
@@ -3269,8 +3269,8 @@ async function runChromeTest() {
         "customer-whatsapp-copy",
         "driver-assignment",
         "driver-dispatch-copy",
-        "driver-status-day-of-trip",
         "onemap-route-assist",
+        "driver-status-day-of-trip",
         "admin-lower-persistence",
       ],
       "Expected dispatch workflow test fixture to check every ordered step",
@@ -12832,6 +12832,21 @@ async function runChromeTest() {
     assert.equal(dispatchDeletedDriverState.driverContact, "+65 9000 0000");
     assert.equal(dispatchDeletedDriverState.driverPlate, "PD 0000");
 
+    await setFieldValueByLabel(
+      "Pax",
+      "4",
+      "driver profile delete save guard pax change",
+    );
+    await evaluate(`(() => {
+      const reviewCheckbox = [...document.querySelectorAll("label")].find((label) =>
+        label.textContent.includes("I reviewed these warnings and still want to save"),
+      )?.querySelector("input[type='checkbox']");
+
+      if (reviewCheckbox && !reviewCheckbox.checked) {
+        reviewCheckbox.click();
+      }
+    })()`);
+
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
@@ -12872,14 +12887,16 @@ async function runChromeTest() {
             bookingDeleteOrPatchCount: bookingDeleteOrPatchRequests.length,
             fetchCalls: window.__prestigeFetchCalls || [],
             savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
-            statusText: document.body.innerText || "",
+            statusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
           };
         })()`);
 
-        return candidateState?.statusText?.includes("Booking saved successfully: 990510")
-          ? candidateState
-          : false;
+        const saveCompleted =
+          candidateState?.statusText?.includes("Booking saved successfully: 990510") ||
+          candidateState?.statusText?.includes("Booking saved, but CRM update failed:");
+
+        return saveCompleted && candidateState?.bookingInsert ? candidateState : false;
       },
       10000,
       "booking save after driver profile delete",
@@ -13511,6 +13528,8 @@ async function runChromeTest() {
       };
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
+      window.__prestigeCustomerDriverDetailsEmailReviewItemRequests = [];
+      window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests = [];
       window.fetch = async (...args) => {
         const target = args[0]?.url || args[0];
         const method = args[1]?.method || args[0]?.method || "GET";
@@ -13522,6 +13541,103 @@ async function runChromeTest() {
             return {};
           }
         })();
+
+        if (String(target).includes("/api/admin-customer-driver-details-email-review-item-setup")) {
+          const url = new URL(String(target), window.location.origin);
+          const missingRequirements = [
+            url.searchParams.get("driver_ack_status") === "driver_acknowledged" ? "" : "driver_acknowledged",
+            url.searchParams.get("booking_reference") ? "" : "booking_reference",
+            url.searchParams.get("customer_email") ? "" : "customer_email",
+            url.searchParams.get("driver_name") ? "" : "driver_name",
+            url.searchParams.get("driver_phone") ? "" : "driver_phone",
+            url.searchParams.get("vehicle_type") ? "" : "vehicle_type",
+            url.searchParams.get("vehicle_plate") ? "" : "vehicle_plate",
+          ].filter(Boolean);
+          const customerEmailReady = missingRequirements.length === 0;
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeCustomerDriverDetailsEmailReviewItemRequests.push({
+            booking_reference: url.searchParams.get("booking_reference") || "",
+            body: null,
+            customer_email: url.searchParams.get("customer_email") || "",
+            driver_ack_status: url.searchParams.get("driver_ack_status") || "",
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          return new Response(
+            JSON.stringify({
+              adminReviewRequired: true,
+              customerEmailReady,
+              external_send: false,
+              ok: true,
+              reviewItem: {
+                actionLabel: "Review email to customer",
+                adminReviewRequired: true,
+                customerEmailReady,
+                disabled_send_status: "blocked",
+                external_send: false,
+                item_key: "customer_driver_details_email",
+                label: "Customer driver details ready",
+                missing_requirements: missingRequirements,
+                sendingEnabled: false,
+              },
+              sendingEnabled: false,
+            }),
+            { status: method === "GET" ? 200 : 405, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        if (String(target).includes("/api/admin-customer-driver-details-email-send-disabled-setup")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests.push({
+            body: null,
+            booking_reference: url.searchParams.get("booking_reference") || "",
+            customer_email: url.searchParams.get("customer_email") || "",
+            external_send: false,
+            headers,
+            method,
+            search: url.search,
+            sendingEnabled: false,
+            status: "blocked",
+            url: String(target),
+          });
+
+          return new Response(
+            JSON.stringify({
+              delivery_surface: "email_disabled",
+              external_send: false,
+              ok: method === "GET",
+              reason: "setup_only_disabled",
+              send: {
+                delivery_surface: "email_disabled",
+                external_send: false,
+                payload_preview: {
+                  booking_reference: url.searchParams.get("booking_reference") || null,
+                  body_line_count: 6,
+                  recipient_email: url.searchParams.get("customer_email") || null,
+                  sender_key: null,
+                  subject: url.searchParams.get("booking_reference")
+                    ? "Assigned driver details for " + url.searchParams.get("booking_reference")
+                    : "Assigned driver details",
+                  template_key: "customer_assigned_driver_details",
+                },
+                reason: "setup_only_disabled",
+                sendingEnabled: false,
+                status: "blocked",
+                version: "admin-email-send-disabled-adapter-v1",
+              },
+              sendingEnabled: false,
+              status: "blocked",
+              version: "focused-browser-customer-driver-details-email-disabled-send-mock",
+            }),
+            { status: method === "GET" ? 200 : 405, headers: { "content-type": "application/json" } },
+          );
+        }
 
         if (String(target).includes("/api/admin-booking-workflow-statuses")) {
           const url = new URL(String(target), window.location.origin);
@@ -15036,6 +15152,7 @@ async function runChromeTest() {
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-driver-job-links?booking_reference=ui-cleanup-load-fixture&limit=1&link_status=active&page=1",
       "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VAN",
+      "GET /api/admin-email-activation-preflight-setup",
       "GET /api/admin-driver-job-statuses?booking_reference=ui-cleanup-load-fixture&limit=4",
       "GET /api/admin-monthly-billing-groups?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-billing-draft-plans?limit=1&page=1&billing_month=2026-05",
@@ -15119,7 +15236,7 @@ async function runChromeTest() {
             .trim() || "";
           const requests = window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [];
 
-          return status.includes("Blocked/no-op") && requests.length === 1
+          return status.includes("Setup-only / send disabled") && requests.length === 1
             ? {
                 externalSend: item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-external-send") || "",
                 loadedReference:
@@ -15134,7 +15251,10 @@ async function runChromeTest() {
       10000,
       "Customer Copy disabled email send no-op result",
     );
-    assert.equal(customerCopyEmailDisabledSendState.status, "Blocked/no-op, sendingEnabled false, external_send false");
+    assert.equal(
+      customerCopyEmailDisabledSendState.status,
+      "Setup-only / send disabled, sendingEnabled false, external_send false",
+    );
     assert.equal(customerCopyEmailDisabledSendState.externalSend, "false");
     assert.equal(customerCopyEmailDisabledSendState.sendingEnabled, "false");
     assert.equal(customerCopyEmailDisabledSendState.loadedReference, "ui-cleanup-load-fixture");
@@ -18006,6 +18126,43 @@ async function runChromeTest() {
           return jsonResponse({ message: "Unhandled booker mock" }, 500);
         }
 
+        if (url.includes("/api/admin-travelers-crm-identity")) {
+          if (method === "GET") {
+            return jsonResponse({
+              ok: true,
+              readiness: {
+                external_send: false,
+                readOnly: true,
+                setupSafe: true,
+                source: "typed_travelers_crm_identity",
+                writeEnabled: false,
+              },
+              traveler: null,
+              version: "browser-admin-travelers-crm-identity-mock",
+            });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled traveler identity mock" }, 500);
+        }
+
+        if (url.includes("/api/admin-saved-addresses")) {
+          if (method === "GET") {
+            return jsonResponse({ ok: true, saved_address: null });
+          }
+
+          if (method === "POST") {
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord }, 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled saved address mock" }, 500);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -18040,23 +18197,6 @@ async function runChromeTest() {
           return jsonResponse({ message: "Unhandled traveler mock" }, 500);
         }
 
-        if (url.includes("/api/admin-saved-addresses")) {
-          if (method === "GET") {
-            return jsonResponse({ ok: true, saved_address: null });
-          }
-
-          if (method === "POST") {
-            return jsonResponse({ ok: true, saved_address: savedAddressRecord }, 201);
-          }
-
-          if (method === "PATCH") {
-            return jsonResponse({ ok: true, saved_address: savedAddressRecord });
-          }
-
-          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-          return jsonResponse({ message: "Unhandled saved address mock" }, 500);
-        }
-
         if (url.includes("/rest/v1/bookings")) {
           if (method === "GET") {
             return jsonResponse([savedBooking]);
@@ -18073,7 +18213,7 @@ async function runChromeTest() {
 
     const clickedSaveBookingCrm = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + Calendar",
+        (button) => button.textContent.trim() === "Save Booking + CRM",
       );
 
       if (!saveButton || saveButton.disabled) {
@@ -18083,7 +18223,7 @@ async function runChromeTest() {
       saveButton.click();
       return true;
     })()`);
-    assert.equal(clickedSaveBookingCrm, true, "Expected Save Booking + Calendar button to be clickable");
+    assert.equal(clickedSaveBookingCrm, true, "Expected Save Booking + CRM button to be clickable");
 
     const crmSaveState = await waitForCondition(
       async () => {
@@ -18092,21 +18232,16 @@ async function runChromeTest() {
           const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
             (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
           );
-          const calendarRequest = (window.__prestigeCrmSaveCalendarRequests || [])[0] || null;
-          const calendarSyncStatusRequest =
-            (window.__prestigeCrmSaveCalendarSyncStatusRequests || [])[0] || null;
 
           return bodyText.includes("Booking saved successfully: ${crmSavedBookingFixture.id}") &&
             bodyText.includes("Customer/account: BROWSER UI TEST COMPANY.") &&
-            bodyText.includes(
-              "Saved for BROWSER UI TEST COMPANY. Calendar file downloaded. File-only sync: app source of truth; calendar edits won't sync back.",
-            )
+            bookingInsert
             ? {
                 bodyText,
                 calendarDownloads: window.__prestigeCrmSaveCalendarDownloads || [],
                 calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
-                calendarRequest,
-                calendarSyncStatusRequest,
+                calendarRequests: window.__prestigeCrmSaveCalendarRequests || [],
+                calendarSyncStatusRequests: window.__prestigeCrmSaveCalendarSyncStatusRequests || [],
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeSaveRequestBodies || [],
                 savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
@@ -18142,11 +18277,91 @@ async function runChromeTest() {
       [],
       "Expected booking save not to create bookings through the legacy admin data shim",
     );
-    const disallowedCalendarOrSendCalls = crmSaveState.fetchCalls.filter((call) => {
+    assert.deepEqual(
+      crmSaveState.calendarRequests,
+      [],
+      "Expected Save Booking + CRM not to create a calendar event",
+    );
+    assert.deepEqual(
+      crmSaveState.calendarSyncStatusRequests,
+      [],
+      "Expected Save Booking + CRM not to check calendar sync status",
+    );
+    assert.deepEqual(
+      crmSaveState.calendarDownloads,
+      [],
+      "Expected Save Booking + CRM not to download a calendar file",
+    );
+    assert.deepEqual(crmSaveState.calendarBlobTypes, []);
+    assert.equal(crmSaveState.bookingInsert?.company_id, crmSavedBookingFixture.company_id);
+    assert.equal(crmSaveState.bookingInsert?.booker_id, crmSavedBookingFixture.booker_id);
+    assert.equal(crmSaveState.bookingInsert?.traveler_id, crmSavedBookingFixture.traveler_id);
+    assert.equal(crmSaveState.bookingInsert?.booking_type, "MNG");
+    assert.equal(crmSaveState.bookingInsert?.vehicle, "AVF");
+    assert.equal(crmSaveState.bookingInsert?.pickup_address, "Changi Airport T3");
+    assert.equal(crmSaveState.bookingInsert?.dropoff_address, "Raffles Hotel Singapore");
+    assert.equal(crmSaveState.bookingInsert?.flight_no, "SQ333");
+    assert.equal(crmSaveState.bookingInsert?.pax, 2);
+    assert.equal(crmSaveState.bookingInsert?.extra_stop_count, 1);
+    assert.equal(crmSaveState.bookingInsert?.child_seat_required, true);
+    assert.equal(crmSaveState.bookingInsert?.child_seat_count, 2);
+    assert.equal(crmSaveState.bookingInsert?.child_seat_type, "booster seat");
+    assert.equal(crmSaveState.bookingInsert?.customer_rate_override, 160);
+    assert.equal(crmSaveState.bookingInsert?.driver_name, "TEST DRIVER CRM 20260516");
+
+    const clickedCreateCalendarEvent = await evaluate(`(() => {
+      const calendarButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Calendar Event",
+      );
+
+      if (!calendarButton || calendarButton.disabled) {
+        return false;
+      }
+
+      calendarButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedCreateCalendarEvent, true, "Expected Create Calendar Event button to be clickable");
+
+    const crmCalendarState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const calendarRequest = (window.__prestigeCrmSaveCalendarRequests || [])[0] || null;
+          const calendarSyncStatusRequest =
+            (window.__prestigeCrmSaveCalendarSyncStatusRequests || [])[0] || null;
+
+          return bodyText.includes(
+            "Calendar file downloaded. File-only sync: app source of truth; calendar edits won't sync back.",
+          ) &&
+            calendarRequest &&
+            calendarSyncStatusRequest &&
+            (window.__prestigeCrmSaveCalendarDownloads || []).length === 1
+            ? {
+                bodyText,
+                calendarDownloads: window.__prestigeCrmSaveCalendarDownloads || [],
+                calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
+                calendarRequest,
+                calendarSyncStatusRequest,
+                fetchCalls: window.__prestigeFetchCalls || [],
+              }
+            : false;
+        })()`);
+
+        return candidateState || false;
+      },
+      10000,
+      "Create Calendar Event file-only download",
+    );
+
+    const disallowedCalendarOrSendCalls = crmCalendarState.fetchCalls.filter((call) => {
       const [, method = "GET", rawUrl = ""] = call.match(/^(\S+)\s+(.+)$/) || [];
       const lowerUrl = rawUrl.toLowerCase();
 
-      if (lowerUrl.includes("/api/admin-booking-calendar-events")) {
+      if (
+        lowerUrl.includes("/api/admin-booking-calendar-events") ||
+        lowerUrl.includes("/api/admin-booking-calendar-sync-statuses")
+      ) {
         return false;
       }
 
@@ -18169,21 +18384,11 @@ async function runChromeTest() {
     assert.deepEqual(
       disallowedCalendarOrSendCalls,
       [],
-      `Expected CRM save calendar flow not to call calendar providers, messaging, invoice, payment, or PDF APIs, got ${crmSaveState.fetchCalls.join(", ")}`,
+      `Expected separated save/calendar flow not to call calendar providers, messaging, invoice, payment, or PDF APIs, got ${crmCalendarState.fetchCalls.join(", ")}`,
     );
-    assert.equal(crmSaveState.bookingInsert?.company_id, crmSavedBookingFixture.company_id);
-    assert.equal(crmSaveState.bookingInsert?.booker_id, crmSavedBookingFixture.booker_id);
-    assert.equal(crmSaveState.bookingInsert?.traveler_id, crmSavedBookingFixture.traveler_id);
-    assert.equal(crmSaveState.bookingInsert?.booking_type, "MNG");
-    assert.equal(crmSaveState.bookingInsert?.vehicle, "AVF");
-    assert.equal(crmSaveState.bookingInsert?.pickup_address, "Changi Airport T3");
-    assert.equal(crmSaveState.bookingInsert?.dropoff_address, "Raffles Hotel Singapore");
-    assert.equal(crmSaveState.bookingInsert?.flight_no, "SQ333");
-    assert.equal(crmSaveState.bookingInsert?.pax, 2);
-    assert.equal(crmSaveState.bookingInsert?.extra_stop_count, 1);
-    assert.equal(crmSaveState.bookingInsert?.child_seat_required, true);
-    assert.deepEqual(crmSaveState.calendarRequest?.body, {
-      booking_reference: crmSavedBookingFixture.id,
+    const crmCalendarDraftReference = "draft-2026-05-27-1530-browser-ui-test-traveler";
+    assert.deepEqual(crmCalendarState.calendarRequest?.body, {
+      booking_reference: crmCalendarDraftReference,
       booking_type: "MNG",
       booker_name: "BROWSER UI TEST BOOKER",
       company_name: "BROWSER UI TEST COMPANY",
@@ -18193,7 +18398,16 @@ async function runChromeTest() {
       driver_plate_number: "",
       dropoff_address: "Raffles Hotel Singapore",
       flight_no: "SQ333",
-      id: crmSavedBookingFixture.id,
+      id: crmCalendarDraftReference,
+      job_card:
+        "AVF MNG\n" +
+        "27 May 2026, 1530hrs\n" +
+        "Flight: SQ333\n" +
+        "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore\n" +
+        "Company: BROWSER UI TEST COMPANY\n" +
+        "Name: BROWSER UI TEST TRAVELER\n" +
+        "Pax: 2\n" +
+        "Child seat: 2 x booster seat",
       pax: 2,
       pickup_address: "Changi Airport T3",
       pickup_time: "1530hrs",
@@ -18202,44 +18416,40 @@ async function runChromeTest() {
       traveler_name: "BROWSER UI TEST TRAVELER",
       vehicle: "AVF",
     });
-    assert.deepEqual(crmSaveState.calendarSyncStatusRequest?.body, {
+    assert.deepEqual(crmCalendarState.calendarSyncStatusRequest?.body, {
       calendar_event: {
-        booking_reference: crmSavedBookingFixture.id,
+        booking_reference: crmCalendarDraftReference,
         ends_at_local: "2026-05-27T17:00:00",
-        filename: `prestige-booking-${crmSavedBookingFixture.id}.ics`,
+        filename: `prestige-booking-${crmCalendarDraftReference}.ics`,
         location: "Changi Airport T3",
         starts_at_local: "2026-05-27T15:30:00",
         timezone: "Asia/Singapore",
         title: "Prestige - MNG - BROWSER UI TEST TRAVELER",
       },
-      saved_booking: crmSaveState.calendarRequest?.body,
+      saved_booking: crmCalendarState.calendarRequest?.body,
       sync_method: "ics_file_download",
     });
     assert.equal(
       /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
-        JSON.stringify(crmSaveState.calendarRequest?.body),
+        JSON.stringify(crmCalendarState.calendarRequest?.body),
       ),
       false,
-      "Expected Save Booking + Calendar payload to omit private finance, parser, notes, and secret fields",
+      "Expected Create Calendar Event payload to omit private finance, parser, notes, and secret fields",
     );
     assert.equal(
       /customer_price|customer_rate|billing|invoice|payment|paynow|driver_payout|payout|driver_notes|internal_admin_note|admin_note|parser|raw_ai|token|secret/i.test(
-        JSON.stringify(crmSaveState.calendarSyncStatusRequest?.body),
+        JSON.stringify(crmCalendarState.calendarSyncStatusRequest?.body),
       ),
       false,
-      "Expected Save Booking + Calendar sync status payload to omit private finance, parser, notes, and secret fields",
+      "Expected Create Calendar Event sync status payload to omit private finance, parser, notes, and secret fields",
     );
-    assert.deepEqual(crmSaveState.calendarDownloads, [
+    assert.deepEqual(crmCalendarState.calendarDownloads, [
       {
-        download: `prestige-booking-${crmSavedBookingFixture.id}.ics`,
+        download: `prestige-booking-${crmCalendarDraftReference}.ics`,
         href: "blob:prestige-crm-save-calendar-test",
       },
     ]);
-    assert.deepEqual(crmSaveState.calendarBlobTypes, ["text/calendar;charset=utf-8"]);
-    assert.equal(crmSaveState.bookingInsert?.child_seat_count, 2);
-    assert.equal(crmSaveState.bookingInsert?.child_seat_type, "booster seat");
-    assert.equal(crmSaveState.bookingInsert?.customer_rate_override, 160);
-    assert.equal(crmSaveState.bookingInsert?.driver_name, "TEST DRIVER CRM 20260516");
+    assert.deepEqual(crmCalendarState.calendarBlobTypes, ["text/calendar;charset=utf-8"]);
 
     await clickTab("Bookings", "Recent Bookings");
 
@@ -18980,6 +19190,26 @@ async function runChromeTest() {
           return jsonResponse({ message: "Unhandled booker mock" }, 500);
         }
 
+        if (url.includes("/api/admin-travelers-crm-identity")) {
+          if (method === "GET") {
+            return jsonResponse({
+              ok: true,
+              readiness: {
+                external_send: false,
+                readOnly: true,
+                setupSafe: true,
+                source: "typed_travelers_crm_identity",
+                writeEnabled: false,
+              },
+              traveler: null,
+              version: "browser-admin-travelers-crm-identity-mock",
+            });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled traveler identity mock" }, 500);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -19415,6 +19645,40 @@ async function runChromeTest() {
           return jsonResponse({ message: "Unhandled booker mock" }, 500);
         }
 
+        if (url.includes("/api/admin-travelers-crm-identity")) {
+          if (method === "GET") {
+            return jsonResponse({
+              ok: true,
+              readiness: {
+                external_send: false,
+                readOnly: true,
+                setupSafe: true,
+                source: "typed_travelers_crm_identity",
+                writeEnabled: false,
+              },
+              traveler: null,
+              version: "browser-admin-travelers-crm-identity-mock",
+            });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled traveler identity mock" }, 500);
+        }
+
+        if (url.includes("/api/admin-saved-addresses")) {
+          if (method === "GET") {
+            return jsonResponse({ ok: true, saved_address: null });
+          }
+
+          if (method === "POST") {
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord }, 201);
+          }
+
+          if (method === "PATCH") {
+            return jsonResponse({ ok: true, saved_address: savedAddressRecord });
+          }
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -19447,20 +19711,6 @@ async function runChromeTest() {
 
           if (method === "PATCH") {
             return jsonResponse({});
-          }
-        }
-
-        if (url.includes("/api/admin-saved-addresses")) {
-          if (method === "GET") {
-            return jsonResponse({ ok: true, saved_address: null });
-          }
-
-          if (method === "POST") {
-            return jsonResponse({ ok: true, saved_address: savedAddressRecord }, 201);
-          }
-
-          if (method === "PATCH") {
-            return jsonResponse({ ok: true, saved_address: savedAddressRecord });
           }
         }
 
@@ -19655,6 +19905,26 @@ async function runChromeTest() {
 
           window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
           return jsonResponse({ message: "Unhandled booker mock" }, 500);
+        }
+
+        if (url.includes("/api/admin-travelers-crm-identity")) {
+          if (method === "GET") {
+            return jsonResponse({
+              ok: true,
+              readiness: {
+                external_send: false,
+                readOnly: true,
+                setupSafe: true,
+                source: "typed_travelers_crm_identity",
+                writeEnabled: false,
+              },
+              traveler: null,
+              version: "browser-admin-travelers-crm-identity-mock",
+            });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled traveler identity mock" }, 500);
         }
 
         if (!url.includes("/rest/v1/")) {

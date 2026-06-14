@@ -16,10 +16,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ## Master Pre-Activation Completion Audit Lock
 
-- Complete up to activation stop: Customer Copy Email/WhatsApp/SMS driver-details messaging; secure customer driver-details link; Telegram internal admin alerts; live location; OTS photo proof; customer/driver auth; billing/payment; customer amendment/cancellation review flow; company/traveler CRM write-blocked readiness; production hardening.
+- Complete up to activation stop: Customer Copy Email/WhatsApp/SMS driver-details messaging; secure customer driver-details link; Telegram internal admin alerts; live location; OTS photo proof; customer/driver auth; billing/payment; customer amendment/cancellation review flow; calendar event lifecycle; company/traveler CRM write-blocked readiness; production hardening.
 - Production hardening status: readiness foundation, preview/readiness API, disabled production action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock are done.
 - Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done; company/traveler CRM write setup is locked through the activation stop; risky full-driver profile write/delete, `rate_settings` save/upsert, pricing, payout, `customer_rates`, and `driver_payout_rules` write paths remain parked.
-- Still blocked unless explicitly approved: live DB/write, migrations, deployment, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location activation, photo upload/storage, CRM/calendar amendment updates, job-card creation from customer amendments, and risky shim write paths.
+- Still blocked unless explicitly approved: live DB/write, migrations, deployment, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location activation, photo upload/storage, CRM/calendar amendment updates, calendar event lifecycle live sync, job-card creation from customer amendments, and risky shim write paths.
 - Continue to use setup-only helpers/APIs and direct guards. Do not add new shims, duplicate UI/API/helper work, live provider behavior, or customer/driver-visible finance/internal details.
 
 ## Email Pre-Activation Completion Audit Lock
@@ -93,19 +93,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin approval is required before CRM booking update or calendar update/cancel.
 - Live booking update, calendar sync/update/cancel, CRM update, job card creation, customer/driver notification, customer auth, and DB/write remain blocked until explicit approval.
 
-## Calendar Event Lifecycle Readiness Setup/API Lock
+## Calendar Event Lifecycle Pre-Activation Completion Audit Lock
 
-- Calendar event lifecycle readiness setup foundation is done at `faede95 Add calendar event lifecycle readiness setup`.
-- GET-only admin-gated preview/readiness API is done at `b77b33f Add calendar event lifecycle preview readiness API`.
-- GET-only admin-gated disabled action API is done at `88f1db2 Add disabled calendar event lifecycle action API`.
+- Calendar event lifecycle is complete up to the activation stop.
+- Readiness foundation is done at `faede95 Add calendar event lifecycle readiness setup`.
+- Preview/readiness API is done at `b77b33f Add calendar event lifecycle preview readiness API`.
+- Disabled calendar action API is done at `88f1db2 Add disabled calendar event lifecycle action API`.
 - Action audit payload setup foundation is done at `f743df2 Add calendar event lifecycle audit payload setup`.
 - Calendar event lifecycle no-live guard is done at `e36e802 Add calendar event lifecycle no-live guard`.
-- It prepares future create calendar event for confirmed booking, update existing calendar event after admin-approved amendment, and cancel existing calendar event after admin-approved cancellation.
-- It returns `calendarCreateEnabled false`, `calendarUpdateEnabled false`, `calendarCancelEnabled false`, `liveCalendarSyncEnabled false`, `external_calendar false`, and `adminApprovalRequired true`.
-- Audit payload setup returns `auditWriteEnabled false` and `blocked/no-op` result metadata only.
+- Calendar create/update/cancel remains disabled/no-op.
+- It returns `calendarCreateEnabled false`, `calendarUpdateEnabled false`, `calendarCancelEnabled false`, `liveCalendarSyncEnabled false`, `external_calendar false`, `adminApprovalRequired true`, and `auditWriteEnabled false` where audit payloads are involved.
 - Customer amendment/cancellation must never auto-update calendar.
-- Calendar update/cancel only happens after admin approval.
-- Disabled action API returns `status blocked` and `blocked/no-op`; no POST/write/DB/calendar provider/env/live calendar sync/package/shim/payment behavior is active from this setup/API.
+- Calendar update/cancel only happens after admin approval and explicit activation later.
+- No POST/write/DB/calendar provider/env/live calendar sync/package/shim/payment behavior is active.
 
 ## Secure Customer Driver Details Link Pre-Activation Completion Audit Lock
 

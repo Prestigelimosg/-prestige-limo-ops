@@ -32,15 +32,16 @@ Netlify and Render remain reasonable alternatives if the owner prefers those pla
 
 ## Owner Decision Fields
 
-- Selected target:
-- Selected command path:
-- Rollback target:
-- Approval scope:
+- Selected target: Vercel Preview/Staging
+- Selected command path: Git preview deployment or `vercel` only, never `vercel --prod`
+- Rollback target: Previous successful preview deployment or revert commit and redeploy preview
+- Approval scope: Staging deployment only
+- Live activation approval: not approved
 - Approval date:
 - Owner:
-- Notes:
+- Notes: Keep live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth, live location, photo upload, CRM/calendar writes, and risky shim writes blocked.
 
-These fields are intentionally blank until William / Prestige Limo SG approves a specific staging deployment target and exact command path.
+These fields approve only the target decision for future staging deployment planning. They do not approve running a deployment command or activating live behavior.
 
 ## Required Future Env/Secrets Status
 

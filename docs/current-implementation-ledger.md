@@ -141,15 +141,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Billing/payment no-live guard is done.
 - Invoice PDF generation, invoice sending, payment links, payout automation, production auto-billing, payment provider/env, and DB/write remain blocked until explicit approval.
 
-## Production Deployment Hardening Readiness Setup Lock
+## Production Hardening Pre-Activation Completion Audit Lock
 
-- Production deployment hardening readiness setup foundation is done at `74c864b Add production hardening readiness setup`.
-- GET-only admin-gated preview/readiness API is done at `1a79d06 Add production hardening readiness preview API`.
-- GET-only admin-gated disabled/no-op action API is done at `72fc6ff Add disabled production hardening action API`.
-- Setup-only action audit payload foundation is done at `4daddff Add production hardening action audit payload setup`.
+- Production hardening is complete up to the activation stop.
+- Readiness foundation is done at `74c864b Add production hardening readiness setup`.
+- Preview/readiness API is done at `1a79d06 Add production hardening readiness preview API`.
+- Disabled production action API is done at `72fc6ff Add disabled production hardening action API`.
+- Action audit payload setup foundation is done at `4daddff Add production hardening action audit payload setup`.
 - Production hardening no-live guard is done at `d75d278 Add production hardening no-live guard`.
-- It prepares future environment readiness, build readiness, no-live activation gates, provider/env approval gates, DB/write/migration approval gates, payment/PDF/payout/auth/location/photo/live-sending approval gates, and rollback/manual review readiness.
-- It returns `productionDeploymentEnabled false`, `liveDbWriteEnabled false`, `migrationEnabled false`, `externalApiEnabled false`, `providerEnvEnabled false`, `paymentActivationEnabled false`, `authActivationEnabled false`, `liveSendingEnabled false`, and `manualApprovalRequired true`.
+- Deployment, live DB writes, migrations, external API/provider/env activation, payment/PDF/payout/auth/live sending/live location/photo upload remain blocked until explicit approval.
+- Manual approval remains required for any live activation.
+- The setup/API/audit chain returns `productionDeploymentEnabled false`, `liveDbWriteEnabled false`, `migrationEnabled false`, `externalApiEnabled false`, `providerEnvEnabled false`, `paymentActivationEnabled false`, `authActivationEnabled false`, `liveSendingEnabled false`, and `manualApprovalRequired true`.
 - No deployment, env read, DB/write, migration, provider activation, payment/PDF/payout/auth/live sending/live location/photo upload, package change, or shim is active from this setup/API/audit chain.
 
 ## Locked Workflow Rules

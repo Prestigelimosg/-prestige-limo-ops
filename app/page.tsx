@@ -30370,9 +30370,9 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:max-w-sm sm:justify-end">
                     <span
-                      className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                      className={`max-w-full break-words rounded-full px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase ${
                         adminCustomerDriverDetailsEmailReviewReady
                           ? "bg-emerald-100 text-emerald-900"
                           : adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
@@ -30384,7 +30384,7 @@ export default function Home() {
                       {adminCustomerDriverDetailsEmailReviewReadyLabel}
                     </span>
                     <span
-                      className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
                       data-admin-customer-driver-details-email-disabled-send-status="true"
                       data-admin-customer-driver-details-email-review-send-state="true"
                       data-admin-customer-driver-details-sms-disabled-send-status="true"
@@ -30394,7 +30394,7 @@ export default function Home() {
                       {adminCustomerDriverDetailsMultiChannelDisabledStatusText}
                     </span>
                     <span
-                      className="rounded-full bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-700"
+                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
                       data-admin-email-activation-preflight-status="true"
                       title={adminEmailActivationPreflightDisplayState.message}
                     >

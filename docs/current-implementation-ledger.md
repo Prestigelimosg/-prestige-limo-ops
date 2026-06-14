@@ -223,6 +223,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Do not replace `saveDefaultRates` or the `rate_settings` write path without explicit approval.
 - Do not touch company/traveler overrides, pricing, payout, `customer_rates`, or `driver_payout_rules` in the same pass.
 
+### Full driver profile shim risk lock
+- Full driver profile shim replacement is payout/internal-field entangled.
+- `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.
+- `saveDriverProfile` writes `payout_preferences` and `driver_payout_rules`.
+- Editable driver profile UI includes payout inputs.
+- Legacy `drivers` route still includes payout/internal-note-adjacent fields.
+- Safe driver assignment/display typed API already exists.
+- Full driver profile write/delete path must stay parked until explicit split/gating approval.
+
 ### Notifications
 - Admin app notifications API.
 - Customer app notifications API.

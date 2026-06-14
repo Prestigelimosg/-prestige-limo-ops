@@ -223,6 +223,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rule: no new shims. Replace remaining shim usage only with typed helpers, typed API routes, and direct contract tests.
 - Shim cleanup no-new-shim guard is done.
 
+### Companies/travelers legacy allowlist blocker lock
+- `companies` and `travelers` cannot be removed from the `admin-legacy-data` allowlist yet.
+- Typed companies API covers only safe read fields: `id`, `company_name`, and `domain`.
+- Typed travelers API covers only identity/default-address display fields.
+- `app/page.tsx` still uses legacy `companies` and `travelers` paths for create/update/name-memory behavior.
+- Rate override writes still depend on legacy `companies` and `travelers` and touch `customer_rates` / `driver_payout_rules`.
+- Next safe split is separate typed company/traveler CRM create/update/name-memory APIs, excluding rate/payout override writes.
+- `customer_rates`, `driver_payout_rules`, pricing, and payout remain parked until explicit approval.
+
 ### Rate settings shim risk lock
 - `rate_settings` touches `customer_rates`, `driver_payout_rules`, customer surcharges, and driver payout fields.
 - Those fields feed `resolvePricing` and booking save price/payout snapshots.

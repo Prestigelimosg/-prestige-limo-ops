@@ -1,18 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-0f9ea96 Fix admin dashboard horizontal overflow
+4f781b5 Update ledger for admin dashboard overflow fix
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `0f9ea96 Fix admin dashboard horizontal overflow`.
+- Latest repo commit to preserve as handoff baseline: `4f781b5 Update ledger for admin dashboard overflow fix`.
 - Latest implementation checkpoint to preserve: `0f9ea96 Fix admin dashboard horizontal overflow`.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, admin dashboard horizontal overflow fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, Save Booking + CRM button placement near Job Card Preview actions, Save Booking duplicate-submit guard, separated Save Booking + CRM and calendar actions, customer amendment/cancellation review handoff setup foundation/API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, billing/payment readiness setup foundation, preview API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, shim cleanup typed API inventory, shim cleanup no-new-shim guard, companies CRM identity/domain typed helper/API, travelers CRM identity/default-address typed helper/API, driver assignment/display typed helper/API, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, app smoke email preflight setup-only allowlist, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp activation; FlightAware live; live location activation; OTS photo activation; customer/driver auth activation; billing/payment activation; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
+
+## Master Pre-Activation Completion Audit Lock
+
+- Complete up to activation stop: Customer Copy Email/WhatsApp/SMS driver-details messaging; secure customer driver-details link; Telegram internal admin alerts; live location; OTS photo proof; customer/driver auth; billing/payment; customer amendment/cancellation review flow; app smoke overflow fix passed.
+- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done; risky full-driver profile write/delete and `rate_settings` save/upsert paths remain parked.
+- Still blocked unless explicitly approved: live DB/write, migrations, provider/env activation, live sending, payment/PDF/payout, auth activation, live location activation, photo upload/storage, calendar/CRM amendment update/cancel, job-card creation from customer amendments, and risky shim write paths.
+- Continue to use setup-only helpers/APIs and direct guards. Do not add new shims, duplicate UI/API/helper work, live provider behavior, or customer/driver-visible finance/internal details.
 
 ## Email Pre-Activation Completion Audit Lock
 
@@ -341,7 +348,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Real Telegram/WhatsApp/email/SMS/push sending.
 - Real customer driver-details link token issuance/access.
 - Real GPS/live map.
-- Real OTS camera/file upload, Supabase Storage bucket/policies, admin viewer, customer visibility, and auth/live access.
+- Real OTS photo upload/storage.
+- Supabase Storage bucket/policies, admin viewer, customer visibility, and auth/live access.
 - Customer/driver auth activation.
 - Invoice PDF generation.
 - Payment links.

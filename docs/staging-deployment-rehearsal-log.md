@@ -1,6 +1,6 @@
 # Staging Deployment Rehearsal Log
 
-This log records a local staging deployment rehearsal verification only. It does not deploy the app, change environment values, enable writes, enable providers, activate live features, or approve production.
+This log records local staging deployment rehearsal evidence and post-deploy staging verification evidence. Entries in this log do not deploy the app, change environment values, enable writes, enable providers, activate live features, or approve production.
 
 ## Rehearsal Record
 
@@ -28,7 +28,55 @@ This log records a local staging deployment rehearsal verification only. It does
 | `npm run test:booking-ui-browser` | Passed with `ok: true`, zero console errors, and zero blocked Supabase requests/mutation requests. |
 | `git status --short` | Clean before this log was written. |
 
-## No-Live Boundaries Confirmed
+## Vercel Staging Deployment Verification - 2026-06-15
+
+- Date/time: 2026-06-15 00:16:28 +08.
+- Vercel staging URL: `https://prestige-limo-ops-staging.vercel.app`.
+- Vercel project name: `prestige-limo-ops-staging`.
+- Deploy target: Vercel Preview/Staging.
+- Branch: `staging`.
+- Deployment source commit: `25be55a Fill exact Vercel staging deployment decision`.
+- Deployment command run by Codex: none.
+- Production deployment command run by Codex: none; `vercel --prod` was not run.
+- Environment variable action by Codex: none; no env vars were added, changed, printed, or committed by this verification.
+- Custom domain/live production activation: not observed; the verified URL stayed on `prestige-limo-ops-staging.vercel.app` without redirect.
+
+### Staging Verification Results
+
+| Check | Result |
+| --- | --- |
+| Staging root URL `/` | Passed; returned `200` HTML and app content. |
+| Public routes `/book`, `/my-bookings`, `/customers`, `/driver-job-demo` | Passed; each returned `200` HTML and app content. |
+| Production hardening readiness API | Passed; anonymous request stayed gated and admin-purpose GET returned setup-only/manual-approval-required with deployment, live DB write, migration, provider/env, payment, auth, and live sending flags false. |
+| Email activation preflight setup API | Passed; returned `activationReady false`, `providerConfigured false`, `sendingEnabled false`, `liveSendingEnabled false`, `external_send false`, and blockers for provider/env/approval/live sending. |
+| Customer Copy Email disabled-send API | Passed; returned `status blocked`, `sendingEnabled false`, and `external_send false`. |
+| Customer Copy WhatsApp disabled-send API | Passed; returned `status blocked`, `providerConfigured false`, `sendingEnabled false`, `liveSendingEnabled false`, and `external_send false`. |
+| Customer Copy SMS disabled-send API | Passed; returned `status blocked`, `providerConfigured false`, `sendingEnabled false`, `liveSendingEnabled false`, and `external_send false`. |
+
+### Local Checks Run For This Verification
+
+| Command | Result |
+| --- | --- |
+| `node scripts/test-preactivation-verification-suite.mjs` | Passed. |
+| `npm run lint` | Passed; Babel reported the existing large `app/page.tsx` code-generator size note. |
+| `npm run build` | Passed with Next.js 16.2.6. |
+| `git diff --check` | Passed before this log update. |
+| `git status --short` | Clean before this log update. |
+
+### Vercel No-Live Boundaries Confirmed
+
+- Staging URL loaded and the app was reachable.
+- No deployment command was run during this verification.
+- No `vercel deploy`, `vercel --prod`, Netlify, Firebase, or other external deployment command was run during this verification.
+- No environment variables were added, changed, printed, or committed by this verification.
+- No live provider/env keys were required for the verified setup-only routes.
+- No live DB/write path was activated by the verified setup-only responses.
+- Setup-only/no-live status remained visible through production hardening, email preflight, and Customer Copy disabled-send API responses.
+- Customer Copy Email/WhatsApp/SMS remained send-disabled.
+- No custom domain or live production activation was observed from the verified staging URL.
+- No package, code, UI, API, helper, route, provider, or runtime behavior was changed.
+
+## Original Rehearsal No-Live Boundaries Confirmed
 
 - No deployment was performed.
 - No `vercel deploy`, `netlify deploy`, `firebase deploy`, or external deployment command was run.
@@ -56,4 +104,4 @@ The following remain blocked unless separately and explicitly approved:
 
 ## Next Owner Decision Required
 
-William / Prestige Limo SG must separately approve the exact staging deployment target, command path, rollback target, evidence capture plan, and no-live environment posture before any actual staging deploy is run. This rehearsal log is not approval to deploy or activate live behavior.
+William / Prestige Limo SG must separately approve any next action beyond the verified Vercel Preview/Staging deployment. This includes any staging env change, custom domain, production promotion, live DB/write activation, provider/env activation, external API/live sending, payment/PDF/payout, auth, live location, photo upload/storage, CRM/calendar writes, or risky shim writes. This log is not approval to deploy further or activate live behavior.

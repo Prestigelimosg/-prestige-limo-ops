@@ -29,6 +29,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 | Blocked live area | Approval required before activation |
 | --- | --- |
 | Live DB/write/migrations | Explicit owner approval for schema/write scope, migration plan, rollback plan, and production data safety. |
+| Deployment | Explicit deployment approval with production readiness verification, rollback plan, and manual go/no-go. |
 | Email provider/env/live sending | Explicit provider/env approval plus recipient safety, sender selection, and live-send approval. |
 | WhatsApp provider/env/live sending | Explicit provider/env approval plus customer-safe template, recipient safety, and live-send approval. |
 | SMS provider/env/live sending | Explicit provider/env approval plus short customer-safe message policy, recipient safety, and live-send approval. |

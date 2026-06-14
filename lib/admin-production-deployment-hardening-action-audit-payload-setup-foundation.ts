@@ -297,7 +297,7 @@ function disabledProductionHardeningFields() {
     production_deployment_enabled: false,
     providerEnvEnabled: false,
     provider_env_enabled: false,
-  };
+  } as const;
 }
 
 export function buildAdminProductionDeploymentHardeningActionAuditPayloadSetup(
@@ -308,7 +308,7 @@ export function buildAdminProductionDeploymentHardeningActionAuditPayloadSetup(
   const actionSource = normalizeActionSource(firstValue(input.actionSource, input.action_source));
   const disabledAction = disabledActionFrom(input);
   const disabledActionReady = hasBlockedNoOpProductionHardeningActionResult(disabledAction);
-  const disabledActionStatus = disabledActionReady ? "blocked" : "missing";
+  const disabledActionStatus: "blocked" | "missing" = disabledActionReady ? "blocked" : "missing";
   const productionReadinessStatus = productionReadinessStatusFrom(setup);
   const missingRequirements: AdminProductionDeploymentHardeningActionAuditPayloadMissingRequirement[] =
     [];

@@ -260,7 +260,7 @@ export function buildAdminCompanyTravelerCrmWriteActionAuditPayloadSetup(
   const entityType = setup.actionScope;
   const actionSource = normalizeActionSource(firstValue(input.actionSource, input.action_source));
   const disabledActionReady = hasBlockedNoOpCrmWriteActionResult(disabledActionFrom(input));
-  const disabledActionStatus = disabledActionReady ? "blocked" : "missing";
+  const disabledActionStatus: "blocked" | "missing" = disabledActionReady ? "blocked" : "missing";
   const missingRequirements: AdminCompanyTravelerCrmWriteActionAuditPayloadMissingRequirement[] = [];
   const disabledFields = auditDisabledFields();
 

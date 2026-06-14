@@ -233,6 +233,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Safe driver assignment/display typed API already exists.
 - Full driver profile write/delete path must stay parked until explicit split/gating approval.
 
+### Driver assignment display typed API wiring blocker lock
+- Safe driver assignment/display typed API already exists.
+- Wiring it into `app/page.tsx` is not safe yet.
+- `loadDrivers` still loads full driver profile fields including `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.
+- `draftPricing` and Save Booking use shared full `drivers` state for pricing and payout snapshots.
+- Saved-booking driver assignment uses selected driver payout rules.
+- Current booking driver selection copies driver notes into the form.
+- Next safe split requires separate display-only driver assignment state/loader from payout-aware driver profile state.
+- Full driver profile write/delete and payout fields remain parked until explicit split/gating approval.
+
 ### Notifications
 - Admin app notifications API.
 - Customer app notifications API.

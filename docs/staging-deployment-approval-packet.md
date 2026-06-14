@@ -10,12 +10,14 @@ This packet is for approval planning only. It does not deploy the app, change en
 
 ## Approval Fields
 
-- Owner:
-- Approval date:
-- Approved scope:
-- Approved staging target:
-- Rollback owner:
-- Notes:
+- Owner: William / Prestige Limo SG
+- Approval date: 2026-06-14
+- Approved scope: Staging deployment planning/rehearsal only
+- Decision: Approved for staging planning only
+- Live activation approval: Not approved
+- Approved staging target: Staging only; no production deploy
+- Rollback owner: William / Prestige Limo SG
+- Notes: Keep all live DB/write, migrations, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location, photo upload/storage, CRM/calendar amendment writes, and risky shim writes blocked.
 
 ## Required Checks Before Staging
 

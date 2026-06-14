@@ -16,9 +16,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ## Master Pre-Activation Completion Audit Lock
 
-- Complete up to activation stop: Customer Copy Email/WhatsApp/SMS driver-details messaging; secure customer driver-details link; Telegram internal admin alerts; live location; OTS photo proof; customer/driver auth; billing/payment; customer amendment/cancellation review flow; production deployment hardening readiness setup/API, disabled action API, action audit payload setup foundation, and no-live guard; app smoke overflow fix passed.
-- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done; company/traveler CRM write setup is locked through the activation stop; risky full-driver profile write/delete and `rate_settings` save/upsert paths remain parked.
-- Still blocked unless explicitly approved: live DB/write, migrations, provider/env activation, live sending, payment/PDF/payout, auth activation, live location activation, photo upload/storage, calendar/CRM amendment update/cancel, job-card creation from customer amendments, and risky shim write paths.
+- Complete up to activation stop: Customer Copy Email/WhatsApp/SMS driver-details messaging; secure customer driver-details link; Telegram internal admin alerts; live location; OTS photo proof; customer/driver auth; billing/payment; customer amendment/cancellation review flow; company/traveler CRM write-blocked readiness; production hardening.
+- Production hardening status: readiness foundation, preview/readiness API, disabled production action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock are done.
+- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done; company/traveler CRM write setup is locked through the activation stop; risky full-driver profile write/delete, `rate_settings` save/upsert, pricing, payout, `customer_rates`, and `driver_payout_rules` write paths remain parked.
+- Still blocked unless explicitly approved: live DB/write, migrations, deployment, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, live location activation, photo upload/storage, CRM/calendar amendment updates, job-card creation from customer amendments, and risky shim write paths.
 - Continue to use setup-only helpers/APIs and direct guards. Do not add new shims, duplicate UI/API/helper work, live provider behavior, or customer/driver-visible finance/internal details.
 
 ## Email Pre-Activation Completion Audit Lock

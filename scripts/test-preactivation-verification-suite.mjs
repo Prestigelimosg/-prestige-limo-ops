@@ -10,6 +10,10 @@ const guardChecks = [
     script: "scripts/test-activation-decision-matrix-guard.mjs",
   },
   {
+    label: "staging deployment approval packet guard",
+    script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

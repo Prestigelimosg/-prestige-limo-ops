@@ -24,6 +24,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Still blocked unless explicitly approved: live DB/write, migrations, deployment, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, FlightAware live lookup, live location activation, photo upload/storage, CRM/calendar amendment updates, calendar event lifecycle create/update/cancel and live sync, job-card creation from customer amendments, and risky shim write paths.
 - Continue to use setup-only helpers/APIs and direct guards. Do not add new shims, duplicate UI/API/helper work, live provider behavior, or customer/driver-visible finance/internal details.
 
+## Activation Decision Matrix
+
+| Blocked live area | Approval required before activation |
+| --- | --- |
+| Live DB/write/migrations | Explicit owner approval for schema/write scope, migration plan, rollback plan, and production data safety. |
+| Email provider/env/live sending | Explicit provider/env approval plus recipient safety, sender selection, and live-send approval. |
+| WhatsApp provider/env/live sending | Explicit provider/env approval plus customer-safe template, recipient safety, and live-send approval. |
+| SMS provider/env/live sending | Explicit provider/env approval plus short customer-safe message policy, recipient safety, and live-send approval. |
+| Telegram bot token/env/live sending | Explicit bot token/env approval plus internal-admin recipient policy and live-send approval. |
+| FlightAware live lookup/scheduler | Explicit FlightAware provider/env approval plus scheduler/rate-limit policy and live external lookup approval. |
+| Live location/GPS/storage/customer map | Explicit GPS capture, storage policy, auth/customer-access, retention, and customer-visible map approval. |
+| OTS photo upload/Supabase Storage/admin viewer | Explicit camera/upload, private bucket, storage policy, DB/write, admin viewer, and access-control approval. |
+| Customer/driver auth/Supabase Auth/session/token issuing | Explicit auth provider, session/token, access policy, DB/write, and customer/driver access approval. |
+| Billing/payment/PDF/payout/payment links | Explicit payment provider, PDF/invoice, payout, payment-link, DB/write, and finance exposure approval. |
+| CRM/calendar amendment update actions | Explicit admin approval workflow, CRM booking update, calendar update/cancel, notification, and write-safety approval. |
+| Risky shim write paths: `rate_settings`, full drivers, `customer_rates`, `driver_payout_rules`, pricing, payout | Explicit one-family split/gating approval with typed helpers/APIs/tests before any write-path replacement. |
+
 ## Email Pre-Activation Completion Audit Lock
 
 - Customer driver-details email is complete up to the activation stop.

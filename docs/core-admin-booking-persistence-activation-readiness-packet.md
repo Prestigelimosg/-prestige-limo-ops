@@ -18,9 +18,9 @@ This packet is docs-only. It does not approve or activate live DB/write, migrati
 
 ## Owner Approval Checklist For First Live DB Write Rehearsal
 
-- Approval status: pending owner approval.
-- Owner: ______________________________.
-- Date: ______________________________.
+- Approval status: approved for staging-only rehearsal.
+- Owner: project owner, per ChatGPT handoff.
+- Date: 2026-06-15.
 - Exact approved future scope for a separately approved rehearsal: Admin Save Booking + CRM via `POST /api/admin-bookings` only.
 - Explicitly not approved: `/api/admin-saved-bookings`, because it includes rich pricing/payout snapshot fields and is outside the first safe live DB write scope.
 - Allowed fields: operational booking fields only, as listed in this packet and enforced by the `/api/admin-bookings` parser/guard.

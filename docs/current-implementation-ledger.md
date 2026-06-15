@@ -342,6 +342,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rule: no new shims. Replace remaining shim usage only with typed helpers, typed API routes, and direct contract tests.
 - Shim cleanup no-new-shim guard is done.
 
+### Remaining Shim Parked State Lock
+- This lock is guarded by `scripts/test-remaining-shim-parked-state-lock.mjs`.
+- No remaining low-risk read/display-only shim lane exists.
+- Existing typed reads are: company/traveler identity display; driver display/search; rate setup read.
+- Remaining legacy shim families are parked: `companies`, `travelers`, `drivers`, and `rate_settings`.
+- Remaining parked behavior is write/edit/rate/full-profile only.
+- Company/traveler writes must be split from `customer_rates` and `driver_payout_rules` before implementation.
+- `rate_settings` save/upsert remains parked.
+- Full driver profile save/delete remains parked.
+- Pricing and payout remain parked.
+- Future implementation must be one lane at a time with typed API, direct contract test, no-live guard, and rollback note.
+- No runtime implementation is approved by this lock.
+- No UI/API/helper behavior change, env change, deployment, DB/write, migration, new shim, payment, PDF, payout, auth, location, photo, calendar, provider, or live sending activation is approved.
+
 ### Companies/travelers legacy allowlist blocker lock
 - `companies` and `travelers` cannot be removed from the `admin-legacy-data` allowlist yet.
 - Typed companies API covers only safe read fields: `id`, `company_name`, and `domain`.

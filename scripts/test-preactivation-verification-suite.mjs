@@ -34,6 +34,10 @@ const guardChecks = [
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },
   {
+    label: "remaining shim parked state lock guard",
+    script: "scripts/test-remaining-shim-parked-state-lock.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

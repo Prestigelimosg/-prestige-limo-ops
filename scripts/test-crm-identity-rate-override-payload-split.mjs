@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 
 const appPagePath = "app/page.tsx";
 const aiParseRoutePath = "app/api/ai-parse/route.ts";
+const adminSavedBookingsRoutePath = "app/api/admin-saved-bookings/route.ts";
+const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 
 const forbiddenCrmPayloadPattern =
@@ -33,9 +35,21 @@ function sliceBetween(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-const [appPage, aiParseRoute, preactivationSuite] = await Promise.all([
+function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
+  const start = source.indexOf(startHeading);
+
+  assert.notEqual(start, -1, `Missing section heading: ${startHeading}`);
+
+  const next = source.indexOf(nextHeadingPrefix, start + startHeading.length);
+
+  return next === -1 ? source.slice(start) : source.slice(start, next);
+}
+
+const [appPage, aiParseRoute, adminSavedBookingsRoute, ledger, preactivationSuite] = await Promise.all([
   readFile(appPagePath, "utf8"),
   readFile(aiParseRoutePath, "utf8"),
+  readFile(adminSavedBookingsRoutePath, "utf8"),
+  readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
 ]);
 
@@ -75,6 +89,22 @@ const removeBossRateOverride = sliceBetween(
   "async function loadDrivers",
 );
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
+const ledgerSection = sectionBetween(ledger, "### CRM Identity/Rate Override Payload Split Lock");
+
+for (const phrase of [
+  "CRM identity/contact payload code is separated from rate override payload code at `d65aac1 Split CRM identity payload from rate override payload`.",
+  "Runtime behavior remains unchanged.",
+  "Company/traveler CRM writes remain parked.",
+  "Rate override save/remove remains parked.",
+  "`customer_rates` and `driver_payout_rules` remain parked.",
+  "Save Booking + CRM is unchanged and remains on `POST /api/admin-bookings`.",
+  "`/api/admin-saved-bookings` is unchanged and remains separate.",
+  "Parser behavior and `/api/ai-parse` are unchanged.",
+  "No new shims were added.",
+  "The split is guarded by `scripts/test-crm-identity-rate-override-payload-split.mjs`.",
+]) {
+  assertIncludes(ledgerSection, phrase, `CRM identity/rate override payload split ledger phrase: ${phrase}`);
+}
 
 for (const [label, source] of [
   ["Company CRM identity/contact payload", companyCrmPayload],
@@ -115,6 +145,14 @@ assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM s
 assertExcludes(saveBooking, "/api/admin-saved-bookings", "Save Booking + CRM safe route");
 assertExcludes(saveBooking, "buildCompanyCrmIdentityContactPayload", "Save Booking + CRM safe route");
 assertExcludes(saveBooking, "buildCompanyRateOverridePayload", "Save Booking + CRM safe route");
+
+assertIncludes(adminSavedBookingsRoute, "export async function GET", "Admin saved bookings route");
+assertIncludes(adminSavedBookingsRoute, "export async function POST", "Admin saved bookings route");
+assertIncludes(adminSavedBookingsRoute, "export async function DELETE", "Admin saved bookings route");
+assertExcludes(adminSavedBookingsRoute, "buildCompanyCrmIdentityContactPayload", "Admin saved bookings route");
+assertExcludes(adminSavedBookingsRoute, "buildTravelerCrmIdentityContactPayload", "Admin saved bookings route");
+assertExcludes(adminSavedBookingsRoute, "buildCompanyRateOverridePayload", "Admin saved bookings route");
+assertExcludes(adminSavedBookingsRoute, "buildTravelerRateOverridePayload", "Admin saved bookings route");
 
 for (const helperName of [
   "buildCompanyCrmIdentityContactPayload",

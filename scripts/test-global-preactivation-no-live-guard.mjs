@@ -24,6 +24,7 @@ const requiredGuardScripts = [
 const setupRouteNameFragments = [
   "admin-billing-payment",
   "admin-calendar-event-lifecycle",
+  "admin-company-traveler-crm-identity-contact-write",
   "admin-company-traveler-crm-write",
   "admin-customer-amendment",
   "admin-customer-driver-auth",

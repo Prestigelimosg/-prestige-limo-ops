@@ -33,6 +33,17 @@ This packet is docs-only. It does not approve or activate live DB/write, migrati
 - Tests required before any activation: `node scripts/test-core-booking-persistence-safe-path-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `node scripts/test-admin-booking-persistence-kill-switch.mjs`, `node scripts/test-admin-booking-persistence-api-gate.mjs`, `node scripts/test-admin-booking-supabase-adapter-contract.mjs`, `node scripts/test-admin-booking-persistence-staging-config.mjs`, `node scripts/test-admin-booking-persistence-enable-readiness.mjs`, `npm run lint`, `npm run build`, `git diff --check`, and `git status --short`.
 - Same-pass rule: no CRM/calendar amendment updates, provider/live sending, auth, location, photo, payment, payout, or risky shim writes in the same pass.
 
+## Completed Staging Rehearsal Evidence
+
+- The owner-approved staging-only `POST /api/admin-bookings` rehearsal completed on 2026-06-15 against `https://prestige-limo-ops-staging.vercel.app/api/admin-bookings`.
+- The endpoint returned HTTP 200 with `ok: true`.
+- Controlled booking reference: `STAGING-ADMIN-BOOKING-20260615074303-3JLQIZ`.
+- Inserted safe operational row ids: booking `15`, customer `4`, route points `11` and `12`, service item `6`, audit log `8`.
+- No secrets were printed and no cleanup was attempted.
+- `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` was closed after the rehearsal, staging was redeployed, and `https://prestige-limo-ops-staging.vercel.app` returned HTTP 200.
+- The rehearsal did not reroute Save Booking + CRM and did not use `/api/admin-saved-bookings`.
+- The rehearsal did not activate provider/sending/payment/PDF/payout/auth/location/photo/CRM-calendar/risky shim writes.
+
 ## Allowed First Live Write Fields
 
 Only safe operational booking fields from the existing `/api/admin-bookings` contract may be considered:

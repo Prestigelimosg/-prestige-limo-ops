@@ -110,6 +110,19 @@ async function writeMockModules(tempDir, options = {}) {
       "module.exports = { createClient };",
     ].join("\n"),
   );
+  await mkdir(path.join(tempDir, "lib"), { recursive: true });
+  await writeFile(
+    path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
+    [
+      "async function createCustomerDriverAppNotification() {",
+      "  return { data: null, ok: true };",
+      "}",
+      "async function maybePersistCustomerDriverAppNotification() {",
+      "  return { data: null, ok: true };",
+      "}",
+      "module.exports = { createCustomerDriverAppNotification, maybePersistCustomerDriverAppNotification };",
+    ].join("\n"),
+  );
 }
 
 async function loadHarness() {

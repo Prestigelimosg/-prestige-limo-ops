@@ -18,6 +18,10 @@ const guardChecks = [
     script: "scripts/test-core-admin-booking-persistence-activation-packet-guard.mjs",
   },
   {
+    label: "core booking persistence safe path guard",
+    script: "scripts/test-core-booking-persistence-safe-path-guard.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

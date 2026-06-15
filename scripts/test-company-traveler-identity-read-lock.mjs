@@ -85,6 +85,16 @@ for (const phrase of [
 
 assertGetOnlyRoute(companiesRoute, "Companies CRM identity route");
 assertGetOnlyRoute(travelersRoute, "Travelers CRM identity route");
+assertIncludes(
+  appPage,
+  'const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";',
+  "App page typed companies identity path",
+);
+assertIncludes(
+  appPage,
+  'const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";',
+  "App page typed travelers identity path",
+);
 
 for (const [label, source] of [
   ["Companies CRM identity typed path", `${companiesRoute}\n${companiesHelper}`],
@@ -127,6 +137,34 @@ for (const line of travelersHelper
     "Travelers identity/default-address safe select",
   );
 }
+
+const lookupNameMemory = sliceBetween(
+  appPage,
+  "async function lookupNameMemory",
+  "async function applyParsedBookingMessage",
+);
+
+assertIncludes(
+  lookupNameMemory,
+  "adminTravelersCrmIdentityApiPath",
+  "App page company/traveler display-read lookup",
+);
+assertIncludes(
+  lookupNameMemory,
+  "adminCompaniesCrmIdentityApiPath",
+  "App page company/traveler display-read lookup",
+);
+assertIncludes(lookupNameMemory, 'method: "GET"', "App page identity display-read lookup");
+assertIncludes(
+  lookupNameMemory,
+  '"x-prestige-admin-purpose": adminLegacyDataPurpose',
+  "App page identity display-read lookup",
+);
+assertExcludes(
+  lookupNameMemory,
+  /adminCustomerNameMemoryApiPath|adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|customer_rates|driver_payout_rules|pricing|payout|payment|billing|pdf|\.insert\s*\(|\.upsert\s*\(|\.update\s*\(|\.delete\s*\(/i,
+  "App page identity display-read lookup",
+);
 
 const saveRateOverride = sliceBetween(
   appPage,

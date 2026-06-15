@@ -65,7 +65,8 @@ const adminSmsCustomerDriverDetailsSendDisabledApiPath =
   "/api/admin-sms-customer-driver-details-send-disabled-setup";
 const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
-const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
+const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
+const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminDriverAssignmentDisplayApiPath = "/api/admin-driver-assignment-display";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
@@ -516,16 +517,42 @@ type NameMemory = {
   preferredVehicle?: string;
 };
 
-type AdminCustomerNameMemoryApiRecord = {
-  company?: string | null;
+type AdminCompanyCrmIdentityApiRecord = {
+  company_name?: string | null;
+  domain?: string | null;
+  id?: number | null;
+};
+
+type AdminCompanyCrmIdentityApiResponse = {
+  company?: AdminCompanyCrmIdentityApiRecord | null;
+  ok?: unknown;
+};
+
+type AdminTravelerCrmIdentityApiSavedAddress = {
+  address?: string | null;
+  address_role?: string | null;
+  id?: number | null;
+  is_default?: boolean | null;
+  label?: string | null;
+};
+
+type AdminTravelerCrmIdentityApiRecord = {
+  booker_contact?: string | null;
+  booker_email?: string | null;
+  booker_name?: string | null;
   company_id?: number | null;
-  companyId?: number | null;
+  default_address?: string | null;
+  default_dropoff_address?: string | null;
+  default_pickup_address?: string | null;
+  id?: number | null;
   preferred_vehicle?: string | null;
-  preferredVehicle?: string | null;
-  saved_address?: string | null;
-  savedAddress?: string | null;
-  traveler_id?: number | null;
-  travelerId?: number | null;
+  saved_address?: AdminTravelerCrmIdentityApiSavedAddress | null;
+  traveler_name?: string | null;
+};
+
+type AdminTravelerCrmIdentityApiResponse = {
+  ok?: unknown;
+  traveler?: AdminTravelerCrmIdentityApiRecord | null;
 };
 
 type BookingRecord = {
@@ -10431,33 +10458,46 @@ export default function Home() {
       return null;
     }
 
-    const searchParams = new URLSearchParams({ traveler_name: personName });
+    const travelerSearchParams = new URLSearchParams({ traveler_name: personName });
 
     try {
-      const response = await fetch(`${adminCustomerNameMemoryApiPath}?${searchParams.toString()}`, {
+      const travelerResponse = await fetch(`${adminTravelersCrmIdentityApiPath}?${travelerSearchParams.toString()}`, {
         headers: {
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
         },
         method: "GET",
       });
-      const result = await response.json().catch(() => ({})) as {
-        name_memory?: AdminCustomerNameMemoryApiRecord | null;
-        ok?: unknown;
-      };
+      const travelerResult = await travelerResponse.json().catch(() => ({})) as AdminTravelerCrmIdentityApiResponse;
 
-      if (!response.ok || result.ok !== true || !result.name_memory) {
+      if (!travelerResponse.ok || travelerResult.ok !== true || !travelerResult.traveler) {
         return null;
       }
 
-      const nameMemory = result.name_memory;
-      const companyId = Number(nameMemory.companyId ?? nameMemory.company_id);
-      const travelerId = Number(nameMemory.travelerId ?? nameMemory.traveler_id);
+      const travelerIdentity = travelerResult.traveler;
+      const companyId = Number(travelerIdentity.company_id);
+      const travelerId = Number(travelerIdentity.id);
+      let company = "";
+
+      if (Number.isSafeInteger(companyId) && companyId > 0) {
+        const companySearchParams = new URLSearchParams({ id: String(companyId) });
+        const companyResponse = await fetch(`${adminCompaniesCrmIdentityApiPath}?${companySearchParams.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const companyResult = await companyResponse.json().catch(() => ({})) as AdminCompanyCrmIdentityApiResponse;
+
+        if (companyResponse.ok && companyResult.ok === true && companyResult.company) {
+          company = normalizeCompanyAccount(companyResult.company.company_name, booking.bookerEmail);
+        }
+      }
 
       return {
-        company: normalizeCompanyAccount(nameMemory.company, booking.bookerEmail),
+        company,
         companyId: Number.isSafeInteger(companyId) && companyId > 0 ? companyId : undefined,
-        preferredVehicle: clean(nameMemory.preferredVehicle ?? nameMemory.preferred_vehicle),
-        savedAddress: clean(nameMemory.savedAddress ?? nameMemory.saved_address),
+        preferredVehicle: clean(travelerIdentity.preferred_vehicle),
+        savedAddress: clean(travelerIdentity.saved_address?.address) || clean(travelerIdentity.default_address),
         travelerId: Number.isSafeInteger(travelerId) && travelerId > 0 ? travelerId : undefined,
       };
     } catch {

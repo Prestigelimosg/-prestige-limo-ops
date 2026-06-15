@@ -3816,7 +3816,7 @@ async function runChromeTest() {
       );
     };
 
-    const waitForTravelerMemoryLookup = async (travelerName, description) => {
+    const waitForTravelerIdentityLookup = async (travelerName, description) => {
       const expectedParam = `traveler_name=${encodeURIComponent(travelerName).replace(/%20/g, "+")}`.toLowerCase();
       await waitForCondition(
         () =>
@@ -3824,12 +3824,12 @@ async function runChromeTest() {
             const expectedParam = ${JSON.stringify(expectedParam)};
 
             return (window.__prestigeFetchCalls || []).some((request) =>
-              String(request).toLowerCase().includes("/api/admin-customer-name-memory?") &&
+              String(request).toLowerCase().includes("/api/admin-travelers-crm-identity?") &&
               String(request).toLowerCase().includes(expectedParam)
             );
           })()`),
         10000,
-        `${description} traveler memory lookup`,
+        `${description} traveler identity lookup`,
       );
     };
 
@@ -3842,7 +3842,7 @@ async function runChromeTest() {
     const isExpectedBackgroundTravelerLookup = (url) => {
       const normalizedUrl = String(url).replace(/\+/g, " ").toLowerCase();
 
-      return normalizedUrl.includes("/api/admin-customer-name-memory") &&
+      return normalizedUrl.includes("/api/admin-travelers-crm-identity") &&
         expectedBackgroundTravelerLookupNames.some((travelerName) =>
           normalizedUrl.includes(`traveler_name=${travelerName.toLowerCase()}`),
         );
@@ -3854,7 +3854,7 @@ async function runChromeTest() {
       ubsCustomerMatchSample,
       "UBS organization domain",
     );
-    await waitForTravelerMemoryLookup("UBS Match Traveler", "UBS organization domain");
+    await waitForTravelerIdentityLookup("UBS Match Traveler", "UBS organization domain");
     assert.equal(ubsMatchState.customer, "UBS", "Expected ubs.com email to suggest UBS");
     assert.equal(ubsMatchState.confidence, "High", "Expected ubs.com match to be high confidence");
     assert.equal(
@@ -3880,7 +3880,7 @@ async function runChromeTest() {
       publicEmailCustomerMatchSample,
       "public email customer",
     );
-    await waitForTravelerMemoryLookup("Public Email Traveler", "public email customer");
+    await waitForTravelerIdentityLookup("Public Email Traveler", "public email customer");
     assert.equal(
       publicEmailMatchState.customer,
       "New customer suggested",
@@ -3903,7 +3903,7 @@ async function runChromeTest() {
       unknownOrgCustomerMatchSample,
       "unknown organization domain",
     );
-    await waitForTravelerMemoryLookup("Newco Traveler", "unknown organization domain");
+    await waitForTravelerIdentityLookup("Newco Traveler", "unknown organization domain");
     assert.equal(
       unknownOrgMatchState.customer,
       "New customer suggested",
@@ -5144,7 +5144,7 @@ async function runChromeTest() {
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertBookingUiState(state);
-    await waitForTravelerMemoryLookup("BROWSER UI TEST TRAVELER", "primary booking parse");
+    await waitForTravelerIdentityLookup("BROWSER UI TEST TRAVELER", "primary booking parse");
 
     const manualExtraChargeDefaultState = await evaluate(`(() => {
       const section = document.querySelector("[data-route-extras-child-seat-section='true']");

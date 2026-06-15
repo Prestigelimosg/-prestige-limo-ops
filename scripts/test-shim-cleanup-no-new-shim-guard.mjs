@@ -117,10 +117,34 @@ assertIncludes(travelersHelper, 'source: "typed_travelers_crm_identity"', "Trave
 assertIncludes(appPage, 'fetch("/api/admin-bookings"', "App page safe admin booking persistence path");
 assertIncludes(appPage, "/api/admin-saved-bookings", "App page guarded saved bookings path");
 assertExcludes(appPage, /adminLegacyTables\.bookings/, "Retired legacy bookings table reference");
-assertExcludes(
+assertIncludes(
   appPage,
-  /fetch\(["']\/api\/admin-travelers-crm-identity/,
-  "App page safe admin booking persistence path",
+  "adminCompaniesCrmIdentityApiPath",
+  "App page typed companies identity display-read path",
+);
+assertIncludes(
+  appPage,
+  "adminTravelersCrmIdentityApiPath",
+  "App page typed travelers identity display-read path",
+);
+const companyTravelerIdentityLookupSource = appPage.slice(
+  appPage.indexOf("async function lookupNameMemory"),
+  appPage.indexOf("async function applyParsedBookingMessage"),
+);
+assertIncludes(
+  companyTravelerIdentityLookupSource,
+  "adminCompaniesCrmIdentityApiPath",
+  "App page typed companies identity display-read lookup",
+);
+assertIncludes(
+  companyTravelerIdentityLookupSource,
+  "adminTravelersCrmIdentityApiPath",
+  "App page typed travelers identity display-read lookup",
+);
+assertExcludes(
+  companyTravelerIdentityLookupSource,
+  /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|customer_rates|driver_payout_rules|pricing|payout|payment|billing|pdf|\.insert\s*\(|\.upsert\s*\(|\.update\s*\(|\.delete\s*\(/i,
+  "App page typed company/traveler identity display-read lookup",
 );
 assertIncludes(travelersTest, "adminTravelersCrmIdentityApiPath", "Travelers typed API test");
 assertIncludes(

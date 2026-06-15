@@ -67,6 +67,7 @@ const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
+const adminDriverAssignmentDisplayApiPath = "/api/admin-driver-assignment-display";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -477,6 +478,15 @@ type DriverRecord = {
   notes: string | null;
   preferred_areas: string | null;
   airport_permit_notes: string | null;
+};
+
+type DriverAssignmentDisplayRecord = {
+  availability_status: string | null;
+  contact_number: string | null;
+  driver_name: string | null;
+  id: number;
+  plate_number: string | null;
+  vehicle_type: string | null;
 };
 
 type DriverAvailabilityRecord = {
@@ -2317,11 +2327,13 @@ function clean(value: string | null | undefined) {
   return (value ?? "").trim();
 }
 
-function isInactiveDriver(driver: DriverRecord | null | undefined) {
+function isInactiveDriver(
+  driver: Pick<DriverRecord, "availability_status"> | DriverAssignmentDisplayRecord | null | undefined,
+) {
   return clean(driver?.availability_status).toLowerCase() === "inactive";
 }
 
-function isAssignableDriver(driver: DriverRecord) {
+function isAssignableDriver(driver: Pick<DriverRecord, "availability_status"> | DriverAssignmentDisplayRecord) {
   return !isInactiveDriver(driver);
 }
 
@@ -7476,6 +7488,9 @@ export default function Home() {
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
+  const [driverAssignmentDisplayDrivers, setDriverAssignmentDisplayDrivers] = useState<
+    DriverAssignmentDisplayRecord[]
+  >([]);
   const [driverDrafts, setDriverDrafts] = useState<Record<string, DriverDraft>>({});
   const [driverAssignmentMessages, setDriverAssignmentMessages] =
     useState<Record<string, Message>>({});
@@ -7504,6 +7519,7 @@ export default function Home() {
   const [telegramAlertPreviewFeedback, setTelegramAlertPreviewFeedback] =
     useState<Message | null>(null);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [loadingDriverAssignmentDisplay, setLoadingDriverAssignmentDisplay] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
   const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
   const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
@@ -9426,6 +9442,10 @@ export default function Home() {
     [rateTravelers, rateOverrideListMessages.boss?.recordId],
   );
   const assignableDrivers = useMemo(() => drivers.filter(isAssignableDriver), [drivers]);
+  const assignableDriverAssignmentDisplayDrivers = useMemo(
+    () => driverAssignmentDisplayDrivers.filter(isAssignableDriver),
+    [driverAssignmentDisplayDrivers],
+  );
   const filteredDrivers = useMemo(() => {
     const query = clean(driverSearchTerm);
 
@@ -9525,7 +9545,7 @@ export default function Home() {
 
   const assignedDriverId = clean(booking.driverId);
   const assignedDriverName = clean(booking.driverName).toLowerCase();
-  const assignedDriverRecord = drivers.find(
+  const assignedDriverRecord = driverAssignmentDisplayDrivers.find(
     (driver) =>
       (assignedDriverId && String(driver.id) === assignedDriverId) ||
       (assignedDriverName && clean(driver.driver_name).toLowerCase() === assignedDriverName),
@@ -9598,7 +9618,7 @@ export default function Home() {
   const draftDriverDispatchCard = useMemo(() => {
     const bookingDriverId = clean(booking.driverId);
     const bookingDriverName = clean(booking.driverName).toLowerCase();
-    const selectedDriver = drivers.find(
+    const selectedDriver = driverAssignmentDisplayDrivers.find(
       (driver) =>
         (bookingDriverId && String(driver.id) === bookingDriverId) ||
         (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
@@ -9646,7 +9666,14 @@ export default function Home() {
       .filter((section) => section.some((line) => clean(line)))
       .map((section) => section.join("\n").trim())
       .join("\n\n");
-  }, [booking, draftPricing.driverPayout, drivers, isDspItinerary, itineraryDisplayStops, route]);
+  }, [
+    booking,
+    draftPricing.driverPayout,
+    driverAssignmentDisplayDrivers,
+    isDspItinerary,
+    itineraryDisplayStops,
+    route,
+  ]);
 
   const activeAdminDriverJobLink =
     adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
@@ -10254,7 +10281,7 @@ export default function Home() {
       return;
     }
 
-    const selectedDriver = drivers.find((driver) => String(driver.id) === driverId);
+    const selectedDriver = driverAssignmentDisplayDrivers.find((driver) => String(driver.id) === driverId);
 
     if (!selectedDriver) {
       setBooking((current) => ({
@@ -10270,7 +10297,6 @@ export default function Home() {
       driverName: clean(selectedDriver.driver_name),
       driverContact: clean(selectedDriver.contact_number),
       driverPlate: clean(selectedDriver.plate_number),
-      driverNotes: clean(selectedDriver.notes),
     }));
   }
 
@@ -11161,6 +11187,41 @@ export default function Home() {
       setMessage({ tone: "error", text: `Load drivers failed: ${errorMessage}` });
     } finally {
       setLoadingDrivers(false);
+    }
+  }
+
+  async function loadDriverAssignmentDisplayDrivers(
+    successText = "Driver assignment display list loaded.",
+    loadingText = "Loading driver assignment display list...",
+  ) {
+    setLoadingDriverAssignmentDisplay(true);
+    setMessage({ tone: "info", text: loadingText });
+
+    try {
+      const response = await fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result = (await response.json().catch(() => null)) as {
+        drivers?: DriverAssignmentDisplayRecord[];
+        error?: string;
+        ok?: boolean;
+      } | null;
+
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(result?.error || "Driver assignment display request failed.");
+      }
+
+      setDriverAssignmentDisplayDrivers(Array.isArray(result.drivers) ? result.drivers : []);
+      setMessage({ tone: "success", text: successText });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown driver assignment display load error.";
+      setMessage({ tone: "error", text: `Load driver assignment display failed: ${errorMessage}` });
+    } finally {
+      setLoadingDriverAssignmentDisplay(false);
     }
   }
 
@@ -25916,11 +25977,16 @@ export default function Home() {
                 </div>
                 <button
                   className="h-9 rounded-md border border-sky-300 bg-white px-3 text-sm font-medium text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                  disabled={loadingDrivers}
-                  onClick={() => loadDrivers("Drivers loaded for assignment.", "Loading drivers for assignment...")}
+                  disabled={loadingDriverAssignmentDisplay}
+                  onClick={() =>
+                    loadDriverAssignmentDisplayDrivers(
+                      "Driver assignment display list loaded.",
+                      "Loading driver assignment display list...",
+                    )
+                  }
                   type="button"
                 >
-                  {loadingDrivers ? "Loading Drivers..." : "Load Drivers for Assignment"}
+                  {loadingDriverAssignmentDisplay ? "Loading Drivers..." : "Load Drivers for Assignment"}
                 </button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -25938,7 +26004,7 @@ export default function Home() {
                         {assignedDriverIsInactive ? " (inactive)" : ""}
                       </option>
                     ) : null}
-                    {assignableDrivers.map((driver) => (
+                    {assignableDriverAssignmentDisplayDrivers.map((driver) => (
                       <option key={driver.id} value={driver.id}>
                         {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
                       </option>

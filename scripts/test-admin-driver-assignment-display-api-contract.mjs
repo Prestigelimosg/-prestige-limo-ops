@@ -408,13 +408,56 @@ try {
   assert.equal(helperSource.includes(".delete("), false, "Helper must not delete drivers.");
   assert.equal(
     appPageSource.includes("/api/admin-driver-assignment-display"),
-    false,
-    "New typed driver assignment/display API must remain separate from editable driver profile UI for now.",
+    true,
+    "Booking driver assignment display must use the typed display-only API.",
+  );
+  assert.equal(
+    appPageSource.includes("driverAssignmentDisplayDrivers"),
+    true,
+    "Booking driver assignment display state must stay split from full driver profile state.",
+  );
+  assert.equal(
+    appPageSource.includes("async function loadDriverAssignmentDisplayDrivers"),
+    true,
+    "Booking driver assignment display must use a dedicated typed loader.",
   );
   assert.equal(
     appPageSource.includes("payout_preferences, driver_payout_rules"),
     true,
     "Full driver profile shim risk must remain visible/parked until a later write-path split.",
+  );
+  const assignmentLoaderSource = appPageSource.slice(
+    appPageSource.indexOf("async function loadDriverAssignmentDisplayDrivers"),
+    appPageSource.indexOf("async function saveDriverProfile"),
+  );
+  assert.equal(
+    assignmentLoaderSource.includes("adminLegacyDataClient"),
+    false,
+    "Driver assignment display loader must not use the legacy shim client.",
+  );
+  assert.equal(
+    assignmentLoaderSource.includes("payout_preferences") || assignmentLoaderSource.includes("driver_payout_rules"),
+    false,
+    "Driver assignment display loader must not use payout-aware driver profile fields.",
+  );
+  const applyDriverSource = appPageSource.slice(
+    appPageSource.indexOf("function applyDriverToBooking"),
+    appPageSource.indexOf("function updateDriverProfilePayout"),
+  );
+  assert.equal(
+    applyDriverSource.includes("driverAssignmentDisplayDrivers"),
+    true,
+    "Booking driver selection must read from display-only driver state.",
+  );
+  assert.equal(
+    applyDriverSource.includes("selectedDriver.notes"),
+    false,
+    "Booking driver selection must not copy full-profile internal driver notes.",
+  );
+  assert.equal(
+    applyDriverSource.includes("payout_preferences") || applyDriverSource.includes("driver_payout_rules"),
+    false,
+    "Booking driver selection must not use payout-aware driver profile fields.",
   );
 
   {

@@ -135,13 +135,52 @@ assertIncludes(
 );
 assertIncludes(driverAssignmentHelper, 'source: "typed_driver_assignment_display"', "Driver assignment readiness");
 assertIncludes(driverAssignmentHelper, "fullProfileWritePathParked: true", "Driver assignment readiness");
-assertIncludes(driverAssignmentTest, "New typed driver assignment/display API must remain separate", "Driver assignment test");
+assertIncludes(
+  appPage,
+  "adminDriverAssignmentDisplayApiPath",
+  "App page typed driver assignment display path",
+);
+assertIncludes(
+  appPage,
+  "driverAssignmentDisplayDrivers",
+  "App page split driver assignment display state",
+);
+assertIncludes(
+  appPage,
+  "async function loadDriverAssignmentDisplayDrivers",
+  "App page typed driver assignment display loader",
+);
+assertIncludes(
+  driverAssignmentTest,
+  "Booking driver assignment display must use the typed display-only API.",
+  "Driver assignment test",
+);
 
 const driverSelectLine = driverAssignmentHelper
   .split("\n")
   .find((line) => line.includes("id, driver_name, contact_number, vehicle_type, plate_number, availability_status"));
 assert.ok(driverSelectLine, "Driver assignment helper must keep a safe select line.");
 assertExcludes(driverSelectLine, unsafeDriverSelectPattern, "Driver assignment select line");
+
+const assignmentDisplayLoaderSource = appPage.slice(
+  appPage.indexOf("async function loadDriverAssignmentDisplayDrivers"),
+  appPage.indexOf("async function saveDriverProfile"),
+);
+assertIncludes(
+  assignmentDisplayLoaderSource,
+  "fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200`",
+  "App page typed driver assignment display loader",
+);
+assertExcludes(
+  assignmentDisplayLoaderSource,
+  /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|legacy_shim|shim\s*\(/,
+  "App page typed driver assignment display loader",
+);
+assertExcludes(
+  assignmentDisplayLoaderSource,
+  unsafeDriverSelectPattern,
+  "App page typed driver assignment display loader",
+);
 
 assertIncludes(
   ledger,

@@ -149,8 +149,18 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
+  "driverProfileDisplayDrivers",
+  "App page split driver profile display state",
+);
+assertIncludes(
+  appPage,
   "async function loadDriverAssignmentDisplayDrivers",
   "App page typed driver assignment display loader",
+);
+assertIncludes(
+  appPage,
+  "function driverDisplayMatchesSearch",
+  "App page typed driver profile display search",
 );
 assertIncludes(
   driverAssignmentTest,
@@ -165,7 +175,7 @@ assert.ok(driverSelectLine, "Driver assignment helper must keep a safe select li
 assertExcludes(driverSelectLine, unsafeDriverSelectPattern, "Driver assignment select line");
 
 const assignmentDisplayLoaderSource = appPage.slice(
-  appPage.indexOf("async function loadDriverAssignmentDisplayDrivers"),
+  appPage.indexOf("async function fetchDriverAssignmentDisplayDriverRecords"),
   appPage.indexOf("async function saveDriverProfile"),
 );
 assertIncludes(
@@ -182,6 +192,34 @@ assertExcludes(
   assignmentDisplayLoaderSource,
   unsafeDriverSelectPattern,
   "App page typed driver assignment display loader",
+);
+const driverProfileDisplaySearchSource = appPage.slice(
+  appPage.indexOf("function driverDisplayMatchesSearch"),
+  appPage.indexOf("function driverDraftMatchesSearch"),
+);
+assertIncludes(
+  driverProfileDisplaySearchSource,
+  "DriverAssignmentDisplayRecord",
+  "App page typed driver profile display search",
+);
+assertExcludes(
+  driverProfileDisplaySearchSource,
+  unsafeDriverSelectPattern,
+  "App page typed driver profile display search",
+);
+const fullDriverProfileLoadSource = appPage.slice(
+  appPage.indexOf("async function loadDrivers"),
+  appPage.indexOf("async function fetchDriverAssignmentDisplayDriverRecords"),
+);
+assertIncludes(
+  fullDriverProfileLoadSource,
+  "fetchDriverAssignmentDisplayDriverRecords",
+  "App page driver profile display loader",
+);
+assertIncludes(
+  fullDriverProfileLoadSource,
+  "setDriverProfileDisplayDrivers",
+  "App page driver profile display loader",
 );
 
 assertIncludes(

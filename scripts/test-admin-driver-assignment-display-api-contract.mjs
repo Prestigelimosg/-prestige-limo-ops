@@ -417,6 +417,11 @@ try {
     "Booking driver assignment display state must stay split from full driver profile state.",
   );
   assert.equal(
+    appPageSource.includes("driverProfileDisplayDrivers"),
+    true,
+    "Driver Database display state must stay split from full driver profile state.",
+  );
+  assert.equal(
     appPageSource.includes("async function loadDriverAssignmentDisplayDrivers"),
     true,
     "Booking driver assignment display must use a dedicated typed loader.",
@@ -439,6 +444,34 @@ try {
     assignmentLoaderSource.includes("payout_preferences") || assignmentLoaderSource.includes("driver_payout_rules"),
     false,
     "Driver assignment display loader must not use payout-aware driver profile fields.",
+  );
+  const profileDisplaySearchSource = appPageSource.slice(
+    appPageSource.indexOf("function driverDisplayMatchesSearch"),
+    appPageSource.indexOf("function driverDraftMatchesSearch"),
+  );
+  assert.equal(
+    profileDisplaySearchSource.includes("DriverAssignmentDisplayRecord"),
+    true,
+    "Driver Database display search must use the typed display-only record.",
+  );
+  assert.equal(
+    unsafeLeakPattern.test(profileDisplaySearchSource),
+    false,
+    "Driver Database display search must not include payout, rate, notes, preferred areas, or internal fields.",
+  );
+  const fullProfileLoadSource = appPageSource.slice(
+    appPageSource.indexOf("async function loadDrivers"),
+    appPageSource.indexOf("async function fetchDriverAssignmentDisplayDriverRecords"),
+  );
+  assert.equal(
+    fullProfileLoadSource.includes("fetchDriverAssignmentDisplayDriverRecords"),
+    true,
+    "Driver Database load must refresh the typed display-only list.",
+  );
+  assert.equal(
+    fullProfileLoadSource.includes("setDriverProfileDisplayDrivers"),
+    true,
+    "Driver Database load must store typed display rows separately from full profile rows.",
   );
   const applyDriverSource = appPageSource.slice(
     appPageSource.indexOf("function applyDriverToBooking"),

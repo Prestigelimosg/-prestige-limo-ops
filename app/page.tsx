@@ -2981,7 +2981,7 @@ function driverSearchValuesMatch(
   });
 }
 
-function driverMatchesSearch(driver: DriverRecord, query: string) {
+function driverDisplayMatchesSearch(driver: DriverAssignmentDisplayRecord, query: string) {
   return driverSearchValuesMatch(
     [
       driver.driver_name,
@@ -2989,8 +2989,6 @@ function driverMatchesSearch(driver: DriverRecord, query: string) {
       driver.plate_number,
       driver.vehicle_type,
       driver.availability_status,
-      driver.preferred_areas,
-      driver.notes,
     ],
     query,
   );
@@ -7487,6 +7485,9 @@ export default function Home() {
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
+  const [driverProfileDisplayDrivers, setDriverProfileDisplayDrivers] = useState<
+    DriverAssignmentDisplayRecord[]
+  >([]);
   const [driverAssignmentDisplayDrivers, setDriverAssignmentDisplayDrivers] = useState<
     DriverAssignmentDisplayRecord[]
   >([]);
@@ -9452,8 +9453,8 @@ export default function Home() {
       return [];
     }
 
-    return drivers.filter((driver) => driverMatchesSearch(driver, query));
-  }, [driverSearchTerm, drivers]);
+    return driverProfileDisplayDrivers.filter((driver) => driverDisplayMatchesSearch(driver, query));
+  }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
   const dashboardDriverCandidates = useMemo(() => {
@@ -11179,7 +11180,10 @@ export default function Home() {
         throw new Error(error.message);
       }
 
+      const displayDrivers = await fetchDriverAssignmentDisplayDriverRecords();
+
       setDrivers((data ?? []) as DriverRecord[]);
+      setDriverProfileDisplayDrivers(displayDrivers);
       setMessage({ tone: "success", text: successText });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown driver load error.";
@@ -11187,6 +11191,26 @@ export default function Home() {
     } finally {
       setLoadingDrivers(false);
     }
+  }
+
+  async function fetchDriverAssignmentDisplayDriverRecords() {
+    const response = await fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200`, {
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "GET",
+    });
+    const result = (await response.json().catch(() => null)) as {
+      drivers?: DriverAssignmentDisplayRecord[];
+      error?: string;
+      ok?: boolean;
+    } | null;
+
+    if (!response.ok || result?.ok !== true) {
+      throw new Error(result?.error || "Driver assignment display request failed.");
+    }
+
+    return Array.isArray(result.drivers) ? result.drivers : [];
   }
 
   async function loadDriverAssignmentDisplayDrivers(
@@ -11197,23 +11221,7 @@ export default function Home() {
     setMessage({ tone: "info", text: loadingText });
 
     try {
-      const response = await fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200`, {
-        headers: {
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "GET",
-      });
-      const result = (await response.json().catch(() => null)) as {
-        drivers?: DriverAssignmentDisplayRecord[];
-        error?: string;
-        ok?: boolean;
-      } | null;
-
-      if (!response.ok || result?.ok !== true) {
-        throw new Error(result?.error || "Driver assignment display request failed.");
-      }
-
-      setDriverAssignmentDisplayDrivers(Array.isArray(result.drivers) ? result.drivers : []);
+      setDriverAssignmentDisplayDrivers(await fetchDriverAssignmentDisplayDriverRecords());
       setMessage({ tone: "success", text: successText });
     } catch (error) {
       const errorMessage =
@@ -11381,6 +11389,26 @@ export default function Home() {
             : driver,
         ),
       );
+      setDriverProfileDisplayDrivers((current) =>
+        current.map((driver) =>
+          String(driver.id) === driverId
+            ? {
+                ...driver,
+                availability_status: "inactive",
+              }
+            : driver,
+        ),
+      );
+      setDriverAssignmentDisplayDrivers((current) =>
+        current.map((driver) =>
+          String(driver.id) === driverId
+            ? {
+                ...driver,
+                availability_status: "inactive",
+              }
+            : driver,
+        ),
+      );
       setDriverProfileDraft((current) =>
         current.driverId === driverId
           ? {
@@ -11493,6 +11521,12 @@ export default function Home() {
       }
 
       setDrivers((current) => current.filter((candidate) => String(candidate.id) !== driverId));
+      setDriverProfileDisplayDrivers((current) =>
+        current.filter((candidate) => String(candidate.id) !== driverId),
+      );
+      setDriverAssignmentDisplayDrivers((current) =>
+        current.filter((candidate) => String(candidate.id) !== driverId),
+      );
       clearDeletedDriverIdFromBookingState(driverId);
       setDriverProfileDraft((current) =>
         current.driverId === driverId ? initialDriverProfileDraft : current,
@@ -29973,7 +30007,7 @@ export default function Home() {
 		                <div>
 		                  <h3 className="text-base font-semibold">Driver Database</h3>
 		                  <p className="text-xs text-slate-500" data-driver-search-count="true">
-		                    Showing {filteredDrivers.length} of {drivers.length} drivers.
+		                    Showing {filteredDrivers.length} of {driverProfileDisplayDrivers.length} drivers.
 		                  </p>
 		                </div>
 		                <label>
@@ -29984,16 +30018,16 @@ export default function Home() {
 		                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
 		                    data-driver-search-input="true"
 		                    onChange={(event) => setDriverSearchTerm(event.target.value)}
-		                    placeholder="Name, phone, plate, vehicle, status, area, notes"
+		                    placeholder="Name, phone, plate, vehicle, status"
 		                    value={driverSearchTerm}
 		                  />
 		                </label>
-		                {drivers.length > 0 && !driverDatabaseSearchQuery ? (
+		                {driverProfileDisplayDrivers.length > 0 && !driverDatabaseSearchQuery ? (
 		                  <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900" data-driver-search-helper="true">
 		                    Search driver name, phone, plate, or vehicle to show drivers.
 		                  </p>
 		                ) : null}
-		                {drivers.length > 0 && driverDatabaseSearchQuery && filteredDrivers.length === 0 ? (
+		                {driverProfileDisplayDrivers.length > 0 && driverDatabaseSearchQuery && filteredDrivers.length === 0 ? (
 		                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-driver-search-empty="true">
 		                    No matching drivers found.
 		                  </p>
@@ -30004,7 +30038,7 @@ export default function Home() {
 		                data-driver-list-scroll="true"
 		              >
 		                {driverDeleteMessage &&
-		                !drivers.some((driver) => String(driver.id) === driverDeleteMessage.driverId) ? (
+		                !driverProfileDisplayDrivers.some((driver) => String(driver.id) === driverDeleteMessage.driverId) ? (
 		                  <p
 		                    className={`rounded-md border px-3 py-2 text-xs ${statusClass(driverDeleteMessage.tone)}`}
 		                    data-driver-delete-feedback-card={driverDeleteMessage.driverId}
@@ -30012,12 +30046,13 @@ export default function Home() {
 		                    {driverDeleteMessage.text}
 		                  </p>
 		                ) : null}
-		                {drivers.length === 0 ? (
+		                {driverProfileDisplayDrivers.length === 0 ? (
 		                  <p className="text-sm text-slate-500">No drivers loaded.</p>
 		                ) : !driverDatabaseSearchQuery ? (
 		                  <p className="text-sm text-slate-500">Search to show drivers.</p>
 		                ) : (
 		                  filteredDrivers.map((driver) => {
+		                    const fullProfileDriver = drivers.find((candidate) => candidate.id === driver.id) ?? null;
 		                    const assignedJobCount = operationalBookings.filter(
 		                      (bookingRecord) =>
 		                        bookingRecord.driver_id === driver.id ||
@@ -30026,7 +30061,7 @@ export default function Home() {
 		                    const driverId = String(driver.id);
 		                    const rowDeleteMessage =
 		                      driverDeleteMessage?.driverId === driverId &&
-		                      drivers.some((candidate) => String(candidate.id) === driverId)
+		                      driverProfileDisplayDrivers.some((candidate) => String(candidate.id) === driverId)
 		                        ? driverDeleteMessage
 		                        : null;
 		                    const driverAvailability = clean(driver.availability_status) || "available";
@@ -30044,7 +30079,14 @@ export default function Home() {
 		                        <button
 		                          className="w-full px-3 py-2 text-left transition hover:bg-stone-50"
 		                          data-driver-profile-select={driver.id}
-		                          onClick={() => loadDriverProfileDraft(driver)}
+		                          onClick={() =>
+		                            fullProfileDriver
+		                              ? loadDriverProfileDraft(fullProfileDriver)
+		                              : setMessage({
+		                                  tone: "error",
+		                                  text: "Load full driver profile data before editing this driver.",
+		                                })
+		                          }
 		                          type="button"
 		                        >
 		                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -30069,8 +30111,16 @@ export default function Home() {
 		                          <button
 		                            className="h-9 rounded-md border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 		                            data-driver-delete-button={driver.id}
-		                            disabled={deletingDriverId === driverId}
-		                            onClick={() => deleteDriverProfile(driver, assignedJobCount)}
+		                            disabled={deletingDriverId === driverId || !fullProfileDriver}
+		                            onClick={() =>
+		                              fullProfileDriver
+		                                ? deleteDriverProfile(fullProfileDriver, assignedJobCount)
+		                                : setDriverDeleteMessage({
+		                                    driverId,
+		                                    tone: "error",
+		                                    text: "Delete driver failed: load full driver profile data first.",
+		                                  })
+		                            }
 		                            type="button"
 		                          >
 		                            {deletingDriverId === driverId ? "Deleting..." : "Delete"}

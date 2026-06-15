@@ -10336,6 +10336,17 @@ async function runChromeTest() {
 	          });
 	        } catch {}
 	      };
+	      const driverDisplayRows = () =>
+	        (window.__prestigeDriverList || [window.__prestigeSavedDriver || savedDriver])
+	          .filter(Boolean)
+	          .map((driver) => ({
+	            availability_status: driver.availability_status ?? null,
+	            contact_number: driver.contact_number ?? null,
+	            driver_name: driver.driver_name ?? null,
+	            id: driver.id,
+	            plate_number: driver.plate_number ?? null,
+	            vehicle_type: driver.vehicle_type ?? null,
+	          }));
 
       window.__prestigeFetchCalls = [];
       window.__prestigeDriverProfileRequestBodies = [];
@@ -10432,6 +10443,27 @@ async function runChromeTest() {
 
           window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
           return jsonResponse({ message: "Unhandled driver availability mock" }, 500);
+        }
+
+        if (url.includes("/api/admin-driver-assignment-display")) {
+          if (method === "GET") {
+            return jsonResponse({
+              drivers: driverDisplayRows(),
+              ok: true,
+              readiness: {
+                external_send: false,
+                fullProfileWritePathParked: true,
+                readOnly: true,
+                setupSafe: true,
+                source: "typed_driver_assignment_display",
+                writeEnabled: false,
+              },
+              version: "browser-admin-driver-assignment-display-mock",
+            });
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled driver assignment display mock" }, 500);
         }
 
         if (!url.includes("/rest/v1/")) {
@@ -10773,8 +10805,10 @@ async function runChromeTest() {
       `Expected all driver profile Supabase calls to be mocked, got ${driverProfileSaveState.unhandledSupabaseCalls.join(", ")}`,
     );
     assert.ok(
-      driverProfileSaveState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
-      `Expected driver profile save to call only mocked drivers REST endpoints, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
+      driverProfileSaveState.fetchCalls.every(
+        (call) => call.includes("/rest/v1/drivers") || call.includes("/api/admin-driver-assignment-display"),
+      ),
+      `Expected driver profile save to call only mocked drivers REST endpoints plus typed display read, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
     );
     assert.ok(
       driverProfileSaveState.fetchCalls.every((call) => !call.includes("/rest/v1/bookings")),
@@ -10967,8 +11001,6 @@ async function runChromeTest() {
       ["SLL901P", "plate number"],
       ["Alphard", "vehicle type"],
       ["busy", "availability"],
-      ["Changi", "preferred areas"],
-      ["Reusable profile save test note", "notes"],
     ];
 
     for (const [query, label] of driverSearchQueries) {
@@ -11005,6 +11037,37 @@ async function runChromeTest() {
           "Expected Driver Database row to stay compact and omit long preferences/notes",
         );
       }
+    }
+
+    for (const [query, label] of [
+      ["Changi", "preferred areas"],
+      ["Reusable profile save test note", "notes"],
+    ]) {
+      await setInputValue("[data-driver-search-input='true']", query, `Driver display search excludes ${label}`);
+      const excludedDriverSearchState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const noMatch = document.querySelector("[data-driver-search-empty='true']");
+
+            return noMatch?.textContent.trim() === "No matching drivers found."
+              ? {
+                  countText: document.querySelector("[data-driver-search-count='true']")?.textContent.trim() || "",
+                  noMatchText: noMatch.textContent.trim(),
+                  rows: [...document.querySelectorAll("[data-driver-profile-row]")].map((row) => row.innerText),
+                }
+              : false;
+          })()`),
+        10000,
+        `driver display search excludes ${label}`,
+      );
+
+      assert.equal(excludedDriverSearchState.countText, "Showing 0 of 30 drivers.");
+      assert.equal(excludedDriverSearchState.noMatchText, "No matching drivers found.");
+      assert.deepEqual(
+        excludedDriverSearchState.rows,
+        [],
+        `Expected Driver Database display search not to match ${label}`,
+      );
     }
 
     await setInputValue("[data-driver-search-input='true']", "NO LOCAL DRIVER MATCH", "Driver search no match");
@@ -12210,8 +12273,10 @@ async function runChromeTest() {
       `Expected renamed driver profile Supabase calls to be mocked, got ${renamedDriverProfileSaveState.unhandledSupabaseCalls.join(", ")}`,
     );
     assert.ok(
-      renamedDriverProfileSaveState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
-      `Expected renamed driver profile save to call only drivers REST endpoints, got ${renamedDriverProfileSaveState.fetchCalls.join(", ")}`,
+      renamedDriverProfileSaveState.fetchCalls.every(
+        (call) => call.includes("/rest/v1/drivers") || call.includes("/api/admin-driver-assignment-display"),
+      ),
+      `Expected renamed driver profile save to call only drivers REST endpoints plus typed display read, got ${renamedDriverProfileSaveState.fetchCalls.join(", ")}`,
     );
     assert.ok(
       renamedDriverProfileSaveState.fetchCalls.every((call) => !call.includes("driver_name=ilike")),
@@ -12674,8 +12739,10 @@ async function runChromeTest() {
     assert.equal(deletedDriverState.deleteRequests[0]?.id, "9905");
     assert.match(deletedDriverState.deleteRequests[0]?.url || "", /\/rest\/v1\/drivers.*id=eq\.9905/);
     assert.ok(
-      deletedDriverState.fetchCalls.every((call) => call.includes("/rest/v1/drivers")),
-      `Expected driver delete to call only drivers REST endpoints, got ${deletedDriverState.fetchCalls.join(", ")}`,
+      deletedDriverState.fetchCalls.every(
+        (call) => call.includes("/rest/v1/drivers") || call.includes("/api/admin-driver-assignment-display"),
+      ),
+      `Expected driver delete to call only drivers REST endpoints plus typed display read, got ${deletedDriverState.fetchCalls.join(", ")}`,
     );
     assert.equal(deletedDriverState.bookingRequestCount, 0, "Expected driver delete not to update booking rows");
     assert.equal(deletedDriverState.feedbackText, "Driver deleted.");

@@ -3424,6 +3424,70 @@ function hasRateOverrideValues(record: Pick<CompanyRecord, "customer_rates" | "d
   return formatOverrideSummary(record.customer_rates, record.driver_payout_rules).hasOverrides;
 }
 
+type CompanyCrmIdentityContactPayload = {
+  company_name: string;
+};
+
+type TravelerCrmIdentityContactPayload = {
+  company_id: number;
+  traveler_name: string;
+};
+
+type CompanyRateOverridePayloadInput = {
+  customerRates: RateRules;
+  driverPayoutRules: DriverPayoutRules;
+  transzendExcelPrivacy?: boolean;
+  updatedAt?: string;
+};
+
+type TravelerRateOverridePayloadInput = {
+  customerRates: RateRules;
+  driverPayoutRules: DriverPayoutRules;
+  updatedAt?: string;
+};
+
+function buildCompanyCrmIdentityContactPayload(companyName: string): CompanyCrmIdentityContactPayload {
+  return {
+    company_name: companyName || "Internal Account",
+  };
+}
+
+function buildTravelerCrmIdentityContactPayload(
+  companyId: number,
+  travelerName: string,
+): TravelerCrmIdentityContactPayload {
+  return {
+    company_id: companyId,
+    traveler_name: travelerName,
+  };
+}
+
+function buildCompanyRateOverridePayload({
+  customerRates,
+  driverPayoutRules,
+  transzendExcelPrivacy,
+  updatedAt,
+}: CompanyRateOverridePayloadInput) {
+  return {
+    customer_rates: customerRates,
+    driver_payout_rules: driverPayoutRules,
+    ...(transzendExcelPrivacy === undefined ? {} : { transzend_excel_privacy: transzendExcelPrivacy }),
+    ...(updatedAt ? { updated_at: updatedAt } : {}),
+  };
+}
+
+function buildTravelerRateOverridePayload({
+  customerRates,
+  driverPayoutRules,
+  updatedAt,
+}: TravelerRateOverridePayloadInput) {
+  return {
+    customer_rates: customerRates,
+    driver_payout_rules: driverPayoutRules,
+    ...(updatedAt ? { updated_at: updatedAt } : {}),
+  };
+}
+
 function statusClass(tone: Message["tone"]) {
   if (tone === "success") {
     return "border-emerald-200 bg-emerald-50 text-emerald-800";
@@ -10909,10 +10973,12 @@ export default function Home() {
         const createdCompany = await adminLegacyDataClient
           .from(adminLegacyTables.companies)
           .insert({
-            company_name: companyName || "Internal Account",
-            customer_rates: bossName ? {} : overrideCustomerRates,
-            driver_payout_rules: bossName ? {} : overrideDriverPayoutRules,
-            transzend_excel_privacy: rateOverrideDraft.transzendExcelPrivacy,
+            ...buildCompanyCrmIdentityContactPayload(companyName || "Internal Account"),
+            ...buildCompanyRateOverridePayload({
+              customerRates: bossName ? {} : overrideCustomerRates,
+              driverPayoutRules: bossName ? {} : overrideDriverPayoutRules,
+              transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
+            }),
           })
           .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
           .single();
@@ -10939,12 +11005,14 @@ export default function Home() {
 
       const companyUpdate = await adminLegacyDataClient
         .from(adminLegacyTables.companies)
-        .update({
-          customer_rates: mergedCompanyRates,
-          driver_payout_rules: mergedCompanyPayouts,
-          transzend_excel_privacy: rateOverrideDraft.transzendExcelPrivacy,
-          updated_at: new Date().toISOString(),
-        })
+        .update(
+          buildCompanyRateOverridePayload({
+            customerRates: mergedCompanyRates,
+            driverPayoutRules: mergedCompanyPayouts,
+            transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
+            updatedAt: new Date().toISOString(),
+          }),
+        )
         .eq("id", company.id)
         .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
         .single();
@@ -10972,17 +11040,19 @@ export default function Home() {
           const traveler = existingTraveler.data as TravelerRecord;
           const travelerUpdate = await adminLegacyDataClient
             .from(adminLegacyTables.travelers)
-            .update({
-              customer_rates: {
-                ...normalizeCustomerRateRules(traveler.customer_rates),
-                ...overrideCustomerRates,
-              },
-              driver_payout_rules: {
-                ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
-                ...overrideDriverPayoutRules,
-              },
-              updated_at: new Date().toISOString(),
-            })
+            .update(
+              buildTravelerRateOverridePayload({
+                customerRates: {
+                  ...normalizeCustomerRateRules(traveler.customer_rates),
+                  ...overrideCustomerRates,
+                },
+                driverPayoutRules: {
+                  ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
+                  ...overrideDriverPayoutRules,
+                },
+                updatedAt: new Date().toISOString(),
+              }),
+            )
             .eq("id", traveler.id);
 
           if (travelerUpdate.error) {
@@ -10990,10 +11060,11 @@ export default function Home() {
           }
         } else {
           const travelerInsert = await adminLegacyDataClient.from(adminLegacyTables.travelers).insert({
-            company_id: company.id,
-            traveler_name: bossName,
-            customer_rates: overrideCustomerRates,
-            driver_payout_rules: overrideDriverPayoutRules,
+            ...buildTravelerCrmIdentityContactPayload(company.id, bossName),
+            ...buildTravelerRateOverridePayload({
+              customerRates: overrideCustomerRates,
+              driverPayoutRules: overrideDriverPayoutRules,
+            }),
           });
 
           if (travelerInsert.error) {
@@ -11063,11 +11134,11 @@ export default function Home() {
     try {
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.companies)
-        .update({
-          customer_rates: {},
-          driver_payout_rules: {},
-          updated_at: new Date().toISOString(),
-        })
+        .update(buildCompanyRateOverridePayload({
+          customerRates: {},
+          driverPayoutRules: {},
+          updatedAt: new Date().toISOString(),
+        }))
         .eq("id", companyRecord.id);
 
       if (error) {
@@ -11142,11 +11213,11 @@ export default function Home() {
     try {
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.travelers)
-        .update({
-          customer_rates: {},
-          driver_payout_rules: {},
-          updated_at: new Date().toISOString(),
-        })
+        .update(buildTravelerRateOverridePayload({
+          customerRates: {},
+          driverPayoutRules: {},
+          updatedAt: new Date().toISOString(),
+        }))
         .eq("id", travelerRecord.id);
 
       if (error) {

@@ -46,6 +46,10 @@ const guardChecks = [
     script: "scripts/test-company-traveler-crm-write-foundation-lock.mjs",
   },
   {
+    label: "CRM identity/rate override payload split guard",
+    script: "scripts/test-crm-identity-rate-override-payload-split.mjs",
+  },
+  {
     label: "remaining shim parked state lock guard",
     script: "scripts/test-remaining-shim-parked-state-lock.mjs",
   },

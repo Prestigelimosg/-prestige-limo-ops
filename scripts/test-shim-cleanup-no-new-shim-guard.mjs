@@ -115,6 +115,8 @@ assertIncludes(
 );
 assertIncludes(travelersHelper, 'source: "typed_travelers_crm_identity"', "Travelers helper readiness");
 assertIncludes(appPage, 'fetch("/api/admin-bookings"', "App page safe admin booking persistence path");
+assertIncludes(appPage, "/api/admin-saved-bookings", "App page guarded saved bookings path");
+assertExcludes(appPage, /adminLegacyTables\.bookings/, "Retired legacy bookings table reference");
 assertExcludes(
   appPage,
   /fetch\(["']\/api\/admin-travelers-crm-identity/,
@@ -241,6 +243,7 @@ assertIncludes(appPage, "driver_payout_rules: driverPayoutRules", "Parked driver
 
 assertIncludes(legacyRoute, "rate_settings: new Set", "Legacy route parked rate_settings allowlist");
 assertIncludes(legacyRoute, "drivers: new Set", "Legacy route parked drivers allowlist");
+assertExcludes(legacyRoute, /bookings: new Set/, "Retired legacy bookings allowlist");
 for (const fragment of [
   '"payout_preferences"',
   '"driver_payout_rules"',

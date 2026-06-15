@@ -28,52 +28,6 @@ type SupabaseRouteQuery = PromiseLike<SupabaseRouteQueryResult> & {
 };
 
 const allowedColumnsByTable: Record<string, Set<string>> = {
-  bookings: new Set([
-    "id",
-    "company_id",
-    "booker_id",
-    "traveler_id",
-    "booking_type",
-    "vehicle",
-    "pickup_time",
-    "pickup_address",
-    "dropoff_address",
-    "flight_no",
-    "route",
-    "pax",
-    "job_card",
-    "status",
-    "driver_id",
-    "driver_name",
-    "driver_contact",
-    "driver_plate_number",
-    "customer_rate",
-    "customer_rate_unit",
-    "customer_price_amount",
-    "customer_rate_override",
-    "customer_price_override_reason",
-    "driver_payout_min",
-    "driver_payout_max",
-    "driver_payout_amount",
-    "driver_payout_override",
-    "driver_payout_reason",
-    "driver_payout_unit",
-    "driver_notes",
-    "driver_dispatch_include_payout",
-    "midnight_surcharge",
-    "midnight_payout",
-    "extra_stop_count",
-    "extra_stop_surcharge",
-    "extra_stop_payout",
-    "child_seat_required",
-    "child_seat_count",
-    "child_seat_type",
-    "child_seat_customer_surcharge",
-    "child_seat_driver_payout",
-    "pricing_source",
-    "created_at",
-    "updated_at",
-  ]),
   companies: new Set([
     "id",
     "company_name",
@@ -132,11 +86,6 @@ const allowedColumnsByTable: Record<string, Set<string>> = {
 };
 
 const allowedEmbeddedSelectsByTable: Record<string, Set<string>> = {
-  bookings: new Set([
-    "bookers(booker_name, email, phone)",
-    "companies(company_name, domain)",
-    "travelers(traveler_name)",
-  ]),
 };
 
 const allowedTables = new Set(Object.keys(allowedColumnsByTable));

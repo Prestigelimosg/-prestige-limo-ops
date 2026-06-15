@@ -424,6 +424,19 @@ try {
   mock = installMockClient();
   response = await readResponse(
     await route.GET(
+      getRequest("http://localhost/api/admin-legacy-data/rest/v1/bookings?select=id,status"),
+      routeContext("bookings"),
+    ),
+  );
+
+  assert.equal(response.status, 404, "retired bookings table stays blocked on the legacy route");
+  assertNoSupabaseTouched(mock, "retired bookings table");
+  assertNoLeaks(response.body, "retired bookings table response");
+
+  setEnv(enabledSessionEnv());
+  mock = installMockClient();
+  response = await readResponse(
+    await route.GET(
       getRequest("http://localhost/api/admin-legacy-data/rest/v1/companies?select=id,company_name&id=eq.1&single=maybe"),
       routeContext("companies"),
     ),

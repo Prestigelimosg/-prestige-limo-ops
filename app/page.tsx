@@ -81,7 +81,6 @@ const adminMapRouteEstimatesApiPath = "/api/admin-map-route-estimates";
 const adminDispatchReleaseWorkflowArea = "dispatch_release";
 const adminDriverAcknowledgementWorkflowArea = "driver_acknowledgement";
 const adminLegacyTables = {
-  bookings: "bookings",
   companies: "companies",
   drivers: "drivers",
   rateSettings: "rate_settings",

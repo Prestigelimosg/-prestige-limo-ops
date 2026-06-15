@@ -4,8 +4,8 @@ This packet is docs-only. It does not approve or activate live DB/write, migrati
 
 ## Current Checkpoints
 
-- Latest repo commit at packet creation: `76d12f8 Record Vercel staging deployment verification`.
-- Latest implementation checkpoint currently preserved in the ledger: `4382cdf Add staging deployment approval packet guard`.
+- Latest repo commit at owner checklist update: `647f9bb Update ledger for core booking persistence safe path guard`.
+- Latest implementation checkpoint currently preserved in the ledger: `4045c0a Add core booking persistence safe path guard`.
 - Inspected paths: `app/page.tsx` Save Booking + CRM flow, `app/page.tsx` Admin Booking Persistence panel, `app/api/admin-bookings/route.ts`, `lib/admin-booking-persistence.ts`, `lib/admin-booking-supabase-adapter.ts`, existing admin booking persistence tests/docs, and ledger risk locks for pricing, payout, rates, and shims.
 
 ## Proposed First Live Activation Scope
@@ -15,6 +15,23 @@ This packet is docs-only. It does not approve or activate live DB/write, migrati
 - The safer first scope is one controlled admin/dispatcher booking/customer save-load path through `buildAdminBookingPersistencePayload`, `saveAdminBookingOperationalSnapshot`, and the server-only Supabase adapter.
 - First activation must stay staging-only until separately approved for production.
 - Customer amendment/cancellation must never auto-update CRM or calendar. Any CRM booking update or calendar update/cancel requires admin approval and a separate activation decision.
+
+## Owner Approval Checklist For First Live DB Write Rehearsal
+
+- Approval status: pending owner approval.
+- Owner: ______________________________.
+- Date: ______________________________.
+- Exact approved future scope for a separately approved rehearsal: Admin Save Booking + CRM via `POST /api/admin-bookings` only.
+- Explicitly not approved: `/api/admin-saved-bookings`, because it includes rich pricing/payout snapshot fields and is outside the first safe live DB write scope.
+- Allowed fields: operational booking fields only, as listed in this packet and enforced by the `/api/admin-bookings` parser/guard.
+- Excluded/risky fields: pricing, payout, payment, PDF, billing, `customer_rates`, `driver_payout_rules`, rate overrides, provider/send, auth, photo, live location, internal notes, and debug fields.
+- Required kill switch: `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` must stay closed until owner approval and an approved controlled rehearsal window.
+- Required Supabase/admin env names only, with values never printed, committed, pasted, or exposed: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE`, `PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE`, `PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN`, and `PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL`.
+- Table/policy verification checklist: confirm `customers`, `customer_contacts`, `bookings`, `booking_route_points`, `booking_service_items`, and `audit_logs` exist; confirm required safe operational columns; confirm service-role access is server-only; confirm public/customer/driver anon clients cannot write; confirm RLS/policies do not expose finance/internal/debug fields; confirm no migration is included unless separately approved.
+- Staging rehearsal checklist: use staging only; use one unique booking reference; verify kill switch OFF returns the disabled safe response; open the switch only for the approved window; call only `POST /api/admin-bookings`; verify one controlled save/load; verify no `/api/admin-saved-bookings` write; close the switch immediately after evidence is captured.
+- Rollback/manual recovery checklist: keep previous successful preview deployment and commit ready; close `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`; record the controlled booking reference and inserted row ids if available; prepare owner-approved cleanup for exact rows only; rotate any exposed secret; rerun guards after recovery.
+- Tests required before any activation: `node scripts/test-core-booking-persistence-safe-path-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `node scripts/test-admin-booking-persistence-kill-switch.mjs`, `node scripts/test-admin-booking-persistence-api-gate.mjs`, `node scripts/test-admin-booking-supabase-adapter-contract.mjs`, `node scripts/test-admin-booking-persistence-staging-config.mjs`, `node scripts/test-admin-booking-persistence-enable-readiness.mjs`, `npm run lint`, `npm run build`, `git diff --check`, and `git status --short`.
+- Same-pass rule: no CRM/calendar amendment updates, provider/live sending, auth, location, photo, payment, payout, or risky shim writes in the same pass.
 
 ## Allowed First Live Write Fields
 

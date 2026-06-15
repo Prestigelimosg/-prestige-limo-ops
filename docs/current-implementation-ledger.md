@@ -379,7 +379,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No runtime implementation is approved by this plan.
 
 ### Company/Traveler CRM Identity/Contact Write Foundation Lock
+- This lock is guarded by `scripts/test-company-traveler-crm-write-foundation-lock.mjs`.
 - Typed company/traveler CRM identity/contact write contract foundation is done at `25d0703 Add typed company traveler CRM write foundation`.
+- Setup endpoint path: `/api/admin-company-traveler-crm-identity-contact-write-contract-setup`.
 - New setup endpoint: `app/api/admin-company-traveler-crm-identity-contact-write-contract-setup/route.ts`.
 - New foundation helper: `lib/admin-company-traveler-crm-identity-contact-write-contract-setup-foundation.ts`.
 - This is setup-only and GET-only. It validates the future company/traveler CRM identity/contact write contract and keeps write flags disabled.
@@ -392,7 +394,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Forbidden fields remain rejected/excluded: rate, pricing, payout, payment, PDF, billing, provider/send, auth, location, photo, calendar, internal, and debug fields.
 - `customer_rates`, `driver_payout_rules`, rate overrides, pricing, and payout remain parked.
 - No new shims were added.
-- Checks passed: focused CRM identity/contact write contract test, admin route flow lock, company/traveler identity read lock, CRM write split plan guard, rate override split gating plan, remaining shim parked state lock, shim cleanup no-new-shim guard, preactivation verification suite, `npm run lint`, `git diff --check`, and `git status --short`.
+- Checks passed: focused CRM identity/contact write contract test, company/traveler CRM write foundation lock guard, admin route flow lock, company/traveler identity read lock, CRM write split plan guard, rate override split gating plan, remaining shim parked state lock, shim cleanup no-new-shim guard, preactivation verification suite, `npm run lint`, `git diff --check`, and `git status --short`.
 - No env change, deployment, DB/write, migration, Supabase key use, parser change, provider/sending/payment/PDF/payout/auth/location/photo/CRM-calendar/risky shim behavior change is approved by this lock.
 
 ### Rate Override Split/Gating Plan Lock

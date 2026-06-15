@@ -42,6 +42,10 @@ const guardChecks = [
     script: "scripts/test-admin-company-traveler-crm-identity-contact-write-contract.mjs",
   },
   {
+    label: "company/traveler CRM write foundation lock guard",
+    script: "scripts/test-company-traveler-crm-write-foundation-lock.mjs",
+  },
+  {
     label: "remaining shim parked state lock guard",
     script: "scripts/test-remaining-shim-parked-state-lock.mjs",
   },

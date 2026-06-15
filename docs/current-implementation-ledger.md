@@ -336,6 +336,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Next safe split is separate typed company/traveler CRM create/update/name-memory APIs, excluding rate/payout override writes.
 - `customer_rates`, `driver_payout_rules`, pricing, and payout remain parked until explicit approval.
 
+### Rate Override Split/Gating Plan Lock
+- This is a docs/test-only plan guarded by `scripts/test-rate-override-split-gating-plan.mjs`.
+- No implementation is approved by this plan.
+- Future design must separate these lanes before touching company/traveler legacy writes: company/traveler display/read; company/traveler create/update; customer rate overrides; driver payout rules; pricing/payout behavior.
+- Company/traveler display/read lane: keep using typed read/display APIs only (`GET /api/admin-companies-crm-identity`, `GET /api/admin-travelers-crm-identity`, and narrow customer name memory reads) with display/identity/default-address fields only.
+- Company/traveler create/update lane: keep blocked behind company/traveler CRM write-readiness, disabled action, audit payload, and no-live guard until separate approval; do not mix with rate override fields.
+- Company/traveler legacy writes remain parked.
+- Rate override save/remove remains parked.
+- `customer_rates` and `driver_payout_rules` remain excluded.
+- Pricing/payout remains excluded.
+- Customer rate overrides lane: company/traveler legacy writes remain parked; rate override save/remove remains parked; `customer_rates` and `driver_payout_rules` remain excluded.
+- Driver payout rules lane: driver payout rules remain excluded from company/traveler CRM write/read splits and must not be exposed to customers or mixed into display-only data.
+- Pricing/payout behavior lane: pricing/payout remains excluded; `resolvePricing`, customer price, driver payout, saved-booking payout snapshots, PayNow/payout details, billing, payment, and PDF behavior must not be touched in the same pass.
+- No UI/API behavior changes are approved by this plan. No live DB/write, env, deployment, migration, new shim, payment, PDF, payout, auth, location, photo, calendar, provider, or live sending activation is approved.
+- Required future tests before implementation: `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-admin-companies-crm-identity-api-contract.mjs`, `node scripts/test-admin-travelers-crm-identity-api-contract.mjs`, `node scripts/test-admin-company-traveler-crm-write-no-live-guard.mjs`, `node scripts/test-admin-rate-setup-api-contract.mjs`, `node scripts/test-core-booking-persistence-safe-path-guard.mjs` if booking/pricing/save state is touched, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
+- Hard blockers: any implementation requiring `customer_rates`, `driver_payout_rules`, pricing, payout, rate override save/remove, company/traveler override writes, booking price/payout snapshots, full driver payout rules, payment/PDF/billing, provider/send, auth, location, photo, calendar writes, live DB/write, env/deploy/migration, or a new shim in the same pass.
+- Rollback plan: keep any future implementation one lane at a time, revert the single split commit if guards or browser tests fail, restore the parked legacy company/traveler rate override save/remove paths unchanged, rerun route-flow, shim cleanup, rate setup, core booking, preactivation, lint, and booking UI browser checks, and do not deploy or enable live DB/write without separate owner approval.
+
 ### Company/traveler CRM write pre-activation completion audit lock
 - Company/traveler CRM write path is complete up to the activation stop.
 - Write-readiness foundation is done.

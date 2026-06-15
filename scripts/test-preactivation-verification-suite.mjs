@@ -26,6 +26,10 @@ const guardChecks = [
     script: "scripts/test-admin-route-flow-lock.mjs",
   },
   {
+    label: "rate override split/gating plan guard",
+    script: "scripts/test-rate-override-split-gating-plan.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

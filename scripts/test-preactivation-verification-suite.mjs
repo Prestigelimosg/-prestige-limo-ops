@@ -22,6 +22,10 @@ const guardChecks = [
     script: "scripts/test-core-booking-persistence-safe-path-guard.mjs",
   },
   {
+    label: "admin route flow lock guard",
+    script: "scripts/test-admin-route-flow-lock.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

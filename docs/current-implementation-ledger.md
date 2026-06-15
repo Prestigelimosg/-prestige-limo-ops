@@ -23,9 +23,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Booking UI browser stabilization is done at `4b7a1ab Stabilize booking UI browser test`; stale browser expectations/mocks were aligned to the current Customer Copy setup-only routes, separated Save Booking + CRM and Create Calendar Event flow, typed traveler identity read, and saved-address mock path.
 - Calendar event lifecycle status: readiness foundation, preview/readiness API, disabled action API, action audit payload setup foundation, no-live guard, and final pre-activation lock are done; customer amendment/cancellation never auto-updates calendar; calendar create/update/cancel remains blocked until explicit approval.
 - Production hardening status: readiness foundation, preview/readiness API, disabled production action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock are done.
-- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done; unused legacy bookings shim surface is retired; driver assignment display now uses the existing typed display-only API for the booking assignment display path; Driver Database display/search now uses separate typed display-only state fed by the existing `/api/admin-driver-assignment-display` route; company/traveler CRM write setup is locked through the activation stop; risky full-driver profile save/delete paths, `rate_settings` save/upsert, pricing, payout, `customer_rates`, and `driver_payout_rules` write paths remain parked.
+- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done; unused legacy bookings shim surface is retired; driver assignment display now uses the existing typed display-only API for the booking assignment display path; Driver Database display/search now uses separate typed display-only state fed by the existing `/api/admin-driver-assignment-display` route; company/traveler CRM write setup is locked through the activation stop; risky full-driver profile write/delete paths, `rate_settings` save/upsert, pricing, payout, `customer_rates`, and `driver_payout_rules` write paths remain parked.
 - Still blocked unless explicitly approved: live DB/write, migrations, deployment, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, FlightAware live lookup, live location activation, photo upload/storage, CRM/calendar amendment updates, calendar event lifecycle create/update/cancel and live sync, job-card creation from customer amendments, and risky shim write paths.
 - Continue to use setup-only helpers/APIs and direct guards. Do not add new shims, duplicate UI/API/helper work, live provider behavior, or customer/driver-visible finance/internal details.
+
+## Admin Route Flow Lock
+
+- Current route-flow map is locked by `scripts/test-admin-route-flow-lock.mjs`.
+- Save Booking + CRM uses `POST /api/admin-bookings` with `x-prestige-admin-purpose=admin-booking-persistence`.
+- Save Booking + CRM does not POST to `/api/admin-saved-bookings`.
+- Load Bookings legacy read remains separate at `GET /api/admin-saved-bookings`.
+- Create Calendar Event builds an ICS/calendar payload only; no external calendar sync is active.
+- Driver assignment display uses `GET /api/admin-driver-assignment-display`.
+- Driver Database display/search uses typed display-only state.
+- Full driver profile save/delete remains parked on the legacy `drivers` shim path.
+- Remaining legacy shim families are only `companies`, `travelers`, `drivers`, and `rate_settings`.
+- Driver job link creation uses `/api/admin-driver-job-links` and creates `/driver-job/{token}`.
+- Customer driver-details send buttons remain disabled/setup-only.
+- Provider/live sending, payment/PDF/payout, auth, location, photo, calendar activation, and risky shim writes remain blocked.
+- Expected 503 gated families remain documented: admin booking persistence when `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED` is closed or Supabase config is missing; legacy admin data when Supabase config is missing; driver job production mode when `PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED` is not open/configured; customer booking intake when persistence is not enabled/configured; monthly billing/invoice/closeout/notification persistence when server gates are closed.
+- `/api/admin-driver-job-links` current safe 400 reasons remain documented: malformed create payload, malformed read booking reference/status/limit/page, malformed revoke payload, and unsupported unsafe link fields.
 
 ## Activation Decision Matrix
 

@@ -30,6 +30,10 @@ const guardChecks = [
     script: "scripts/test-rate-override-split-gating-plan.mjs",
   },
   {
+    label: "company/traveler identity read lock guard",
+    script: "scripts/test-company-traveler-identity-read-lock.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

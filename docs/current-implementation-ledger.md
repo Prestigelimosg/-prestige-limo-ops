@@ -354,6 +354,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Hard blockers: any implementation requiring `customer_rates`, `driver_payout_rules`, pricing, payout, rate override save/remove, company/traveler override writes, booking price/payout snapshots, full driver payout rules, payment/PDF/billing, provider/send, auth, location, photo, calendar writes, live DB/write, env/deploy/migration, or a new shim in the same pass.
 - Rollback plan: keep any future implementation one lane at a time, revert the single split commit if guards or browser tests fail, restore the parked legacy company/traveler rate override save/remove paths unchanged, rerun route-flow, shim cleanup, rate setup, core booking, preactivation, lint, and booking UI browser checks, and do not deploy or enable live DB/write without separate owner approval.
 
+### Company/Traveler Identity Read Lock
+- This is a docs/test-only lock guarded by `scripts/test-company-traveler-identity-read-lock.mjs`.
+- GET /api/admin-companies-crm-identity is company identity read/display only.
+- GET /api/admin-travelers-crm-identity is traveler identity/default-address read/display only.
+- The typed identity routes remain GET-only, read-only, `writeEnabled false`, and `external_send false`.
+- Company/traveler create/update/name-memory writes remain parked.
+- Rate override save/remove remains parked.
+- `customer_rates`, `driver_payout_rules`, pricing, payout, rate snapshots, and payout snapshots remain excluded.
+- Remaining legacy company/traveler call sites are blocked because they mix rate/payout fields.
+- Future work must split identity, CRM writes, customer rates, driver payout rules, and `rate_settings` into separate typed lanes.
+- No runtime implementation is approved by this lock.
+- No UI/API behavior changes are approved by this lock.
+- No env change, deployment, DB/write, migration, new shim, payment, PDF, payout, auth, location, photo, calendar, provider, or live sending activation is approved.
+
 ### Company/traveler CRM write pre-activation completion audit lock
 - Company/traveler CRM write path is complete up to the activation stop.
 - Write-readiness foundation is done.

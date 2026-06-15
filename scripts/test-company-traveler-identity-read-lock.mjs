@@ -70,15 +70,21 @@ const [
 const lockSection = sectionBetween(ledger, "### Company/Traveler Identity Read Lock");
 
 for (const phrase of [
+  "Typed identity display wiring is done at `69c269d Wire company traveler identity display to typed APIs`.",
   "GET /api/admin-companies-crm-identity is company identity read/display only.",
   "GET /api/admin-travelers-crm-identity is traveler identity/default-address read/display only.",
+  "Company/traveler display-read now uses existing typed identity APIs: `GET /api/admin-travelers-crm-identity` and `GET /api/admin-companies-crm-identity`.",
+  "Traveler identity/default-address display uses the typed read path.",
+  "Company identity display uses the typed read path when a safe `company_id` exists.",
   "Company/traveler create/update/name-memory writes remain parked.",
   "Rate override save/remove remains parked.",
   "`customer_rates`, `driver_payout_rules`, pricing, payout, rate snapshots, and payout snapshots remain excluded.",
+  "Save Booking + CRM behavior was not changed.",
+  "`/api/admin-saved-bookings` was not changed.",
+  "No new shims were added.",
   "Remaining legacy company/traveler call sites are blocked because they mix rate/payout fields.",
   "Future work must split identity, CRM writes, customer rates, driver payout rules, and `rate_settings` into separate typed lanes.",
-  "No runtime implementation is approved by this lock.",
-  "No UI/API behavior changes are approved by this lock.",
+  "Checks passed for the typed identity display wiring:",
 ]) {
   assertIncludes(lockSection, phrase, `Company/traveler identity read lock phrase: ${phrase}`);
 }

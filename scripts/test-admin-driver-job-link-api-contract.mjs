@@ -536,6 +536,74 @@ try {
   assertNoUnsafeDriverJobLinkLeak(listed, "listed response");
   assert.doesNotMatch(JSON.stringify(listed.body), /driver_job_url/i);
 
+  client.tables.driver_job_links.push({
+    actor_label: "Dashboard test admin",
+    actor_role: "admin",
+    booking_reference: "May 2026 / JOB-UBS-042",
+    created_at: "2026-06-10T02:00:00.000Z",
+    expires_at: "2026-06-12T02:00:00.000Z",
+    id: "22222222-2222-4222-8222-222222222222",
+    issued_at: "2026-06-10T02:00:00.000Z",
+    link_status: "active",
+    revoked_at: null,
+    safe_link_context: {
+      driver_job_payload: {
+        assigned_driver_name: "Dashboard Driver",
+        assigned_driver_vehicle_model: "Mercedes V-Class",
+        pickup_datetime: "2026-06-13T09:30:00.000+08:00",
+        route: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+      },
+    },
+    source_surface: "admin_dashboard",
+    updated_at: "2026-06-10T02:00:00.000Z",
+  });
+
+  const dashboardListed = await readResponse(
+    await harness.route.GET(
+      new Request(
+        `http://localhost/api/admin-driver-job-links?booking_reference=${encodeURIComponent("May 2026 / JOB-UBS-042")}&limit=1&link_status=active&page=1`,
+        {
+          headers: adminHeaders(),
+        },
+      ),
+    ),
+  );
+
+  assert.equal(dashboardListed.status, 200);
+  assert.equal(dashboardListed.body.ok, true);
+  assert.equal(dashboardListed.body.links.length, 1);
+  assert.equal(dashboardListed.body.links[0].booking_reference, "May 2026 / JOB-UBS-042");
+  assert.equal(dashboardListed.body.links[0].safe_summary.assigned_driver, "Dashboard Driver");
+  assertNoApiLeak(dashboardListed, "dashboard-style read response");
+  assertNoUnsafeDriverJobLinkLeak(dashboardListed, "dashboard-style read response");
+
+  const unsafeReadReference = await readResponse(
+    await harness.route.GET(
+      new Request("http://localhost/api/admin-driver-job-links?booking_reference=..%2Funsafe&limit=1&page=1", {
+        headers: adminHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(unsafeReadReference.status, 400);
+  assert.equal(unsafeReadReference.body.ok, false);
+  assert.equal(unsafeReadReference.body.error, "Malformed driver job link booking reference rejected.");
+  assertNoApiLeak(unsafeReadReference, "unsafe read reference");
+
+  const humanReferenceCreate = await readResponse(
+    await harness.route.POST(
+      requestWithJson(
+        "POST",
+        "http://localhost/api/admin-driver-job-links",
+        safeCreatePayload({ booking_reference: "May 2026 / JOB-UBS-042" }),
+      ),
+    ),
+  );
+
+  assert.equal(humanReferenceCreate.status, 400);
+  assert.equal(humanReferenceCreate.body.ok, false);
+  assertNoApiLeak(humanReferenceCreate, "human-style create reference rejection");
+
   const revoked = await readResponse(
     await harness.route.PATCH(
       requestWithJson("PATCH", "http://localhost/api/admin-driver-job-links", {

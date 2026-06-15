@@ -309,6 +309,23 @@ function validBookingReference(value: unknown) {
     : null;
 }
 
+function validReadBookingReference(value: unknown) {
+  const cleaned = textOrNull(value)?.replace(/\s+/g, " ");
+
+  if (
+    !cleaned ||
+    cleaned.length > maxBookingReferenceLength ||
+    includesForbiddenDriverJobLinkFragment(cleaned) ||
+    /\.\.|\/{2,}|https?:|[\\<>{}\[\]|`$?&]/i.test(cleaned)
+  ) {
+    return null;
+  }
+
+  return /^[A-Za-z0-9][A-Za-z0-9 ._:#/()-]{0,119}$/.test(cleaned)
+    ? cleaned
+    : null;
+}
+
 function validDateText(value: unknown) {
   const cleaned = textOrNull(value);
 
@@ -482,7 +499,7 @@ export function parseAdminDriverJobLinkReadParams(
     bookingReferenceValue === null ||
     bookingReferenceValue === ""
       ? null
-      : validBookingReference(bookingReferenceValue);
+      : validReadBookingReference(bookingReferenceValue);
 
   if (bookingReferenceValue && !bookingReference) {
     return {
@@ -745,7 +762,7 @@ function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecor
 
 function normalizeDriverJobLinkRecord(row: UnknownRecord): AdminDriverJobLinkRecord | null {
   const id = validUuid(row.id);
-  const bookingReference = validBookingReference(row.booking_reference);
+  const bookingReference = validReadBookingReference(row.booking_reference);
   const linkStatus = validLinkStatus(row.link_status);
   const sourceSurface = textOrNull(row.source_surface);
   const actorRole = textOrNull(row.actor_role);

@@ -71,6 +71,16 @@ const companyRatePayload = sliceBetween(
 const travelerRatePayload = sliceBetween(
   appPage,
   "function buildTravelerRateOverridePayload",
+  "function buildLegacyCompanyRateOverrideInsertPayload",
+);
+const legacyCompanyRateOverrideInsertPayload = sliceBetween(
+  appPage,
+  "function buildLegacyCompanyRateOverrideInsertPayload",
+  "function buildLegacyTravelerRateOverrideInsertPayload",
+);
+const legacyTravelerRateOverrideInsertPayload = sliceBetween(
+  appPage,
+  "function buildLegacyTravelerRateOverrideInsertPayload",
   "function statusClass",
 );
 const saveRateOverride = sliceBetween(
@@ -119,14 +129,40 @@ for (const [label, source] of [
 ]) {
   assertIncludes(source, "customer_rates", label);
   assertIncludes(source, "driver_payout_rules", label);
+  assertExcludes(source, "company_name", label);
+  assertExcludes(source, "company_id", label);
+  assertExcludes(source, "traveler_name", label);
 }
 
 assertIncludes(companyCrmPayload, "company_name", "Company CRM identity/contact payload");
 assertIncludes(travelerCrmPayload, "company_id", "Traveler CRM identity/contact payload");
 assertIncludes(travelerCrmPayload, "traveler_name", "Traveler CRM identity/contact payload");
 
-assertIncludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "Parked legacy override save");
-assertIncludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "Parked legacy override save");
+assertIncludes(
+  legacyCompanyRateOverrideInsertPayload,
+  "buildCompanyCrmIdentityContactPayload",
+  "Legacy company rate override insert composition",
+);
+assertIncludes(
+  legacyCompanyRateOverrideInsertPayload,
+  "buildCompanyRateOverridePayload",
+  "Legacy company rate override insert composition",
+);
+assertIncludes(
+  legacyTravelerRateOverrideInsertPayload,
+  "buildTravelerCrmIdentityContactPayload",
+  "Legacy traveler rate override insert composition",
+);
+assertIncludes(
+  legacyTravelerRateOverrideInsertPayload,
+  "buildTravelerRateOverridePayload",
+  "Legacy traveler rate override insert composition",
+);
+
+assertIncludes(saveRateOverride, "buildLegacyCompanyRateOverrideInsertPayload", "Parked legacy override save");
+assertIncludes(saveRateOverride, "buildLegacyTravelerRateOverrideInsertPayload", "Parked legacy override save");
+assertExcludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "Parked legacy override save");
+assertExcludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "Parked legacy override save");
 assertIncludes(saveRateOverride, "buildCompanyRateOverridePayload", "Parked legacy override save");
 assertIncludes(saveRateOverride, "buildTravelerRateOverridePayload", "Parked legacy override save");
 assertIncludes(saveRateOverride, "adminLegacyDataClient", "Parked legacy override save");
@@ -159,6 +195,8 @@ for (const helperName of [
   "buildTravelerCrmIdentityContactPayload",
   "buildCompanyRateOverridePayload",
   "buildTravelerRateOverridePayload",
+  "buildLegacyCompanyRateOverrideInsertPayload",
+  "buildLegacyTravelerRateOverrideInsertPayload",
 ]) {
   assertExcludes(aiParseRoute, helperName, "AI parse route");
 }

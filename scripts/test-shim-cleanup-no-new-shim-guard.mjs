@@ -114,7 +114,12 @@ assertIncludes(
   "Travelers saved-address helper",
 );
 assertIncludes(travelersHelper, 'source: "typed_travelers_crm_identity"', "Travelers helper readiness");
-assertIncludes(appPage, 'const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";', "App page");
+assertIncludes(appPage, 'fetch("/api/admin-bookings"', "App page safe admin booking persistence path");
+assertExcludes(
+  appPage,
+  /fetch\(["']\/api\/admin-travelers-crm-identity/,
+  "App page safe admin booking persistence path",
+);
 assertIncludes(travelersTest, "adminTravelersCrmIdentityApiPath", "Travelers typed API test");
 assertIncludes(
   travelersTest,

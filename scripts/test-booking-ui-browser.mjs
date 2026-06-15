@@ -988,7 +988,6 @@ const dashboardSameTimeAssignedT1234Fixture = {
 const mrLeeSaveTravelerName = "BROWSER UI TEST Mr Lee";
 const mrLeeExpectedPickupDate = "2026-05-20";
 const mrLeeExpectedPickupTime = "0700hrs";
-const mrLeeExpectedStoragePickupTime = "0700";
 const mrLeeExpectedCardDateTime = "20 May 2026, 0700hrs";
 const mrLeeNoCompanySavedBookingFixture = {
   id: "ui-mr-lee-no-company-save-fixture",
@@ -1035,25 +1034,6 @@ const legacyMrLeeCompletedDuplicateFixture = {
   driver_payout_amount: 65,
   created_at: "2026-05-19T02:30:00.000Z",
   updated_at: "2026-05-19T02:30:00.000Z",
-};
-const mrLeeExistingCompanySavedBookingFixture = {
-  ...mrLeeNoCompanySavedBookingFixture,
-  id: "ui-mr-lee-existing-company-save-fixture",
-  company_id: 901,
-  traveler_id: 903,
-  job_card:
-    `AVF DEP\n${mrLeeExpectedCardDateTime}\nFlight: SQ306\n10 Scotts Road > Changi Airport\nCompany: EXISTING CRM COMPANY\nName: ${mrLeeSaveTravelerName}\nPax: 2`,
-  companies: {
-    company_name: "EXISTING CRM COMPANY",
-    domain: "existing-crm.example.com",
-  },
-  travelers: {
-    traveler_name: mrLeeSaveTravelerName,
-  },
-};
-const mrLeeCrmFailureSavedBookingFixture = {
-  ...mrLeeNoCompanySavedBookingFixture,
-  id: "ui-mr-lee-crm-failure-save-fixture",
 };
 const multiBookingPreviewSample = `Hi William.
 
@@ -1244,6 +1224,36 @@ const forbiddenRuntimeText = [
   "Unhandled Runtime Error",
   "formatOverrideSummary is not defined",
 ];
+const forbiddenAdminBookingRequestKeyFragments = [
+  "company_id",
+  "booker_id",
+  "traveler_id",
+  "customer_price",
+  "customer_rate",
+  "customer_rates",
+  "driver_id",
+  "driver_name",
+  "driver_contact",
+  "driver_plate_number",
+  "driver_notes",
+  "driver_dispatch",
+  "driver_payout",
+  "driver_payout_rules",
+  "payout",
+  "payment",
+  "pdf",
+  "billing",
+  "rate_override",
+  "provider",
+  "send",
+  "auth",
+  "photo",
+  "live_location",
+  "internal_note",
+  "admin_note",
+  "debug",
+  "pricing",
+];
 
 function sleep(timeoutMs) {
   return new Promise((resolve) => setTimeout(resolve, timeoutMs));
@@ -1255,6 +1265,38 @@ function normalizeErrorMessage(error) {
 
 function normalizeConsoleMessages(values) {
   return values.map(String).join(" ");
+}
+
+function collectObjectKeys(value, prefix = "") {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => collectObjectKeys(item, `${prefix}[${index}]`));
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  return Object.entries(value).flatMap(([key, nestedValue]) => {
+    const keyPath = prefix ? `${prefix}.${key}` : key;
+
+    return [keyPath, ...collectObjectKeys(nestedValue, keyPath)];
+  });
+}
+
+function assertNoForbiddenAdminBookingRequestFields(payload, label) {
+  const forbiddenKeys = collectObjectKeys(payload).filter((keyPath) => {
+    const normalizedKey = keyPath.toLowerCase();
+
+    return forbiddenAdminBookingRequestKeyFragments.some((fragment) =>
+      normalizedKey.includes(fragment),
+    );
+  });
+
+  assert.deepEqual(
+    forbiddenKeys,
+    [],
+    `${label} included forbidden fields: ${forbiddenKeys.join(", ")}`,
+  );
 }
 
 function pickupDateTimeOffset(offsetMinutes) {
@@ -10320,27 +10362,26 @@ async function runChromeTest() {
           }
         }
 
-        if (url.includes("/api/admin-saved-bookings")) {
-          if (method === "POST") {
-            const parsed = bodyText ? JSON.parse(bodyText) : {};
-            const nextId = 990510;
-            window.__prestigeDriverDeleteSavedBooking = {
-              ...(window.__prestigeDriverDeleteAssignedBooking || {}),
-              ...parsed,
-              id: nextId,
-              companies: null,
-              bookers: window.__prestigeDriverDeleteAssignedBooking?.bookers || null,
-              travelers: window.__prestigeDriverDeleteAssignedBooking?.travelers || null,
-            };
+        if (url.includes("/api/admin-bookings")) {
+          const parsed = bodyText ? JSON.parse(bodyText) : {};
 
+          if (method === "POST") {
             return jsonResponse({
               booking: {
-                id: nextId,
-                status: parsed.status,
+                ...parsed?.booking,
+                booking_reference: parsed?.booking?.booking_reference || "ADM-DRIVER-DELETE-SAFE",
+                route_points: parsed?.route_points || [],
+                service_items: parsed?.service_items || [],
               },
               ok: true,
-              version: "browser-admin-saved-booking-create-mock",
-            }, 201);
+              version: "browser-admin-bookings-safe-create-mock",
+            });
+          }
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          if (method === "POST") {
+            return jsonResponse({ ok: false, error: "Legacy saved booking POST should not be used." }, 500);
           }
 
           const savedBookingReadUrl = new URL(url, window.location.href);
@@ -12875,7 +12916,7 @@ async function runChromeTest() {
       async () => {
         const candidateState = await evaluate(`(() => {
           const bookingInsert = (window.__prestigeDriverProfileRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
           );
           const bookingDeleteOrPatchRequests = (window.__prestigeDriverProfileRequestBodies || []).filter(
             (entry) =>
@@ -12893,8 +12934,7 @@ async function runChromeTest() {
         })()`);
 
         const saveCompleted =
-          candidateState?.statusText?.includes("Booking saved successfully: 990510") ||
-          candidateState?.statusText?.includes("Booking saved, but CRM update failed:");
+          candidateState?.statusText?.includes("Operational booking saved:");
 
         return saveCompleted && candidateState?.bookingInsert ? candidateState : false;
       },
@@ -12909,8 +12949,8 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       saveAfterDriverDeleteState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [{ id: "990510", method: "GET" }],
-      "Expected booking save after driver delete to use the typed admin saved booking read API",
+      [],
+      "Expected safe booking save after driver delete not to reload through the legacy saved booking API",
     );
     assert.deepEqual(
       saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
@@ -12922,19 +12962,17 @@ async function runChromeTest() {
       [],
       "Expected booking save after driver delete not to create bookings through the legacy admin data shim",
     );
-    assert.equal(
-      saveAfterDriverDeleteState.bookingInsert?.driver_id,
-      null,
-      "Expected booking save after driver profile delete not to send deleted driver id",
+    assert.deepEqual(
+      saveAfterDriverDeleteState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
+      [],
+      "Expected booking save after driver delete not to POST to the legacy saved booking API",
     );
-    assert.equal(saveAfterDriverDeleteState.bookingInsert?.driver_name, "Alson Toh");
-    assert.equal(saveAfterDriverDeleteState.bookingInsert?.driver_contact, "+65 9000 0000");
-    assert.equal(saveAfterDriverDeleteState.bookingInsert?.driver_plate_number, "PD 0000");
-    assert.equal(
-      saveAfterDriverDeleteState.bookingInsert?.driver_payout_amount,
-      88,
-      "Expected saved driver payout snapshot to remain after profile delete",
+    assertNoForbiddenAdminBookingRequestFields(
+      saveAfterDriverDeleteState.bookingInsert,
+      "safe booking save after driver delete request",
     );
+    assert.equal(saveAfterDriverDeleteState.bookingInsert?.booking?.pax_count, 4);
+    assert.equal(saveAfterDriverDeleteState.bookingInsert?.booking?.source_channel, "admin-dashboard");
     assert.equal(
       saveAfterDriverDeleteState.bookingDeleteOrPatchCount,
       0,
@@ -18071,7 +18109,7 @@ async function runChromeTest() {
           });
         }
 
-        if (url.includes("/api/admin-saved-bookings")) {
+        if (url.includes("/api/admin-bookings")) {
           let parsedBody = null;
 
           try {
@@ -18081,12 +18119,20 @@ async function runChromeTest() {
           if (method === "POST") {
             return jsonResponse({
               booking: {
-                id: savedBooking.id,
-                status: parsedBody?.status || "confirmed",
+                ...parsedBody?.booking,
+                booking_reference: parsedBody?.booking?.booking_reference || "ADM-BROWSER-CRM-SAFE",
+                route_points: parsedBody?.route_points || [],
+                service_items: parsedBody?.service_items || [],
               },
               ok: true,
-              version: "browser-admin-saved-booking-create-mock",
-            }, 201);
+              version: "browser-admin-bookings-safe-create-mock",
+            });
+          }
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          if (method === "POST") {
+            return jsonResponse({ ok: false, error: "Legacy saved booking POST should not be used." }, 500);
           }
 
           const savedBookingReadUrl = new URL(url, window.location.href);
@@ -18230,12 +18276,10 @@ async function runChromeTest() {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
           const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
           );
 
-          return bodyText.includes("Booking saved successfully: ${crmSavedBookingFixture.id}") &&
-            bodyText.includes("Customer/account: BROWSER UI TEST COMPANY.") &&
-            bookingInsert
+          return bodyText.includes("Operational booking saved:") && bookingInsert
             ? {
                 bodyText,
                 calendarDownloads: window.__prestigeCrmSaveCalendarDownloads || [],
@@ -18264,8 +18308,8 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       crmSaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [{ id: String(crmSavedBookingFixture.id), method: "GET" }],
-      "Expected post-save reload to use the typed admin saved booking read API",
+      [],
+      "Expected safe Save Booking + CRM not to reload through the legacy saved booking API",
     );
     assert.deepEqual(
       crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
@@ -18276,6 +18320,23 @@ async function runChromeTest() {
       crmSaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
       [],
       "Expected booking save not to create bookings through the legacy admin data shim",
+    );
+    assert.deepEqual(
+      crmSaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
+      [],
+      "Expected Save Booking + CRM not to POST to the legacy admin saved booking API",
+    );
+    assert.deepEqual(
+      crmSaveState.fetchCalls.filter(
+        (call) =>
+          call.startsWith("POST ") &&
+          (call.includes("/rest/v1/companies") ||
+            call.includes("/api/admin-bookers") ||
+            call.includes("/rest/v1/travelers") ||
+            call.includes("/api/admin-saved-addresses")),
+      ),
+      [],
+      "Expected safe Save Booking + CRM not to perform legacy CRM writes",
     );
     assert.deepEqual(
       crmSaveState.calendarRequests,
@@ -18293,21 +18354,31 @@ async function runChromeTest() {
       "Expected Save Booking + CRM not to download a calendar file",
     );
     assert.deepEqual(crmSaveState.calendarBlobTypes, []);
-    assert.equal(crmSaveState.bookingInsert?.company_id, crmSavedBookingFixture.company_id);
-    assert.equal(crmSaveState.bookingInsert?.booker_id, crmSavedBookingFixture.booker_id);
-    assert.equal(crmSaveState.bookingInsert?.traveler_id, crmSavedBookingFixture.traveler_id);
-    assert.equal(crmSaveState.bookingInsert?.booking_type, "MNG");
-    assert.equal(crmSaveState.bookingInsert?.vehicle, "AVF");
-    assert.equal(crmSaveState.bookingInsert?.pickup_address, "Changi Airport T3");
-    assert.equal(crmSaveState.bookingInsert?.dropoff_address, "Raffles Hotel Singapore");
-    assert.equal(crmSaveState.bookingInsert?.flight_no, "SQ333");
-    assert.equal(crmSaveState.bookingInsert?.pax, 2);
-    assert.equal(crmSaveState.bookingInsert?.extra_stop_count, 1);
-    assert.equal(crmSaveState.bookingInsert?.child_seat_required, true);
-    assert.equal(crmSaveState.bookingInsert?.child_seat_count, 2);
-    assert.equal(crmSaveState.bookingInsert?.child_seat_type, "booster seat");
-    assert.equal(crmSaveState.bookingInsert?.customer_rate_override, 160);
-    assert.equal(crmSaveState.bookingInsert?.driver_name, "TEST DRIVER CRM 20260516");
+    assertNoForbiddenAdminBookingRequestFields(crmSaveState.bookingInsert, "safe Save Booking + CRM request");
+    assert.equal(crmSaveState.bookingInsert?.booking?.source_channel, "admin-dashboard");
+    assert.equal(crmSaveState.bookingInsert?.booking?.route_type, "MNG");
+    assert.equal(crmSaveState.bookingInsert?.booking?.vehicle_type_or_category, "AVF");
+    assert.equal(crmSaveState.bookingInsert?.booking?.pickup_location, "Changi Airport T3");
+    assert.equal(crmSaveState.bookingInsert?.booking?.dropoff_location, "Raffles Hotel Singapore");
+    assert.equal(crmSaveState.bookingInsert?.booking?.pax_count, 2);
+    assert.equal(crmSaveState.bookingInsert?.booking?.contact_phone, "+65 9000 0333");
+    assert.equal(crmSaveState.bookingInsert?.booking?.contact_email, "browserui@example.com");
+    assert.ok(
+      crmSaveState.bookingInsert?.route_points?.some(
+        (routePoint) =>
+          routePoint.point_type === "stop" &&
+          routePoint.location_text === "Marina Bay Sands",
+      ),
+      "Expected safe Save Booking + CRM request to keep operational extra-stop route point",
+    );
+    assert.ok(
+      crmSaveState.bookingInsert?.service_items?.some(
+        (serviceItem) =>
+          serviceItem.service_item_type === "child_seat" &&
+          serviceItem.quantity === 2,
+      ),
+      "Expected safe Save Booking + CRM request to keep operational child-seat service item",
+    );
 
     const clickedCreateCalendarEvent = await evaluate(`(() => {
       const calendarButton = [...document.querySelectorAll("button")].find(
@@ -18452,134 +18523,32 @@ async function runChromeTest() {
     assert.deepEqual(crmCalendarState.calendarBlobTypes, ["text/calendar;charset=utf-8"]);
 
     await clickTab("Bookings", "Recent Bookings");
-
-    await waitForCondition(
+    const safeSaveRecentBookingState = await waitForCondition(
       () =>
         evaluate(`(() => {
           const bodyText = document.body.innerText;
-          const recentBookingButton = [...document.querySelectorAll("article")].some(
+          const hasLegacyCrmRecentBooking = [...document.querySelectorAll("article")].some(
             (article) =>
               article.innerText.includes("BROWSER UI TEST COMPANY") &&
               article.innerText.includes("SQ333") &&
               [...article.querySelectorAll("button")].some((button) => button.textContent.trim() === "Load this booking"),
           );
 
-          return bodyText.includes("Recent Bookings") && recentBookingButton;
+          return bodyText.includes("Recent Bookings")
+            ? { hasLegacyCrmRecentBooking }
+            : false;
         })()`),
       10000,
-      "saved CRM booking in Recent Bookings",
+      "safe Save Booking + CRM Recent Bookings boundary",
     );
-
-    const clickedSavedCrmRecentLoad = await evaluate(`(() => {
-      const article = [...document.querySelectorAll("article")].find(
-        (candidate) =>
-          candidate.innerText.includes("BROWSER UI TEST COMPANY") &&
-          candidate.innerText.includes("SQ333"),
-      );
-      const button = [...(article?.querySelectorAll("button") || [])].find(
-        (candidate) => candidate.textContent.trim() === "Load this booking",
-      );
-
-      if (!button || button.disabled) {
-        return false;
-      }
-
-      button.click();
-      return true;
-    })()`);
-    assert.equal(clickedSavedCrmRecentLoad, true, "Expected saved CRM Recent Booking to load");
-
-    const crmReloadState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(`(() => {
-          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
-          const labels = [...document.querySelectorAll("label")];
-          const fieldValue = (labelText) => {
-            const label = labels.find((candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText);
-            const control = label?.querySelector("input, select, textarea");
-
-            if (!control) {
-              return "";
-            }
-
-            if (control.tagName === "SELECT") {
-              return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-            }
-
-            return control.value || "";
-          };
-          const pres = [...document.querySelectorAll("pre")].map((pre) => pre.innerText);
-
-          return {
-            bodyText: document.body.innerText,
-            fields: {
-              company: fieldValue("Company / Account"),
-              bookingType: fieldValue("Booking type"),
-              vehicle: fieldValue("Vehicle"),
-              pickupDate: fieldValue("Pickup date"),
-              pickupTime: fieldValue("Pickup time"),
-              flight: fieldValue("Flight number"),
-              pickup: fieldValue("Pickup"),
-              extraStopLocation: fieldValue("Extra stop location"),
-              extraStopCount: fieldValue("Extra Stops"),
-              manualExtraCharges: fieldValue("Extra Charges"),
-              manualExtraChargesNote: fieldValue("Extra Charges note / reason"),
-              dropoff: fieldValue("Drop-off"),
-              booker: fieldValue("Booker"),
-              bookerContact: fieldValue("Booker WhatsApp / Contact"),
-              bookerEmail: fieldValue("Booker email (optional)"),
-              name: fieldValue("Passenger name") || fieldValue("Name"),
-              pax: fieldValue("Pax"),
-              childSeatRequired: fieldValue("Child seat required"),
-              childSeatCount: fieldValue("Child seat count"),
-              childSeatType: fieldValue("Child seat type / note"),
-              customerPriceOverride: fieldValue("Customer Price Override"),
-              driverName: fieldValue("Driver Name"),
-            },
-            jobCardPreview: pres.find((text) => text.includes("Flight: SQ333")) || "",
-            driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
-          };
-        })()`);
-
-        return candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
-          candidateState?.fields?.flight === "SQ333"
-          ? candidateState
-          : false;
-      },
-      10000,
-      "reloaded CRM saved booking form state",
+    assert.equal(
+      safeSaveRecentBookingState.hasLegacyCrmRecentBooking,
+      false,
+      "Expected safe Save Booking + CRM not to create a legacy Recent Bookings row",
     );
-
-    assert.equal(crmReloadState.fields.company, "BROWSER UI TEST COMPANY");
-    assert.equal(crmReloadState.fields.booker, "BROWSER UI TEST BOOKER");
-    assert.equal(crmReloadState.fields.bookerContact, "+65 9000 0333");
-    assert.equal(crmReloadState.fields.bookerEmail, "browserui@example.com");
-    assert.equal(crmReloadState.fields.name, "BROWSER UI TEST TRAVELER");
-    assert.equal(crmReloadState.fields.pax, "2");
-    assert.equal(crmReloadState.fields.vehicle, "AVF");
-    assert.equal(crmReloadState.fields.bookingType, "MNG");
-    assert.equal(crmReloadState.fields.pickupDate, "2026-05-27");
-    assert.equal(crmReloadState.fields.pickupTime, "1530hrs");
-    assert.equal(crmReloadState.fields.flight, "SQ333");
-    assert.equal(crmReloadState.fields.pickup, "Changi Airport T3");
-    assert.equal(crmReloadState.fields.extraStopLocation, "Marina Bay Sands");
-    assert.equal(crmReloadState.fields.extraStopCount, "1");
-    assert.equal(crmReloadState.fields.manualExtraCharges, "");
-    assert.equal(crmReloadState.fields.manualExtraChargesNote, "");
-    assert.equal(crmReloadState.fields.dropoff, "Raffles Hotel Singapore");
-    assert.match(crmReloadState.fields.childSeatRequired, /Yes/i);
-    assert.equal(crmReloadState.fields.childSeatCount, "2");
-    assert.equal(crmReloadState.fields.childSeatType, "booster seat");
-    assert.equal(crmReloadState.fields.customerPriceOverride, "160");
-    assert.equal(crmReloadState.fields.driverName, "TEST DRIVER CRM 20260516");
-    assert.match(crmReloadState.jobCardPreview, /Marina Bay Sands/);
-    assert.match(crmReloadState.jobCardPreview, /Child seat: 2 x booster seat/);
-    assert.match(crmReloadState.driverDispatch, /TEST DRIVER CRM 20260516/);
-    assert.match(crmReloadState.driverDispatch, /BROWSER UI TEST TRAVELER/);
-    assert.doesNotMatch(crmReloadState.bodyText, /Company:\s*gmail\.com/i);
-    assert.doesNotMatch(crmReloadState.bodyText, /Company:\s*prestigelimo\.sg/i);
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
+    await clickTab("Dispatch", "Dispatcher Intake");
 
     const focusedMultiBookingTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
@@ -19143,7 +19112,7 @@ async function runChromeTest() {
           }
         }
 
-        if (url.includes("/api/admin-saved-bookings")) {
+        if (url.includes("/api/admin-bookings")) {
           let parsedBody = null;
 
           try {
@@ -19153,12 +19122,20 @@ async function runChromeTest() {
           if (method === "POST") {
             return jsonResponse({
               booking: {
-                id: savedBooking.id,
-                status: parsedBody?.status || "confirmed",
+                ...parsedBody?.booking,
+                booking_reference: parsedBody?.booking?.booking_reference || "ADM-MR-LEE-SAFE",
+                route_points: parsedBody?.route_points || [],
+                service_items: parsedBody?.service_items || [],
               },
               ok: true,
-              version: "browser-admin-saved-booking-create-mock",
-            }, 201);
+              version: "browser-admin-bookings-safe-create-mock",
+            });
+          }
+        }
+
+        if (url.includes("/api/admin-saved-bookings")) {
+          if (method === "POST") {
+            return jsonResponse({ ok: false, error: "Legacy saved booking POST should not be used." }, 500);
           }
 
           const savedBookingReadUrl = new URL(url, window.location.href);
@@ -19244,17 +19221,17 @@ async function runChromeTest() {
     assert.equal(clickedMrLeeNoCompanySave, true, "Expected Mr Lee no-company save button to be clickable");
 
     const mrLeeNoCompanySaveState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(`(() => {
-          const bodyText = document.body.innerText;
-          const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
-          );
+	      async () => {
+	        const candidateState = await evaluate(`(() => {
+	          const bodyText = document.body.innerText;
+	          const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
+	            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+	          );
 
-          return bodyText.includes("Booking saved successfully: ${mrLeeNoCompanySavedBookingFixture.id}")
-            ? {
-                bodyText,
-                fetchCalls: window.__prestigeFetchCalls || [],
+	          return bodyText.includes("Operational booking saved:")
+	            ? {
+	                bodyText,
+	                fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeMrLeeSaveRequestBodies || [],
                 savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -19274,11 +19251,11 @@ async function runChromeTest() {
       [],
       `Expected Mr Lee no-company save to mock every Supabase call, got ${mrLeeNoCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
     );
-    assert.deepEqual(
-      mrLeeNoCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [{ id: String(mrLeeNoCompanySavedBookingFixture.id), method: "GET" }],
-      "Expected Mr Lee no-company post-save reload to use the typed admin saved booking read API",
-    );
+	    assert.deepEqual(
+	      mrLeeNoCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
+	      [],
+	      "Expected Mr Lee no-company safe save not to reload through the legacy saved booking API",
+	    );
     assert.deepEqual(
       mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
@@ -19289,25 +19266,24 @@ async function runChromeTest() {
       [],
       "Expected Mr Lee no-company save not to create bookings through the legacy admin data shim",
     );
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.company_id, null);
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booker_id, null);
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.traveler_id, null);
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking_type, "DEP");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.vehicle, "AVF");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pickup_time, mrLeeExpectedStoragePickupTime);
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pickup_address, "10 Scotts Road");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.dropoff_address, "Changi Airport");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.flight_no, "SQ306");
-    assert.ok(
-      (mrLeeNoCompanySaveState.bookingInsert?.job_card || "").includes(mrLeeExpectedCardDateTime),
-      "Expected saved Mr Lee browser fixture job card to preserve exact pickup date/time",
-    );
-    assert.match(
-      mrLeeNoCompanySaveState.bookingInsert?.job_card || "",
-      /BROWSER UI TEST Mr Lee/,
-      "Expected saved browser fixture job card to be visibly test-only",
-    );
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.pax, 2);
+	    assert.deepEqual(
+	      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
+	      [],
+	      "Expected Mr Lee no-company save not to POST to the legacy admin saved booking API",
+	    );
+	    assertNoForbiddenAdminBookingRequestFields(
+	      mrLeeNoCompanySaveState.bookingInsert,
+	      "safe Mr Lee no-company Save Booking + CRM request",
+	    );
+	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.route_type, "DEP");
+	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.vehicle_type_or_category, "AVF");
+	    assert.ok(
+	      String(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_datetime || "").includes("2026-05-20"),
+	      "Expected safe Mr Lee browser fixture to preserve pickup date in the operational payload",
+	    );
+	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_location, "10 Scotts Road");
+	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.dropoff_location, "Changi Airport");
+	    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pax_count, 2);
     assert.equal(
       mrLeeNoCompanySaveState.fetchCalls.some(
         (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),
@@ -19328,697 +19304,10 @@ async function runChromeTest() {
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved, but CRM update failed/i);
     assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Company:\s*(?:Mr Lee|Internal Account|Draft)/i);
 
-    await clickTab("Bookings", "Recent Bookings");
-    const mrLeeNoCompanyRecentCardState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const article = [...document.querySelectorAll("article")].find(
-            (candidate) =>
-              candidate.innerText.includes("SQ306") &&
-              candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}) &&
-              [...candidate.querySelectorAll("button")].some(
-                (button) =>
-                  button.textContent.trim() === "Load this booking" &&
-                  !button.matches("[data-dashboard-load-booking='true']"),
-              ),
-          );
-
-          return article
-            ? {
-                articleText: article.innerText,
-                hasLoadButton: [...article.querySelectorAll("button")].some(
-                  (button) =>
-                    button.textContent.trim() === "Load this booking" &&
-                    !button.matches("[data-dashboard-load-booking='true']"),
-                ),
-              }
-            : false;
-        })()`),
-      10000,
-      "Mr Lee no-company saved booking in Recent Bookings",
-    );
-    assert.equal(mrLeeNoCompanyRecentCardState.hasLoadButton, true);
-    assert.match(mrLeeNoCompanyRecentCardState.articleText, /BROWSER UI TEST Mr Lee/);
-    assert.ok(
-      mrLeeNoCompanyRecentCardState.articleText.includes(mrLeeExpectedCardDateTime),
-      "Expected Bookings card to show exact Mr Lee test pickup date/time",
-    );
-
-    await clickTab("Dashboard", "Operations Dashboard");
-    const mrLeeNoCompanyDashboardCardState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const article = [...document.querySelectorAll("article")].find(
-            (candidate) =>
-              candidate.innerText.includes("SQ306") &&
-              candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}),
-          );
-
-          return article
-            ? {
-                articleText: article.innerText,
-                hasDashboardLoadButton: Boolean(article.querySelector("[data-dashboard-load-booking='true']")),
-              }
-            : false;
-        })()`),
-      10000,
-      "Mr Lee no-company saved booking on Dashboard",
-    );
-    assert.equal(mrLeeNoCompanyDashboardCardState.hasDashboardLoadButton, true);
-    assert.match(mrLeeNoCompanyDashboardCardState.articleText, /BROWSER UI TEST Mr Lee/);
-    assert.ok(
-      mrLeeNoCompanyDashboardCardState.articleText.includes(mrLeeExpectedCardDateTime),
-      "Expected Dashboard card to show exact Mr Lee test pickup date/time",
-    );
-
-    await evaluate(`window.__prestigeCopiedTexts = []`);
-    const clickedLegacyMrLeeDashboardCopy = await evaluate(`(() => {
-      const article = [...document.querySelectorAll("article")].find(
-        (candidate) =>
-          candidate.innerText.includes("SQ306") &&
-          candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}),
-      );
-      const copyButton = article?.querySelector("[data-dashboard-copy-job-card='${mrLeeNoCompanySavedBookingFixture.id}']");
-
-      if (!copyButton || copyButton.disabled) {
-        return false;
-      }
-
-      copyButton.click();
-      return true;
-    })()`);
-    assert.equal(
-      clickedLegacyMrLeeDashboardCopy,
-      true,
-      "Expected legacy Mr Lee Dashboard Copy WhatsApp Job Card button to be clickable",
-    );
-
-    const legacyMrLeeDashboardCopyState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const copiedText = (window.__prestigeCopiedTexts || []).slice(-1)[0] || "";
-          const feedback = document.querySelector("[data-dashboard-copy-feedback='${mrLeeNoCompanySavedBookingFixture.id}:jobCard']");
-
-          return feedback?.textContent.trim() === "Booking job card copied."
-            ? {
-                copiedText,
-                feedbackText: feedback.textContent.trim(),
-              }
-            : false;
-        })()`),
-      10000,
-      "legacy Mr Lee Dashboard job card copy",
-    );
-    assert.match(legacyMrLeeDashboardCopyState.copiedText, /BROWSER UI TEST Mr Lee/);
-    assert.doesNotMatch(
-      legacyMrLeeDashboardCopyState.copiedText,
-      /^Name:\s*Mr Lee\s*$/im,
-      "Expected copied legacy Mr Lee job card not to expose plain unmarked Mr Lee",
-    );
-    assert.ok(
-      legacyMrLeeDashboardCopyState.copiedText.includes(mrLeeExpectedCardDateTime),
-      "Expected copied legacy Mr Lee job card to preserve exact pickup date/time",
-    );
-
-    await clickTab("Bookings", "Recent Bookings");
-
-    const clickedMrLeeNoCompanyRecentLoad = await evaluate(`(() => {
-      const article = [...document.querySelectorAll("article")].find(
-        (candidate) =>
-          candidate.innerText.includes("SQ306") &&
-          candidate.innerText.includes(${JSON.stringify(mrLeeSaveTravelerName)}) &&
-          [...candidate.querySelectorAll("button")].some(
-            (button) =>
-              button.textContent.trim() === "Load this booking" &&
-              !button.matches("[data-dashboard-load-booking='true']"),
-          ),
-      );
-      const loadButton = [...(article?.querySelectorAll("button") || [])].find(
-        (button) =>
-          button.textContent.trim() === "Load this booking" &&
-          !button.matches("[data-dashboard-load-booking='true']"),
-      );
-
-      if (!loadButton || loadButton.disabled) {
-        return false;
-      }
-
-      loadButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedMrLeeNoCompanyRecentLoad, true, "Expected Mr Lee saved booking to reload from Recent Bookings");
-
-    const mrLeeNoCompanyReloadState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(extractStateScript);
-
-        return candidateState?.fields?.flight === "SQ306" &&
-          candidateState?.fields?.pickup === "10 Scotts Road" &&
-          candidateState?.fields?.dropoff === "Changi Airport"
-          ? candidateState
-          : false;
-      },
-      10000,
-      "Mr Lee no-company saved booking reload",
-    );
-
-    assert.equal(mrLeeNoCompanyReloadState.fields.company, "");
-    assert.equal(mrLeeNoCompanyReloadState.fields.bookingType, "DEP");
-    assert.equal(mrLeeNoCompanyReloadState.fields.vehicle, "AVF");
-    assert.equal(mrLeeNoCompanyReloadState.fields.pickupDate, mrLeeExpectedPickupDate);
-    assert.equal(mrLeeNoCompanyReloadState.fields.pickupTime, mrLeeExpectedPickupTime);
-    assert.equal(mrLeeNoCompanyReloadState.fields.flight, "SQ306");
-    assert.equal(mrLeeNoCompanyReloadState.fields.pickup, "10 Scotts Road");
-    assert.equal(mrLeeNoCompanyReloadState.fields.dropoff, "Changi Airport");
-    assert.equal(mrLeeNoCompanyReloadState.fields.name, mrLeeSaveTravelerName);
-    assert.equal(mrLeeNoCompanyReloadState.fields.pax, "2");
-    assert.ok(
-      mrLeeNoCompanyReloadState.jobCardPreview.includes(mrLeeExpectedCardDateTime),
-      "Expected loaded Mr Lee test booking preview to preserve exact pickup date/time",
-    );
-
-    const setExistingCompanyOnMrLee = await evaluate(`(() => {
-      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
-      const label = [...document.querySelectorAll("label")].find(
-        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Company / Account",
-      );
-      const input = label?.querySelector("input");
-
-      if (!input) {
-        return false;
-      }
-
-      const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
-      descriptor?.set?.call(input, "EXISTING CRM COMPANY");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    })()`);
-    assert.equal(setExistingCompanyOnMrLee, true, "Expected Company / Account to be editable for existing company save");
-
-    await evaluate(`(() => {
-      const savedBooking = ${JSON.stringify(mrLeeExistingCompanySavedBookingFixture)};
-      const companyRecord = {
-        id: savedBooking.company_id,
-        company_name: savedBooking.companies.company_name,
-        domain: savedBooking.companies.domain,
-        customer_rates: {},
-        driver_payout_rules: {},
-        transzend_excel_privacy: false,
-      };
-      const travelerRecord = {
-        id: savedBooking.traveler_id,
-        company_id: savedBooking.company_id,
-        traveler_name: savedBooking.travelers.traveler_name,
-        preferred_vehicle: savedBooking.vehicle,
-        default_address: savedBooking.pickup_address,
-        default_pickup_address: savedBooking.pickup_address,
-        default_dropoff_address: "",
-        booker_id: null,
-        booker_name: null,
-        booker_contact: null,
-        booker_email: null,
-        customer_rates: {},
-        driver_payout_rules: {},
-      };
-      const savedAddressRecord = {
-        id: 904,
-        company_id: savedBooking.company_id,
-        traveler_id: savedBooking.traveler_id,
-        label: "Default",
-        address: savedBooking.pickup_address,
-        address_role: "traveler_default",
-        is_default: true,
-        use_count: 1,
-      };
-      const jsonResponse = (body, status = 200) =>
-        new Response(JSON.stringify(body), {
-          status,
-          headers: { "content-type": "application/json" },
-        });
-
-      window.__prestigeFetchCalls = [];
-      window.__prestigeExistingCompanySaveRequestBodies = [];
-      window.__prestigeAdminSavedBookingReadRequests = [];
-      window.__prestigeUnhandledSupabaseCalls = [];
-      window.__prestigeExistingCompanyLookupCount = 0;
-      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
-      window.fetch = async (...args) => {
-        const target = args[0]?.url || args[0];
-        const url = String(target);
-        const method = args[1]?.method || args[0]?.method || "GET";
-        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
-
-        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
-        if (bodyText) {
-          try {
-            window.__prestigeExistingCompanySaveRequestBodies.push({
-              method,
-              url,
-              body: JSON.parse(bodyText),
-            });
-          } catch {
-            window.__prestigeExistingCompanySaveRequestBodies.push({ method, url, body: bodyText });
-          }
-        }
-
-        if (url.includes("/api/admin-saved-bookings")) {
-          let parsedBody = null;
-
-          try {
-            parsedBody = bodyText ? JSON.parse(bodyText) : null;
-          } catch {}
-
-          if (method === "POST") {
-            return jsonResponse({
-              booking: {
-                id: savedBooking.id,
-                status: parsedBody?.status || "confirmed",
-              },
-              ok: true,
-              version: "browser-admin-saved-booking-create-mock",
-            }, 201);
-          }
-
-          const savedBookingReadUrl = new URL(url, window.location.href);
-          const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
-
-          window.__prestigeAdminSavedBookingReadRequests.push({
-            id: savedBookingReadId,
-            method,
-            url,
-          });
-
-          if (method === "GET" && savedBookingReadId === String(savedBooking.id)) {
-            return jsonResponse({
-              booking: savedBooking,
-              ok: true,
-              version: "browser-admin-saved-booking-read-mock",
-            });
-          }
-
-          return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
-        }
-
-        if (url.includes("/api/admin-bookers")) {
-          if (method === "GET") {
-            return jsonResponse({ booker: null, ok: true, version: "browser-admin-bookers-mock" });
-          }
-
-          if (method === "POST" || method === "PATCH") {
-            const parsedBody = bodyText ? JSON.parse(bodyText) : {};
-
-            return jsonResponse({
-              booker: {
-                id: 923,
-                company_id: parsedBody.company_id || companyRecord.id,
-                booker_name: parsedBody.booker_name || "Existing Company Booker",
-                email: parsedBody.email || null,
-                phone: parsedBody.phone || null,
-              },
-              ok: true,
-              version: "browser-admin-bookers-mock",
-            });
-          }
-
-          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-          return jsonResponse({ message: "Unhandled booker mock" }, 500);
-        }
-
-        if (url.includes("/api/admin-travelers-crm-identity")) {
-          if (method === "GET") {
-            return jsonResponse({
-              ok: true,
-              readiness: {
-                external_send: false,
-                readOnly: true,
-                setupSafe: true,
-                source: "typed_travelers_crm_identity",
-                writeEnabled: false,
-              },
-              traveler: null,
-              version: "browser-admin-travelers-crm-identity-mock",
-            });
-          }
-
-          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-          return jsonResponse({ message: "Unhandled traveler identity mock" }, 500);
-        }
-
-        if (url.includes("/api/admin-saved-addresses")) {
-          if (method === "GET") {
-            return jsonResponse({ ok: true, saved_address: null });
-          }
-
-          if (method === "POST") {
-            return jsonResponse({ ok: true, saved_address: savedAddressRecord }, 201);
-          }
-
-          if (method === "PATCH") {
-            return jsonResponse({ ok: true, saved_address: savedAddressRecord });
-          }
-        }
-
-        if (!url.includes("/rest/v1/")) {
-          return window.__prestigeOriginalFetch(...args);
-        }
-
-        if (url.includes("/rest/v1/companies")) {
-          if (method === "GET") {
-            window.__prestigeExistingCompanyLookupCount += 1;
-            return jsonResponse(window.__prestigeExistingCompanyLookupCount === 1 ? [] : companyRecord);
-          }
-
-          if (method === "POST") {
-            return jsonResponse(
-              {
-                code: "23505",
-                message: 'duplicate key value violates unique constraint "companies_company_name_key"',
-              },
-              409,
-            );
-          }
-        }
-
-        if (url.includes("/rest/v1/travelers")) {
-          if (method === "GET") {
-            return jsonResponse([]);
-          }
-
-          if (method === "POST") {
-            return jsonResponse(travelerRecord, 201);
-          }
-
-          if (method === "PATCH") {
-            return jsonResponse({});
-          }
-        }
-
-        if (url.includes("/rest/v1/bookings")) {
-          if (method === "GET") {
-            return jsonResponse([savedBooking]);
-          }
-        }
-
-        window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-        return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
-      };
-    })()`);
-
-    const clickedMrLeeExistingCompanySave = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + CRM",
-      );
-
-      if (!saveButton || saveButton.disabled) {
-        return false;
-      }
-
-      saveButton.click();
-      return true;
-    })()`);
-    assert.equal(
-      clickedMrLeeExistingCompanySave,
-      true,
-      "Expected Mr Lee existing-company save button to be clickable",
-    );
-
-    const mrLeeExistingCompanySaveState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(`(() => {
-          const bodyText = document.body.innerText;
-          const bookingInsert = (window.__prestigeExistingCompanySaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
-          );
-
-          return bodyText.includes("Booking saved successfully: ${mrLeeExistingCompanySavedBookingFixture.id}")
-            ? {
-                bodyText,
-                fetchCalls: window.__prestigeFetchCalls || [],
-                requestBodies: window.__prestigeExistingCompanySaveRequestBodies || [],
-                savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
-                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
-                bookingInsert: bookingInsert?.body || null,
-              }
-            : false;
-        })()`);
-
-        return candidateState || false;
-      },
-      10000,
-      "Mr Lee existing-company duplicate recovery save",
-    );
-
-    assert.deepEqual(
-      mrLeeExistingCompanySaveState.unhandledSupabaseCalls,
-      [],
-      `Expected Mr Lee existing-company save to mock every Supabase call, got ${mrLeeExistingCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
-    );
-    assert.deepEqual(
-      mrLeeExistingCompanySaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [{ id: String(mrLeeExistingCompanySavedBookingFixture.id), method: "GET" }],
-      "Expected Mr Lee existing-company post-save reload to use the typed admin saved booking read API",
-    );
-    assert.deepEqual(
-      mrLeeExistingCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
-      [],
-      "Expected Mr Lee existing-company post-save reload not to read bookings through the legacy admin data shim",
-    );
-    assert.deepEqual(
-      mrLeeExistingCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
-      [],
-      "Expected Mr Lee existing-company save not to create bookings through the legacy admin data shim",
-    );
-    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.company_id, 901);
-    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.traveler_id, 903);
-    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.booking_type, "DEP");
-    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.pickup_address, "10 Scotts Road");
-    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.dropoff_address, "Changi Airport");
-    assert.equal(mrLeeExistingCompanySaveState.bookingInsert?.flight_no, "SQ306");
-    assert.match(
-      mrLeeExistingCompanySaveState.bookingInsert?.job_card || "",
-      /BROWSER UI TEST Mr Lee/,
-      "Expected existing-company save fixture job card to remain visibly test-only",
-    );
-    assert.equal(
-      mrLeeExistingCompanySaveState.fetchCalls.some(
-        (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),
-      ),
-      true,
-      "Expected duplicate company insert race to be exercised",
-    );
-    assert.doesNotMatch(mrLeeExistingCompanySaveState.bodyText, /CRM update failed/i);
-
-    const setCrmFailureCompanyOnMrLee = await evaluate(`(() => {
-      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
-      const label = [...document.querySelectorAll("label")].find(
-        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Company / Account",
-      );
-      const input = label?.querySelector("input");
-
-      if (!input) {
-        return false;
-      }
-
-      const descriptor = Object.getOwnPropertyDescriptor(input.constructor.prototype, "value");
-      descriptor?.set?.call(input, "CRM FAILURE COMPANY");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    })()`);
-    assert.equal(setCrmFailureCompanyOnMrLee, true, "Expected Company / Account to be editable for CRM failure save");
-
-    await evaluate(`(() => {
-      const savedBooking = ${JSON.stringify(mrLeeCrmFailureSavedBookingFixture)};
-      const jsonResponse = (body, status = 200) =>
-        new Response(JSON.stringify(body), {
-          status,
-          headers: { "content-type": "application/json" },
-        });
-
-      window.__prestigeFetchCalls = [];
-      window.__prestigeCrmFailureSaveRequestBodies = [];
-      window.__prestigeAdminSavedBookingReadRequests = [];
-      window.__prestigeUnhandledSupabaseCalls = [];
-      window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
-      window.fetch = async (...args) => {
-        const target = args[0]?.url || args[0];
-        const url = String(target);
-        const method = args[1]?.method || args[0]?.method || "GET";
-        const bodyText = typeof args[1]?.body === "string" ? args[1].body : "";
-
-        window.__prestigeFetchCalls.push(\`\${method} \${url}\`);
-        if (bodyText) {
-          try {
-            window.__prestigeCrmFailureSaveRequestBodies.push({
-              method,
-              url,
-              body: JSON.parse(bodyText),
-            });
-          } catch {
-            window.__prestigeCrmFailureSaveRequestBodies.push({ method, url, body: bodyText });
-          }
-        }
-
-        if (url.includes("/api/admin-saved-bookings")) {
-          let parsedBody = null;
-
-          try {
-            parsedBody = bodyText ? JSON.parse(bodyText) : null;
-          } catch {}
-
-          if (method === "POST") {
-            return jsonResponse({
-              booking: {
-                id: savedBooking.id,
-                status: parsedBody?.status || "confirmed",
-              },
-              ok: true,
-              version: "browser-admin-saved-booking-create-mock",
-            }, 201);
-          }
-
-          const savedBookingReadUrl = new URL(url, window.location.href);
-          const savedBookingReadId = savedBookingReadUrl.searchParams.get("id") || "";
-
-          window.__prestigeAdminSavedBookingReadRequests.push({
-            id: savedBookingReadId,
-            method,
-            url,
-          });
-
-          if (method === "GET" && savedBookingReadId === String(savedBooking.id)) {
-            return jsonResponse({
-              booking: savedBooking,
-              ok: true,
-              version: "browser-admin-saved-booking-read-mock",
-            });
-          }
-
-          return jsonResponse({ ok: false, error: "Saved booking read mock not found." }, 404);
-        }
-
-        if (url.includes("/api/admin-bookers")) {
-          if (method === "GET") {
-            return jsonResponse({ booker: null, ok: true, version: "browser-admin-bookers-mock" });
-          }
-
-          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-          return jsonResponse({ message: "Unhandled booker mock" }, 500);
-        }
-
-        if (url.includes("/api/admin-travelers-crm-identity")) {
-          if (method === "GET") {
-            return jsonResponse({
-              ok: true,
-              readiness: {
-                external_send: false,
-                readOnly: true,
-                setupSafe: true,
-                source: "typed_travelers_crm_identity",
-                writeEnabled: false,
-              },
-              traveler: null,
-              version: "browser-admin-travelers-crm-identity-mock",
-            });
-          }
-
-          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-          return jsonResponse({ message: "Unhandled traveler identity mock" }, 500);
-        }
-
-        if (!url.includes("/rest/v1/")) {
-          return window.__prestigeOriginalFetch(...args);
-        }
-
-        if (url.includes("/rest/v1/companies")) {
-          if (method === "GET") {
-            return jsonResponse([]);
-          }
-
-          if (method === "POST") {
-            return jsonResponse({ message: "CRM service unavailable" }, 500);
-          }
-        }
-
-        if (url.includes("/rest/v1/travelers") && method === "GET") {
-          return jsonResponse([]);
-        }
-
-        if (url.includes("/rest/v1/bookings")) {
-          if (method === "GET") {
-            return jsonResponse([savedBooking]);
-          }
-        }
-
-        window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
-        return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
-      };
-    })()`);
-
-    const clickedMrLeeCrmFailureSave = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Save Booking + CRM",
-      );
-
-      if (!saveButton || saveButton.disabled) {
-        return false;
-      }
-
-      saveButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedMrLeeCrmFailureSave, true, "Expected Mr Lee CRM failure save button to be clickable");
-
-    const mrLeeCrmFailureSaveState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(`(() => {
-          const bodyText = document.body.innerText;
-          const bookingInsert = (window.__prestigeCrmFailureSaveRequestBodies || []).find(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-saved-bookings"),
-          );
-
-          return bodyText.includes("Booking saved, but CRM update failed:")
-            ? {
-                bodyText,
-                fetchCalls: window.__prestigeFetchCalls || [],
-                savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
-                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
-                bookingInsert: bookingInsert?.body || null,
-              }
-            : false;
-        })()`);
-
-        return candidateState || false;
-      },
-      10000,
-      "Mr Lee CRM failure save warning",
-    );
-
-    assert.deepEqual(
-      mrLeeCrmFailureSaveState.unhandledSupabaseCalls,
-      [],
-      `Expected Mr Lee CRM failure save to mock every Supabase call, got ${mrLeeCrmFailureSaveState.unhandledSupabaseCalls.join(", ")}`,
-    );
-    assert.deepEqual(
-      mrLeeCrmFailureSaveState.savedBookingReadRequests.map(({ id, method }) => ({ id, method })),
-      [{ id: String(mrLeeCrmFailureSavedBookingFixture.id), method: "GET" }],
-      "Expected Mr Lee CRM-failure post-save reload to use the typed admin saved booking read API",
-    );
-    assert.deepEqual(
-      mrLeeCrmFailureSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
-      [],
-      "Expected Mr Lee CRM-failure post-save reload not to read bookings through the legacy admin data shim",
-    );
-    assert.deepEqual(
-      mrLeeCrmFailureSaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
-      [],
-      "Expected Mr Lee CRM-failure save not to create bookings through the legacy admin data shim",
-    );
-    assert.equal(mrLeeCrmFailureSaveState.bookingInsert?.company_id, null);
-    assert.match(mrLeeCrmFailureSaveState.bodyText, /Booking saved, but CRM update failed: CRM service unavailable/);
-    assert.doesNotMatch(mrLeeCrmFailureSaveState.bodyText, /Booking saved successfully\. CRM update failed/i);
-    assert.doesNotMatch(mrLeeCrmFailureSaveState.bodyText, /Booking saved successfully: ui-mr-lee-crm-failure-save-fixture/);
+	    assert.doesNotMatch(
+	      mrLeeNoCompanySaveState.bodyText,
+	      /CRM update failed|Booking saved successfully:/i,
+	    );
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
 

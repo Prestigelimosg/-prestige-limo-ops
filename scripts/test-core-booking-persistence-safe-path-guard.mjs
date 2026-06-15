@@ -284,11 +284,27 @@ try {
   const operationalSaveSource = extractBlock(pageSource, "async function saveAdminBookingOperationalSnapshot");
   const operationalPayloadSource = extractBlock(pageSource, "function buildAdminBookingPersistencePayload");
 
-  assertIncludes(saveBookingSource, "adminSavedBookingsApiPath", "current Save Booking + CRM path");
-  assertIncludes(saveBookingSource, "customer_price_amount", "current legacy payload");
-  assertIncludes(saveBookingSource, "driver_payout_amount", "current legacy payload");
-  assertIncludes(saveBookingSource, "resolvePricing", "current legacy pricing dependency");
-  assertIncludes(saveBookingSource, "calculateProfit", "current legacy pricing dependency");
+  assertIncludes(saveBookingSource, 'fetch("/api/admin-bookings"', "Save Booking + CRM safe persistence path");
+  assertIncludes(saveBookingSource, 'method: "POST"', "Save Booking + CRM safe persistence method");
+  assertIncludes(
+    saveBookingSource,
+    '"x-prestige-admin-purpose": "admin-booking-persistence"',
+    "Save Booking + CRM safe persistence purpose",
+  );
+  assertIncludes(
+    saveBookingSource,
+    "buildAdminBookingPersistencePayload",
+    "Save Booking + CRM safe operational payload builder",
+  );
+  assertExcludes(saveBookingSource, "adminSavedBookingsApiPath", "Save Booking + CRM safe persistence path");
+  assertExcludes(saveBookingSource, "/api/admin-saved-bookings", "Save Booking + CRM safe persistence path");
+  assertExcludes(saveBookingSource, "resolveCompany", "Save Booking + CRM safe persistence path");
+  assertExcludes(saveBookingSource, "resolveBooker", "Save Booking + CRM safe persistence path");
+  assertExcludes(saveBookingSource, "resolveName", "Save Booking + CRM safe persistence path");
+  assertExcludes(saveBookingSource, "rememberNameCrmDetails", "Save Booking + CRM safe persistence path");
+  assertExcludes(saveBookingSource, "resolvePricing", "Save Booking + CRM safe persistence path");
+  assertExcludes(saveBookingSource, "calculateProfit", "Save Booking + CRM safe persistence path");
+  assertNoRiskyFragments(saveBookingSource, "Save Booking + CRM safe persistence handler");
 
   assertIncludes(operationalSaveSource, 'fetch("/api/admin-bookings"', "safe operational save path");
   assertIncludes(operationalSaveSource, 'method: "POST"', "safe operational save method");

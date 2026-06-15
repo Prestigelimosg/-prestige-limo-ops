@@ -65,12 +65,9 @@ const adminSmsCustomerDriverDetailsSendDisabledApiPath =
   "/api/admin-sms-customer-driver-details-send-disabled-setup";
 const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
-const adminBookersApiPath = "/api/admin-bookers";
 const adminCustomerNameMemoryApiPath = "/api/admin-customer-name-memory";
-const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
-const adminSavedAddressesApiPath = "/api/admin-saved-addresses";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminSavedBookingDriverAssignmentsApiPath =
@@ -316,182 +313,6 @@ function createAdminLegacyDataClient() {
 
 const adminLegacyDataClient = createAdminLegacyDataClient();
 
-function adminBookerError(message: string): AdminLegacyDataResult<BookerRecord> {
-  return {
-    data: null,
-    error: {
-      message,
-    },
-  };
-}
-
-async function adminBookerRequest(
-  method: "GET" | "PATCH" | "POST",
-  {
-    body,
-    params,
-  }: {
-    body?: Record<string, unknown>;
-    params?: Record<string, string | number | null | undefined>;
-  },
-): Promise<AdminLegacyDataResult<BookerRecord>> {
-  const searchParams = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(params || {})) {
-    if (value !== null && value !== undefined && String(value).trim()) {
-      searchParams.set(key, String(value));
-    }
-  }
-
-  const url = `${adminBookersApiPath}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-
-  try {
-    const response = await fetch(url, {
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      headers: {
-        ...(body ? { "Content-Type": "application/json" } : {}),
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method,
-    });
-    const responseBody = (await response.json().catch(() => null)) as AdminBookerApiResponse | null;
-
-    if (!response.ok || responseBody?.ok !== true) {
-      return adminBookerError(responseBody?.error || "Admin booker request failed.");
-    }
-
-    return {
-      data: responseBody.booker || null,
-      error: null,
-    };
-  } catch {
-    return adminBookerError("Admin booker request failed.");
-  }
-}
-
-function findAdminBooker(params: Record<string, string | number | null | undefined>) {
-  return adminBookerRequest("GET", { params });
-}
-
-function createAdminBooker(body: Record<string, unknown>) {
-  return adminBookerRequest("POST", { body });
-}
-
-function updateAdminBooker(body: Record<string, unknown>) {
-  return adminBookerRequest("PATCH", { body });
-}
-
-function adminTravelerCrmIdentityError(message: string): AdminLegacyDataResult<CompanyIdLookupRecord> {
-  return {
-    data: null,
-    error: {
-      message,
-    },
-  };
-}
-
-async function findAdminTravelerCrmIdentity(
-  params: Record<string, string | number | null | undefined>,
-): Promise<AdminLegacyDataResult<CompanyIdLookupRecord>> {
-  const searchParams = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(params || {})) {
-    if (value !== null && value !== undefined && String(value).trim()) {
-      searchParams.set(key, String(value));
-    }
-  }
-
-  const url = `${adminTravelersCrmIdentityApiPath}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method: "GET",
-    });
-    const responseBody = (await response.json().catch(() => null)) as AdminTravelerCrmIdentityApiResponse | null;
-
-    if (!response.ok || responseBody?.ok !== true) {
-      return adminTravelerCrmIdentityError(
-        responseBody?.error || "Admin traveler CRM identity request failed.",
-      );
-    }
-
-    return {
-      data: responseBody.traveler || null,
-      error: null,
-    };
-  } catch {
-    return adminTravelerCrmIdentityError("Admin traveler CRM identity request failed.");
-  }
-}
-
-function adminSavedAddressError(message: string): AdminLegacyDataResult<SavedAddressRecord> {
-  return {
-    data: null,
-    error: {
-      message,
-    },
-  };
-}
-
-async function adminSavedAddressRequest(
-  method: "GET" | "PATCH" | "POST",
-  {
-    body,
-    params,
-  }: {
-    body?: Record<string, unknown>;
-    params?: Record<string, string | number | null | undefined>;
-  },
-): Promise<AdminLegacyDataResult<SavedAddressRecord>> {
-  const searchParams = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(params || {})) {
-    if (value !== null && value !== undefined && String(value).trim()) {
-      searchParams.set(key, String(value));
-    }
-  }
-
-  const url = `${adminSavedAddressesApiPath}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
-
-  try {
-    const response = await fetch(url, {
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      headers: {
-        ...(body ? { "Content-Type": "application/json" } : {}),
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method,
-    });
-    const responseBody = (await response.json().catch(() => null)) as AdminSavedAddressApiResponse | null;
-
-    if (!response.ok || responseBody?.ok !== true) {
-      return adminSavedAddressError(responseBody?.error || "Admin saved address request failed.");
-    }
-
-    return {
-      data: responseBody.saved_address || null,
-      error: null,
-    };
-  } catch {
-    return adminSavedAddressError("Admin saved address request failed.");
-  }
-}
-
-function findAdminSavedAddress(params: Record<string, string | number | null | undefined>) {
-  return adminSavedAddressRequest("GET", { params });
-}
-
-function createAdminSavedAddress(body: Record<string, unknown>) {
-  return adminSavedAddressRequest("POST", { body });
-}
-
-function updateAdminSavedAddress(body: Record<string, unknown>) {
-  return adminSavedAddressRequest("PATCH", { body });
-}
-
 function adminDriverAvailabilityError(message: string): AdminLegacyDataResult<DriverAvailabilityRecord> {
   return {
     data: null,
@@ -571,18 +392,6 @@ type CompanyRecord = {
   transzend_excel_privacy?: boolean | null;
 };
 
-type BookerRecord = {
-  id: number;
-  company_id: number;
-  booker_name: string | null;
-  email: string | null;
-  phone: string | null;
-};
-
-type CompanyIdLookupRecord = {
-  company_id?: number | null;
-};
-
 type RateSettingsRecord = {
   child_seat_customer_surcharge?: number | null;
   child_seat_driver_payout?: number | null;
@@ -603,20 +412,6 @@ type AdminRateSetupReadResponse = {
   version?: string;
 };
 
-type AdminBookerApiResponse = {
-  booker?: BookerRecord | null;
-  error?: string;
-  ok?: boolean;
-  version?: string;
-};
-
-type AdminSavedAddressApiResponse = {
-  error?: string;
-  ok?: boolean;
-  saved_address?: SavedAddressRecord | null;
-  version?: string;
-};
-
 type AdminDriverAvailabilityApiResponse = {
   driver?: DriverAvailabilityRecord | null;
   error?: string;
@@ -627,16 +422,6 @@ type AdminDriverAvailabilityApiResponse = {
 type AdminSavedBookingReadResponse = {
   booking?: BookingRecord | null;
   bookings?: BookingRecord[];
-  error?: string;
-  ok?: boolean;
-  version?: string;
-};
-
-type AdminSavedBookingCreateResponse = {
-  booking?: {
-    id?: string | number;
-    status?: string | null;
-  } | null;
   error?: string;
   ok?: boolean;
   version?: string;
@@ -678,18 +463,6 @@ type TravelerRecord = {
   booker_email?: string | null;
   customer_rates?: RateRules | null;
   driver_payout_rules?: DriverPayoutRules | null;
-};
-
-type SavedAddressRecord = {
-  id: number;
-  company_id: number | null;
-  traveler_id: number | null;
-  label: string | null;
-  address: string | null;
-  address_role: string | null;
-  is_default: boolean | null;
-  last_used_at?: string | null;
-  use_count: number | null;
 };
 
 type DriverRecord = {
@@ -744,13 +517,6 @@ type AdminCustomerNameMemoryApiRecord = {
   savedAddress?: string | null;
   traveler_id?: number | null;
   travelerId?: number | null;
-};
-
-type AdminTravelerCrmIdentityApiResponse = {
-  error?: string;
-  ok?: boolean;
-  traveler?: CompanyIdLookupRecord | null;
-  version?: string;
 };
 
 type BookingRecord = {
@@ -3717,28 +3483,6 @@ function formatPickupTime(value: string | null | undefined) {
 
 function normalizePickupTimeForStorage(value: string | null | undefined) {
   return formatPickupTime(value).replace("hrs", "").replace("Time TBC", "");
-}
-
-function getKnownCompanyForRelationship(bookerName: string, personName: string, companyName: string) {
-  const key = [bookerName, personName, companyName].map((value) => clean(value).toLowerCase()).join(" ");
-
-  if (/\bjune\s+aw\b|\btiger\s+global\b|\bmr\s+deep\b|\bmr\s+stanley\b/.test(key)) {
-    return "Tiger Global";
-  }
-
-  if (/\bnicole\s+yap\b|\bmr\s+rohan\s+singh\b|\bbny\b/.test(key)) {
-    return "BNY";
-  }
-
-  if (/\bsharron\b|\bshiseido\b/.test(key)) {
-    return "Shiseido";
-  }
-
-  if (/\bpolly\s+wong\b|\bapollo\b/.test(key)) {
-    return "Apollo";
-  }
-
-  return "";
 }
 
 function blankCompanyRecord(companyName: string, customerRates: RateRules = {}, driverPayoutRules: DriverPayoutRules = {}): CompanyRecord {
@@ -7775,7 +7519,7 @@ export default function Home() {
   const lastSuccessfulBookingSaveRef = useRef<{
     bookingId: string;
     key: string;
-    record: BookingRecord | null;
+    record: AdminBookingPersistenceRecord | null;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [rateSettings, setRateSettings] = useState<RateSettings>(initialRateSettings);
@@ -10629,25 +10373,6 @@ export default function Home() {
     return true;
   }
 
-  function isAirportAddress(value: string) {
-    return /\b(?:changi|airport|terminal|t[1-4])\b/i.test(value);
-  }
-
-  function getReusableNameAddress() {
-    const pickup = clean(booking.pickup);
-    const dropoff = clean(booking.dropoff);
-
-    if (pickup && isAirportAddress(pickup) && dropoff && !isAirportAddress(dropoff)) {
-      return dropoff;
-    }
-
-    if (dropoff && isAirportAddress(dropoff) && pickup && !isAirportAddress(pickup)) {
-      return pickup;
-    }
-
-    return dropoff || pickup;
-  }
-
   function applyNameMemory(parsedBooking: ParsedBooking, nameMemory: NameMemory) {
     const enrichedBooking = { ...parsedBooking };
     const bookingType = clean(enrichedBooking.bookingType || booking.bookingType).toUpperCase();
@@ -10869,399 +10594,6 @@ export default function Home() {
       });
     } finally {
       setAiAssistLoading(false);
-    }
-  }
-
-  async function resolveCompany() {
-    if (!adminLegacyDataClient) {
-      throw new Error("Admin data API is not available.");
-    }
-
-    const client = adminLegacyDataClient;
-    const detectedCompany = getKnownCompanyForRelationship(
-      booking.booker,
-      booking.name,
-      booking.company,
-    );
-    const companyName = normalizeCompanyAccount(detectedCompany || booking.company, booking.bookerEmail);
-    const bookerName = clean(booking.booker);
-    const personName = clean(booking.name);
-    const bookerContact = normalizePhone(booking.bookerContact);
-    const domain = getEmailDomain(booking.bookerEmail);
-
-    async function getCompanyById(companyId: number | null) {
-      if (!companyId) {
-        return null;
-      }
-
-      const companyResult = await client
-        .from(adminLegacyTables.companies)
-        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
-        .eq("id", companyId)
-        .limit(1)
-        .maybeSingle();
-
-      if (companyResult.error) {
-        throw new Error(companyResult.error.message);
-      }
-
-      const companyRecord = companyResult.data as CompanyRecord | null;
-      const safeCompanyName = normalizeCompanyAccount(companyRecord?.company_name, booking.bookerEmail);
-
-      if (
-        companyRecord &&
-        ((clean(companyRecord.company_name) && !safeCompanyName) || isIgnoredAccountEmailDomain(companyRecord.domain))
-      ) {
-        return null;
-      }
-
-      return companyRecord;
-    }
-
-    async function getCompanyBySafeName(safeCompanyName: string) {
-      if (!safeCompanyName) {
-        return null;
-      }
-
-      const existingByName = await client
-        .from(adminLegacyTables.companies)
-        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
-        .ilike("company_name", safeCompanyName)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingByName.error) {
-        throw new Error(existingByName.error.message);
-      }
-
-      return (existingByName.data as CompanyRecord | null) ?? null;
-    }
-
-    if (companyName) {
-      const existingByName = await getCompanyBySafeName(companyName);
-
-      if (existingByName) {
-        return existingByName;
-      }
-    }
-
-    if (bookerContact) {
-      const existingByContact = await findAdminBooker({ phone: bookerContact });
-
-      if (existingByContact.error) {
-        throw new Error(existingByContact.error.message);
-      }
-
-      const contactLookup = existingByContact.data as CompanyIdLookupRecord | null;
-      const companyByContact = await getCompanyById(contactLookup?.company_id ?? null);
-
-      if (companyByContact) {
-        return companyByContact;
-      }
-    }
-
-    if (domain) {
-      const existingByDomain = await client
-        .from(adminLegacyTables.companies)
-        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
-        .eq("domain", domain)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingByDomain.error) {
-        throw new Error(existingByDomain.error.message);
-      }
-
-      if (existingByDomain.data) {
-        return existingByDomain.data as CompanyRecord;
-      }
-    }
-
-    if (bookerName) {
-      const existingByBooker = await findAdminBooker({ booker_name: bookerName });
-
-      if (existingByBooker.error) {
-        throw new Error(existingByBooker.error.message);
-      }
-
-      const bookerLookup = existingByBooker.data as CompanyIdLookupRecord | null;
-      const companyByBooker = await getCompanyById(bookerLookup?.company_id ?? null);
-
-      if (companyByBooker) {
-        return companyByBooker;
-      }
-    }
-
-    if (personName) {
-      const existingByName = await findAdminTravelerCrmIdentity({ traveler_name: personName });
-
-      if (existingByName.error) {
-        throw new Error(existingByName.error.message);
-      }
-
-      const nameLookup = existingByName.data as CompanyIdLookupRecord | null;
-      const companyByName = await getCompanyById(nameLookup?.company_id ?? null);
-
-      if (companyByName) {
-        return companyByName;
-      }
-    }
-
-    const companyNameToCreate = companyName || domain;
-
-    if (!companyNameToCreate) {
-      return blankCompanyRecord("");
-    }
-
-    const createdCompany = await client
-      .from(adminLegacyTables.companies)
-      .insert({
-        company_name: companyNameToCreate,
-        domain: domain || null,
-        customer_rates: {},
-        driver_payout_rules: {},
-      })
-      .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
-      .single();
-
-    if (createdCompany.error) {
-      const duplicateCompanyName =
-        createdCompany.error.code === "23505" ||
-        /duplicate key value violates unique constraint "companies_company_name_key"/i.test(
-          createdCompany.error.message,
-        );
-
-      if (duplicateCompanyName) {
-        const existingByName = await getCompanyBySafeName(companyNameToCreate);
-
-        if (existingByName) {
-          return existingByName;
-        }
-      }
-
-      throw new Error(createdCompany.error.message);
-    }
-
-    return createdCompany.data as CompanyRecord;
-  }
-
-  async function resolveBooker(companyId: number) {
-    const email = normaliseEmail(booking.bookerEmail);
-    const phone = normalizePhone(booking.bookerContact);
-    const bookerName = clean(booking.booker) || (!clean(booking.company) ? clean(booking.name) : "");
-
-    if (!bookerName) {
-      return null;
-    }
-
-    async function updateBookerIfNeeded(bookerRecord: BookerRecord) {
-      const updatePayload = {
-        booker_name: bookerRecord.booker_name || bookerName,
-        email: bookerRecord.email || email || null,
-        phone: bookerRecord.phone || phone || null,
-      };
-
-      const { error, data } = await updateAdminBooker({
-        id: bookerRecord.id,
-        ...updatePayload,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      return data || {
-        ...bookerRecord,
-        ...updatePayload,
-      };
-    }
-
-    if (phone) {
-      const existingByPhone = await findAdminBooker({ company_id: companyId, phone });
-
-      if (existingByPhone.error) {
-        throw new Error(existingByPhone.error.message);
-      }
-
-      if (existingByPhone.data) {
-        return updateBookerIfNeeded(existingByPhone.data as BookerRecord);
-      }
-    }
-
-    if (email) {
-      const existingByEmail = await findAdminBooker({ company_id: companyId, email });
-
-      if (existingByEmail.error) {
-        throw new Error(existingByEmail.error.message);
-      }
-
-      if (existingByEmail.data) {
-        return updateBookerIfNeeded(existingByEmail.data as BookerRecord);
-      }
-    }
-
-    const existingByName = await findAdminBooker({ company_id: companyId, booker_name: bookerName });
-
-    if (existingByName.error) {
-      throw new Error(existingByName.error.message);
-    }
-
-    if (existingByName.data) {
-      return updateBookerIfNeeded(existingByName.data as BookerRecord);
-    }
-
-    const createdBooker = await createAdminBooker({
-      booker_name: bookerName,
-      company_id: companyId,
-      email: email || null,
-      phone: phone || null,
-    });
-
-    if (createdBooker.error) {
-      throw new Error(createdBooker.error.message);
-    }
-
-    return createdBooker.data as BookerRecord | null;
-  }
-
-  async function resolveName(companyId: number, booker: BookerRecord | null) {
-    if (!adminLegacyDataClient) {
-      throw new Error("Admin data API is not available.");
-    }
-
-    const personName = clean(booking.name);
-
-    if (!personName) {
-      return null;
-    }
-
-    const existingName = await adminLegacyDataClient
-      .from(adminLegacyTables.travelers)
-      .select("id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_id, booker_name, booker_contact, booker_email, customer_rates, driver_payout_rules")
-      .eq("company_id", companyId)
-      .ilike("traveler_name", personName)
-      .limit(1)
-      .maybeSingle();
-
-    if (existingName.error) {
-      throw new Error(existingName.error.message);
-    }
-
-    if (existingName.data) {
-      const existingRecord = existingName.data as TravelerRecord;
-      const updatePayload: Partial<TravelerRecord> = {
-        booker_id: existingRecord.booker_id || booker?.id || null,
-        booker_name: existingRecord.booker_name || clean(booker?.booker_name),
-        booker_contact: existingRecord.booker_contact || clean(booker?.phone),
-        booker_email: existingRecord.booker_email || clean(booker?.email),
-      };
-
-      const { error } = await adminLegacyDataClient.from(adminLegacyTables.travelers).update(updatePayload).eq("id", existingRecord.id);
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      return {
-        ...existingRecord,
-        ...updatePayload,
-      };
-    }
-
-    const createdName = await adminLegacyDataClient
-      .from(adminLegacyTables.travelers)
-      .insert({
-        company_id: companyId,
-        traveler_name: personName,
-        booker_id: booker?.id ?? null,
-        booker_name: clean(booker?.booker_name) || null,
-        booker_contact: clean(booker?.phone) || null,
-        booker_email: clean(booker?.email) || null,
-      })
-      .select("id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_id, booker_name, booker_contact, booker_email, customer_rates, driver_payout_rules")
-      .single();
-
-    if (createdName.error) {
-      throw new Error(createdName.error.message);
-    }
-
-    return createdName.data as TravelerRecord;
-  }
-
-  async function rememberNameCrmDetails(companyId: number, travelerId: number | null) {
-    if (!adminLegacyDataClient || !travelerId) {
-      return;
-    }
-
-    const address = getReusableNameAddress();
-    const preferredVehicle = clean(booking.vehicle);
-    const updatePayload: Partial<TravelerRecord> = {};
-
-    if (preferredVehicle) {
-      updatePayload.preferred_vehicle = preferredVehicle;
-    }
-
-    if (address) {
-      updatePayload.default_address = address;
-    }
-
-    if (clean(booking.pickup) && !isAirportAddress(booking.pickup)) {
-      updatePayload.default_pickup_address = clean(booking.pickup);
-    }
-
-    if (clean(booking.dropoff) && !isAirportAddress(booking.dropoff)) {
-      updatePayload.default_dropoff_address = clean(booking.dropoff);
-    }
-
-    if (Object.keys(updatePayload).length > 0) {
-      const { error } = await adminLegacyDataClient.from(adminLegacyTables.travelers).update(updatePayload).eq("id", travelerId);
-
-      if (error) {
-        throw new Error(error.message);
-      }
-    }
-
-    if (!address) {
-      return;
-    }
-
-    const existingAddress = await findAdminSavedAddress({ address, traveler_id: travelerId });
-
-    if (existingAddress.error) {
-      throw new Error(existingAddress.error.message);
-    }
-
-    if (existingAddress.data) {
-      const savedAddress = existingAddress.data as SavedAddressRecord;
-      const { error } = await updateAdminSavedAddress({
-        address,
-        company_id: companyId,
-        id: savedAddress.id,
-        is_default: true,
-        last_used_at: new Date().toISOString(),
-        use_count: (savedAddress.use_count ?? 0) + 1,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      return;
-    }
-
-    const { error } = await createAdminSavedAddress({
-      address,
-      address_role: "traveler_default",
-      company_id: companyId,
-      is_default: true,
-      label: "Default",
-      last_used_at: new Date().toISOString(),
-      traveler_id: travelerId,
-      use_count: 1,
-    });
-
-    if (error) {
-      throw new Error(error.message);
     }
   }
 
@@ -12130,11 +11462,8 @@ export default function Home() {
     }
   }
 
-  async function saveBooking(): Promise<BookingRecord | null> {
-    const currentNeedsReviewWarnings = [
-      ...getNeedsReviewWarnings(booking),
-      ...getPricingReviewWarnings(draftPricing),
-    ];
+  async function saveBooking(): Promise<AdminBookingPersistenceRecord | null> {
+    const currentNeedsReviewWarnings = getNeedsReviewWarnings(booking);
     const currentReviewAcceptanceKey = getReviewAcceptanceKey(booking, currentNeedsReviewWarnings);
 
     if (
@@ -12157,24 +11486,10 @@ export default function Home() {
       return null;
     }
 
-    if (!adminLegacyDataClient) {
-      const saveMessage = {
-        tone: "error",
-        text: "Booking save failed: Admin data API is not available.",
-      } satisfies Message;
-
-      setMessage({
-        tone: saveMessage.tone,
-        text: saveMessage.text,
-      });
-      setBookingSaveMessage(saveMessage);
-      return null;
-    }
-
     if (typeof fetch !== "function") {
       const saveMessage = {
         tone: "error",
-        text: "Booking save failed: Admin saved booking API is not available.",
+        text: "Booking save failed: Admin booking persistence API is not available.",
       } satisfies Message;
 
       setMessage({
@@ -12203,7 +11518,7 @@ export default function Home() {
     if (lastSuccessfulBookingSave?.key === bookingSaveGuardKey) {
       const saveMessage = {
         tone: "info",
-        text: `Booking already saved: ${lastSuccessfulBookingSave.bookingId}. Change details before saving again.`,
+        text: `Operational booking already saved: ${lastSuccessfulBookingSave.bookingId}. Change details before saving again.`,
       } satisfies Message;
 
       setMessage(saveMessage);
@@ -12217,248 +11532,69 @@ export default function Home() {
     setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
 
     try {
-      const fallbackCompanyName =
-        normalizeCompanyAccount(
-          getKnownCompanyForRelationship(booking.booker, booking.name, booking.company) || booking.company,
-          booking.bookerEmail,
-        );
-      let company: CompanyRecord = blankCompanyRecord(fallbackCompanyName);
-      let booker: BookerRecord | null = null;
-      let name: TravelerRecord | null = null;
-      let crmUpdateFailed = false;
-      let crmErrorMessage = "";
-
-      try {
-        company = await resolveCompany();
-        if (company.id) {
-          booker = await resolveBooker(company.id);
-          name = await resolveName(company.id, booker);
-        }
-      } catch (error) {
-        crmUpdateFailed = true;
-        crmErrorMessage = error instanceof Error ? error.message : "Unknown CRM update error.";
-      }
-
-      const bookingDriverId = clean(booking.driverId);
-      const bookingDriverName = clean(booking.driverName).toLowerCase();
-      const selectedDriver = drivers.find(
-        (driver) =>
-          (bookingDriverId && String(driver.id) === bookingDriverId) ||
-          (bookingDriverName && clean(driver.driver_name).toLowerCase() === bookingDriverName),
-      ) ?? null;
-      const fallbackDriverId = Number(bookingDriverId);
-      const resolvedDriverId =
-        selectedDriver?.id ?? (Number.isFinite(fallbackDriverId) && fallbackDriverId > 0 ? fallbackDriverId : null);
-      const pricing = resolvePricing(
-        booking,
-        company,
-        name,
-        rateSettings,
-        selectedDriver,
-      );
-      const pricingSnapshot = calculateProfit(
-        pricing,
-        booking.customerPriceOverride,
-        clean(booking.driverPayoutOverride) || booking.savedDriverPayoutAmount,
-      );
-
-      const bookingPayload = {
-        company_id: company.id || null,
-        booker_id: booker?.id ?? null,
-        traveler_id: name?.id ?? null,
-        booking_type: clean(booking.bookingType),
-        vehicle: clean(booking.vehicle),
-        pickup_time: normalizePickupTimeForStorage(booking.time),
-        pickup_address: clean(booking.pickup),
-        dropoff_address: clean(booking.dropoff),
-        flight_no: clean(booking.flight),
-        route,
-        pax: Number(clean(booking.pax)) || 1,
-        job_card: jobCard,
-        driver_id: resolvedDriverId,
-        driver_name: clean(booking.driverName) || null,
-        driver_contact: clean(booking.driverContact) || clean(selectedDriver?.contact_number) || null,
-        driver_plate_number: clean(booking.driverPlate) || clean(selectedDriver?.plate_number) || null,
-        customer_rate: pricing.customerRate,
-        customer_rate_unit: pricing.customerRateUnit,
-        customer_price_amount: pricingSnapshot.customerPrice,
-        customer_rate_override: clean(booking.customerPriceOverride)
-          ? numericRate(booking.customerPriceOverride)
-          : null,
-        customer_price_override_reason: clean(booking.customerPriceOverrideReason) || null,
-        driver_payout_min: pricing.driverPayoutMin,
-        driver_payout_max: pricing.driverPayoutMax,
-        driver_payout_amount: pricingSnapshot.driverPayout,
-        driver_payout_override: clean(booking.driverPayoutOverride)
-          ? numericRate(booking.driverPayoutOverride)
-          : null,
-        driver_payout_reason: clean(booking.driverPayoutReason) || null,
-        driver_payout_unit: pricing.driverPayoutUnit,
-        driver_notes: clean(booking.driverNotes) || null,
-        driver_dispatch_include_payout: Boolean(booking.driverIncludePayout),
-        midnight_surcharge: pricing.midnightSurcharge,
-        midnight_payout: pricing.midnightPayout,
-        extra_stop_count: pricing.extraStopCount,
-        extra_stop_surcharge: pricing.extraStopSurcharge,
-        extra_stop_payout: pricing.extraStopPayout,
-        child_seat_required: clean(booking.childSeatRequired) === "yes",
-        child_seat_count: pricing.childSeatCount,
-        child_seat_type:
-          clean(booking.childSeatRequired) === "yes" ? clean(booking.childSeatType) || null : null,
-        child_seat_customer_surcharge: pricing.childSeatCustomerAmount,
-        child_seat_driver_payout: pricing.childSeatDriverAmount,
-        pricing_source: pricingSnapshot.customerPriceSource,
-        status: clean(booking.driverName) ? "assigned" : "confirmed",
-      };
-      const response = await fetch(adminSavedBookingsApiPath, {
+      const bookingPayload = buildAdminBookingPersistencePayload(booking, currentTimeMs);
+      const response = await fetch("/api/admin-bookings", {
         body: JSON.stringify(bookingPayload),
         headers: {
           "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
         },
         method: "POST",
       });
-      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingCreateResponse | null;
+      const responseBody = (await response.json().catch(() => null)) as {
+        booking?: AdminBookingPersistenceRecord | null;
+        error?: string;
+        ok?: boolean;
+      } | null;
+      const savedBooking = responseBody?.booking ?? null;
+      const savedBookingReference = clean(savedBooking?.booking_reference);
 
-      const savedBookingId = responseBody?.booking?.id;
-
-      if (
-        !response.ok ||
-        responseBody?.ok !== true ||
-        !responseBody.booking ||
-        !savedBookingId ||
-        responseBody.booking.status !== bookingPayload.status
-      ) {
-        const error = readAdminLegacyDataError(
-          responseBody,
-          "Admin saved booking create request failed.",
-        );
+      if (!response.ok || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
+        const errorMessage = responseBody?.error || "Admin booking persistence request failed.";
         const saveMessage = {
           tone: "error",
-          text: `Booking save failed: ${
-            responseBody?.booking && !savedBookingId ? "No saved booking id returned." : formatSupabaseError(error)
-          }`,
+          text: adminBookingPersistenceFailureMessage("save", new Error(errorMessage)),
         } satisfies Message;
 
         setMessage(saveMessage);
         setBookingSaveMessage(saveMessage);
+        setAdminBookingPersistenceMessage(saveMessage);
         return null;
-      } else {
-        if (!crmUpdateFailed && company.id) {
-          try {
-            await rememberNameCrmDetails(company.id, name?.id ?? null);
-          } catch (error) {
-            crmUpdateFailed = true;
-            crmErrorMessage = error instanceof Error ? error.message : "Unknown CRM memory update error.";
-          }
-        }
-
-        const savedBookingResult = await fetchSavedBookingById(savedBookingId);
-
-        if (savedBookingResult.error || !savedBookingResult.data) {
-          const saveMessage = {
-            tone: "success",
-            text: `Booking saved successfully: ${savedBookingId}`,
-          } satisfies Message;
-
-          setMessage({
-            tone: saveMessage.tone,
-            text: `${saveMessage.text}. Recent booking reload failed: ${
-              savedBookingResult.error ? formatSupabaseError(savedBookingResult.error) : "No booking row returned."
-            }`,
-          });
-          setBookingSaveMessage(saveMessage);
-          setAcceptedReviewWarningKey("");
-          lastSuccessfulBookingSaveRef.current = {
-            bookingId: String(savedBookingId),
-            key: bookingSaveGuardKey,
-            record: null,
-          };
-          return null;
-        }
-
-        const savedBookingRecord = savedBookingResult.data as BookingRecord;
-        setBookings((currentBookings) =>
-          sortBookingsNewestFirst([
-            savedBookingRecord,
-            ...currentBookings.filter((currentBooking) => String(currentBooking.id) !== String(savedBookingRecord.id)),
-          ]),
-        );
-        setLoadedBookingId(String(savedBookingRecord.id));
-        const savedCustomerLabel =
-          getBookingCompanyName(savedBookingRecord) ||
-          getBookerName(savedBookingRecord) ||
-          getBookingName(savedBookingRecord) ||
-          "customer/account pending review";
-        const saveMessage = {
-          tone: crmUpdateFailed ? "error" : "success",
-          text: crmUpdateFailed
-            ? `Booking saved, but CRM update failed: ${crmErrorMessage || "Unknown CRM error."}`
-            : `Booking saved successfully: ${savedBookingId}. Customer/account: ${savedCustomerLabel}.`,
-        } satisfies Message;
-
-        setMessage(saveMessage);
-        setBookingSaveMessage(saveMessage);
-        setAcceptedReviewWarningKey("");
-        lastSuccessfulBookingSaveRef.current = {
-          bookingId: String(savedBookingRecord.id),
-          key: bookingSaveGuardKey,
-          record: savedBookingRecord,
-        };
-        return savedBookingRecord;
       }
+
+      setAdminBookingPersistenceRecords((current) => [
+        savedBooking,
+        ...current.filter(
+          (record) => clean(record.booking_reference) !== savedBookingReference,
+        ),
+      ]);
+      const saveMessage = {
+        tone: "success",
+        text: `Operational booking saved: ${savedBookingReference}. CRM-safe operational persistence only.`,
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      setAdminBookingPersistenceMessage(saveMessage);
+      setAcceptedReviewWarningKey("");
+      lastSuccessfulBookingSaveRef.current = {
+        bookingId: savedBookingReference,
+        key: bookingSaveGuardKey,
+        record: savedBooking,
+      };
+      return savedBooking;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown save error.";
       const saveMessage = { tone: "error", text: `Booking save failed: ${errorMessage}` } satisfies Message;
       setMessage(saveMessage);
       setBookingSaveMessage(saveMessage);
+      setAdminBookingPersistenceMessage(saveMessage);
       return null;
     } finally {
       if (bookingSaveInFlightKeyRef.current === bookingSaveGuardKey) {
         bookingSaveInFlightKeyRef.current = null;
       }
       setSaving(false);
-    }
-  }
-
-  async function fetchSavedBookingById(bookingId: string | number) {
-    if (typeof fetch !== "function") {
-      return {
-        data: null,
-        error: new Error("Admin saved booking read API is not available."),
-      };
-    }
-
-    try {
-      const searchParams = new URLSearchParams({ id: String(bookingId) });
-      const response = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, {
-        headers: {
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "GET",
-      });
-      const responseBody = (await response.json().catch(() => null)) as AdminSavedBookingReadResponse | null;
-
-      if (!response.ok || responseBody?.ok !== true) {
-        return {
-          data: null,
-          error: readAdminLegacyDataError(responseBody, "Admin saved booking read request failed."),
-        };
-      }
-
-      if (!responseBody.booking) {
-        return {
-          data: null,
-          error: new Error("No saved booking row returned."),
-        };
-      }
-
-      return {
-        data: responseBody.booking,
-        error: null,
-      };
-    } catch {
-      return adminLegacyDataError("Admin saved booking read request failed.") as AdminLegacyDataResult<BookingRecord>;
     }
   }
 

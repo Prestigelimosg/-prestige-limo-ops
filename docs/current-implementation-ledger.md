@@ -358,6 +358,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Safe driver assignment/display typed API already exists.
 - Full driver profile write/delete path must stay parked until explicit split/gating approval.
 
+### Full Driver Profile Shim Split Approval Packet
+- Approval status: pending owner approval.
+- Goal: split safe driver display/operational fields from risky full profile save/delete fields before any future full-driver shim replacement.
+- Safe possible future fields: driver name, phone/contact number, vehicle type, plate number, and availability/display status only where already supported by typed APIs such as `admin-driver-assignment-display` or `admin-driver-availability`.
+- Excluded fields: `payout_preferences`, `driver_payout_rules`, pricing, payout, notes, `preferred_areas`, `airport_permit_notes`, internal/admin notes, payment, PDF, billing, provider/send, auth, location, photo, and calendar-write fields.
+- Full driver profile save/delete remains parked; no implementation is approved by this packet.
+- No UI change is approved. Do not add new sectors, buttons, cards, or profile surfaces as part of this planning packet.
+- No DB/write, env, deployment, migration, Supabase key use, package change, or new shim is approved.
+- Required tests before any future implementation: focused typed helper/API contract test for the split, `scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `scripts/test-core-booking-persistence-safe-path-guard.mjs` if booking state is touched, `scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
+- Hard blockers: any need to read/write payout preferences, driver payout rules, pricing, payout, internal notes, preferred areas, airport permit notes, full profile delete, or saved-booking payout-aware assignment in the same pass.
+- Rollback plan for future implementation: keep changes one-family-only, revert the typed split commit if any guard/browser test fails, restore the legacy full driver profile parked path unchanged, rerun shim cleanup and preactivation guards, and do not deploy or enable live DB/write until separate owner approval.
+
 ### Driver assignment display typed API wiring lock
 - Driver assignment display wiring is done at `924fbe4 Wire driver assignment display to typed API`.
 - Booking driver assignment display now uses the existing typed display-only `GET /api/admin-driver-assignment-display` API/helper through separate display-only state/loader.

@@ -1,15 +1,15 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest known clean checkpoint:
-25d0703 Add typed company traveler CRM write foundation
+d65aac1 Split CRM identity payload from rate override payload
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Latest repo commit to preserve as handoff baseline: `25d0703 Add typed company traveler CRM write foundation`.
-- Latest implementation checkpoint to preserve: `25d0703 Add typed company traveler CRM write foundation`.
+- Latest repo commit to preserve as handoff baseline: `d65aac1 Split CRM identity payload from rate override payload`.
+- Latest implementation checkpoint to preserve: `d65aac1 Split CRM identity payload from rate override payload`.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, admin dashboard horizontal overflow fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, Save Booking + CRM button placement near Job Card Preview actions, Save Booking duplicate-submit guard, separated Save Booking + CRM and calendar actions, Save Booking + CRM safe admin booking persistence reroute, unused legacy bookings shim surface retirement, booking UI browser test stabilization, calendar event lifecycle readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, customer amendment/cancellation review handoff setup foundation/API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, billing/payment readiness setup foundation, preview API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, production deployment hardening readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, staging deployment approval packet and guard, core admin booking persistence activation readiness packet, guard, safe path guard, and Save Booking + CRM safe reroute, global pre-activation no-live guard, activation decision matrix guard, pre-activation verification suite, shim cleanup typed API inventory, shim cleanup no-new-shim guard, companies CRM identity/domain typed helper/API and typed display wiring, travelers CRM identity/default-address typed helper/API and typed display wiring, company/traveler CRM write-readiness setup foundation/API, disabled action API, audit payload setup foundation, no-live guard, and pre-activation audit lock, driver assignment/display typed helper/API and booking assignment display wiring, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, app smoke email preflight setup-only allowlist, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp activation; FlightAware live; live location activation; OTS photo activation; customer/driver auth activation; billing/payment activation; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
@@ -24,7 +24,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver job link GET validation is fixed at `43c5970 Fix driver job link GET validation`; GET/read for `/api/admin-driver-job-links` now accepts safe dashboard-style booking refs without noisy 400s while POST create, PATCH revoke, and token creation/revocation behavior remain unchanged.
 - Calendar event lifecycle status: readiness foundation, preview/readiness API, disabled action API, action audit payload setup foundation, no-live guard, and final pre-activation lock are done; customer amendment/cancellation never auto-updates calendar; calendar create/update/cancel remains blocked until explicit approval.
 - Production hardening status: readiness foundation, preview/readiness API, disabled production action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock are done.
-- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done and wired into company/traveler display-read at `69c269d Wire company traveler identity display to typed APIs`; unused legacy bookings shim surface is retired; driver assignment display now uses the existing typed display-only API for the booking assignment display path; Driver Database display/search now uses separate typed display-only state fed by the existing `/api/admin-driver-assignment-display` route; company/traveler CRM write setup is locked through the activation stop; risky full-driver profile write/delete paths, `rate_settings` save/upsert, pricing, payout, `customer_rates`, and `driver_payout_rules` write paths remain parked.
+- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done and wired into company/traveler display-read at `69c269d Wire company traveler identity display to typed APIs`; unused legacy bookings shim surface is retired; driver assignment display now uses the existing typed display-only API for the booking assignment display path; Driver Database display/search now uses separate typed display-only state fed by the existing `/api/admin-driver-assignment-display` route; company/traveler CRM write setup is locked through the activation stop; CRM identity/contact payload code is split from rate override payload code at `d65aac1 Split CRM identity payload from rate override payload`; risky full-driver profile write/delete paths, `rate_settings` save/upsert, pricing, payout, `customer_rates`, and `driver_payout_rules` write paths remain parked.
 - Still blocked unless explicitly approved: live DB/write, migrations, deployment, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, FlightAware live lookup, live location activation, photo upload/storage, CRM/calendar amendment updates, calendar event lifecycle create/update/cancel and live sync, job-card creation from customer amendments, and risky shim write paths.
 - Continue to use setup-only helpers/APIs and direct guards. Do not add new shims, duplicate UI/API/helper work, live provider behavior, or customer/driver-visible finance/internal details.
 
@@ -445,6 +445,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Company/traveler create/update/name-memory writes remain blocked until explicit approval.
 - `customer_rates`, `driver_payout_rules`, pricing, payout, and rate override writes remain parked.
 - Legacy allowlist removal remains blocked until write paths are safely split and explicitly approved.
+
+### CRM Identity/Rate Override Payload Split Lock
+- CRM identity/contact payload code is separated from rate override payload code at `d65aac1 Split CRM identity payload from rate override payload`.
+- Runtime behavior remains unchanged.
+- Company/traveler CRM writes remain parked.
+- Rate override save/remove remains parked.
+- `customer_rates` and `driver_payout_rules` remain parked.
+- Save Booking + CRM is unchanged and remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` is unchanged and remains separate.
+- Parser behavior and `/api/ai-parse` are unchanged.
+- No new shims were added.
+- No env change, deployment, live DB/write execution, migration, UI sector/card, provider/sending, payment/PDF/payout, auth, location, photo, or calendar activation happened.
+- The split is guarded by `scripts/test-crm-identity-rate-override-payload-split.mjs`.
 
 ### Company/traveler CRM write-readiness setup lock
 - Setup-only typed helper is done at `32ca2ca Add company traveler CRM write readiness setup`.

@@ -34,6 +34,10 @@ const guardChecks = [
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },
   {
+    label: "company/traveler CRM write split plan guard",
+    script: "scripts/test-company-traveler-crm-write-split-plan.mjs",
+  },
+  {
     label: "remaining shim parked state lock guard",
     script: "scripts/test-remaining-shim-parked-state-lock.mjs",
   },

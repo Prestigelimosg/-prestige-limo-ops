@@ -365,6 +365,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Next safe split is separate typed company/traveler CRM create/update/name-memory APIs, excluding rate/payout override writes.
 - `customer_rates`, `driver_payout_rules`, pricing, and payout remain parked until explicit approval.
 
+### Company/Traveler CRM Write Split Plan Lock
+- This is a docs/test-only plan guarded by `scripts/test-company-traveler-crm-write-split-plan.mjs`.
+- Company/traveler identity display is already typed through `GET /api/admin-companies-crm-identity` and `GET /api/admin-travelers-crm-identity`.
+- Company/traveler writes remain parked.
+- Future company/traveler CRM write API must exclude: `customer_rates`, `driver_payout_rules`, pricing, payout, rate overrides, surcharge/payout fields, `pricing_source`, and payout snapshots.
+- Rate override save/remove remains separate and parked.
+- Future implementation must be one lane only: company/traveler CRM identity/contact write fields.
+- Required direct contract tests before implementation: typed helper contract for allowed company/traveler CRM identity/contact write fields; GET/POST method contract for the new typed route; forbidden-field rejection for `customer_rates`, `driver_payout_rules`, pricing, payout, rate overrides, surcharge/payout fields, `pricing_source`, payout snapshots, payment, PDF, billing, provider/send, auth, location, photo, calendar, internal notes, and debug fields; no legacy shim usage in the typed write path.
+- Required no-live guard: write remains disabled/no-op until explicit owner approval; no DB/write, env change, deployment, migration, provider/live sending, payment, PDF, payout, auth, location, photo, calendar, or new shim activation.
+- Rollback/manual recovery note: keep the future split one lane only, revert the single split commit if guards or browser tests fail, restore parked legacy company/traveler write paths unchanged, rerun route-flow, identity-read, rate-override, shim-cleanup, preactivation, lint, and booking UI checks, and do not deploy or enable live DB/write without separate owner approval.
+- No UI expansion is approved; keep the existing compact CRM area.
+- No runtime implementation is approved by this plan.
+
 ### Rate Override Split/Gating Plan Lock
 - This is a docs/test-only plan guarded by `scripts/test-rate-override-split-gating-plan.mjs`.
 - No implementation is approved by this plan.

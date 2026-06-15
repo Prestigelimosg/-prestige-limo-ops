@@ -349,6 +349,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Do not replace `saveDefaultRates` or the `rate_settings` write path without explicit approval.
 - Do not touch company/traveler overrides, pricing, payout, `customer_rates`, or `driver_payout_rules` in the same pass.
 
+### Rate Settings Shim Split Approval Packet
+- Approval status: pending owner approval.
+- Goal: split safe read/display of default rate settings from risky write/update behavior before any future `rate_settings` shim replacement.
+- Safe current path: read-only rate setup already exists through `GET /api/admin-rate-setup`; future work must preserve read/display-only behavior unless explicitly approved.
+- `rate_settings` default-rate save remains parked; no implementation is approved by this packet.
+- No UI change is approved. Do not add new sectors, buttons, cards, or rate surfaces as part of this planning packet.
+- No DB/write, env, deployment, migration, Supabase key use, package change, or new shim is approved.
+- Excluded fields/paths: `customer_rates`, `driver_payout_rules`, pricing, payout, rate overrides, company/traveler overrides, payment, PDF, billing, provider/send, auth, location, photo, and calendar-write fields.
+- Required tests before any future implementation: focused typed helper/API contract test for the split, `scripts/test-admin-rate-setup-api-contract.mjs`, `scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `scripts/test-core-booking-persistence-safe-path-guard.mjs` if booking/pricing state is touched, `scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
+- Hard blockers: any need to write default rates, customer rates, driver payout rules, pricing, payout, company/traveler overrides, booking price/payout snapshots, payment/PDF/billing fields, or rate override behavior in the same pass.
+- Rollback plan for future implementation: keep changes one-family-only, revert the typed split commit if any guard/browser test fails, restore the parked `saveDefaultRates` legacy path unchanged, rerun rate setup, shim cleanup, core booking, and preactivation guards, and do not deploy or enable live DB/write until separate owner approval.
+
 ### Full driver profile shim risk lock
 - Full driver profile shim replacement is payout/internal-field entangled.
 - `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.

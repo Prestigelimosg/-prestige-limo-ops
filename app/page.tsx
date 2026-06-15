@@ -11350,14 +11350,6 @@ export default function Home() {
   }
 
   async function deactivateDriverProfile() {
-    if (!adminLegacyDataClient) {
-      setMessage({
-        tone: "error",
-        text: "Deactivate driver failed: Admin data API is not available.",
-      });
-      return;
-    }
-
     const driverId = clean(driverProfileDraft.driverId);
 
     if (!driverId) {

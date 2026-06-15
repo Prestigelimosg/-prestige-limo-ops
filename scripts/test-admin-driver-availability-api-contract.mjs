@@ -236,6 +236,22 @@ assert.equal(/customer_rates|driver_payout_rules|payout_preferences/.test(helper
 assert.equal(helperSource.includes("id, availability_status, updated_at"), true, "Helper must select only availability fields.");
 assert.equal(/\.(delete|insert|upsert|rpc)\s*\(/.test(helperSource), false, "Helper must not expose delete/insert/upsert/rpc.");
 
+const deactivateDriverProfileStart = appPageSource.indexOf("async function deactivateDriverProfile");
+const deactivateDriverProfileEnd = appPageSource.indexOf("function clearDeletedDriverIdFromBookingState");
+assert.notEqual(deactivateDriverProfileStart, -1, "App page must keep driver deactivation handler.");
+assert.notEqual(deactivateDriverProfileEnd, -1, "App page must keep driver deactivation boundary.");
+const deactivateDriverProfileSource = appPageSource.slice(deactivateDriverProfileStart, deactivateDriverProfileEnd);
+assert.equal(
+  deactivateDriverProfileSource.includes("updateAdminDriverAvailability(payload)"),
+  true,
+  "Driver deactivation must use typed availability API.",
+);
+assert.equal(
+  /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data/.test(deactivateDriverProfileSource),
+  false,
+  "Driver deactivation must not depend on the legacy data shim.",
+);
+
 const harness = await loadHarness();
 
 try {

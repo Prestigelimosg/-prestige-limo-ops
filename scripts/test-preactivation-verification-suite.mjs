@@ -14,6 +14,10 @@ const guardChecks = [
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },
   {
+    label: "core admin booking persistence activation packet guard",
+    script: "scripts/test-core-admin-booking-persistence-activation-packet-guard.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

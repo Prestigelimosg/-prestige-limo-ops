@@ -38,6 +38,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-runtime-wiring-approval-packet.mjs",
   },
   {
+    label: "Load Bookings typed DTO split plan guard",
+    script: "scripts/test-load-bookings-typed-dto-split-plan.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

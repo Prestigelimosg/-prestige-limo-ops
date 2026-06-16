@@ -112,6 +112,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep Load Bookings on existing legacy read surface until typed read path is separately approved, tested, and verified.
 - No runtime implementation, `app/page.tsx` Load Bookings wiring, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card, or new shim is approved by this packet.
 
+### Load Bookings Typed DTO Split Plan Lock
+- Future typed Load Bookings DTO split is planned only; no runtime implementation is approved by this lock.
+- Current Load Bookings runtime remains on `GET /api/admin-saved-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- Existing disabled admin booking read/list/detail contract remains setup-only/no-live-read/no-op.
+- Future typed Load Bookings DTO must include safe operational read fields only: booking id/reference/status, booking type, vehicle/service display, pickup/dropoff datetime/address, route summary/route points summary, pax/job card display, customer/company/booker/traveler display fields, booker email/phone, assigned driver display only if non-payout, child seat/extra stop display only if non-price, created_at/updated_at, and audit summary.
+- Future typed DTO must exclude pricing, payout, `customer_rate`, `customer_price_amount`, `customer_rate_override`, `customer_price_override_reason`, `customer_rates`, `driver_payout_rules`, `driver_payout_min/max/amount/override/reason/unit`, `driver_notes`, `driver_dispatch_include_payout`, midnight_surcharge/payout, extra_stop_surcharge/payout, child_seat_customer_surcharge/driver_payout, `pricing_source`, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, and secrets.
+- Future wiring must not be a blind endpoint swap.
+- Future wiring needs an adapter/DTO layer or safe cards that do not require finance/payout fields.
+- Existing legacy finance/payout-aware card behavior must remain parked until separate finance approval.
+- Required future tests before runtime wiring: typed DTO contract test, forbidden-field exclusion guard, Load Bookings route-flow guard, `/api/admin-saved-bookings` separation guard, parser unchanged guard, no-new-shim guard, booking UI browser test, and focused UI mapping test proving typed Load Bookings no longer depends on risky fields.
+- Rollback note: keep Load Bookings on `/api/admin-saved-bookings` until typed DTO runtime wiring is separately approved and verified.
+- No UI/API/helper behavior change, `app/page.tsx` Load Bookings wiring, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card, or new shim is approved by this lock.
+
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.

@@ -31,6 +31,7 @@ const setupRouteNameFragments = [
   "admin-customer-driver-details-email",
   "admin-customer-driver-details-link",
   "admin-email",
+  "admin-full-driver-profile-action",
   "admin-live-location",
   "admin-ots-photo-proof",
   "admin-production-deployment-hardening",

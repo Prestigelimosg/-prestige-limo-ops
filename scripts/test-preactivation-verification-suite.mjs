@@ -75,6 +75,10 @@ const guardChecks = [
     script: "scripts/test-full-driver-profile-split-readiness-lock.mjs",
   },
   {
+    label: "disabled full driver profile action guard",
+    script: "scripts/test-admin-full-driver-profile-action-disabled-setup-api-contract.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

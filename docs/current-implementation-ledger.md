@@ -334,6 +334,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new UI sectors/cards were observed.
 - No new shims were added.
 
+### Staging Deploy Smoke for Disabled Load Bookings Typed Read Setup
+- `origin/staging` deployed to `a68df2b Add disabled Load Bookings typed read endpoint setup`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted.
+- Console/runtime errors: 0.
+- Disabled typed Load Bookings read setup remains no-live/no-op.
+- All 6 runtime lanes remain parked: Load Bookings runtime read wiring, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+- Passive setup-only `GET /api/admin-email-activation-preflight-setup` returned 403 without provider send, write behavior, or runtime activation.
+
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.

@@ -46,6 +46,11 @@ const guardChecks = [
     script: "scripts/test-admin-company-traveler-crm-identity-contact-write-action-disabled-setup-api-contract.mjs",
   },
   {
+    label: "company/traveler CRM identity/contact audit payload setup guard",
+    script:
+      "scripts/test-admin-company-traveler-crm-identity-contact-write-action-audit-payload-setup-api-contract.mjs",
+  },
+  {
     label: "company/traveler CRM write foundation lock guard",
     script: "scripts/test-company-traveler-crm-write-foundation-lock.mjs",
   },

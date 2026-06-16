@@ -175,6 +175,10 @@ const guardChecks = [
     script: "scripts/test-sms-customer-driver-details-no-live-guard.mjs",
   },
   {
+    label: "SMS provider no-send approval packet guard",
+    script: "scripts/test-sms-provider-no-send-approval-packet.mjs",
+  },
+  {
     label: "Telegram no-live guard",
     script: "scripts/test-telegram-internal-admin-alert-no-live-guard.mjs",
   },

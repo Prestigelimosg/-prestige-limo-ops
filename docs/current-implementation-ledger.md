@@ -210,6 +210,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This packet adds `scripts/test-load-bookings-operational-runtime-wiring-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No typed endpoint migration, Save Booking + CRM change, `/api/admin-saved-bookings` route/helper change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this packet.
 
+### Typed Load Bookings Endpoint Migration Approval Packet
+- Approval status: pending future typed endpoint migration approval.
+- This packet does not approve runtime implementation, DB read activation, env changes, deployment, migrations, or live reads.
+- Load Bookings still uses `GET /api/admin-saved-bookings`.
+- Operational display adapter is implemented and guarded.
+- Typed endpoint migration remains parked.
+- Existing typed read contract is setup-only/no-live-read at `GET /api/admin-booking-read-contract-disabled-setup`.
+- Future typed endpoint requires separate DB read, env, table-policy, and rollback approval.
+- Future migration must not touch Save Booking + CRM, `/api/admin-saved-bookings` behavior, parser, pricing, payout, payment/PDF, provider, auth, location/photo/calendar, UI sectors, or shims.
+- Future migration must not feed typed operational data into `bookingCardPriceLine`, `bookingRecordToForm`, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.
+- Future typed endpoint must return safe operational display/list/detail fields only and must exclude pricing, payout, `customer_rates`, `driver_payout_rules`, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, and secrets.
+- Required future tests before endpoint migration: typed endpoint contract test, safe DTO contract guard, safe UI adapter/card contract guard, operational runtime mapping guard, forbidden-field exclusion guard, Load Bookings route-flow guard, `/api/admin-saved-bookings` separation guard, parser unchanged guard, no-new-shim guard, booking UI browser test, DB read/env/table-policy approval guard, and rollback/no-live checkpoint.
+- Rollback note: keep Load Bookings on `GET /api/admin-saved-bookings` until the typed endpoint migration is separately approved, implemented, verified, and reversible.
+- This packet adds `scripts/test-load-bookings-typed-endpoint-migration-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No runtime implementation, UI/API/helper behavior change, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this packet.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

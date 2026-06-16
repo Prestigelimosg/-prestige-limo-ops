@@ -62,6 +62,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-operational-runtime-wiring-approval-packet.mjs",
   },
   {
+    label: "Typed Load Bookings endpoint migration approval packet guard",
+    script: "scripts/test-load-bookings-typed-endpoint-migration-approval-packet.mjs",
+  },
+  {
     label: "Load Bookings operational runtime mapping guard",
     script: "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs",
   },

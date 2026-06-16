@@ -90,6 +90,10 @@ const guardChecks = [
     script: "scripts/test-company-traveler-crm-write-split-plan.mjs",
   },
   {
+    label: "company/traveler CRM runtime write approval packet guard",
+    script: "scripts/test-company-traveler-crm-runtime-write-approval-packet.mjs",
+  },
+  {
     label: "company/traveler CRM identity/contact write contract guard",
     script: "scripts/test-admin-company-traveler-crm-identity-contact-write-contract.mjs",
   },

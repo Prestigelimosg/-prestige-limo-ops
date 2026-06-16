@@ -107,9 +107,10 @@ for (const phrase of [
   "Current Load Bookings runtime remains on `GET /api/admin-saved-bookings`.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` remains separate and unchanged.",
-  "Reason: current `BookingRecord` and UI still consume risky legacy finance/payout/internal fields.",
-  "`bookingCardPriceLine`, recent/dashboard/completed booking cards, `bookingRecordToForm`, driver dispatch copy, driver assignment controls, and billing readiness paths must not be fed by the safe DTO until split.",
-  "Future typed Load Bookings wiring requires a safe operational UI adapter or safe cards first.",
+  "Reason: current `BookingRecord` and parked action/finance UI paths still consume risky legacy finance/payout/internal fields.",
+  "Stage 1 operational display cards no longer call `bookingCardPriceLine`.",
+  "`bookingCardPriceLine`, `bookingRecordToForm`, driver dispatch copy, driver assignment controls, and billing readiness paths remain parked and must not be fed by the safe DTO.",
+  "Future typed Load Bookings endpoint migration still requires separate approval and must use the safe operational UI adapter/card path.",
   "Existing legacy finance/payout-aware UI behavior remains parked until separate finance/payout approval.",
   "Rollback note: keep Load Bookings on `GET /api/admin-saved-bookings` until safe UI adapter and typed read path are separately approved and verified.",
 ]) {
@@ -195,9 +196,20 @@ for (const riskyField of [
 }
 
 const priceLineUsages = appPage.match(/bookingCardPriceLine\(savedBooking\)/g) ?? [];
-assert.ok(
-  priceLineUsages.length >= 3,
-  "Dashboard, recent, and completed booking cards must still be recognized as price-line dependent.",
+assert.equal(
+  priceLineUsages.length,
+  0,
+  "Dashboard, recent, and completed operational display cards must not call bookingCardPriceLine(savedBooking).",
+);
+assertIncludes(
+  appPage,
+  "function buildLoadBookingsOperationalDisplayCard",
+  "Stage 1 operational display card mapper",
+);
+assertIncludes(
+  appPage,
+  "loadBookingsOperationalDisplayFieldNames",
+  "Stage 1 operational display field list",
 );
 
 const bookingRecordToFormBlock = sliceBetween(appPage, "function bookingRecordToForm", "function stripBookerFromJobCard");

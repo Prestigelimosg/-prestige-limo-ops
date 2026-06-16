@@ -7310,25 +7310,25 @@ async function runChromeTest() {
     const recentLutherPriceArticle = hiddenLegacyMrLeeBookingsState.articles.find((articleText) =>
       articleText.includes("Luther Graham") && articleText.includes("SQ265") && articleText.includes("30 Apr 2026"),
     );
-    assert.match(
+    assert.doesNotMatch(
       recentLoadedPriceArticle || "",
-      /Customer \$120 \/ Driver \$75/,
-      "Expected Bookings card to show saved customer and driver prices",
+      /Customer \$|Driver \$/,
+      "Expected Bookings operational card to hide saved customer and driver prices",
     );
-    assert.match(
+    assert.doesNotMatch(
       recentCustomerOnlyPriceArticle || "",
-      /Customer \$140 \/ Driver —/,
-      "Expected Bookings card to show missing driver price as a dash, not zero",
+      /Customer \$|Driver \$/,
+      "Expected Bookings operational card to hide customer-only price display",
     );
     assert.doesNotMatch(
       recentCustomerOnlyPriceArticle || "",
       /Driver \$0(?:\.00)?/,
       "Expected Bookings card not to invent a $0 driver price when it is missing",
     );
-    assert.match(
+    assert.doesNotMatch(
       recentLutherPriceArticle || "",
-      /Customer \$160 \/ Driver \$95/,
-      "Expected Bookings card to use the saved assigned driver payout",
+      /Customer \$|Driver \$/,
+      "Expected Bookings operational card to hide saved assigned driver payout",
     );
     assert.doesNotMatch(
       recentLutherPriceArticle || "",
@@ -7853,25 +7853,25 @@ async function runChromeTest() {
     const dashboardLutherPriceArticle = hiddenLegacyMrLeeDashboardState.articles.find((articleText) =>
       articleText.includes("Luther Graham") && articleText.includes("SQ265") && articleText.includes("30 Apr 2026"),
     );
-    assert.match(
+    assert.doesNotMatch(
       dashboardLoadedPriceArticle || "",
-      /Customer \$120 \/ Driver \$75/,
-      "Expected Dashboard card to show saved customer and driver prices",
+      /Customer \$|Driver \$/,
+      "Expected Dashboard operational card to hide saved customer and driver prices",
     );
-    assert.match(
+    assert.doesNotMatch(
       dashboardCustomerOnlyPriceArticle || "",
-      /Customer \$140 \/ Driver —/,
-      "Expected Dashboard card to show missing driver price as a dash, not zero",
+      /Customer \$|Driver \$/,
+      "Expected Dashboard operational card to hide customer-only price display",
     );
     assert.doesNotMatch(
       dashboardCustomerOnlyPriceArticle || "",
       /Driver \$0(?:\.00)?/,
       "Expected Dashboard card not to invent a $0 driver price when it is missing",
     );
-    assert.match(
+    assert.doesNotMatch(
       dashboardLutherPriceArticle || "",
-      /Customer \$160 \/ Driver \$95/,
-      "Expected Dashboard card to use the saved assigned driver payout",
+      /Customer \$|Driver \$/,
+      "Expected Dashboard operational card to hide saved assigned driver payout",
     );
     assert.doesNotMatch(
       dashboardLutherPriceArticle || "",
@@ -8148,7 +8148,7 @@ async function runChromeTest() {
 
         return candidateState?.localMessageText === "Assigned driver updated." &&
           candidateState?.articleText?.includes("Driver: DASHBOARD TEST DRIVER") &&
-          candidateState?.articleText?.includes("Customer $95 / Driver $82")
+          !/Customer \$|Driver \$/.test(candidateState?.articleText || "")
           ? candidateState
           : false;
       },
@@ -8192,7 +8192,11 @@ async function runChromeTest() {
     assert.match(dashboardAssignmentState.articleText, /Assigned/i);
     assert.match(dashboardAssignmentState.articleText, /Driver:\s*DASHBOARD TEST DRIVER/);
     assert.match(dashboardAssignmentState.articleText, /Contact:\s*\+65 8555 7777/);
-    assert.match(dashboardAssignmentState.articleText, /Customer \$95 \/ Driver \$82/);
+    assert.doesNotMatch(
+      dashboardAssignmentState.articleText,
+      /Customer \$|Driver \$/,
+      "Expected Dashboard operational card to hide manual payout display after assignment",
+    );
     assert.match(dashboardAssignmentState.articleText, /Copy Driver Dispatch/);
     assert.ok(
       dashboardAssignmentState.localMessageDistance !== null &&
@@ -8298,14 +8302,18 @@ async function runChromeTest() {
               candidate.innerText.includes("SQ777"),
           );
 
-          return article?.innerText.includes("Customer $95 / Driver $82")
+          return article && !/Customer \$|Driver \$/.test(article.innerText)
             ? { articleText: article.innerText }
             : false;
         })()`),
       10000,
       "manual payout Bookings card",
     );
-    assert.match(manualPayoutBookingsCardState.articleText, /Customer \$95 \/ Driver \$82/);
+    assert.doesNotMatch(
+      manualPayoutBookingsCardState.articleText,
+      /Customer \$|Driver \$/,
+      "Expected Bookings operational card to hide manual payout display after assignment",
+    );
 
     const clickedManualPayoutLoadBooking = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
@@ -9441,7 +9449,11 @@ async function runChromeTest() {
     });
     assert.match(markedOtwState.articleText, /Driver:\s*DASHBOARD STATUS FLOW DRIVER/);
     assert.match(markedOtwState.articleText, /Route:\s*Changi Airport T1\s+\S\s+Ritz Carlton Singapore/);
-    assert.match(markedOtwState.articleText, /Customer \$120 \/ Driver \$82/);
+    assert.doesNotMatch(
+      markedOtwState.articleText,
+      /Customer \$|Driver \$/,
+      "Expected Dashboard operational card to hide finance/payout line after status change",
+    );
 
     await exerciseDashboardStatusAction({
       dataAttribute: "data-dashboard-mark-pob",
@@ -9665,7 +9677,11 @@ async function runChromeTest() {
     );
     assert.match(dashboardCompletionState.articleText, /Driver:\s*COMPLETION ACTION DRIVER/);
     assert.match(dashboardCompletionState.articleText, /Route:\s*Changi Airport T3\s+\S\s+Capella Singapore/);
-    assert.match(dashboardCompletionState.articleText, /Customer \$115 \/ Driver \$80/);
+    assert.doesNotMatch(
+      dashboardCompletionState.articleText,
+      /Customer \$|Driver \$/,
+      "Expected Dashboard operational card to hide finance/payout line after completion",
+    );
     assert.ok(
       dashboardCompletionState.localMessageDistance !== null &&
         dashboardCompletionState.localMessageDistance <= 120,
@@ -9727,10 +9743,10 @@ async function runChromeTest() {
       /Car plate:\s*SLC779C/,
       "Expected Completed tab to preserve the assigned car plate after marking completed",
     );
-    assert.match(
+    assert.doesNotMatch(
       markedCompletedTabState.articleText,
-      /Customer \$115 \/ Driver \$80/,
-      "Expected Completed tab to preserve the manual driver payout after marking completed",
+      /Customer \$|Driver \$/,
+      "Expected Completed operational card to hide manual driver payout after marking completed",
     );
     assert.equal(
       markedCompletedTabState.hasMarkCompletedSuccessMessage,
@@ -11304,10 +11320,8 @@ async function runChromeTest() {
     })()`);
 
     const dashboardProfileDriverDefaultSearchState = await evaluate(`(() => {
-      const article = [...document.querySelectorAll("article")].find(
-        (candidate) =>
-          candidate.innerText.includes("DASHBOARD PROFILE PAYOUT TRAVELER") &&
-          candidate.innerText.includes("SQ776"),
+      const article = [...document.querySelectorAll("article")].find((candidate) =>
+        candidate.querySelector("[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']")
       );
       const searchInput = article?.querySelector("[data-dashboard-driver-search-input='${dashboardProfilePayoutAssignmentFixture.id}']");
       const helper = article?.querySelector("[data-dashboard-driver-search-helper='${dashboardProfilePayoutAssignmentFixture.id}']");
@@ -11799,9 +11813,11 @@ async function runChromeTest() {
       "Dashboard Manual / unselected clears stale driver details",
     );
     assert.equal(dashboardManualSelectionClearedState.searchValue, "");
-    assert.equal(
-      dashboardManualSelectionClearedState.helperText,
-      "Search driver name, phone, plate, or vehicle to show drivers.",
+    assert.ok(
+      dashboardManualSelectionClearedState.helperText === "" ||
+        dashboardManualSelectionClearedState.helperText ===
+          "Search driver name, phone, plate, or vehicle to show drivers.",
+      `Expected Dashboard driver search helper to be empty or restored after manual clear, got ${dashboardManualSelectionClearedState.helperText}`,
     );
     assert.deepEqual(dashboardManualSelectionClearedState.optionTexts, ["Manual / unselected"]);
     assert.equal(dashboardManualSelectionClearedState.selectedDriverText, "Manual / unselected");
@@ -11915,7 +11931,7 @@ async function runChromeTest() {
 
         return candidateState?.localMessageText === "Assigned driver updated." &&
           candidateState?.articleText?.includes("Driver: REUSABLE PROFILE TEST DRIVER") &&
-          candidateState?.articleText?.includes("Customer $95 / Driver $66")
+          !/Customer \$|Driver \$/.test(candidateState?.articleText || "")
           ? candidateState
           : false;
       },
@@ -11959,7 +11975,11 @@ async function runChromeTest() {
     assert.equal(profilePayoutAssignmentState.assignmentBodies[0]?.driver_dispatch_include_payout, true);
     assert.equal(profilePayoutAssignmentState.reasonValue, "");
     assert.equal(profilePayoutAssignmentState.reasonPlaceholder, "");
-    assert.match(profilePayoutAssignmentState.articleText, /Customer \$95 \/ Driver \$66/);
+    assert.doesNotMatch(
+      profilePayoutAssignmentState.articleText,
+      /Customer \$|Driver \$/,
+      "Expected Dashboard operational card to hide profile payout display after assignment",
+    );
     assert.doesNotMatch(
       profilePayoutAssignmentState.articleText,
       /Driver \$55/,
@@ -12026,14 +12046,18 @@ async function runChromeTest() {
               candidate.innerText.includes("SQ776"),
           );
 
-          return article?.innerText.includes("Customer $95 / Driver $66")
+          return article && !/Customer \$|Driver \$/.test(article.innerText)
             ? { articleText: article.innerText }
             : false;
         })()`),
       10000,
       "profile payout Bookings card",
     );
-    assert.match(profilePayoutBookingsCardState.articleText, /Customer \$95 \/ Driver \$66/);
+    assert.doesNotMatch(
+      profilePayoutBookingsCardState.articleText,
+      /Customer \$|Driver \$/,
+      "Expected Bookings operational card to hide profile payout display after assignment",
+    );
     assert.doesNotMatch(
       profilePayoutBookingsCardState.articleText,
       /Driver \$55/,
@@ -17592,15 +17616,15 @@ async function runChromeTest() {
 
     assert.match(completedTabState.completedArticleText, /Completed/i);
     assert.match(completedTabState.completedArticleText, /COMPLETED TEST TRAVELER/);
-    assert.match(
+    assert.doesNotMatch(
       completedTabState.completedArticleText,
-      /Customer \$90 \/ Driver \$65/,
-      "Expected Completed card to show saved customer and driver prices",
+      /Customer \$|Driver \$/,
+      "Expected Completed operational card to hide saved customer and driver prices",
     );
-    assert.match(
+    assert.doesNotMatch(
       completedTabState.customerOnlyPriceArticleText,
-      /Customer \$140 \/ Driver —/,
-      "Expected Completed card to show missing driver price as a dash, not zero",
+      /Customer \$|Driver \$/,
+      "Expected Completed operational card to hide customer-only price display",
     );
     assert.doesNotMatch(
       completedTabState.customerOnlyPriceArticleText,

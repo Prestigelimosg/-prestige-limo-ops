@@ -100,26 +100,27 @@ const approvalSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Approval status: pending future runtime-wiring approval.",
-  "This packet does not approve runtime wiring.",
+  "Approval status: pending future typed endpoint migration approval.",
+  "This packet does not approve typed endpoint migration or DB read activation.",
   "Current Load Bookings remains on `GET /api/admin-saved-bookings`.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` remains separate and unchanged.",
-  "Safe DTO contract exists but is not runtime-wired.",
-  "Safe UI adapter/card contract exists but is not runtime-wired.",
-  "Runtime wiring remains blocked until approved separately.",
-  "Future runtime wiring must use operational-only adapter/card fields.",
-  "Future runtime wiring must not feed the safe DTO into existing finance/payout/internal `BookingRecord` paths.",
-  "Existing finance/payout/internal UI paths remain parked: `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, dashboard/recent/completed price lines, driver dispatch payout copy, driver assignment payout controls, and billing readiness finance paths.",
+  "Safe DTO contract exists but remains server-only/setup-only.",
+  "Safe UI adapter/card contract exists but remains server-only/setup-only.",
+  "Stage 1 operational display mapping is active in `app/page.tsx` without importing the server-only setup helpers.",
+  "Typed endpoint migration remains blocked until approved separately.",
+  "Future typed endpoint migration must use operational-only adapter/card fields.",
+  "Future typed endpoint migration must not feed the safe DTO into existing finance/payout/internal `BookingRecord` paths.",
+  "Existing finance/payout/internal UI paths remain parked: `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, and billing readiness finance paths.",
   "Future implementation must not change Save Booking + CRM.",
   "Future implementation must not change `/api/admin-saved-bookings` behavior.",
   "Future implementation must not touch parser or `/api/ai-parse`.",
   "Future implementation must not add UI sectors/buttons/cards.",
   "Future implementation must not add new shims.",
   "Future live DB read activation requires separate approval and gate/env verification.",
-  "Required future tests before runtime wiring: safe DTO contract guard, safe UI adapter/card contract guard, operational-only runtime mapping guard, forbidden-field exclusion guard, Load Bookings route-flow guard, `/api/admin-saved-bookings` separation guard, parser unchanged guard, no-new-shim guard, booking UI browser test, and rollback/no-live checkpoint.",
-  "Rollback note: keep Load Bookings on `/api/admin-saved-bookings` until the operational-only runtime path is separately approved, implemented, verified, and reversible.",
-  "No runtime implementation",
+  "Required future tests before typed endpoint migration: safe DTO contract guard, safe UI adapter/card contract guard, operational-only runtime mapping guard, forbidden-field exclusion guard, Load Bookings route-flow guard, `/api/admin-saved-bookings` separation guard, parser unchanged guard, no-new-shim guard, booking UI browser test, and rollback/no-live checkpoint.",
+  "Rollback note: keep Load Bookings endpoint on `/api/admin-saved-bookings` until the typed read endpoint path is separately approved, implemented, verified, and reversible.",
+  "No typed endpoint migration",
 ]) {
   assertIncludes(approvalSection, phrase, `Operational Load Bookings approval phrase ${phrase}`);
 }

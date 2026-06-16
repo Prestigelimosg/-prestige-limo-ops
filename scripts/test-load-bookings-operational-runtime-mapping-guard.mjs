@@ -103,16 +103,17 @@ const mappingSection = sectionBetween(
 );
 
 for (const phrase of [
-  "Future Load Bookings runtime mapping is guarded before any `app/page.tsx` wiring.",
+  "Stage 1 operational-only Load Bookings display mapping is guarded.",
   "Current Load Bookings remains on `GET /api/admin-saved-bookings`.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` remains separate and unchanged.",
   "Safe DTO contract remains setup-only.",
   "Safe UI adapter/card contract remains setup-only.",
-  "No `app/page.tsx` Load Bookings runtime wiring is active.",
+  "`app/page.tsx` uses a client-side operational display card mapper that mirrors the safe DTO plus safe UI adapter/card field shape without importing the server-only setup helpers.",
   "No blind endpoint swap is approved.",
-  "Future operational mapping must use the safe DTO plus safe UI adapter/card path only.",
-  "Future operational mapping must not feed safe DTO data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, dashboard/recent/completed price lines, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.",
+  "Operational display mapping uses safe operational card fields only.",
+  "Operational display mapping must not feed safe operational card data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.",
+  "Dashboard/recent/completed operational display cards no longer render finance/payout price lines.",
   "Parser behavior and `/api/ai-parse` remain untouched.",
   "No Supabase, `adminLegacyDataClient`, or DB read-write path is introduced by this mapping guard.",
   "No new shims are added.",
@@ -165,6 +166,22 @@ assertExcludes(appPage, safeDtoHelperExport, "app/page.tsx safe DTO runtime wiri
 assertExcludes(appPage, safeDtoHelperFragment, "app/page.tsx safe DTO runtime wiring");
 assertExcludes(appPage, safeUiAdapterHelperExport, "app/page.tsx safe UI adapter runtime wiring");
 assertExcludes(appPage, safeUiAdapterHelperFragment, "app/page.tsx safe UI adapter runtime wiring");
+
+assertIncludes(
+  appPage,
+  "function buildLoadBookingsOperationalDisplayCard",
+  "Stage 1 operational display card mapper",
+);
+assertIncludes(
+  appPage,
+  "loadBookingsOperationalDisplayFieldNames",
+  "Stage 1 operational display field list",
+);
+assertIncludes(
+  appPage,
+  "hasForbiddenLoadBookingsOperationalDisplayText",
+  "Stage 1 operational display forbidden-value guard",
+);
 
 const bookingRecordType = sliceBetween(appPage, "type BookingRecord = {", "type BookingStatusValue");
 for (const riskyField of [
@@ -255,10 +272,37 @@ for (const [label, start, end, expectedFragments] of [
 }
 
 const priceLineUsages = appPage.match(/bookingCardPriceLine\(savedBooking\)/g) ?? [];
-assert.ok(
-  priceLineUsages.length >= 3,
-  "Dashboard, recent, and completed booking cards must remain recognized as parked price-line users.",
+assert.equal(
+  priceLineUsages.length,
+  0,
+  "Dashboard, recent, and completed operational display cards must not call bookingCardPriceLine(savedBooking).",
 );
+
+for (const [label, start, end] of [
+  [
+    "dashboard operational cards",
+    "function renderBookingCards",
+    "const pricingPanel",
+  ],
+  [
+    "recent operational cards",
+    "const recentBookingsPanel",
+    "const completedEmptyState",
+  ],
+  [
+    "completed operational cards",
+    "const completedBookingsPanel",
+    "const jobCardCopyEditState",
+  ],
+]) {
+  const source = sliceBetween(appPage, start, end);
+
+  assertIncludes(source, "buildLoadBookingsOperationalDisplayCard(savedBooking)", label);
+  assertExcludes(source, "bookingCardPriceLine(savedBooking)", label);
+  assertExcludes(source, "Customer override:", label);
+  assertExcludes(source, "Vehicle / pax / price", label);
+  assertIncludes(source, "Vehicle / pax", label);
+}
 
 for (const billingDependency of [
   "buildCompletedBookingBillingReadinessAuditPayload",

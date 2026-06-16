@@ -26,6 +26,10 @@ const guardChecks = [
     script: "scripts/test-admin-booking-read-contract-disabled-setup-api-contract.mjs",
   },
   {
+    label: "admin booking read no-live guard",
+    script: "scripts/test-admin-booking-read-no-live-guard.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

@@ -547,6 +547,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Safe driver assignment/display typed API already exists.
 - Full driver profile write/delete path must stay parked until explicit split/gating approval.
 
+### Full Driver Profile Save/Delete Split Readiness Lock
+- Full driver profile save/delete split readiness is locked by `scripts/test-full-driver-profile-split-readiness-lock.mjs`.
+- Remaining legacy driver shim call sites are `loadDrivers`, `saveDriverProfile`, and `deleteDriverProfile`.
+- Full driver profile legacy path still exposes `GET`, `POST`, `PATCH`, and `DELETE` through the admin legacy data route.
+- Loaded/saved legacy driver fields include `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, `availability_status`, `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.
+- Safe driver display/read is already typed through `GET /api/admin-driver-assignment-display`.
+- Driver availability/deactivation is already typed through `/api/admin-driver-availability`.
+- Full driver profile save/delete remains parked.
+- Future safe shape must be disabled/no-write first.
+- Allowed future safe fields only: `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, and `availability_status`.
+- Forbidden fields remain parked: `payout_preferences`, `driver_payout_rules`, pricing, payout, notes, `preferred_areas`, `airport_permit_notes`, internal/admin notes, payment, PDF, billing, provider/send, auth, location, photo, calendar, and debug.
+- No runtime implementation is approved by this lock.
+- No UI/API/helper behavior change, DB/write, env, deployment, migration, Supabase key use, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, package change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, or new shim is approved.
+
 ### Full Driver Profile Shim Split Approval Packet
 - Approval status: pending owner approval.
 - Goal: split safe driver display/operational fields from risky full profile save/delete fields before any future full-driver shim replacement.

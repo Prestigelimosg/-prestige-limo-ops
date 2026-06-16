@@ -71,6 +71,10 @@ const guardChecks = [
     script: "scripts/test-remaining-shim-parked-state-lock.mjs",
   },
   {
+    label: "full driver profile split readiness lock guard",
+    script: "scripts/test-full-driver-profile-split-readiness-lock.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

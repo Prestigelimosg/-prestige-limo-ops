@@ -963,6 +963,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, compact Email/WhatsApp/SMS disabled-send buttons row/layout fix, and multi-channel no-live guard.
 - No real sending active.
 
+### Staging Deploy Smoke After Provider Packets
+- `origin/staging` points to `4f917e7 Add SMS provider no-send approval packet`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Visual staging smoke passed after the provider no-send packet deploy.
+- Main admin UI rendered with the expected compact admin tabs: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; the passive smoke observed GET requests only.
+- Console/runtime errors: 0.
+- Email, WhatsApp, SMS, and Telegram remain setup-only/no-live.
+- All 6 runtime lanes remain parked: Load Bookings runtime read wiring, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Email Provider No-Send Approval Packet Lock
 - Approval status: pending future Email staging test approval.
 - This is a docs/test-only no-send approval packet guarded by `scripts/test-email-provider-no-send-approval-packet.mjs`.

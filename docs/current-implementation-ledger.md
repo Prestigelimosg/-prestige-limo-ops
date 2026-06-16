@@ -558,6 +558,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No UI expansion is approved; keep the existing compact CRM area.
 - No runtime implementation is approved by this plan.
 
+### Company/Traveler CRM Runtime Write Approval Packet Lock
+- Approval status: pending future runtime-write approval.
+- This is a docs/test-only approval packet guarded by `scripts/test-company-traveler-crm-runtime-write-approval-packet.mjs`.
+- Current company/traveler runtime writes remain parked.
+- Existing legacy write flow still mixes CRM identity/contact with rate overrides, `customer_rates`, and `driver_payout_rules`.
+- Existing CRM identity/contact write contract, disabled action, and audit payload setup remains setup-only/no-write/no-op.
+- Future runtime lane may include only CRM identity/contact fields.
+- Future runtime lane must exclude rate overrides, `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets.
+- Future runtime wiring must not change Save Booking + CRM.
+- Future runtime wiring must not change `/api/admin-saved-bookings`.
+- Future runtime wiring must not change parser behavior or `/api/ai-parse`.
+- Future runtime wiring must not add new shims.
+- Runtime DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.
+- Required tests before any future wiring: typed CRM runtime route contract test, forbidden-field rejection guard, CRM identity/rate override payload split guard, rate override split/gating plan guard, CRM disabled action and audit setup guards, route-flow lock, no-new-shim guard, preactivation verification suite, lint, and booking UI browser test if `app/page.tsx` wiring changes.
+- Rollback note: keep the future runtime write split one lane only; if any guard or browser test fails, revert the single runtime-wiring commit, restore the parked legacy company/traveler write paths unchanged, rerun CRM, rate override, route-flow, shim cleanup, preactivation, lint, and booking UI checks, and do not deploy or enable DB/write without separate owner approval.
+- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
+
 ### Company/Traveler CRM Identity/Contact Write Foundation Lock
 - This lock is guarded by `scripts/test-company-traveler-crm-write-foundation-lock.mjs`.
 - Typed company/traveler CRM identity/contact write contract foundation is done at `25d0703 Add typed company traveler CRM write foundation`.

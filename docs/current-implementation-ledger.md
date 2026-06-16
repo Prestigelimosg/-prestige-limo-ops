@@ -229,6 +229,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-operational-runtime-mapping-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No typed endpoint migration, Save Booking + CRM change, `/api/admin-saved-bookings` route/helper change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
 
+### Staging Deploy Smoke for Load Bookings Operational Display
+- `origin/staging` deployed to `bc72391 Wire Load Bookings to operational safe display adapter`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered with the existing compact admin tabs.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; the passive smoke observed GET-only behavior.
+- Console/runtime errors: 0.
+- Load Bookings operational display mapping was present by static asset check.
+- The old finance/payout label `Vehicle / pax / price` was absent from the passive DOM and staging assets.
+- All 6 runtime lanes remain parked: Load Bookings runtime read wiring, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.

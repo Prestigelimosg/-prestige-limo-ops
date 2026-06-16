@@ -182,6 +182,120 @@ assertIncludes(
   "hasForbiddenLoadBookingsOperationalDisplayText",
   "Stage 1 operational display forbidden-value guard",
 );
+assertIncludes(
+  appPage,
+  "type LoadBookingsOperationalFormFields = Pick<",
+  "Load Bookings operational form field boundary",
+);
+assertIncludes(
+  appPage,
+  "type LoadBookingsFinancePayoutInternalFormFields = Pick<",
+  "Load Bookings finance/payout/internal form field boundary",
+);
+
+const bookingRecordToFormEntrypointBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToForm",
+  "function bookingRecordToOperationalFormFields",
+);
+for (const fragment of [
+  "...createInitialBooking()",
+  "...bookingRecordToOperationalFormFields(bookingRecord)",
+  "...bookingRecordToFinancePayoutInternalFormFields(bookingRecord)",
+]) {
+  assertIncludes(bookingRecordToFormEntrypointBlock, fragment, `Load Bookings form mapping composition ${fragment}`);
+}
+for (const riskyField of [
+  "customer_rate_override",
+  "customer_price_override_reason",
+  "driver_payout_override",
+  "driver_payout_reason",
+  "driver_notes",
+  "driver_dispatch_include_payout",
+]) {
+  assertExcludes(
+    bookingRecordToFormEntrypointBlock,
+    riskyField,
+    `Load Bookings form entrypoint raw finance/payout/internal field ${riskyField}`,
+  );
+}
+
+const operationalFormFieldsBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToOperationalFormFields",
+  "function bookingRecordToFinancePayoutInternalFormFields",
+);
+for (const operationalField of [
+  "company",
+  "bookingType",
+  "vehicle",
+  "date",
+  "time",
+  "flight",
+  "pickup",
+  "extraStopLocation",
+  "dropoff",
+  "booker",
+  "bookerContact",
+  "bookerEmail",
+  "name",
+  "pax",
+  "driverId",
+  "driverName",
+  "driverContact",
+  "driverPlate",
+  "childSeatRequired",
+  "childSeatCount",
+  "childSeatType",
+  "extraStopCount",
+]) {
+  assertIncludes(operationalFormFieldsBlock, operationalField, `Load Bookings operational form field ${operationalField}`);
+}
+for (const riskyField of [
+  "customer_rate_override",
+  "customer_price_override_reason",
+  "driver_payout_override",
+  "driver_payout_reason",
+  "driver_notes",
+  "driver_dispatch_include_payout",
+  "customerPriceOverride",
+  "driverPayoutOverride",
+  "driverNotes",
+  "driverIncludePayout",
+]) {
+  assertExcludes(
+    operationalFormFieldsBlock,
+    riskyField,
+    `Load Bookings operational form helper finance/payout/internal field ${riskyField}`,
+  );
+}
+
+const financePayoutInternalFormFieldsBlock = sliceBetween(
+  appPage,
+  "function bookingRecordToFinancePayoutInternalFormFields",
+  "function stripBookerFromJobCard",
+);
+for (const parkedField of [
+  "customer_rate_override",
+  "customer_price_override_reason",
+  "driver_payout_override",
+  "driver_payout_reason",
+  "driver_notes",
+  "driver_dispatch_include_payout",
+  "customerPriceOverride",
+  "customerPriceOverrideReason",
+  "driverPayoutOverride",
+  "savedDriverPayoutAmount",
+  "driverPayoutReason",
+  "driverNotes",
+  "driverIncludePayout",
+]) {
+  assertIncludes(
+    financePayoutInternalFormFieldsBlock,
+    parkedField,
+    `Load Bookings parked finance/payout/internal form field ${parkedField}`,
+  );
+}
 
 const bookingRecordType = sliceBetween(appPage, "type BookingRecord = {", "type BookingStatusValue");
 for (const riskyField of [

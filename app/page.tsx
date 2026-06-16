@@ -384,6 +384,43 @@ type BookingForm = {
   driverIncludePayout: string;
 };
 
+type LoadBookingsOperationalFormFields = Pick<
+  BookingForm,
+  | "booker"
+  | "bookerContact"
+  | "bookerEmail"
+  | "bookingType"
+  | "childSeatCount"
+  | "childSeatRequired"
+  | "childSeatType"
+  | "company"
+  | "date"
+  | "driverContact"
+  | "driverId"
+  | "driverName"
+  | "driverPlate"
+  | "dropoff"
+  | "extraStopCount"
+  | "extraStopLocation"
+  | "flight"
+  | "name"
+  | "pax"
+  | "pickup"
+  | "time"
+  | "vehicle"
+>;
+
+type LoadBookingsFinancePayoutInternalFormFields = Pick<
+  BookingForm,
+  | "customerPriceOverride"
+  | "customerPriceOverrideReason"
+  | "driverIncludePayout"
+  | "driverNotes"
+  | "driverPayoutOverride"
+  | "driverPayoutReason"
+  | "savedDriverPayoutAmount"
+>;
+
 type CompanyRecord = {
   id: number;
   company_name: string | null;
@@ -4235,18 +4272,22 @@ function getLoadBookingsOperationalDisplayTitle(card: LoadBookingsOperationalDis
 }
 
 function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
+  return {
+    ...createInitialBooking(),
+    ...bookingRecordToOperationalFormFields(bookingRecord),
+    ...bookingRecordToFinancePayoutInternalFormFields(bookingRecord),
+  };
+}
+
+function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): LoadBookingsOperationalFormFields {
   const routePoints = getRoutePoints(bookingRecord);
   const pickup = clean(bookingRecord.pickup_address) || routePoints[0] || "";
   const dropoff = clean(bookingRecord.dropoff_address) || routePoints[routePoints.length - 1] || "";
   const extraStopLocations = routePoints.slice(1, -1);
   const extraStopCount = normalizeExtraStopCount(bookingRecord.extra_stop_count) || extraStopLocations.length;
   const childSeatRequired = Boolean(bookingRecord.child_seat_required);
-  const savedDriverPayout = bookingCardPriceAmounts(bookingRecord).driverPrice;
-  const hasManualDriverPayoutOverride =
-    bookingRecord.driver_payout_override !== null && bookingRecord.driver_payout_override !== undefined;
 
   return {
-    ...createInitialBooking(),
     company: getBookingCompanyName(bookingRecord),
     bookingType: clean(bookingRecord.booking_type) || "MNG",
     vehicle: clean(bookingRecord.vehicle) || "AVF",
@@ -4269,6 +4310,17 @@ function bookingRecordToForm(bookingRecord: BookingRecord): BookingForm {
     childSeatCount: childSeatRequired ? String(normalizeChildSeatCount(true, bookingRecord.child_seat_count)) : "",
     childSeatType: childSeatRequired ? clean(bookingRecord.child_seat_type) : "",
     extraStopCount: extraStopCount ? String(extraStopCount) : "",
+  };
+}
+
+function bookingRecordToFinancePayoutInternalFormFields(
+  bookingRecord: BookingRecord,
+): LoadBookingsFinancePayoutInternalFormFields {
+  const savedDriverPayout = bookingCardPriceAmounts(bookingRecord).driverPrice;
+  const hasManualDriverPayoutOverride =
+    bookingRecord.driver_payout_override !== null && bookingRecord.driver_payout_override !== undefined;
+
+  return {
     customerPriceOverride:
       bookingRecord.customer_rate_override === null || bookingRecord.customer_rate_override === undefined
         ? ""

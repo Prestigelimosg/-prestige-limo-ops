@@ -511,6 +511,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Hard blockers: any need to write default rates, customer rates, driver payout rules, pricing, payout, company/traveler overrides, booking price/payout snapshots, payment/PDF/billing fields, or rate override behavior in the same pass.
 - Rollback plan for future implementation: keep changes one-family-only, revert the typed split commit if any guard/browser test fails, restore the parked `saveDefaultRates` legacy path unchanged, rerun rate setup, shim cleanup, core booking, and preactivation guards, and do not deploy or enable live DB/write until separate owner approval.
 
+### Rate Settings Default Write Split Lock
+- Rate settings default write split is locked by `scripts/test-rate-settings-write-split-lock.mjs`.
+- `rate_settings` read path is already typed through `GET /api/admin-rate-setup`.
+- Typed rate setup read is covered by `scripts/test-admin-rate-setup-api-contract.mjs`.
+- `rate_settings` save/upsert remains parked in `saveDefaultRates` on the legacy `rate_settings` path.
+- `rate_settings` is rate/pricing-related and must stay disabled/no-write until a separate explicit approval.
+- `customer_rates`, `driver_payout_rules`, pricing, payout, rate overrides, company/traveler override writes, and booking price/payout snapshots remain parked.
+- No runtime implementation is approved by this lock.
+- No UI/API behavior change, DB/write, env, deployment, migration, Supabase key use, package change, or new shim is approved.
+- Future implementation must be one typed lane only, with a direct contract test, no-live guard, rollback note, `scripts/test-admin-rate-setup-api-contract.mjs`, `scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `scripts/test-rate-override-split-gating-plan.mjs`, `scripts/test-remaining-shim-parked-state-lock.mjs`, `scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `git diff --check`, and `git status --short`.
+
 ### Full driver profile shim risk lock
 - Full driver profile shim replacement is payout/internal-field entangled.
 - `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.

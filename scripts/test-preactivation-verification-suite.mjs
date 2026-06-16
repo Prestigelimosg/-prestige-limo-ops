@@ -30,6 +30,10 @@ const guardChecks = [
     script: "scripts/test-rate-override-split-gating-plan.mjs",
   },
   {
+    label: "rate settings write split lock guard",
+    script: "scripts/test-rate-settings-write-split-lock.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

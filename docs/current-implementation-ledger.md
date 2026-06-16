@@ -963,6 +963,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, compact Email/WhatsApp/SMS disabled-send buttons row/layout fix, and multi-channel no-live guard.
 - No real sending active.
 
+### WhatsApp Provider No-Send Approval Packet Lock
+- Approval status: pending future WhatsApp staging test approval.
+- This is a docs/test-only no-send approval packet guarded by `scripts/test-whatsapp-provider-no-send-approval-packet.mjs`.
+- Current WhatsApp routes remain setup-only/no-live:
+  `GET /api/admin-whatsapp-customer-driver-details-preview-readiness-setup` and
+  `GET /api/admin-whatsapp-customer-driver-details-send-disabled-setup`.
+- Current WhatsApp send surface remains disabled/no-op with `external_send: false`, `sendingEnabled: false`, `liveSendingEnabled: false`, and `providerConfigured: false`.
+- No provider env values are printed, required, or read by the current WhatsApp setup-only routes/helpers.
+- No WhatsApp provider SDK/API activation is approved.
+- No live WhatsApp send is approved.
+- Future staging WhatsApp test requires separate owner approval, secret-safe provider env-name handling, recipient allowlist, template/content guard, one-message test scope, and rollback/disable plan.
+- Future WhatsApp template/content must exclude pricing, payout, payment/PDF, auth, location/photo/calendar, parser/debug, internal notes, and secrets.
+- Future live/provider send wiring must not change Save Booking + CRM.
+- Future live/provider send wiring must not change `/api/admin-saved-bookings`.
+- Future live/provider send wiring must not change parser behavior or `/api/ai-parse`.
+- Future live/provider send wiring must not add UI sectors/buttons/cards.
+- Future live/provider send wiring must not add new shims.
+- Required tests before any future WhatsApp staging send: `node scripts/test-whatsapp-provider-no-send-approval-packet.mjs`, `node scripts/test-whatsapp-customer-driver-details-no-live-guard.mjs`, `node scripts/test-customer-copy-multi-channel-no-live-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, provider env-name/secret-safe listing guard, recipient allowlist guard, template/content forbidden-field guard, single-send staging approval guard, rollback/disable verification guard, `npm run lint`, `npm run test:booking-ui-browser` if UI wiring changes, `git diff --check`, and `git status --short`.
+- Rollback note: keep WhatsApp on the setup-only disabled-send route until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed provider tokens, and restore the disabled/no-op route surface unchanged.
+- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
+
 ### Live location
 - Live location setup foundation.
 - Live location window policy setup foundation.

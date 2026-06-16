@@ -163,6 +163,10 @@ const guardChecks = [
     script: "scripts/test-whatsapp-customer-driver-details-no-live-guard.mjs",
   },
   {
+    label: "WhatsApp provider no-send approval packet guard",
+    script: "scripts/test-whatsapp-provider-no-send-approval-packet.mjs",
+  },
+  {
     label: "SMS no-live guard",
     script: "scripts/test-sms-customer-driver-details-no-live-guard.mjs",
   },

@@ -79,6 +79,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Checks passed for the no-live guard: `node scripts/test-admin-booking-read-no-live-guard.mjs`, `node scripts/test-admin-booking-read-contract-disabled-setup-api-contract.mjs`, `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-core-booking-persistence-safe-path-guard.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser`, `git diff --check`, `git diff --cached --check`, and `git status --short`.
 - Note: the first booking UI browser run during the no-live guard pass hit an unrelated timing timeout; rerun passed cleanly.
 
+### Load Bookings Typed Read Migration Plan Lock
+- Future typed Load Bookings read/list/detail migration is planned only; no runtime implementation is approved by this lock.
+- Current Load Bookings runtime wiring remains unchanged and stays on the existing legacy read surface.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Save Booking + CRM is unchanged and remains on `POST /api/admin-bookings`.
+- Existing disabled admin booking read/list/detail contract remains setup-only/no-live-read/no-op at `GET /api/admin-booking-read-contract-disabled-setup`.
+- Future typed Load Bookings migration must be read/list/detail only.
+- Future typed read must exclude pricing, payout, `customer_rates`, `driver_payout_rules`, rate overrides, payment, PDF, billing, provider/send, auth, location, photo, calendar, internal/admin notes, debug, and secrets.
+- Future implementation must not change Save Booking + CRM.
+- Future implementation must not activate DB read/write without separate explicit approval.
+- Required tests before any runtime wiring: typed read contract test, no-live read guard, Load Bookings route-flow guard, forbidden-field exclusion guard, `/api/admin-saved-bookings` separation guard, parser unchanged guard, and no-new-shim guard.
+- Rollback note: keep Load Bookings on the existing legacy read surface until a typed read path is separately approved and verified.
+- No UI/API/helper behavior change, `app/page.tsx` Load Bookings wiring, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/card, or new shim is approved by this lock.
+
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.

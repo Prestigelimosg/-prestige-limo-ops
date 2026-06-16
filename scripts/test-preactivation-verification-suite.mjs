@@ -30,6 +30,10 @@ const guardChecks = [
     script: "scripts/test-admin-booking-read-no-live-guard.mjs",
   },
   {
+    label: "Load Bookings typed read migration plan guard",
+    script: "scripts/test-load-bookings-typed-read-migration-plan.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

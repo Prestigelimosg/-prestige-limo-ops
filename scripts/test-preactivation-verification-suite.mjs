@@ -46,6 +46,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-safe-dto-contract.mjs",
   },
   {
+    label: "Load Bookings safe DTO no-live guard",
+    script: "scripts/test-load-bookings-safe-dto-no-live-guard.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

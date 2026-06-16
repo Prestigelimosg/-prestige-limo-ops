@@ -164,6 +164,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-runtime-wiring-blocker.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No runtime implementation, UI/API/helper behavior change, `app/page.tsx` Load Bookings wiring, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card, or new shim is approved by this lock.
 
+### Load Bookings Safe UI Adapter/Card Contract Setup Lock
+- Load Bookings safe operational UI adapter/card contract setup is done for future read/list/detail migration preparation only.
+- New setup-only helper: `lib/admin-load-bookings-safe-ui-adapter-card-contract.ts`.
+- New guard: `scripts/test-load-bookings-safe-ui-adapter-card-contract.mjs`.
+- The guard is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- The helper validates a future safe operational Load Bookings card/adapter shape only.
+- Allowed adapter/card fields are limited to booking id/reference/status, booking type, vehicle/service display, pickup/dropoff datetime/address, route summary/route points summary, pax/job card display, customer/company/booker/traveler display fields, booker email/phone, assigned driver display/contact/vehicle/status only if non-payout, child seat/extra stop display only if non-price, created_at/updated_at, and audit summary.
+- Forbidden fields remain rejected/excluded: pricing, payout, `customer_rate`, `customer_price_amount`, `customer_rate_override`, `customer_price_override_reason`, `customer_rates`, `driver_payout_rules`, `driver_payout_min/max/amount/override/reason/unit`, `driver_notes`, `driver_dispatch_include_payout`, midnight_surcharge/payout, extra_stop_surcharge/payout, child_seat_customer_surcharge/driver_payout, `pricing_source`, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, and secrets.
+- The helper remains setup-only, disabled/no-live-read/no-op, and does not create a route or runtime surface.
+- No `app/page.tsx` runtime wiring was added.
+- No real UI card/component rendering change was added.
+- Current Load Bookings runtime remains on `GET /api/admin-saved-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- Parser behavior and `/api/ai-parse` are unchanged.
+- The helper does not call Supabase, `adminLegacyDataClient`, or any DB read/write path.
+- No UI sectors, buttons, or cards were added.
+- No new shims were added.
+- No env change, deployment, migration, Supabase key use, provider/sending, payment/PDF/payout, auth, location, photo, calendar, or live activation is approved by this lock.
+
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.

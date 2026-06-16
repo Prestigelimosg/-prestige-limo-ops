@@ -54,6 +54,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-runtime-wiring-blocker.mjs",
   },
   {
+    label: "Load Bookings safe UI adapter card contract guard",
+    script: "scripts/test-load-bookings-safe-ui-adapter-card-contract.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

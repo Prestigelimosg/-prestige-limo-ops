@@ -247,6 +247,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This packet adds `scripts/test-load-bookings-db-read-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No runtime implementation, UI/API/helper behavior change, Save Booking + CRM change, `/api/admin-saved-bookings` behavior change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this packet.
 
+### Load Bookings Typed Read Adapter Foundation Lock
+- Setup-only typed Load Bookings DB-read adapter foundation is added at `lib/admin-load-bookings-typed-read-adapter-foundation.ts`.
+- It uses the existing safe Load Bookings DTO contract shape only.
+- It validates future read/list/detail adapter fields without executing any live read.
+- It remains disabled/no-live-read/no-op with read, DB-read, live-read, write, endpoint-change, app-page runtime wiring, parser-change, Save Booking change, and `/api/admin-saved-bookings` change flags closed.
+- It does not call Supabase.
+- It does not call `adminLegacyDataClient`.
+- It does not execute any DB read/write path.
+- It does not wire `app/page.tsx`.
+- It does not change the Load Bookings endpoint.
+- Load Bookings still uses `GET /api/admin-saved-bookings`.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Safe future adapter fields remain limited to safe DTO fields: booking id/reference/status, booking type, vehicle/service display, pickup/dropoff datetime/address, route summary/route points summary, pax/job card display, customer/company/booker/traveler display fields, booker email/phone, assigned driver display only if non-payout, child seat/extra stop display only if non-price, created_at/updated_at, and audit summary.
+- Forbidden fields remain rejected/excluded: pricing, payout, customer rates, driver payout rules, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and mock QA/dev archive fields.
+- Typed endpoint migration and DB-read activation remain parked until separate approval.
+- This lock adds `scripts/test-load-bookings-typed-read-adapter-foundation.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No runtime implementation, UI/API route/helper behavior change, Load Bookings endpoint change, Save Booking + CRM change, `/api/admin-saved-bookings` behavior change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

@@ -70,6 +70,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-db-read-approval-packet.mjs",
   },
   {
+    label: "Load Bookings typed read adapter foundation guard",
+    script: "scripts/test-load-bookings-typed-read-adapter-foundation.mjs",
+  },
+  {
     label: "Load Bookings operational runtime mapping guard",
     script: "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs",
   },

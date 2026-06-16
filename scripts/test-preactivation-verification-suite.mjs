@@ -79,6 +79,10 @@ const guardChecks = [
     script: "scripts/test-admin-full-driver-profile-action-disabled-setup-api-contract.mjs",
   },
   {
+    label: "disabled full driver profile action audit payload guard",
+    script: "scripts/test-admin-full-driver-profile-action-audit-payload-setup-api-contract.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

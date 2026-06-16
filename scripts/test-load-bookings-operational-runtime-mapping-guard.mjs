@@ -1,0 +1,344 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const ledgerPath = "docs/current-implementation-ledger.md";
+const appPagePath = "app/page.tsx";
+const aiParseRoutePath = "app/api/ai-parse/route.ts";
+const adminBookingsRoutePath = "app/api/admin-bookings/route.ts";
+const adminSavedBookingsRoutePath = "app/api/admin-saved-bookings/route.ts";
+const safeDtoHelperPath = "lib/admin-load-bookings-safe-dto-contract.ts";
+const safeUiAdapterHelperPath = "lib/admin-load-bookings-safe-ui-adapter-card-contract.ts";
+const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+
+const safeDtoHelperExport = "buildAdminLoadBookingsSafeDtoContract";
+const safeDtoHelperFragment = "admin-load-bookings-safe-dto-contract";
+const safeUiAdapterHelperExport = "buildAdminLoadBookingsSafeUiAdapterCardContract";
+const safeUiAdapterHelperFragment = "admin-load-bookings-safe-ui-adapter-card-contract";
+const mappingGuardScript = "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs";
+
+const dbOrLivePathPattern =
+  /@supabase\/supabase-js|createClient|supabase|\.from\(|\.select\(|\.insert\(|\.upsert\(|\.update\(|\.delete\(|rpc\s*\(|fetch\s*\(|process\.env|SUPABASE_[A-Z_]*|SERVICE_ROLE_KEY|SECRET_KEY|API_KEY|ACCESS_TOKEN|adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|legacy_shim|shim\s*\(/i;
+
+const forbiddenFields = [
+  "pricing",
+  "payout",
+  "`customer_rate`",
+  "`customer_price_amount`",
+  "`customer_rate_override`",
+  "`customer_price_override_reason`",
+  "`customer_rates`",
+  "`driver_payout_rules`",
+  "`driver_payout_min/max/amount/override/reason/unit`",
+  "`driver_notes`",
+  "`driver_dispatch_include_payout`",
+  "midnight_surcharge/payout",
+  "extra_stop_surcharge/payout",
+  "child_seat_customer_surcharge/driver_payout",
+  "`pricing_source`",
+  "rate overrides",
+  "payment",
+  "PDF",
+  "billing",
+  "provider/send",
+  "auth",
+  "location/photo/calendar",
+  "internal/admin notes",
+  "debug",
+  "secrets",
+];
+
+function assertIncludes(source, fragment, label = fragment) {
+  assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
+}
+
+function assertExcludes(source, fragmentOrPattern, label) {
+  const matches =
+    fragmentOrPattern instanceof RegExp
+      ? fragmentOrPattern.test(source)
+      : source.includes(fragmentOrPattern);
+
+  assert.equal(matches, false, `${label} must not include ${fragmentOrPattern}.`);
+}
+
+function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
+  const start = source.indexOf(startHeading);
+  assert.notEqual(start, -1, `Missing section heading: ${startHeading}`);
+  const next = source.indexOf(nextHeadingPrefix, start + startHeading.length);
+
+  return next === -1 ? source.slice(start) : source.slice(start, next);
+}
+
+function sliceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `Missing source marker: ${startMarker}`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `Missing end marker after ${startMarker}: ${endMarker}`);
+
+  return source.slice(start, end);
+}
+
+const [
+  ledger,
+  appPage,
+  aiParseRoute,
+  adminBookingsRoute,
+  adminSavedBookingsRoute,
+  safeDtoHelper,
+  safeUiAdapterHelper,
+  preactivationSuite,
+] = await Promise.all([
+  readFile(ledgerPath, "utf8"),
+  readFile(appPagePath, "utf8"),
+  readFile(aiParseRoutePath, "utf8"),
+  readFile(adminBookingsRoutePath, "utf8"),
+  readFile(adminSavedBookingsRoutePath, "utf8"),
+  readFile(safeDtoHelperPath, "utf8"),
+  readFile(safeUiAdapterHelperPath, "utf8"),
+  readFile(preactivationSuitePath, "utf8"),
+]);
+
+const mappingSection = sectionBetween(
+  ledger,
+  "### Operational-Only Load Bookings Runtime Mapping Guard Lock",
+);
+
+for (const phrase of [
+  "Future Load Bookings runtime mapping is guarded before any `app/page.tsx` wiring.",
+  "Current Load Bookings remains on `GET /api/admin-saved-bookings`.",
+  "Save Booking + CRM remains on `POST /api/admin-bookings`.",
+  "`/api/admin-saved-bookings` remains separate and unchanged.",
+  "Safe DTO contract remains setup-only.",
+  "Safe UI adapter/card contract remains setup-only.",
+  "No `app/page.tsx` Load Bookings runtime wiring is active.",
+  "No blind endpoint swap is approved.",
+  "Future operational mapping must use the safe DTO plus safe UI adapter/card path only.",
+  "Future operational mapping must not feed safe DTO data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, dashboard/recent/completed price lines, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.",
+  "Parser behavior and `/api/ai-parse` remain untouched.",
+  "No Supabase, `adminLegacyDataClient`, or DB read-write path is introduced by this mapping guard.",
+  "No new shims are added.",
+  "This lock adds `scripts/test-load-bookings-operational-runtime-mapping-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
+]) {
+  assertIncludes(mappingSection, phrase, `Operational mapping ledger phrase ${phrase}`);
+}
+
+for (const forbiddenField of forbiddenFields) {
+  assertIncludes(mappingSection, forbiddenField, `Operational mapping forbidden field ${forbiddenField}`);
+}
+
+for (const forbiddenApprovalPhrase of [
+  "approved for runtime wiring",
+  "runtime wiring is approved",
+  "safe to wire now",
+  "blind endpoint swap may proceed",
+  "blind endpoint swap can proceed",
+  "DB read/write is approved",
+  "finance/payout approval granted",
+]) {
+  assertExcludes(
+    mappingSection,
+    forbiddenApprovalPhrase,
+    `Operational mapping approval phrase ${forbiddenApprovalPhrase}`,
+  );
+}
+
+const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
+assertIncludes(
+  loadBookingsBlock,
+  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "Current Load Bookings endpoint",
+);
+assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");
+assertExcludes(loadBookingsBlock, safeDtoHelperExport, "Load Bookings safe DTO runtime wiring");
+assertExcludes(loadBookingsBlock, safeDtoHelperFragment, "Load Bookings safe DTO runtime wiring");
+assertExcludes(loadBookingsBlock, safeUiAdapterHelperExport, "Load Bookings safe UI adapter runtime wiring");
+assertExcludes(loadBookingsBlock, safeUiAdapterHelperFragment, "Load Bookings safe UI adapter runtime wiring");
+assertExcludes(loadBookingsBlock, "/api/admin-booking-read-contract-disabled-setup", "Blind typed-read endpoint swap");
+
+const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
+assertIncludes(saveBookingBlock, 'fetch("/api/admin-bookings"', "Save Booking + CRM path");
+assertIncludes(saveBookingBlock, 'method: "POST"', "Save Booking + CRM method");
+assertExcludes(saveBookingBlock, "/api/admin-saved-bookings", "Save Booking + CRM path");
+assertExcludes(saveBookingBlock, safeDtoHelperExport, "Save Booking + CRM safe DTO mapping");
+assertExcludes(saveBookingBlock, safeUiAdapterHelperExport, "Save Booking + CRM safe UI adapter mapping");
+
+assertExcludes(appPage, safeDtoHelperExport, "app/page.tsx safe DTO runtime wiring");
+assertExcludes(appPage, safeDtoHelperFragment, "app/page.tsx safe DTO runtime wiring");
+assertExcludes(appPage, safeUiAdapterHelperExport, "app/page.tsx safe UI adapter runtime wiring");
+assertExcludes(appPage, safeUiAdapterHelperFragment, "app/page.tsx safe UI adapter runtime wiring");
+
+const bookingRecordType = sliceBetween(appPage, "type BookingRecord = {", "type BookingStatusValue");
+for (const riskyField of [
+  "customer_rate",
+  "customer_price_amount",
+  "customer_rate_override",
+  "customer_price_override_reason",
+  "driver_payout_min",
+  "driver_payout_max",
+  "driver_payout_amount",
+  "driver_payout_override",
+  "driver_payout_reason",
+  "driver_payout_unit",
+  "driver_notes",
+  "driver_dispatch_include_payout",
+  "midnight_payout",
+  "extra_stop_payout",
+  "child_seat_driver_payout",
+  "pricing_source",
+]) {
+  assertIncludes(bookingRecordType, riskyField, `Parked BookingRecord risky field ${riskyField}`);
+}
+
+for (const [label, start, end, expectedFragments] of [
+  [
+    "bookingCardPriceLine finance/payout path",
+    "function bookingCardPriceAmounts",
+    "function positiveRateOrDefault",
+    [
+      "customer_rate",
+      "customer_price_amount",
+      "customer_rate_override",
+      "driver_payout_min",
+      "driver_payout_override",
+      "driver_payout_amount",
+      "midnight_payout",
+      "extra_stop_payout",
+      "child_seat_driver_payout",
+    ],
+  ],
+  [
+    "bookingRecordToForm finance/payout path",
+    "function bookingRecordToForm",
+    "function stripBookerFromJobCard",
+    [
+      "customer_rate_override",
+      "customer_price_override_reason",
+      "driver_payout_override",
+      "driver_payout_reason",
+      "driver_notes",
+      "driver_dispatch_include_payout",
+    ],
+  ],
+  [
+    "driver dispatch payout copy path",
+    "function getDriverDispatchCard",
+    "function parseMockChargeTimeToMinutes",
+    ["driver_payout_override", "driver_payout_amount", "driver_dispatch_include_payout", "Payout:"],
+  ],
+  [
+    "driver assignment payout controls path",
+    "function bookingRecordToDriverDraft",
+    "function getDriverDraft",
+    ["driver_payout_override", "driver_payout_reason", "driver_notes", "driver_dispatch_include_payout"],
+  ],
+  [
+    "driver assignment payout write path",
+    "async function assignDriver",
+    "async function copyDriverDispatch",
+    [
+      "driver_payout_rules",
+      "driver_payout_amount",
+      "driver_payout_override",
+      "driver_payout_reason",
+      "driver_notes",
+      "driver_dispatch_include_payout",
+    ],
+  ],
+]) {
+  const source = sliceBetween(appPage, start, end);
+
+  for (const expectedFragment of expectedFragments) {
+    assertIncludes(source, expectedFragment, `${label} fragment ${expectedFragment}`);
+  }
+
+  assertExcludes(source, safeDtoHelperExport, `${label} safe DTO mapping`);
+  assertExcludes(source, safeUiAdapterHelperExport, `${label} safe UI adapter mapping`);
+}
+
+const priceLineUsages = appPage.match(/bookingCardPriceLine\(savedBooking\)/g) ?? [];
+assert.ok(
+  priceLineUsages.length >= 3,
+  "Dashboard, recent, and completed booking cards must remain recognized as parked price-line users.",
+);
+
+for (const billingDependency of [
+  "buildCompletedBookingBillingReadinessAuditPayload",
+  "hasSavedCustomerBillingAmountSource",
+  "adminCompletedBookingBillingReadinessAudit",
+]) {
+  assertIncludes(appPage, billingDependency, `Billing readiness finance path ${billingDependency}`);
+}
+
+for (const [label, source] of [
+  ["Safe DTO contract helper", safeDtoHelper],
+  ["Safe UI adapter/card contract helper", safeUiAdapterHelper],
+]) {
+  assertIncludes(source, "server-only", label);
+  assertIncludes(source, "loadBookingsRuntimeWiringEnabled: false", label);
+  assertIncludes(source, "readEnabled: false", label);
+  assertIncludes(source, "liveReadEnabled: false", label);
+  assertIncludes(source, "dbReadEnabled: false", label);
+  assertIncludes(source, "no_live_read: true", label);
+  assertExcludes(source, dbOrLivePathPattern, label);
+}
+
+for (const field of [
+  "pricing",
+  "payout",
+  "customer_rate",
+  "customer_price_amount",
+  "customer_rates",
+  "driver_payout_rules",
+  "driver_payout_amount",
+  "driver_notes",
+  "driver_dispatch_include_payout",
+  "pricing_source",
+  "payment",
+  "pdf",
+  "billing",
+  "provider_send",
+  "auth_session",
+  "live_location",
+  "photo",
+  "calendar_event_id",
+  "internal_admin_notes",
+  "debug_payload",
+  "secret_token",
+]) {
+  assertIncludes(safeDtoHelper, `"${field}"`, `Safe DTO forbidden field ${field}`);
+  assertIncludes(safeUiAdapterHelper, `"${field}"`, `Safe UI adapter forbidden field ${field}`);
+}
+
+assertIncludes(adminSavedBookingsRoute, "export async function GET", "Admin saved bookings route");
+assertIncludes(adminSavedBookingsRoute, "loadAdminSavedBookingList", "Admin saved bookings route");
+assertIncludes(adminSavedBookingsRoute, "loadAdminSavedBookingById", "Admin saved bookings route");
+assertExcludes(adminSavedBookingsRoute, safeDtoHelperExport, "Admin saved bookings route safe DTO separation");
+assertExcludes(
+  adminSavedBookingsRoute,
+  safeUiAdapterHelperExport,
+  "Admin saved bookings route safe UI adapter separation",
+);
+
+for (const [label, source] of [
+  ["AI parse route", aiParseRoute],
+  ["admin-bookings route", adminBookingsRoute],
+]) {
+  assertExcludes(source, safeDtoHelperExport, label);
+  assertExcludes(source, safeDtoHelperFragment, label);
+  assertExcludes(source, safeUiAdapterHelperExport, label);
+  assertExcludes(source, safeUiAdapterHelperFragment, label);
+}
+
+for (const suiteEntry of [
+  mappingGuardScript,
+  "scripts/test-load-bookings-operational-runtime-wiring-approval-packet.mjs",
+  "scripts/test-load-bookings-safe-ui-adapter-card-contract.mjs",
+  "scripts/test-load-bookings-runtime-wiring-blocker.mjs",
+  "scripts/test-load-bookings-safe-dto-no-live-guard.mjs",
+  "scripts/test-load-bookings-safe-dto-contract.mjs",
+  "scripts/test-admin-route-flow-lock.mjs",
+  "scripts/test-shim-cleanup-no-new-shim-guard.mjs",
+]) {
+  assertIncludes(preactivationSuite, suiteEntry, `Preactivation suite entry ${suiteEntry}`);
+}
+
+console.log("Load Bookings operational runtime mapping guard passed");

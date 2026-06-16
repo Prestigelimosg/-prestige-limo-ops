@@ -451,6 +451,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - CRM identity/contact logic is further isolated from rate override save/remove at `fb2e9ca Finish CRM write rate separation boundary`.
 - GET-only disabled/no-write CRM identity/contact write action boundary is done at `3cfd0a2 Add disabled CRM identity write action API`.
 - Disabled action endpoint: `/api/admin-company-traveler-crm-identity-contact-write-action-disabled-setup`.
+- Disabled/no-write CRM identity/contact audit payload setup is done at `db72c46 Add disabled CRM identity audit payload setup`.
+- Audit payload setup endpoint: `/api/admin-company-traveler-crm-identity-contact-write-action-audit-payload-setup`.
+- It prepares the future audit evidence shape only.
+- It does not persist audit logs.
+- It does not call Supabase.
+- It does not call `adminLegacyDataClient`.
 - It uses the typed CRM identity/contact contract from `25d0703 Add typed company traveler CRM write foundation`.
 - It validates safe company/traveler identity/contact fields.
 - It rejects forbidden rate/pricing/payout/payment/internal/debug fields.
@@ -465,12 +471,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Save Booking + CRM is unchanged and remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` is unchanged and remains separate.
 - Parser behavior and `/api/ai-parse` are unchanged.
+- No UI change was made.
 - No DB/write/live activation or Supabase use happened.
 - No new shims were added.
 - No env change, deployment, live DB/write execution, migration, UI sector/card, provider/sending, payment/PDF/payout, auth, location, photo, calendar, or live sending activation happened.
 - The split is guarded by `scripts/test-crm-identity-rate-override-payload-split.mjs`.
 - Checks passed for the separation boundary: `node scripts/test-crm-identity-rate-override-payload-split.mjs`, `node scripts/test-company-traveler-crm-write-foundation-lock.mjs`, `node scripts/test-admin-company-traveler-crm-identity-contact-write-contract.mjs`, `node scripts/test-company-traveler-crm-write-split-plan.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser`, `git diff --check`, and `git status --short`.
 - Checks passed for the disabled CRM identity/contact write action API: `node scripts/test-admin-company-traveler-crm-identity-contact-write-action-disabled-setup-api-contract.mjs`, `node scripts/test-crm-identity-rate-override-payload-split.mjs`, `node scripts/test-company-traveler-crm-write-foundation-lock.mjs`, `node scripts/test-admin-company-traveler-crm-identity-contact-write-contract.mjs`, `node scripts/test-company-traveler-crm-write-split-plan.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser`, `git diff --check`, and `git status --short`.
+- Checks passed for the disabled CRM identity/contact audit payload setup: `node scripts/test-admin-company-traveler-crm-identity-contact-write-action-audit-payload-setup-api-contract.mjs`, CRM/shim/preactivation guard scripts, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `git diff --check`, and `git status --short`.
 
 ### Company/traveler CRM write-readiness setup lock
 - Setup-only typed helper is done at `32ca2ca Add company traveler CRM write readiness setup`.

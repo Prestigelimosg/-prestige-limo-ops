@@ -50,6 +50,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-safe-dto-no-live-guard.mjs",
   },
   {
+    label: "Load Bookings runtime wiring blocker guard",
+    script: "scripts/test-load-bookings-runtime-wiring-blocker.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

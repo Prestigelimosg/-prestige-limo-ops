@@ -149,6 +149,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new shims were added.
 - Checks passed for the implementation and no-live guard: `node scripts/test-load-bookings-safe-dto-contract.mjs`, `node scripts/test-load-bookings-safe-dto-no-live-guard.mjs`, `node scripts/test-load-bookings-typed-dto-split-plan.mjs`, `node scripts/test-load-bookings-runtime-wiring-approval-packet.mjs`, `node scripts/test-load-bookings-typed-read-migration-plan.mjs`, `node scripts/test-admin-booking-read-contract-disabled-setup-api-contract.mjs`, `node scripts/test-admin-booking-read-no-live-guard.mjs`, `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-core-booking-persistence-safe-path-guard.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser`, `git diff --check`, and `git status --short`.
 
+### Load Bookings Runtime Wiring Blocker Lock
+- Runtime wiring to the safe DTO is blocked for now.
+- Current Load Bookings runtime remains on `GET /api/admin-saved-bookings`.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Reason: current `BookingRecord` and UI still consume risky legacy finance/payout/internal fields.
+- Current risky dependencies include `customer_rate`, `customer_price_amount`, `customer_rate_override`, `customer_price_override_reason`, `driver_payout_min/max/amount/override/reason/unit`, `driver_notes`, `driver_dispatch_include_payout`, midnight_surcharge/payout, extra_stop_surcharge/payout, child_seat_customer_surcharge/driver_payout, and `pricing_source`.
+- `bookingCardPriceLine`, recent/dashboard/completed booking cards, `bookingRecordToForm`, driver dispatch copy, driver assignment controls, and billing readiness paths must not be fed by the safe DTO until split.
+- Future typed Load Bookings wiring requires a safe operational UI adapter or safe cards first.
+- Future safe UI adapter must exclude pricing, payout, `customer_rates`, `driver_payout_rules`, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, and secrets.
+- Existing legacy finance/payout-aware UI behavior remains parked until separate finance/payout approval.
+- Rollback note: keep Load Bookings on `GET /api/admin-saved-bookings` until safe UI adapter and typed read path are separately approved and verified.
+- This lock adds `scripts/test-load-bookings-runtime-wiring-blocker.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No runtime implementation, UI/API/helper behavior change, `app/page.tsx` Load Bookings wiring, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card, or new shim is approved by this lock.
+
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.

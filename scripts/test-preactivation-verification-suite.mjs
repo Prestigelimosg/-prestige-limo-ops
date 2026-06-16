@@ -86,6 +86,10 @@ const guardChecks = [
     script: "scripts/test-rate-settings-runtime-approval-packet.mjs",
   },
   {
+    label: "pricing/customer_rates runtime approval packet guard",
+    script: "scripts/test-pricing-customer-rates-approval-packet.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

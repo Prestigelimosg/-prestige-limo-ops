@@ -34,6 +34,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-migration-plan.mjs",
   },
   {
+    label: "Load Bookings runtime wiring approval packet guard",
+    script: "scripts/test-load-bookings-runtime-wiring-approval-packet.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

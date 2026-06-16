@@ -276,7 +276,7 @@ export function buildAdminCompanyTravelerCrmWriteActionAuditPayloadSetup(
     missingRequirements.push("disabled_action_result");
   }
 
-  const auditPayload = {
+  const auditPayload: AdminCompanyTravelerCrmWriteActionAuditPayloadSetupResult["audit_payload"] = {
     ...disabledFields,
     actionSource,
     actionType,

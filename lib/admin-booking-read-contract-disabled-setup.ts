@@ -268,7 +268,7 @@ function safeText(value: unknown, maxLength: number) {
   return cleaned;
 }
 
-function safeReadMode(input: Record<string, unknown>) {
+function safeReadMode(input: Record<string, unknown>): "list" | "detail" | null {
   const value = input.read_mode ?? input.readMode ?? input.mode ?? input.type;
   const cleaned = safeText(value, 40)?.toLowerCase() || null;
 

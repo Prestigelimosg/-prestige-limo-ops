@@ -255,7 +255,7 @@ export function buildAdminRateSettingsWriteActionDisabledSetup(
   input: AdminRateSettingsWriteActionDisabledSetupInput = {},
 ): AdminRateSettingsWriteActionDisabledSetupResult {
   const { forbiddenFields, normalized, unknownFields } = normalizeInput(input);
-  const rateSettingsFields = {
+  const rateSettingsFields: AdminRateSettingsWriteActionDisabledSetupFields = {
     child_seat_customer_surcharge: finiteNonNegativeNumber(normalized.child_seat_customer_surcharge),
     child_seat_driver_payout: finiteNonNegativeNumber(normalized.child_seat_driver_payout),
     extra_stop_payout: finiteNonNegativeNumber(normalized.extra_stop_payout),

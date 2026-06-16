@@ -133,7 +133,7 @@ export function buildAdminFullDriverProfileActionAuditPayloadSetup(
     disabledAction.invalid_fields.length + disabledAction.unknown_fields.length;
   const rejectedForbiddenFieldSummary =
     rejectedForbiddenFieldCount > 0 ? "forbidden_fields_rejected" : "none";
-  const auditPayload = {
+  const auditPayload: AdminFullDriverProfileActionAuditPayloadSetupResult["audit_payload"] = {
     ...fields,
     actionName: disabledAction.actionType,
     actionType: disabledAction.actionType,

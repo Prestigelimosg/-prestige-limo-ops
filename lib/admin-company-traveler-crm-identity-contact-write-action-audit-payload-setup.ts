@@ -147,7 +147,7 @@ export function buildAdminCompanyTravelerCrmIdentityContactWriteActionAuditPaylo
   const rejectedForbiddenFieldSummary =
     rejectedForbiddenFieldCount > 0 ? "forbidden_fields_rejected" : "none";
   const resultLabel = disabledAction.status === "blocked" ? "blocked/no-op" : "rejected/no-op";
-  const auditPayload = {
+  const auditPayload: AdminCompanyTravelerCrmIdentityContactWriteActionAuditPayloadSetupResult["audit_payload"] = {
     ...fields,
     actionName: disabledAction.actionType,
     actionType: disabledAction.actionType,

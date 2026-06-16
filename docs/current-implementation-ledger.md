@@ -963,6 +963,31 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, compact Email/WhatsApp/SMS disabled-send buttons row/layout fix, and multi-channel no-live guard.
 - No real sending active.
 
+### Email Provider No-Send Approval Packet Lock
+- Approval status: pending future Email staging test approval.
+- This is a docs/test-only no-send approval packet guarded by `scripts/test-email-provider-no-send-approval-packet.mjs`.
+- Current Email routes remain setup-only/no-live:
+  `GET /api/admin-customer-driver-details-email-preview-readiness-setup`,
+  `GET /api/admin-customer-driver-details-email-review-item-setup`,
+  `GET /api/admin-customer-driver-details-email-send-disabled-setup`,
+  `GET /api/admin-email-provider-readiness-setup`,
+  `GET /api/admin-email-provider-selection-setup`, and
+  `GET /api/admin-email-activation-preflight-setup`.
+- Current Email send surface remains disabled/no-op with `external_send: false`, `sendingEnabled: false`, `liveSendingEnabled: false`, and `providerConfigured: false`.
+- No provider env values are printed, required, or read by the current Email setup-only routes/helpers.
+- No SMTP/API/provider activation is approved.
+- No live Email send is approved.
+- Future staging Email test requires separate owner approval, secret-safe provider env-name handling, recipient allowlist, content guard, one-message test scope, and rollback/disable plan.
+- Future Email content must exclude pricing, payout, payment/PDF, auth, location/photo/calendar, parser/debug, internal notes, and secrets.
+- Future live/provider send wiring must not change Save Booking + CRM.
+- Future live/provider send wiring must not change `/api/admin-saved-bookings`.
+- Future live/provider send wiring must not change parser behavior or `/api/ai-parse`.
+- Future live/provider send wiring must not add UI sectors/buttons/cards.
+- Future live/provider send wiring must not add new shims.
+- Required tests before any future Email staging send: `node scripts/test-email-provider-no-send-approval-packet.mjs`, `node scripts/test-email-no-live-guard.mjs`, `node scripts/test-customer-copy-multi-channel-no-live-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, provider env-name/secret-safe listing guard, recipient allowlist guard, content forbidden-field guard, single-send staging approval guard, rollback/disable verification guard, `npm run lint`, `npm run test:booking-ui-browser` if UI wiring changes, `git diff --check`, and `git status --short`.
+- Rollback note: keep Email on the setup-only disabled-send/preflight routes until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed provider tokens, and restore the disabled/no-op route surface unchanged.
+- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
+
 ### WhatsApp Provider No-Send Approval Packet Lock
 - Approval status: pending future WhatsApp staging test approval.
 - This is a docs/test-only no-send approval packet guarded by `scripts/test-whatsapp-provider-no-send-approval-packet.mjs`.

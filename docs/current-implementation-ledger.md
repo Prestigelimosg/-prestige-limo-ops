@@ -773,6 +773,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep pricing/customer_rates runtime parked on the current legacy rate settings/company/traveler override and booking snapshot paths until a typed lane is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy paths unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/payout/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Payout Runtime Approval Packet Lock
+- Approval status: pending future runtime-wiring approval.
+- This is a docs/test-only approval packet guarded by `scripts/test-payout-approval-packet.mjs`.
+- `driver_payout_rules`/payout runtime remains parked.
+- Payout is coupled to pricing/profit, `rate_settings`, company/traveler overrides, full driver profile, assignment, dispatch copy, and saved-booking snapshots.
+- `customer_rates`/pricing must remain separate and parked.
+- Payment/PDF/billing must remain separate and parked.
+- Current `rate_settings` save/upsert, company/traveler rate override save/remove, full driver profile save/delete, saved-booking driver assignment payout snapshots, and dispatch payout copy remain parked for payout purposes.
+- Future payout lane must prevent customer-visible payout leakage and driver-visible customer price/billing leakage.
+- Future payout lane must exclude customer pricing, `customer_rates`, payment/PDF/billing activation, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.
+- Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.
+- Future runtime wiring must not change Save Booking + CRM.
+- Future runtime wiring must not change `/api/admin-saved-bookings`.
+- Future runtime wiring must not change parser behavior or `/api/ai-parse`.
+- Future runtime wiring must not add UI sectors/buttons/cards.
+- Future runtime wiring must not add new shims.
+- Required tests before any future wiring: typed payout runtime contract test, customer/driver finance visibility guard, forbidden-field exclusion guard for customer pricing, `customer_rates`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets, `node scripts/test-payout-approval-packet.mjs`, `node scripts/test-pricing-customer-rates-approval-packet.mjs`, `node scripts/test-full-driver-profile-runtime-approval-packet.mjs`, `node scripts/test-rate-settings-runtime-approval-packet.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
+- Rollback note: keep `driver_payout_rules`/payout runtime parked on the current legacy rate settings/company/traveler override, full driver profile, saved-booking assignment, dispatch copy, and booking snapshot paths until a typed lane is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy paths unchanged.
+- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/customer_rates/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
+
 ### Full driver profile shim risk lock
 - Full driver profile shim replacement is payout/internal-field entangled.
 - `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.

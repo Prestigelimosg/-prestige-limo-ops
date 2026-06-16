@@ -90,6 +90,10 @@ const guardChecks = [
     script: "scripts/test-pricing-customer-rates-approval-packet.mjs",
   },
   {
+    label: "payout runtime approval packet guard",
+    script: "scripts/test-payout-approval-packet.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

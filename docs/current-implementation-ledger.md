@@ -735,6 +735,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No app behavior, UI, env, deployment, DB/write, migration, Supabase key use, provider/sending, payment/PDF/payout, auth, location, photo, calendar, CRM-calendar, or risky shim behavior changed.
 - Checks passed for the implementation: `node scripts/test-admin-rate-settings-write-action-disabled-setup-api-contract.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser`, `git diff --check`, `git diff --cached --check`, and `git status --short`.
 
+### Rate Settings Runtime Approval Packet Lock
+- Approval status: pending future runtime-wiring approval.
+- This is a docs/test-only approval packet guarded by `scripts/test-rate-settings-runtime-approval-packet.mjs`.
+- `rate_settings` read path is typed through `GET /api/admin-rate-setup`.
+- `rate_settings` save/upsert runtime remains parked.
+- `saveDefaultRates` still uses the legacy `rate_settings` shim path.
+- Disabled `rate_settings` write action setup exists at `GET /api/admin-rate-settings-write-action-disabled-setup` and remains no-write/no-op.
+- Future runtime lane must exclude `customer_rates`, `driver_payout_rules`, pricing, payout snapshots, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.
+- Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.
+- Future runtime wiring must not change Save Booking + CRM.
+- Future runtime wiring must not change `/api/admin-saved-bookings`.
+- Future runtime wiring must not change parser behavior or `/api/ai-parse`.
+- Future runtime wiring must not add UI sectors/buttons/cards.
+- Future runtime wiring must not add new shims.
+- Required tests before any future wiring: typed rate settings runtime contract test, `node scripts/test-rate-settings-runtime-approval-packet.mjs`, `node scripts/test-admin-rate-settings-write-action-disabled-setup-api-contract.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
+- Rollback note: keep `saveDefaultRates` on the parked legacy `rate_settings` shim path until typed runtime wiring is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy path unchanged.
+- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
+
 ### Full driver profile shim risk lock
 - Full driver profile shim replacement is payout/internal-field entangled.
 - `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.

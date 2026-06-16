@@ -82,6 +82,10 @@ const guardChecks = [
     script: "scripts/test-admin-rate-settings-write-action-disabled-setup-api-contract.mjs",
   },
   {
+    label: "rate settings runtime approval packet guard",
+    script: "scripts/test-rate-settings-runtime-approval-packet.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

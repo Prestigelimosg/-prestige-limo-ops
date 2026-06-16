@@ -175,6 +175,10 @@ const guardChecks = [
     script: "scripts/test-telegram-internal-admin-alert-no-live-guard.mjs",
   },
   {
+    label: "Telegram provider no-send approval packet guard",
+    script: "scripts/test-telegram-provider-no-send-approval-packet.mjs",
+  },
+  {
     label: "customer driver-details link no-live guard",
     script: "scripts/test-customer-driver-details-link-no-live-guard.mjs",
   },

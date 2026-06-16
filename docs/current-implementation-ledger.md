@@ -984,6 +984,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep WhatsApp on the setup-only disabled-send route until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed provider tokens, and restore the disabled/no-op route surface unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Telegram Provider No-Send Approval Packet Lock
+- Approval status: pending future Telegram staging test approval.
+- This is a docs/test-only no-send approval packet guarded by `scripts/test-telegram-provider-no-send-approval-packet.mjs`.
+- Current Telegram routes remain setup-only/no-live:
+  `GET /api/admin-telegram-internal-admin-alert-preview-readiness-setup` and
+  `GET /api/admin-telegram-internal-admin-alert-send-disabled-setup`.
+- Current Telegram send surface remains disabled/no-op with `external_send: false`, `sendingEnabled: false`, `liveSendingEnabled: false`, and `providerConfigured: false`.
+- No provider env values are printed, required, or read by the current Telegram setup-only routes/helpers.
+- No Telegram bot token/API activation is approved.
+- No live Telegram send is approved.
+- Future staging Telegram test requires separate owner approval, secret-safe bot/env-name handling, recipient/chat allowlist, content guard, one-message test scope, and rollback/disable plan.
+- Future Telegram content must exclude pricing, payout, payment/PDF, auth, location/photo/calendar, parser/debug, internal notes, and secrets.
+- Future live/provider send wiring must not change Save Booking + CRM.
+- Future live/provider send wiring must not change `/api/admin-saved-bookings`.
+- Future live/provider send wiring must not change parser behavior or `/api/ai-parse`.
+- Future live/provider send wiring must not add UI sectors/buttons/cards.
+- Future live/provider send wiring must not add new shims.
+- Required tests before any future Telegram staging send: `node scripts/test-telegram-provider-no-send-approval-packet.mjs`, `node scripts/test-telegram-internal-admin-alert-no-live-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, provider env-name/secret-safe listing guard, recipient/chat allowlist guard, content forbidden-field guard, single-send staging approval guard, rollback/disable verification guard, `npm run lint`, `npm run test:booking-ui-browser` if UI wiring changes, `git diff --check`, and `git status --short`.
+- Rollback note: keep Telegram on the setup-only disabled-send route until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed bot tokens, and restore the disabled/no-op route surface unchanged.
+- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
+
 ### Live location
 - Live location setup foundation.
 - Live location window policy setup foundation.

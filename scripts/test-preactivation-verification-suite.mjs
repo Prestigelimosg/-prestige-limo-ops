@@ -139,6 +139,10 @@ const guardChecks = [
     script: "scripts/test-admin-full-driver-profile-no-live-guard.mjs",
   },
   {
+    label: "full driver profile runtime approval packet guard",
+    script: "scripts/test-full-driver-profile-runtime-approval-packet.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

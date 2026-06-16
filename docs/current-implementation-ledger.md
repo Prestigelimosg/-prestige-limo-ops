@@ -824,6 +824,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new shims were added.
 - Checks passed for the implementation: `node scripts/test-admin-full-driver-profile-no-live-guard.mjs`, `node scripts/test-admin-full-driver-profile-action-audit-payload-setup-api-contract.mjs`, `node scripts/test-full-driver-profile-split-readiness-lock.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser`, `git diff --check`, `git diff --cached --check`, and `git status --short`.
 
+### Full Driver Profile Runtime Approval Packet Lock
+- Approval status: pending future runtime-wiring approval.
+- This is a docs/test-only approval packet guarded by `scripts/test-full-driver-profile-runtime-approval-packet.mjs`.
+- Full driver profile display/read is typed through `GET /api/admin-driver-assignment-display`.
+- Driver availability/deactivation is typed through `/api/admin-driver-availability`.
+- Full driver profile save/delete runtime remains parked.
+- `loadDrivers`, `saveDriverProfile`, and `deleteDriverProfile` still use the legacy `drivers` shim path for full profile surfaces.
+- Disabled full driver profile action setup, audit payload setup, and no-live guard already exist.
+- Future runtime lane must exclude `payout_preferences`, `driver_payout_rules`, pricing, payout, notes, `preferred_areas`, `airport_permit_notes`, internal/admin notes, payment/PDF/billing, provider/send, auth, location/photo/calendar, debug, and secrets unless separately approved.
+- Future DB write/delete requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write/delete execution.
+- Future runtime wiring must not change Save Booking + CRM.
+- Future runtime wiring must not change `/api/admin-saved-bookings`.
+- Future runtime wiring must not change parser behavior or `/api/ai-parse`.
+- Future runtime wiring must not add UI sectors/buttons/cards.
+- Future runtime wiring must not add new shims.
+- Required tests before any future wiring: typed full driver profile runtime contract test, `node scripts/test-full-driver-profile-runtime-approval-packet.mjs`, `node scripts/test-admin-full-driver-profile-no-live-guard.mjs`, `node scripts/test-full-driver-profile-split-readiness-lock.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
+- Rollback note: keep full driver profile save/delete on the parked legacy `drivers` shim path until typed runtime wiring is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy path unchanged.
+- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write/delete, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
+
 ### Full Driver Profile Shim Split Approval Packet
 - Approval status: pending owner approval.
 - Goal: split safe driver display/operational fields from risky full profile save/delete fields before any future full-driver shim replacement.

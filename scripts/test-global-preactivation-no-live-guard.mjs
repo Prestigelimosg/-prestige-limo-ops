@@ -34,6 +34,7 @@ const setupRouteNameFragments = [
   "admin-live-location",
   "admin-ots-photo-proof",
   "admin-production-deployment-hardening",
+  "admin-rate-settings-write-action",
   "admin-sms-customer-driver-details",
   "admin-telegram-internal-admin-alert",
   "admin-whatsapp-customer-driver-details",

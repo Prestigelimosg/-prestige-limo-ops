@@ -34,6 +34,10 @@ const guardChecks = [
     script: "scripts/test-rate-settings-write-split-lock.mjs",
   },
   {
+    label: "disabled rate settings write action guard",
+    script: "scripts/test-admin-rate-settings-write-action-disabled-setup-api-contract.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

@@ -184,6 +184,30 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new shims were added.
 - No env change, deployment, migration, Supabase key use, provider/sending, payment/PDF/payout, auth, location, photo, calendar, or live activation is approved by this lock.
 
+### Operational-Only Load Bookings Runtime Wiring Approval Packet
+- Approval status: pending future runtime-wiring approval.
+- This packet does not approve runtime wiring.
+- Current Load Bookings remains on `GET /api/admin-saved-bookings`.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Safe DTO contract exists but is not runtime-wired.
+- Safe UI adapter/card contract exists but is not runtime-wired.
+- Runtime wiring remains blocked until approved separately.
+- Future runtime wiring must use operational-only adapter/card fields.
+- Future runtime wiring must not feed the safe DTO into existing finance/payout/internal `BookingRecord` paths.
+- Existing finance/payout/internal UI paths remain parked: `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, dashboard/recent/completed price lines, driver dispatch payout copy, driver assignment payout controls, and billing readiness finance paths.
+- Future operational-only UI adapter/card must exclude pricing, payout, `customer_rate`, `customer_price_amount`, `customer_rate_override`, `customer_price_override_reason`, `customer_rates`, `driver_payout_rules`, `driver_payout_min/max/amount/override/reason/unit`, `driver_notes`, `driver_dispatch_include_payout`, midnight_surcharge/payout, extra_stop_surcharge/payout, child_seat_customer_surcharge/driver_payout, `pricing_source`, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, and secrets.
+- Future implementation must not change Save Booking + CRM.
+- Future implementation must not change `/api/admin-saved-bookings` behavior.
+- Future implementation must not touch parser or `/api/ai-parse`.
+- Future implementation must not add UI sectors/buttons/cards.
+- Future implementation must not add new shims.
+- Future live DB read activation requires separate approval and gate/env verification.
+- Required future tests before runtime wiring: safe DTO contract guard, safe UI adapter/card contract guard, operational-only runtime mapping guard, forbidden-field exclusion guard, Load Bookings route-flow guard, `/api/admin-saved-bookings` separation guard, parser unchanged guard, no-new-shim guard, booking UI browser test, and rollback/no-live checkpoint.
+- Rollback note: keep Load Bookings on `/api/admin-saved-bookings` until the operational-only runtime path is separately approved, implemented, verified, and reversible.
+- This packet adds `scripts/test-load-bookings-operational-runtime-wiring-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No runtime implementation, UI/API/helper behavior change, `app/page.tsx` Load Bookings wiring, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card, or new shim is approved by this packet.
+
 ### Driver Job Link GET Validation Lock
 - GET/read for `/api/admin-driver-job-links` is fixed at `43c5970 Fix driver job link GET validation`.
 - GET/read now accepts safe dashboard-style booking refs without noisy 400s.

@@ -267,6 +267,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-typed-read-adapter-foundation.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No runtime implementation, UI/API route/helper behavior change, Load Bookings endpoint change, Save Booking + CRM change, `/api/admin-saved-bookings` behavior change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
 
+### Disabled Typed Load Bookings Read Endpoint Setup Lock
+- Setup-only disabled typed Load Bookings read endpoint is added at `GET /api/admin-load-bookings-typed-read-disabled-setup`.
+- New setup route: `app/api/admin-load-bookings-typed-read-disabled-setup/route.ts`.
+- It uses the existing typed read adapter foundation at `lib/admin-load-bookings-typed-read-adapter-foundation.ts`.
+- The route is GET-only and remains disabled/no-live-read/no-op.
+- It validates safe DTO fields only.
+- It does not call Supabase.
+- It does not call `adminLegacyDataClient`.
+- It does not execute any DB read/write path.
+- It does not wire `app/page.tsx`.
+- It does not change the Load Bookings endpoint.
+- Load Bookings still uses `GET /api/admin-saved-bookings`.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Pricing, payout, payment/PDF, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and mock QA/dev archive fields remain rejected/excluded.
+- This lock adds `scripts/test-load-bookings-typed-read-disabled-setup-api-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No runtime implementation, live API behavior change, Load Bookings endpoint change, Save Booking + CRM change, `/api/admin-saved-bookings` behavior change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

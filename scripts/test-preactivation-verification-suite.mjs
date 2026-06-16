@@ -74,6 +74,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-adapter-foundation.mjs",
   },
   {
+    label: "Load Bookings typed read disabled setup API contract guard",
+    script: "scripts/test-load-bookings-typed-read-disabled-setup-api-contract.mjs",
+  },
+  {
     label: "Load Bookings operational runtime mapping guard",
     script: "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs",
   },

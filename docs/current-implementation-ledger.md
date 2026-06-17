@@ -368,6 +368,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new UI sectors/cards were added.
 - No new shims were added.
 
+### Staging Smoke for Typed Load Bookings Operational Order
+- `origin/staging` deployed to `2e882cf Preserve typed Load Bookings operational order`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; passive page load observed only safe requests.
+- Console/runtime errors: 0.
+- Typed read safe-card order is used only as an operational display ordering hint.
+- Legacy `BookingRecord` remains the action/form/detail source.
+- Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
+- The typed Load Bookings endpoint remains read-only; no DB write path was introduced.
+- All 6 runtime lanes remain parked: Load Bookings endpoint migration, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- Email, WhatsApp, SMS, and Telegram remain setup-only/no-live.
+- No new UI sectors/cards were added.
+- No new shims were added.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

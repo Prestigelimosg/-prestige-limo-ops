@@ -410,7 +410,7 @@ for (const forbiddenFragment of forbiddenFieldFragments) {
 const crmRuntimeClientHelper = sliceBetween(
   appPage,
   "async function saveCompanyTravelerCrmIdentityContactRuntime",
-  "function buildCompanyRateOverridePayload",
+  "function customerRatesRuntimeRejectedFields",
 );
 const saveRateOverrideSource = sliceBetween(
   appPage,

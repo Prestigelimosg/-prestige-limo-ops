@@ -61,7 +61,7 @@ const companyCrmPayload = sliceBetween(
 const travelerCrmPayload = sliceBetween(
   appPage,
   "function buildTravelerCrmIdentityContactPayload",
-  "function buildCompanyRateOverridePayload",
+  "function crmRuntimeRecordId",
 );
 const companyRatePayload = sliceBetween(
   appPage,
@@ -86,7 +86,7 @@ const legacyTravelerRateOverrideInsertPayload = sliceBetween(
 const crmRuntimeClientHelper = sliceBetween(
   appPage,
   "async function saveCompanyTravelerCrmIdentityContactRuntime",
-  "function buildCompanyRateOverridePayload",
+  "function customerRatesRuntimeRejectedFields",
 );
 const saveRateOverride = sliceBetween(
   appPage,
@@ -111,7 +111,8 @@ for (const phrase of [
   "Stage 1 CRM identity/contact runtime route mapping calls the typed CRM runtime write action from the existing Company/Boss Overrides save path with identity/contact payloads only.",
   "Closed-gate/no-op CRM route responses preserve current legacy rate override behavior.",
   "Rate override save/remove remains parked.",
-  "`customer_rates` and `driver_payout_rules` remain parked.",
+  "`customer_rates` is tracked separately by the customer_rates runtime gate and app wiring locks.",
+  "`driver_payout_rules` remains parked.",
   "Save Booking + CRM is unchanged and remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` is unchanged and remains separate.",
   "Parser behavior and `/api/ai-parse` are unchanged.",

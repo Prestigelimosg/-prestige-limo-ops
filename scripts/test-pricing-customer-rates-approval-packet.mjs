@@ -57,14 +57,14 @@ const [
 const packetSection = sectionBetween(ledger, "### Pricing Customer Rates Runtime Approval Packet Lock");
 
 for (const phrase of [
-  "Approval status: pending future runtime-wiring approval.",
+  "Approval status: live DB write remains pending future approval; app-side gated customer_rates wiring is complete.",
   "This is a docs/test-only approval packet guarded by `scripts/test-pricing-customer-rates-approval-packet.mjs`.",
-  "Customer rates/pricing app runtime wiring remains parked.",
+  "Customer rates/pricing app runtime wiring now calls the gated customer_rates boundary, but the live DB write remains closed by default.",
   "Pricing is coupled to `rate_settings`, company/traveler overrides, booking price/payout snapshots, and billing/payment/PDF-adjacent paths.",
   "`driver_payout_rules` and payout remain separate and parked.",
-  "Current `rate_settings` read path is typed, but pricing/customer_rates runtime wiring is not approved.",
-  "Current company/traveler rate override save/remove remains on the existing legacy combined path and still touches `customer_rates` with `driver_payout_rules`.",
-  "A gated customer_rates runtime write boundary exists, but it remains closed by default and is not wired from `app/page.tsx`.",
+  "Current `rate_settings` read path is typed, and customer_rates app wiring is bounded to the gated customer_rates boundary only.",
+  "Current company/traveler rate override save/remove calls the gated customer_rates boundary first, then falls back to the existing legacy combined path when the gate returns no-op.",
+  "A gated customer_rates runtime write boundary is wired from `app/page.tsx`, but it remains closed by default and never carries `driver_payout_rules`.",
   "Future pricing lane may include only customer-facing pricing/customer_rates setup or contract fields after separate approval.",
   "Future pricing lane must exclude payout, `driver_payout_rules`, payment/PDF/billing activation, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.",
   "Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.",
@@ -73,9 +73,9 @@ for (const phrase of [
   "Future runtime wiring must not change parser behavior or `/api/ai-parse`.",
   "Future runtime wiring must not add UI sectors/buttons/cards.",
   "Future runtime wiring must not add new shims.",
-  "Required tests before any future wiring:",
+  "Required tests before any future live DB write:",
   "Rollback note:",
-  "No `app/page.tsx` runtime wiring, UI behavior change, env change, deployment, live DB write execution, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/payout/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.",
+  "No UI behavior change, env change, deployment, live DB write execution, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/payout/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.",
 ]) {
   assertIncludes(packetSection, phrase, `Pricing/customer_rates approval packet phrase: ${phrase}`);
 }
@@ -175,6 +175,11 @@ assertIncludes(
   preactivationSuite,
   "scripts/test-customer-rates-runtime-write-action-api-contract.mjs",
   "Preactivation suite customer_rates runtime write guard registration",
+);
+assertIncludes(
+  preactivationSuite,
+  "scripts/test-customer-rates-runtime-app-wiring.mjs",
+  "Preactivation suite customer_rates app wiring guard registration",
 );
 
 console.log("pricing/customer_rates runtime approval packet guard passed");

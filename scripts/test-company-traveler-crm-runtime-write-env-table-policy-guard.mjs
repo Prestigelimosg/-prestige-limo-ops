@@ -268,7 +268,7 @@ assertExcludes(writeTravelerBlock, ".rpc(", "CRM traveler rpc");
 const crmRuntimeClientHelper = sliceBetween(
   appPage,
   "async function saveCompanyTravelerCrmIdentityContactRuntime",
-  "function buildCompanyRateOverridePayload",
+  "function customerRatesRuntimeRejectedFields",
 );
 assertIncludes(appPage, crmRuntimeWriteRoutePath, "app CRM runtime route path");
 assertIncludes(crmRuntimeClientHelper, "fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath", "app CRM runtime fetch");

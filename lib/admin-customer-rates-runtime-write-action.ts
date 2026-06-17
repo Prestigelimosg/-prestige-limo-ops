@@ -284,6 +284,11 @@ function buildContract(input: unknown) {
   const invalidFields: string[] = [];
   const unknownFields: string[] = [];
   const forbiddenFields = collectForbiddenFields(record);
+  const customerRatesProvided =
+    record.customer_rates !== null &&
+    record.customer_rates !== undefined &&
+    typeof record.customer_rates === "object" &&
+    !Array.isArray(record.customer_rates);
 
   if (!action) {
     invalidFields.push("action_type");
@@ -297,6 +302,10 @@ function buildContract(input: unknown) {
     if (!["action_type", "customer_rates", "id"].includes(key)) {
       unknownFields.push(key);
     }
+  }
+
+  if (!customerRatesProvided) {
+    invalidFields.push("customer_rates");
   }
 
   const customerRateFields = customerRateFieldsFrom(record.customer_rates);
@@ -396,10 +405,6 @@ function getRuntimeWriteClient(
   });
 }
 
-function writableFieldCount(fields: RateRules) {
-  return Object.keys(fields).length;
-}
-
 function writePayload(fields: RateRules) {
   return {
     customer_rates: fields,
@@ -431,14 +436,6 @@ export async function executeAdminCustomerRatesRuntimeWriteAction(
   if (!contract.ok) {
     return safeResult(contract, {
       reason: "unsafe_or_unknown_fields",
-      status: "rejected",
-    });
-  }
-
-  if (writableFieldCount(contract.customer_rates) === 0) {
-    return safeResult(contract, {
-      error: "Customer rates write requires at least one safe customer rate field.",
-      reason: "missing_required_fields",
       status: "rejected",
     });
   }

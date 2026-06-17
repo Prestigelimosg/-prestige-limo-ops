@@ -291,7 +291,10 @@ for (const phrase of [
   "The write gate is closed by default through `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`.",
   "Allowed input is existing company/traveler `id`, action type, and safe `customer_rates` keys only: MNG, DEP, TRF, DSP.",
   "Forbidden fields remain rejected/excluded: `driver_payout_rules`, driver payout, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, and mock QA/dev archive fields.",
-  "The route is not wired from `app/page.tsx`.",
+  "The app rate override save/remove flow calls this typed boundary for `customer_rates` first.",
+  "Closed-gate/no-op responses fall back to the existing legacy path to preserve current behavior.",
+  "When the typed boundary reports `saved`, the legacy follow-up omits `customer_rates` and writes only parked `driver_payout_rules` plus allowed metadata.",
+  "No typed payout runtime write is wired by this gate.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
   "No parser or `/api/ai-parse` change.",
@@ -324,7 +327,10 @@ for (const forbiddenFragment of forbiddenFieldFragments) {
   assertIncludes(helperSource, forbiddenFragment, `Helper forbidden field guard ${forbiddenFragment}`);
 }
 
-assertExcludes(appPage, routePathFragment, "App page must not wire customer rates runtime write route yet");
+assertIncludes(appPage, routePathFragment, "App page must call the gated customer rates runtime write route");
+assertIncludes(appPage, "saveCustomerRatesRuntime", "App page customer rates runtime helper");
+assertIncludes(appPage, "includeCustomerRates: !companyCustomerRatesRuntime.saved", "Company fallback customer_rates guard");
+assertIncludes(appPage, "includeCustomerRates: !travelerCustomerRatesRuntime.saved", "Traveler fallback customer_rates guard");
 assertExcludes(aiParseRoute, routePathFragment, "Parser route must not call customer rates runtime write route");
 assertExcludes(adminBookingsRoute, routePathFragment, "Admin bookings route must not call customer rates runtime write route");
 assertExcludes(adminSavedBookingsRoute, routePathFragment, "Admin saved bookings route must not call customer rates runtime write route");
@@ -416,6 +422,17 @@ try {
   assertSaved(savedTraveler, "Mocked traveler customer rates save", { DSP: 65, TRF: 70 });
   assert.equal(travelerCalls[0].table, "travelers", "Traveler customer rates save must target travelers.");
   assert.deepEqual(travelerCalls[1].payload.customer_rates, { DSP: 65, TRF: 70 });
+
+  const clearCalls = [];
+  const clearedCompany = await executeAdminCustomerRatesRuntimeWriteAction(
+    safeInput({ customer_rates: {} }),
+    serverActor,
+    {
+      clientFactory: () => mockedClient(clearCalls),
+    },
+  );
+  assertSaved(clearedCompany, "Mocked company customer rates clear", {});
+  assert.deepEqual(clearCalls[1].payload.customer_rates, {}, "Customer rates clear must persist an empty map.");
 } finally {
   restoreEnv();
   await harness.cleanup();

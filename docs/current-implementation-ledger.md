@@ -1187,6 +1187,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` for the parked legacy `customer_rates` and `driver_payout_rules` maps.
 - No env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.
 
+### Pricing Customer Rates Boundary Split Lock
+- Company/traveler customer rate override payload builders are split from driver payout override payload builders.
+- `buildCompanyCustomerRateOverridePayload` and `buildTravelerCustomerRateOverridePayload` contain `customer_rates` only.
+- `buildCompanyDriverPayoutOverridePayload` and `buildTravelerDriverPayoutOverridePayload` contain `driver_payout_rules` only.
+- Existing `buildCompanyRateOverridePayload` and `buildTravelerRateOverridePayload` compose the split helpers to preserve current legacy behavior.
+- Current company/traveler rate override save/remove remains on the legacy `adminLegacyDataClient` companies/travelers paths.
+- No typed pricing/customer_rates runtime write is wired by this split.
+- No typed payout runtime write is wired by this split.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No UI sector/card, env change, deployment, DB read/write execution, provider activation, live send, or new shim is included.
+
 ### Pricing Customer Rates Runtime Approval Packet Lock
 - Approval status: pending future runtime-wiring approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-pricing-customer-rates-approval-packet.mjs`.

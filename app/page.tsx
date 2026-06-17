@@ -3835,9 +3835,12 @@ function buildCompanyRateOverridePayload({
   transzendExcelPrivacy,
   updatedAt,
 }: CompanyRateOverridePayloadInput) {
+  const customerRateFields = buildCompanyCustomerRateOverridePayload({ customerRates });
+  const driverPayoutFields = buildCompanyDriverPayoutOverridePayload({ driverPayoutRules });
+
   return {
-    customer_rates: customerRates,
-    driver_payout_rules: driverPayoutRules,
+    customer_rates: customerRateFields.customer_rates,
+    driver_payout_rules: driverPayoutFields.driver_payout_rules,
     ...(transzendExcelPrivacy === undefined ? {} : { transzend_excel_privacy: transzendExcelPrivacy }),
     ...(updatedAt ? { updated_at: updatedAt } : {}),
   };
@@ -3848,10 +3851,45 @@ function buildTravelerRateOverridePayload({
   driverPayoutRules,
   updatedAt,
 }: TravelerRateOverridePayloadInput) {
+  const customerRateFields = buildTravelerCustomerRateOverridePayload({ customerRates });
+  const driverPayoutFields = buildTravelerDriverPayoutOverridePayload({ driverPayoutRules });
+
+  return {
+    customer_rates: customerRateFields.customer_rates,
+    driver_payout_rules: driverPayoutFields.driver_payout_rules,
+    ...(updatedAt ? { updated_at: updatedAt } : {}),
+  };
+}
+
+function buildCompanyCustomerRateOverridePayload({
+  customerRates,
+}: Pick<CompanyRateOverridePayloadInput, "customerRates">) {
   return {
     customer_rates: customerRates,
+  };
+}
+
+function buildTravelerCustomerRateOverridePayload({
+  customerRates,
+}: Pick<TravelerRateOverridePayloadInput, "customerRates">) {
+  return {
+    customer_rates: customerRates,
+  };
+}
+
+function buildCompanyDriverPayoutOverridePayload({
+  driverPayoutRules,
+}: Pick<CompanyRateOverridePayloadInput, "driverPayoutRules">) {
+  return {
     driver_payout_rules: driverPayoutRules,
-    ...(updatedAt ? { updated_at: updatedAt } : {}),
+  };
+}
+
+function buildTravelerDriverPayoutOverridePayload({
+  driverPayoutRules,
+}: Pick<TravelerRateOverridePayloadInput, "driverPayoutRules">) {
+  return {
+    driver_payout_rules: driverPayoutRules,
   };
 }
 

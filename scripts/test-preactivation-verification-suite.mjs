@@ -138,6 +138,10 @@ const guardChecks = [
     script: "scripts/test-pricing-customer-rates-approval-packet.mjs",
   },
   {
+    label: "pricing/customer_rates boundary split guard",
+    script: "scripts/test-pricing-customer-rates-boundary-split.mjs",
+  },
+  {
     label: "payout runtime approval packet guard",
     script: "scripts/test-payout-approval-packet.mjs",
   },

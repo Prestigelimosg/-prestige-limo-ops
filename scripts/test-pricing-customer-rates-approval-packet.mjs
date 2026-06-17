@@ -100,8 +100,15 @@ for (const fragment of [
   ".from(adminLegacyTables.rateSettings)",
   "const scalarRateSettings = buildDefaultRateSettingsScalarPayload(rateSettings);",
   "const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);",
+  "const legacyScalarFields = buildDefaultRateSettingsLegacyScalarFallbackPayload(",
+  "scalarRuntimeSave.saved",
+  "...legacyScalarFields",
   "customer_rates: customerRates",
   "driver_payout_rules: driverPayoutRules",
+]) {
+  assertIncludes(saveDefaultRates, fragment, `Parked saveDefaultRates fragment: ${fragment}`);
+}
+for (const fragment of [
   "midnight_surcharge: scalarRateSettings.midnight_surcharge",
   "extra_stop_surcharge: scalarRateSettings.extra_stop_surcharge",
   "midnight_payout: scalarRateSettings.midnight_payout",
@@ -109,7 +116,7 @@ for (const fragment of [
   "child_seat_customer_surcharge: scalarRateSettings.child_seat_customer_surcharge",
   "child_seat_driver_payout: scalarRateSettings.child_seat_driver_payout",
 ]) {
-  assertIncludes(saveDefaultRates, fragment, `Parked saveDefaultRates fragment: ${fragment}`);
+  assertExcludes(saveDefaultRates, fragment, `Parked saveDefaultRates direct scalar duplication: ${fragment}`);
 }
 
 const saveRateOverride = sliceBetween(

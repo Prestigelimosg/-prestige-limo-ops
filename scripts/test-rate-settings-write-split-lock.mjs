@@ -101,9 +101,17 @@ for (const fragment of [
   ".upsert({",
   "const scalarRateSettings = buildDefaultRateSettingsScalarPayload(rateSettings);",
   "const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);",
-  "id: scalarRateSettings.id",
+  "const legacyScalarFields = buildDefaultRateSettingsLegacyScalarFallbackPayload(",
+  "scalarRuntimeSave.saved",
+  "...legacyScalarFields",
   "customer_rates: customerRates",
   "driver_payout_rules: driverPayoutRules",
+]) {
+  assertIncludes(saveDefaultRates, fragment, `Parked rate_settings default save fragment: ${fragment}`);
+}
+
+for (const fragment of [
+  "id: scalarRateSettings.id",
   "midnight_surcharge: scalarRateSettings.midnight_surcharge",
   "extra_stop_surcharge: scalarRateSettings.extra_stop_surcharge",
   "midnight_payout: scalarRateSettings.midnight_payout",
@@ -111,7 +119,7 @@ for (const fragment of [
   "child_seat_customer_surcharge: scalarRateSettings.child_seat_customer_surcharge",
   "child_seat_driver_payout: scalarRateSettings.child_seat_driver_payout",
 ]) {
-  assertIncludes(saveDefaultRates, fragment, `Parked rate_settings default save fragment: ${fragment}`);
+  assertExcludes(saveDefaultRates, fragment, `Parked rate_settings direct scalar duplication: ${fragment}`);
 }
 
 for (const fragment of [

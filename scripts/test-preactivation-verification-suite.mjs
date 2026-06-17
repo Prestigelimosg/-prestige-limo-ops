@@ -138,6 +138,10 @@ const guardChecks = [
     script: "scripts/test-rate-settings-save-defaults-boundary-split.mjs",
   },
   {
+    label: "rate settings scalar runtime legacy fallback guard",
+    script: "scripts/test-rate-settings-scalar-runtime-legacy-fallback-guard.mjs",
+  },
+  {
     label: "pricing/customer_rates runtime approval packet guard",
     script: "scripts/test-pricing-customer-rates-approval-packet.mjs",
   },

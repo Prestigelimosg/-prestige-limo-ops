@@ -1224,8 +1224,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The scalar helper contains only `id`, `midnight_surcharge`, `extra_stop_surcharge`, `midnight_payout`, `extra_stop_payout`, `child_seat_customer_surcharge`, and `child_seat_driver_payout`.
 - The parked legacy maps helper contains `customer_rates` and `driver_payout_rules` only to preserve the current legacy `saveDefaultRates` behavior.
 - `saveDefaultRates` calls `saveDefaultRateSettingsScalarRuntime` before the parked legacy save; the typed call sends only scalar fields and treats closed-gate no-op responses as non-blocking.
+- When the typed scalar runtime reports saved, the parked legacy save keeps only `id`, `customer_rates`, and `driver_payout_rules`; scalar defaults are not duplicated through the legacy shim.
 - `saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` for the parked legacy `customer_rates` and `driver_payout_rules` maps.
 - No env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.
+
+### Rate Settings Scalar Runtime Legacy Fallback Guard Lock
+- Rate settings scalar runtime legacy fallback is guarded.
+- Closed-gate/no-op typed scalar responses keep the existing legacy `rate_settings` fallback behavior unchanged.
+- When the typed scalar runtime reports saved, `saveDefaultRates` keeps scalar fields out of the legacy shim follow-up.
+- The legacy follow-up still carries parked `customer_rates` and `driver_payout_rules` map fields until those maps are separately migrated.
+- The typed scalar runtime result now carries `saved: true` only for successful typed scalar writes.
+- No Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider send, env change, deployment, live DB write execution, or new shim is included.
+- This lock adds `scripts/test-rate-settings-scalar-runtime-legacy-fallback-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Pricing Customer Rates Boundary Split Lock
 - Company/traveler customer rate override payload builders are split from driver payout override payload builders.

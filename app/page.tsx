@@ -3596,12 +3596,23 @@ type DefaultRateSettingsLegacyRateMapsPayload = {
   driver_payout_rules: Required<DriverPayoutRules>;
 };
 
+type DefaultRateSettingsLegacyScalarFallbackPayload = {
+  child_seat_customer_surcharge?: number;
+  child_seat_driver_payout?: number;
+  extra_stop_payout?: number;
+  extra_stop_surcharge?: number;
+  id: "default";
+  midnight_payout?: number;
+  midnight_surcharge?: number;
+};
+
 type RateSettingsRuntimeWriteResponse = {
   error?: string;
   no_op?: boolean;
   ok?: boolean;
   reason?: string;
   rejected_fields?: unknown;
+  status?: string;
 };
 
 function buildDefaultRateSettingsScalarPayload(
@@ -3633,10 +3644,35 @@ function buildDefaultRateSettingsLegacyRateMapsPayload(
   };
 }
 
+function buildDefaultRateSettingsLegacyScalarFallbackPayload(
+  settings: DefaultRateSettingsScalarRuntimePayload,
+  typedScalarSaved: boolean,
+): DefaultRateSettingsLegacyScalarFallbackPayload {
+  if (typedScalarSaved) {
+    return {
+      id: settings.id,
+    };
+  }
+
+  return {
+    child_seat_customer_surcharge: settings.child_seat_customer_surcharge,
+    child_seat_driver_payout: settings.child_seat_driver_payout,
+    extra_stop_payout: settings.extra_stop_payout,
+    extra_stop_surcharge: settings.extra_stop_surcharge,
+    id: settings.id,
+    midnight_payout: settings.midnight_payout,
+    midnight_surcharge: settings.midnight_surcharge,
+  };
+}
+
 function rateSettingsRuntimeRejectedFields(value: RateSettingsRuntimeWriteResponse | null) {
   return Array.isArray(value?.rejected_fields)
     ? value.rejected_fields.map((field) => clean(field)).filter(Boolean)
     : [];
+}
+
+function rateSettingsRuntimeWriteSaved(value: RateSettingsRuntimeWriteResponse | null) {
+  return value?.ok === true && clean(value.status).toLowerCase() === "saved";
 }
 
 function isRateSettingsRuntimeWriteBlockedNoOp(value: RateSettingsRuntimeWriteResponse | null) {
@@ -3664,7 +3700,7 @@ function rateSettingsRuntimeWriteError(
 
 async function saveDefaultRateSettingsScalarRuntime(
   payload: DefaultRateSettingsScalarRuntimePayload,
-): Promise<{ ok: true } | { errorMessage: string; ok: false }> {
+): Promise<{ ok: true; saved: boolean } | { errorMessage: string; ok: false }> {
   try {
     const response = await fetch(adminRateSettingsRuntimeWriteActionApiPath, {
       body: JSON.stringify(payload),
@@ -3677,11 +3713,11 @@ async function saveDefaultRateSettingsScalarRuntime(
     const responseBody = (await response.json().catch(() => null)) as RateSettingsRuntimeWriteResponse | null;
 
     if (response.ok && responseBody?.ok === true) {
-      return { ok: true };
+      return { ok: true, saved: rateSettingsRuntimeWriteSaved(responseBody) };
     }
 
     if (isRateSettingsRuntimeWriteBlockedNoOp(responseBody)) {
-      return { ok: true };
+      return { ok: true, saved: false };
     }
 
     return {
@@ -12027,18 +12063,16 @@ export default function Home() {
         throw new Error(scalarRuntimeSave.errorMessage);
       }
 
+      const legacyScalarFields = buildDefaultRateSettingsLegacyScalarFallbackPayload(
+        scalarRateSettings,
+        scalarRuntimeSave.saved,
+      );
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.rateSettings)
         .upsert({
-          id: scalarRateSettings.id,
+          ...legacyScalarFields,
           customer_rates: customerRates,
           driver_payout_rules: driverPayoutRules,
-          midnight_surcharge: scalarRateSettings.midnight_surcharge,
-          extra_stop_surcharge: scalarRateSettings.extra_stop_surcharge,
-          midnight_payout: scalarRateSettings.midnight_payout,
-          extra_stop_payout: scalarRateSettings.extra_stop_payout,
-          child_seat_customer_surcharge: scalarRateSettings.child_seat_customer_surcharge,
-          child_seat_driver_payout: scalarRateSettings.child_seat_driver_payout,
           updated_at: new Date().toISOString(),
         })
         .select("id")

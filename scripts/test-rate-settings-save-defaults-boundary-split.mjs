@@ -51,6 +51,7 @@ for (const phrase of [
   "The scalar helper contains only `id`, `midnight_surcharge`, `extra_stop_surcharge`, `midnight_payout`, `extra_stop_payout`, `child_seat_customer_surcharge`, and `child_seat_driver_payout`.",
   "The parked legacy maps helper contains `customer_rates` and `driver_payout_rules` only to preserve the current legacy `saveDefaultRates` behavior.",
   "`saveDefaultRates` calls `saveDefaultRateSettingsScalarRuntime` before the parked legacy save; the typed call sends only scalar fields and treats closed-gate no-op responses as non-blocking.",
+  "When the typed scalar runtime reports saved, the parked legacy save keeps only `id`, `customer_rates`, and `driver_payout_rules`; scalar defaults are not duplicated through the legacy shim.",
   "`saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` for the parked legacy `customer_rates` and `driver_payout_rules` maps.",
   "No env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.",
 ]) {
@@ -100,7 +101,7 @@ assertExcludes(scalarHelper, "normalizeDriverPayoutRules", "Scalar helper driver
 const legacyMapsHelper = sliceBetween(
   appPage,
   "function buildDefaultRateSettingsLegacyRateMapsPayload",
-  "type CompanyCrmIdentityContactPayload",
+  "function buildDefaultRateSettingsLegacyScalarFallbackPayload",
 );
 for (const fragment of [
   "customer_rates",
@@ -113,6 +114,28 @@ for (const fragment of [
   assertIncludes(legacyMapsHelper, fragment, `Parked maps helper ${fragment}`);
 }
 
+const scalarFallbackHelper = sliceBetween(
+  appPage,
+  "function buildDefaultRateSettingsLegacyScalarFallbackPayload",
+  "function rateSettingsRuntimeRejectedFields",
+);
+for (const fragment of [
+  "typedScalarSaved",
+  "return {\n      id: settings.id,\n    };",
+  "child_seat_customer_surcharge: settings.child_seat_customer_surcharge",
+  "child_seat_driver_payout: settings.child_seat_driver_payout",
+  "extra_stop_payout: settings.extra_stop_payout",
+  "extra_stop_surcharge: settings.extra_stop_surcharge",
+  "midnight_payout: settings.midnight_payout",
+  "midnight_surcharge: settings.midnight_surcharge",
+]) {
+  assertIncludes(scalarFallbackHelper, fragment, `Scalar fallback helper ${fragment}`);
+}
+assertExcludes(scalarFallbackHelper, "customer_rates", "Scalar fallback helper customer rates");
+assertExcludes(scalarFallbackHelper, "driver_payout_rules", "Scalar fallback helper driver payout rules");
+assertExcludes(scalarFallbackHelper, "normalizeCustomerRateRules", "Scalar fallback helper customer-rate normalizer");
+assertExcludes(scalarFallbackHelper, "normalizeDriverPayoutRules", "Scalar fallback helper driver-payout normalizer");
+
 const scalarRuntimeHelper = sliceBetween(
   appPage,
   "async function saveDefaultRateSettingsScalarRuntime",
@@ -124,7 +147,9 @@ for (const fragment of [
   "body: JSON.stringify(payload)",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
   'method: "POST"',
+  "rateSettingsRuntimeWriteSaved(responseBody)",
   "isRateSettingsRuntimeWriteBlockedNoOp(responseBody)",
+  "return { ok: true, saved: false };",
 ]) {
   assertIncludes(scalarRuntimeHelper, fragment, `Scalar runtime helper ${fragment}`);
 }
@@ -144,9 +169,16 @@ for (const fragment of [
   "const customerRates = legacyRateMapFields.customer_rates;",
   "const driverPayoutRules = legacyRateMapFields.driver_payout_rules;",
   "const scalarRuntimeSave = await saveDefaultRateSettingsScalarRuntime(scalarRateSettings);",
+  "const legacyScalarFields = buildDefaultRateSettingsLegacyScalarFallbackPayload(",
+  "scalarRuntimeSave.saved",
   ".from(adminLegacyTables.rateSettings)",
+  "...legacyScalarFields",
   "customer_rates: customerRates",
   "driver_payout_rules: driverPayoutRules",
+]) {
+  assertIncludes(saveDefaultRates, fragment, `saveDefaultRates split fragment: ${fragment}`);
+}
+for (const fragment of [
   "midnight_surcharge: scalarRateSettings.midnight_surcharge",
   "extra_stop_surcharge: scalarRateSettings.extra_stop_surcharge",
   "midnight_payout: scalarRateSettings.midnight_payout",
@@ -154,7 +186,7 @@ for (const fragment of [
   "child_seat_customer_surcharge: scalarRateSettings.child_seat_customer_surcharge",
   "child_seat_driver_payout: scalarRateSettings.child_seat_driver_payout",
 ]) {
-  assertIncludes(saveDefaultRates, fragment, `saveDefaultRates split fragment: ${fragment}`);
+  assertExcludes(saveDefaultRates, fragment, `saveDefaultRates legacy upsert direct scalar ${fragment}`);
 }
 assertIncludes(appPage, typedRuntimeRoute, "app/page.tsx typed runtime route path");
 assertExcludes(saveDefaultRates, typedRuntimeRoute, "saveDefaultRates direct typed runtime route literal");

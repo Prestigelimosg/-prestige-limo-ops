@@ -431,6 +431,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new UI sectors/cards were added.
 - No new shims were added.
 
+### Staging Static Smoke for Load Bookings Typed Read Query Shape Guard
+- `origin/staging` deployed to `9b62133 Add Load Bookings typed read query shape guard`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Static staging HTML rendered the main admin shell.
+- Expected tabs were present in the static staging response: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present in the static staging response but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; this checkpoint used GET-only static/HTTP checks.
+- Local headless Chrome console attachment was unavailable because Chrome did not expose the remote debug port from this sandbox, so this checkpoint does not claim browser console/runtime inspection.
+- Load Bookings typed read query shape guard remains registered and passing.
+- Pre-activation verification suite remains passing.
+- Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
+- The typed Load Bookings endpoint remains gated/read-only; no DB write path was introduced.
+- All 6 runtime lanes remain parked: Load Bookings endpoint migration, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- Email, WhatsApp, SMS, and Telegram remain setup-only/no-live.
+- No new UI sectors/cards were added.
+- No new shims were added.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

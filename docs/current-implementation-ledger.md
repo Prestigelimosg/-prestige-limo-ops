@@ -1167,6 +1167,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep `saveDefaultRates` on the parked legacy `rate_settings` shim path until typed runtime wiring is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy path unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Rate Settings Runtime Write Action Gate Lock
+- Typed `rate_settings` runtime write boundary is added at `POST /api/admin-rate-settings-runtime-write-action`.
+- The route remains unwired from `app/page.tsx`; `saveDefaultRates` still uses the parked legacy `rate_settings` shim path.
+- The dedicated gate is `PRESTIGE_RATE_SETTINGS_WRITE_ENABLED`; it is closed by default and env values are never printed.
+- With the gate closed, the route returns blocked/no-op and does not create a Supabase client.
+- If the gate is opened later, a server-session admin/dispatcher actor is still required before any database client can be created.
+- Allowed scalar `rate_settings` fields are limited to `midnight_surcharge`, `extra_stop_surcharge`, `midnight_payout`, `extra_stop_payout`, `child_seat_customer_surcharge`, and `child_seat_driver_payout` with `id` fixed to `default`.
+- Forbidden fields remain rejected/excluded: `customer_rates`, `driver_payout_rules`, customer price/rate maps, rate overrides, pricing/payout snapshots, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and tokens.
+- No Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, env change, deployment, migration, live DB write execution, or new shim is included.
+
 ### Pricing Customer Rates Runtime Approval Packet Lock
 - Approval status: pending future runtime-wiring approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-pricing-customer-rates-approval-packet.mjs`.

@@ -126,6 +126,10 @@ const guardChecks = [
     script: "scripts/test-rate-settings-runtime-approval-packet.mjs",
   },
   {
+    label: "rate settings runtime write action guard",
+    script: "scripts/test-rate-settings-runtime-write-action-api-contract.mjs",
+  },
+  {
     label: "pricing/customer_rates runtime approval packet guard",
     script: "scripts/test-pricing-customer-rates-approval-packet.mjs",
   },

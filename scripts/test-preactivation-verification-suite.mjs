@@ -90,6 +90,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-rollback-boundary.mjs",
   },
   {
+    label: "Load Bookings typed read query shape guard",
+    script: "scripts/test-load-bookings-typed-read-query-shape-guard.mjs",
+  },
+  {
     label: "Load Bookings operational runtime mapping guard",
     script: "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs",
   },

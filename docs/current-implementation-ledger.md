@@ -399,6 +399,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-read-rollback-boundary.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Load Bookings Typed Read Query Shape Guard Lock
+- Typed Load Bookings read query shape is guarded before any endpoint migration.
+- The typed read endpoint remains gated by env-name `PRESTIGE_LOAD_BOOKINGS_TYPED_READ_ENABLED` and must not print or require env values.
+- The typed read query helper may read only the `bookings` table through list/detail select queries.
+- The query helper must not use insert, update, upsert, delete, rpc, provider send, payment/PDF, auth, location/photo/calendar, parser/debug, internal/admin notes, secret/token fields, or legacy shim paths.
+- Legacy finance/payout/rate source columns selected for compatibility must stay quarantined by field name and must only pass through `mapAdminLoadBookingsTypedReadList` or `mapAdminLoadBookingsTypedReadDetail` before any response.
+- Typed read responses must return only safe operational `safe_dto` and `safe_card` shapes plus quarantine counts.
+- Raw saved-booking rows must not be returned from `GET /api/admin-load-bookings-typed-read`.
+- Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- No `/api/admin-saved-bookings` route/helper change.
+- No parser or `/api/ai-parse` change.
+- No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
+- This lock adds `scripts/test-load-bookings-typed-read-query-shape-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging Smoke for Load Bookings Typed Read Rollback Guard
 - `origin/staging` deployed to `4004b3a Add Load Bookings typed read rollback guard`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

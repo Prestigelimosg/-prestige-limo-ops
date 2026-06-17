@@ -1245,6 +1245,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
 
+### Staging Smoke After Customer Rates Runtime Create Path
+- `origin/staging` deployed to `e347e3d Route customer rates create path through runtime gate`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; passive browser smoke observed GET-only behavior.
+- Console/runtime errors: 0.
+- Known passive setup-only `GET /api/admin-email-activation-preflight-setup` returned 403 without provider send, write behavior, or runtime activation.
+- Customer_rates create-path runtime gate remains guarded; no active customer_rates create/write flow was exercised by the smoke.
+- Pricing and payout remain separate and parked; `driver_payout_rules` remains outside the customer_rates runtime boundary.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Staging Smoke After Customer Rates Runtime Save Path
 - `origin/staging` points to `c9008b4 Wire customer rates runtime save path`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

@@ -164,7 +164,7 @@ try {
   const anonymousResponse = await harness.route.GET(new Request(apiUrl()));
   const anonymous = await anonymousResponse.json();
 
-  assert.equal(anonymousResponse.status, 403, "Email activation preflight API must stay admin-gated.");
+  assert.equal(anonymousResponse.status, 403, "Email activation preflight API must stay anonymous-gated.");
   assert.equal(anonymous.activationReady, false);
   assert.equal(anonymous.external_send, false);
   assert.equal(anonymous.liveSendingEnabled, false);
@@ -175,6 +175,47 @@ try {
   assert.equal(anonymous.selectedProvider, null);
   assert.equal(anonymous.sendingEnabled, false);
   assert.equal(anonymous.status, "blocked");
+
+  const crossOriginResponse = await harness.route.GET(
+    new Request(apiUrl(), {
+      headers: {
+        referer: "http://evil.example/",
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+    }),
+  );
+  const crossOrigin = await crossOriginResponse.json();
+
+  assert.equal(crossOriginResponse.status, 403, "Email activation preflight API must stay cross-origin gated.");
+  assert.equal(crossOrigin.activationReady, false);
+  assert.equal(crossOrigin.external_send, false);
+  assert.equal(crossOrigin.liveSendingEnabled, false);
+  assert.equal(crossOrigin.providerConfigured, false);
+  assert.equal(crossOrigin.sendingEnabled, false);
+  assert.equal(crossOrigin.status, "blocked");
+
+  process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED = "true";
+  const setupOnlyDashboardResponse = await harness.route.GET(
+    new Request(apiUrl(), { headers: adminHeaders() }),
+  );
+  const setupOnlyDashboard = await setupOnlyDashboardResponse.json();
+
+  assert.equal(
+    setupOnlyDashboardResponse.status,
+    200,
+    "Email activation preflight setup-only admin dashboard read must avoid staging 403 noise.",
+  );
+  assert.equal(setupOnlyDashboard.ok, true);
+  assert.equal(setupOnlyDashboard.activationReady, false);
+  assert.equal(setupOnlyDashboard.activationStatus, "blocked");
+  assert.deepEqual(setupOnlyDashboard.blockers, activationBlockers);
+  assert.equal(setupOnlyDashboard.external_send, false);
+  assert.equal(setupOnlyDashboard.liveSendingEnabled, false);
+  assert.equal(setupOnlyDashboard.providerConfigured, false);
+  assert.equal(setupOnlyDashboard.providerSelected, false);
+  assert.equal(setupOnlyDashboard.sendingEnabled, false);
+  assert.equal(setupOnlyDashboard.status, "setup_only");
+  applyLocalAdminBoundary();
 
   const defaultResponse = await harness.route.GET(new Request(apiUrl(), { headers: adminHeaders() }));
   const preflight = await defaultResponse.json();

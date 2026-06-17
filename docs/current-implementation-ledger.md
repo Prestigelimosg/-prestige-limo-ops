@@ -632,6 +632,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy multi-channel no-live guard is done.
 - Live provider/env/send activation remains blocked until explicit approval.
 
+### Email Activation Preflight Staging Read Cleanliness Lock
+- `GET /api/admin-email-activation-preflight-setup` remains setup-only/no-live/no-send.
+- Same-origin admin dashboard reads now return a clean blocked/setup-only 200 response even when the booking persistence write gate is open.
+- Anonymous and cross-origin reads remain 403 blocked.
+- The response still reports `activationReady: false`, `external_send: false`, `sendingEnabled: false`, `liveSendingEnabled: false`, and `providerConfigured: false`.
+- No provider env values are printed, required, or read.
+- No SMTP/provider SDK/API activation, live send, DB read/write, migration, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card, or new shim is included.
+- Focused coverage: `node scripts/test-admin-email-activation-preflight-setup-api-contract.mjs`.
+
 ## Telegram Pre-Activation Completion Audit Lock
 
 - Telegram internal admin alerts are complete up to the activation stop.

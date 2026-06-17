@@ -1528,6 +1528,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The guard is registered in the preactivation verification suite as `scripts/test-full-driver-profile-runtime-app-wiring.mjs`.
 - No UI sector/card, env change, deployment, live DB write/delete execution, provider activation, live send, or new shim is included.
 
+### Staging Deploy Smoke for Full Driver Profile Runtime App Wiring
+- `origin/staging` deployed to `4daf6ec Fix email activation preflight staging read`, including `9bffce6 Wire full driver profile runtime fallback path`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Safe GET to `/api/admin-full-driver-profile-runtime-write-action` returned HTTP 405, confirming the gated boundary remains POST-only and did not expose a GET/write path.
+- Same-origin setup-only GET to `/api/admin-email-activation-preflight-setup` returned HTTP 200 with no live provider/send behavior.
+- Passive headless browser smoke rendered the main admin UI.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; passive browser network observation saw 38 GET requests only.
+- Console/runtime errors: 0.
+- Failed network requests: 0.
+- The full driver profile runtime write gate remains closed by default through `PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED`; no live DB write/delete was executed.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- No UI sectors/cards were added.
+- No new shims were added.
+
 ### Full Driver Profile Shim Split Approval Packet
 - Approval status: pending owner approval.
 - Goal: split safe driver display/operational fields from risky full profile save/delete fields before any future full-driver shim replacement.

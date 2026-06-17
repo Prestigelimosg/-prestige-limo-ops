@@ -369,11 +369,11 @@ assertIncludes(
 );
 assertIncludes(
   loadBookingsBlock,
-  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+  "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
   "Load Bookings typed read display bridge",
 );
 const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
-  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+  "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
 );
 const legacySavedBookingsFetchIndex = loadBookingsBlock.indexOf(
   "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
@@ -400,13 +400,33 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {})",
+  "setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {})",
   "Load Bookings typed read safe-card state",
+);
+assertIncludes(
+  appPage,
+  "setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay?.orderedCardIds ?? [])",
+  "Load Bookings typed read ordered safe-card state",
+);
+assertIncludes(
+  appPage,
+  "function buildLoadBookingsTypedOperationalDisplayResult",
+  "Load Bookings typed read ordered display result builder",
+);
+assertIncludes(
+  appPage,
+  "orderedCardIds.push(cardKey)",
+  "Load Bookings typed read ordered card ids",
 );
 assertExcludes(
   loadBookingsBlock,
   "setBookings(typedOperationalCardsById",
   "Load Bookings typed read must not replace booking/form source",
+);
+assertExcludes(
+  loadBookingsBlock,
+  "setBookings(typedOperationalDisplay",
+  "Load Bookings typed read ordered result must not replace booking/form source",
 );
 assertExcludes(loadBookingsBlock, "admin-load-bookings-typed-read-gated", "Load Bookings app typed helper wiring");
 

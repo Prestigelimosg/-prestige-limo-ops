@@ -698,6 +698,11 @@ type LoadBookingsOperationalDisplayItem = {
   operationalCard: LoadBookingsOperationalDisplayCard;
 };
 
+type LoadBookingsTypedOperationalDisplayResult = {
+  cardsById: Record<string, LoadBookingsOperationalDisplayCard>;
+  orderedCardIds: string[];
+};
+
 type AdminLoadBookingsTypedReadSafeBooking = {
   quarantined_field_count?: number;
   safe_card?: Partial<Record<LoadBookingsOperationalDisplayField, string | null>> | null;
@@ -4323,10 +4328,11 @@ function loadBookingsOperationalDisplayCardKey(card: LoadBookingsOperationalDisp
   return card.booking_id || card.booking_reference || "";
 }
 
-function buildLoadBookingsTypedOperationalDisplayCardsById(
+function buildLoadBookingsTypedOperationalDisplayResult(
   safeBookings: AdminLoadBookingsTypedReadSafeBooking[],
-) {
+): LoadBookingsTypedOperationalDisplayResult {
   const cardsById: Record<string, LoadBookingsOperationalDisplayCard> = {};
+  const orderedCardIds: string[] = [];
 
   for (const safeBooking of safeBookings) {
     const operationalCard = buildLoadBookingsOperationalDisplayCardFromTypedRead(safeBooking);
@@ -4334,13 +4340,14 @@ function buildLoadBookingsTypedOperationalDisplayCardsById(
 
     if (operationalCard && cardKey) {
       cardsById[cardKey] = operationalCard;
+      orderedCardIds.push(cardKey);
     }
   }
 
-  return cardsById;
+  return { cardsById, orderedCardIds };
 }
 
-async function fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams: URLSearchParams) {
+async function fetchLoadBookingsTypedOperationalDisplayResult(searchParams: URLSearchParams) {
   const response = await fetch(`${adminLoadBookingsTypedReadApiPath}?${searchParams.toString()}`, {
     headers: {
       "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -4353,7 +4360,7 @@ async function fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams: U
     return null;
   }
 
-  return buildLoadBookingsTypedOperationalDisplayCardsById(responseBody.bookings);
+  return buildLoadBookingsTypedOperationalDisplayResult(responseBody.bookings);
 }
 
 function getLoadBookingsOperationalDisplayTitle(card: LoadBookingsOperationalDisplayCard) {
@@ -7971,6 +7978,10 @@ export default function Home() {
     loadBookingsTypedOperationalCardsById,
     setLoadBookingsTypedOperationalCardsById,
   ] = useState<Record<string, LoadBookingsOperationalDisplayCard>>({});
+  const [
+    loadBookingsTypedOperationalCardOrder,
+    setLoadBookingsTypedOperationalCardOrder,
+  ] = useState<string[]>([]);
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
   const [driverProfileDisplayDrivers, setDriverProfileDisplayDrivers] = useState<
     DriverAssignmentDisplayRecord[]
@@ -9944,6 +9955,13 @@ export default function Home() {
   }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
+  const loadBookingsTypedOperationalCardOrderIndex = useMemo(
+    () =>
+      new Map(
+        loadBookingsTypedOperationalCardOrder.map((bookingId, index) => [bookingId, index]),
+      ),
+    [loadBookingsTypedOperationalCardOrder],
+  );
   function getLoadBookingsOperationalDisplayCard(bookingRecord: BookingRecord) {
     const fallbackCard = buildLoadBookingsOperationalDisplayCard(bookingRecord);
     const typedCard = loadBookingsTypedOperationalCardsById[String(bookingRecord.id)];
@@ -9968,11 +9986,39 @@ export default function Home() {
   }
   function buildLoadBookingsOperationalDisplayItems(
     sectionBookings: BookingRecord[],
+    options?: { useTypedOperationalOrder?: boolean },
   ): LoadBookingsOperationalDisplayItem[] {
-    return sectionBookings.map((bookingRecord) => ({
+    const displayItems = sectionBookings.map((bookingRecord) => ({
       bookingRecord,
       operationalCard: getLoadBookingsOperationalDisplayCard(bookingRecord),
     }));
+
+    if (!options?.useTypedOperationalOrder) {
+      return displayItems;
+    }
+
+    return displayItems
+      .map((displayItem, index) => ({
+        displayItem,
+        index,
+        typedOrder: loadBookingsTypedOperationalCardOrderIndex.get(String(displayItem.bookingRecord.id)),
+      }))
+      .sort((firstItem, secondItem) => {
+        if (firstItem.typedOrder !== undefined && secondItem.typedOrder !== undefined) {
+          return firstItem.typedOrder - secondItem.typedOrder;
+        }
+
+        if (firstItem.typedOrder !== undefined) {
+          return -1;
+        }
+
+        if (secondItem.typedOrder !== undefined) {
+          return 1;
+        }
+
+        return firstItem.index - secondItem.index;
+      })
+      .map(({ displayItem }) => displayItem);
   }
   const dashboardDriverCandidates = useMemo(() => {
     const candidateMap = new Map<string, DashboardDriverCandidate>();
@@ -10455,9 +10501,9 @@ export default function Home() {
   const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
   const otherBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(otherBookings);
   const filteredRecentBookingDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(filteredRecentBookings);
+    buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
   const filteredCompletedBookingDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(filteredCompletedBookings);
+    buildLoadBookingsOperationalDisplayItems(filteredCompletedBookings, { useTypedOperationalOrder: true });
 
   function update(field: keyof BookingForm, value: string) {
     setCustomerMatchFeedback(null);
@@ -12243,11 +12289,12 @@ export default function Home() {
       setMessage({ tone: "info", text: "Loading bookings..." });
     }
     setLoadBookingsTypedOperationalCardsById({});
+    setLoadBookingsTypedOperationalCardOrder([]);
 
     try {
       const searchParams = new URLSearchParams({ limit: "25" });
-      const typedOperationalCardsById =
-        await fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams).catch(() => null);
+      const typedOperationalDisplay =
+        await fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null);
       const response = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, {
         headers: {
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -12266,7 +12313,8 @@ export default function Home() {
         const loadedBookings = sortBookingsNewestFirst(responseBody.bookings);
 
         setBookings(loadedBookings);
-        setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {});
+        setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {});
+        setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay?.orderedCardIds ?? []);
         if (!options?.silent) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });

@@ -114,6 +114,7 @@ for (const phrase of [
   "Operational display mapping uses safe operational card fields only.",
   "When available, typed safe-card data is the primary operational display source and legacy saved-booking fields are fallback-only for the display card.",
   "Operational card render loops consume `LoadBookingsOperationalDisplayItem` pairs: typed-safe `operationalCard` for display, legacy `BookingRecord` for actions/form/detail fallback.",
+  "Typed read preserves ordered safe-card ids as an operational display ordering hint; legacy `BookingRecord` remains the action/form/detail source.",
   "Operational display mapping must not feed safe operational card data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.",
   "Dashboard/recent/completed operational display cards no longer render finance/payout price lines.",
   "Parser behavior and `/api/ai-parse` remain untouched.",
@@ -155,11 +156,11 @@ assertIncludes(
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");
 assertIncludes(
   loadBookingsBlock,
-  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+  "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
   "Gated typed read operational display bridge",
 );
 const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
-  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+  "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
 );
 const legacySavedBookingsFetchIndex = loadBookingsBlock.indexOf(
   "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
@@ -186,8 +187,35 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {})",
+  "setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {})",
   "Typed read operational card state",
+);
+assertIncludes(
+  appPage,
+  "setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay?.orderedCardIds ?? [])",
+  "Typed read operational card order state",
+);
+assertIncludes(
+  appPage,
+  "type LoadBookingsTypedOperationalDisplayResult = {",
+  "Typed read operational display result type",
+);
+assertIncludes(appPage, "orderedCardIds: string[];", "Typed read operational ordered ids type");
+assertIncludes(
+  appPage,
+  "function buildLoadBookingsTypedOperationalDisplayResult",
+  "Typed read operational display result builder",
+);
+assertIncludes(appPage, "orderedCardIds.push(cardKey)", "Typed read operational ordered ids builder");
+assertIncludes(
+  appPage,
+  "loadBookingsTypedOperationalCardOrderIndex",
+  "Typed read operational order index",
+);
+assertIncludes(
+  appPage,
+  "useTypedOperationalOrder: true",
+  "Typed read operational order display option",
 );
 assertIncludes(
   appPage,
@@ -215,6 +243,11 @@ assertExcludes(
   loadBookingsBlock,
   "setBookings(typedOperationalCardsById",
   "Typed read operational cards must not replace booking/form source",
+);
+assertExcludes(
+  loadBookingsBlock,
+  "setBookings(typedOperationalDisplay",
+  "Typed read operational ordered result must not replace booking/form source",
 );
 assertExcludes(loadBookingsBlock, safeDtoHelperExport, "Load Bookings safe DTO runtime wiring");
 assertExcludes(loadBookingsBlock, safeDtoHelperFragment, "Load Bookings safe DTO runtime wiring");

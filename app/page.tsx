@@ -9951,14 +9951,14 @@ export default function Home() {
       ...fallbackCard,
       ...typedCard,
       assigned_driver_display_name:
-        fallbackCard.assigned_driver_display_name || typedCard.assigned_driver_display_name,
-      assigned_driver_phone: fallbackCard.assigned_driver_phone || typedCard.assigned_driver_phone,
-      assigned_driver_plate: fallbackCard.assigned_driver_plate || typedCard.assigned_driver_plate,
-      audit_summary: fallbackCard.audit_summary || typedCard.audit_summary,
-      booking_id: fallbackCard.booking_id || typedCard.booking_id,
-      booking_reference: fallbackCard.booking_reference || typedCard.booking_reference,
-      booking_status: fallbackCard.booking_status || typedCard.booking_status,
-      updated_at: fallbackCard.updated_at || typedCard.updated_at,
+        typedCard.assigned_driver_display_name || fallbackCard.assigned_driver_display_name,
+      assigned_driver_phone: typedCard.assigned_driver_phone || fallbackCard.assigned_driver_phone,
+      assigned_driver_plate: typedCard.assigned_driver_plate || fallbackCard.assigned_driver_plate,
+      audit_summary: typedCard.audit_summary || fallbackCard.audit_summary,
+      booking_id: typedCard.booking_id || fallbackCard.booking_id,
+      booking_reference: typedCard.booking_reference || fallbackCard.booking_reference,
+      booking_status: typedCard.booking_status || fallbackCard.booking_status,
+      updated_at: typedCard.updated_at || fallbackCard.updated_at,
     };
   }
   const dashboardDriverCandidates = useMemo(() => {
@@ -12226,6 +12226,8 @@ export default function Home() {
 
     try {
       const searchParams = new URLSearchParams({ limit: "25" });
+      const typedOperationalCardsById =
+        await fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams).catch(() => null);
       const response = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, {
         headers: {
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -12242,8 +12244,6 @@ export default function Home() {
         }
       } else {
         const loadedBookings = sortBookingsNewestFirst(responseBody.bookings);
-        const typedOperationalCardsById =
-          await fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams).catch(() => null);
 
         setBookings(loadedBookings);
         setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {});

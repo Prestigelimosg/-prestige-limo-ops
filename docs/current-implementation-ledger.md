@@ -359,10 +359,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Safe DTO contract remains setup-only.
 - Safe UI adapter/card contract remains setup-only.
 - `app/page.tsx` uses a client-side operational display card mapper that mirrors the safe DTO plus safe UI adapter/card field shape without importing the server-only setup helpers.
-- `app/page.tsx` now has a gated typed-read operational display bridge that can hydrate operational display cards from `GET /api/admin-load-bookings-typed-read` when the typed read gate and admin boundary allow it.
+- `app/page.tsx` now has a gated typed-read operational display bridge that hydrates operational display cards from `GET /api/admin-load-bookings-typed-read` before the legacy booking/form read when the typed read gate and admin boundary allow it.
 - The bridge keeps the loaded booking/form source on `GET /api/admin-saved-bookings` and silently falls back to the existing operational display card mapper when typed read is blocked, closed, or unavailable.
 - No blind endpoint swap is approved.
 - Operational display mapping uses safe operational card fields only.
+- When available, typed safe-card data is the primary operational display source and legacy saved-booking fields are fallback-only for the display card.
 - Operational display mapping must not feed safe operational card data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.
 - Dashboard/recent/completed operational display cards no longer render finance/payout price lines.
 - Forbidden fields remain rejected/excluded from the operational mapping path: pricing, payout, `customer_rate`, `customer_price_amount`, `customer_rate_override`, `customer_price_override_reason`, `customer_rates`, `driver_payout_rules`, `driver_payout_min/max/amount/override/reason/unit`, `driver_notes`, `driver_dispatch_include_payout`, midnight_surcharge/payout, extra_stop_surcharge/payout, child_seat_customer_surcharge/driver_payout, `pricing_source`, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, and secrets.

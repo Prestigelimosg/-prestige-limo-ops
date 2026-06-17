@@ -112,10 +112,11 @@ for (const phrase of [
   "`app/page.tsx` uses a client-side operational display card mapper that mirrors the safe DTO plus safe UI adapter/card field shape without importing the server-only setup helpers.",
   "No blind endpoint swap is approved.",
   "Operational display mapping uses safe operational card fields only.",
+  "When available, typed safe-card data is the primary operational display source and legacy saved-booking fields are fallback-only for the display card.",
   "Operational display mapping must not feed safe operational card data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.",
   "Dashboard/recent/completed operational display cards no longer render finance/payout price lines.",
   "Parser behavior and `/api/ai-parse` remain untouched.",
-  "`app/page.tsx` now has a gated typed-read operational display bridge that can hydrate operational display cards from `GET /api/admin-load-bookings-typed-read` when the typed read gate and admin boundary allow it.",
+  "`app/page.tsx` now has a gated typed-read operational display bridge that hydrates operational display cards from `GET /api/admin-load-bookings-typed-read` before the legacy booking/form read when the typed read gate and admin boundary allow it.",
   "The bridge keeps the loaded booking/form source on `GET /api/admin-saved-bookings` and silently falls back to the existing operational display card mapper when typed read is blocked, closed, or unavailable.",
   "No direct Supabase, `adminLegacyDataClient`, or DB write path is introduced by this mapping guard.",
   "No new shims are added.",
@@ -156,6 +157,22 @@ assertIncludes(
   "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
   "Gated typed read operational display bridge",
 );
+const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
+  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+);
+const legacySavedBookingsFetchIndex = loadBookingsBlock.indexOf(
+  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+);
+assert.equal(
+  typedOperationalFetchIndex > -1 && legacySavedBookingsFetchIndex > -1,
+  true,
+  "Load Bookings typed and legacy fetches must both be present.",
+);
+assert.equal(
+  typedOperationalFetchIndex < legacySavedBookingsFetchIndex,
+  true,
+  "Typed safe-card hydration must run before the legacy saved-bookings form/detail read.",
+);
 assertIncludes(
   appPage,
   "function buildLoadBookingsOperationalDisplayCardFromTypedRead",
@@ -170,6 +187,11 @@ assertIncludes(
   appPage,
   "setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {})",
   "Typed read operational card state",
+);
+assertIncludes(
+  appPage,
+  "typedCard.assigned_driver_display_name || fallbackCard.assigned_driver_display_name",
+  "Typed read operational card primary field precedence",
 );
 assertExcludes(
   loadBookingsBlock,

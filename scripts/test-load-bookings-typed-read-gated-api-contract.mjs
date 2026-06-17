@@ -372,6 +372,22 @@ assertIncludes(
   "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
   "Load Bookings typed read display bridge",
 );
+const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
+  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+);
+const legacySavedBookingsFetchIndex = loadBookingsBlock.indexOf(
+  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+);
+assert.equal(
+  typedOperationalFetchIndex > -1 && legacySavedBookingsFetchIndex > -1,
+  true,
+  "Load Bookings typed and legacy fetches must both be present.",
+);
+assert.equal(
+  typedOperationalFetchIndex < legacySavedBookingsFetchIndex,
+  true,
+  "Load Bookings must hydrate typed operational display cards before the legacy booking/form source.",
+);
 assertIncludes(
   appPage,
   "function buildLoadBookingsOperationalDisplayCardFromTypedRead",

@@ -399,6 +399,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-read-rollback-boundary.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Smoke for Load Bookings Typed Read Rollback Guard
+- `origin/staging` deployed to `4004b3a Add Load Bookings typed read rollback guard`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; passive page load observed no unsafe requests.
+- Console/runtime errors: 0.
+- Load Bookings typed read rollback guard remains registered and passing.
+- Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
+- The typed Load Bookings endpoint remains GET-only/read-only; no DB write path was introduced.
+- All 6 runtime lanes remain parked: Load Bookings endpoint migration, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- Email, WhatsApp, SMS, and Telegram remain setup-only/no-live.
+- No new UI sectors/cards were added.
+- No new shims were added.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

@@ -693,6 +693,11 @@ type LoadBookingsOperationalDisplayCard = Record<
   string | null
 >;
 
+type LoadBookingsOperationalDisplayItem = {
+  bookingRecord: BookingRecord;
+  operationalCard: LoadBookingsOperationalDisplayCard;
+};
+
 type AdminLoadBookingsTypedReadSafeBooking = {
   quarantined_field_count?: number;
   safe_card?: Partial<Record<LoadBookingsOperationalDisplayField, string | null>> | null;
@@ -9961,6 +9966,14 @@ export default function Home() {
       updated_at: typedCard.updated_at || fallbackCard.updated_at,
     };
   }
+  function buildLoadBookingsOperationalDisplayItems(
+    sectionBookings: BookingRecord[],
+  ): LoadBookingsOperationalDisplayItem[] {
+    return sectionBookings.map((bookingRecord) => ({
+      bookingRecord,
+      operationalCard: getLoadBookingsOperationalDisplayCard(bookingRecord),
+    }));
+  }
   const dashboardDriverCandidates = useMemo(() => {
     const candidateMap = new Map<string, DashboardDriverCandidate>();
     const driversById = new Map(drivers.map((driver) => [driver.id, driver]));
@@ -10438,6 +10451,13 @@ export default function Home() {
   const otherBookings = dashboardBookings.filter(
     (bookingRecord) => getBookingDateKey(bookingRecord) < todayKey,
   );
+  const todayBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(todayBookings);
+  const upcomingBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(upcomingBookings);
+  const otherBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(otherBookings);
+  const filteredRecentBookingDisplayItems =
+    buildLoadBookingsOperationalDisplayItems(filteredRecentBookings);
+  const filteredCompletedBookingDisplayItems =
+    buildLoadBookingsOperationalDisplayItems(filteredCompletedBookings);
 
   function update(field: keyof BookingForm, value: string) {
     setCustomerMatchFeedback(null);
@@ -13969,8 +13989,8 @@ export default function Home() {
     );
   }
 
-  function renderBookingCards(sectionBookings: BookingRecord[], emptyText: string) {
-    if (sectionBookings.length === 0) {
+  function renderBookingCards(sectionItems: LoadBookingsOperationalDisplayItem[], emptyText: string) {
+    if (sectionItems.length === 0) {
       return (
         <div className="rounded-md border border-dashed border-stone-300 p-6 text-center text-sm text-slate-500">
           {emptyText}
@@ -13980,8 +14000,7 @@ export default function Home() {
 
     return (
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {sectionBookings.map((savedBooking) => {
-          const operationalCard = getLoadBookingsOperationalDisplayCard(savedBooking);
+        {sectionItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
           const driverDraft = getDriverDraft(savedBooking);
           const bookingId = String(savedBooking.id);
           const normalizedBookingStatus = clean(savedBooking.status).toLowerCase();
@@ -14627,8 +14646,7 @@ export default function Home() {
       ) : null}
       {filteredRecentBookings.length > 0 ? (
       <div className="mt-3 max-h-80 space-y-2 overflow-auto">
-        {filteredRecentBookings.map((savedBooking) => {
-          const operationalCard = getLoadBookingsOperationalDisplayCard(savedBooking);
+        {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -14840,8 +14858,7 @@ export default function Home() {
           ) : null}
           {filteredCompletedBookings.length > 0 ? (
           <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
-            {filteredCompletedBookings.map((savedBooking) => {
-              const operationalCard = getLoadBookingsOperationalDisplayCard(savedBooking);
+            {filteredCompletedBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }) => {
               const routePoints = getRoutePoints(savedBooking);
               const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
               const dropoff =
@@ -31367,18 +31384,18 @@ export default function Home() {
           <div className="mt-5 space-y-6">
             <div>
               <h3 className="mb-3 text-base font-semibold">Today Bookings</h3>
-              {renderBookingCards(todayBookings, "No bookings for today.")}
+              {renderBookingCards(todayBookingDisplayItems, "No bookings for today.")}
             </div>
 
             <div>
               <h3 className="mb-3 text-base font-semibold">Upcoming Bookings</h3>
-              {renderBookingCards(upcomingBookings, "No upcoming bookings.")}
+              {renderBookingCards(upcomingBookingDisplayItems, "No upcoming bookings.")}
             </div>
 
             {otherBookings.length > 0 ? (
               <div>
                 <h3 className="mb-3 text-base font-semibold">Earlier Bookings</h3>
-                {renderBookingCards(otherBookings, "No earlier bookings.")}
+                {renderBookingCards(otherBookingDisplayItems, "No earlier bookings.")}
               </div>
             ) : null}
           </div>

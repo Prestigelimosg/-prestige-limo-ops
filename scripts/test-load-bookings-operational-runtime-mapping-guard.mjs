@@ -113,6 +113,7 @@ for (const phrase of [
   "No blind endpoint swap is approved.",
   "Operational display mapping uses safe operational card fields only.",
   "When available, typed safe-card data is the primary operational display source and legacy saved-booking fields are fallback-only for the display card.",
+  "Operational card render loops consume `LoadBookingsOperationalDisplayItem` pairs: typed-safe `operationalCard` for display, legacy `BookingRecord` for actions/form/detail fallback.",
   "Operational display mapping must not feed safe operational card data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.",
   "Dashboard/recent/completed operational display cards no longer render finance/payout price lines.",
   "Parser behavior and `/api/ai-parse` remain untouched.",
@@ -192,6 +193,23 @@ assertIncludes(
   appPage,
   "typedCard.assigned_driver_display_name || fallbackCard.assigned_driver_display_name",
   "Typed read operational card primary field precedence",
+);
+assertIncludes(appPage, "type LoadBookingsOperationalDisplayItem = {", "Operational display item type");
+assertIncludes(appPage, "bookingRecord: BookingRecord;", "Operational display item legacy record boundary");
+assertIncludes(
+  appPage,
+  "operationalCard: LoadBookingsOperationalDisplayCard;",
+  "Operational display item safe card boundary",
+);
+assertIncludes(
+  appPage,
+  "function buildLoadBookingsOperationalDisplayItems",
+  "Operational display item builder",
+);
+assertIncludes(
+  appPage,
+  "operationalCard: getLoadBookingsOperationalDisplayCard(bookingRecord)",
+  "Operational display item safe-card source",
 );
 assertExcludes(
   loadBookingsBlock,
@@ -441,26 +459,29 @@ assert.equal(
   "Dashboard, recent, and completed operational display cards must not call bookingCardPriceLine(savedBooking).",
 );
 
-for (const [label, start, end] of [
+for (const [label, start, end, expectedDisplayItemMap] of [
   [
     "dashboard operational cards",
     "function renderBookingCards",
     "const pricingPanel",
+    "sectionItems.map(({ bookingRecord: savedBooking, operationalCard })",
   ],
   [
     "recent operational cards",
     "const recentBookingsPanel",
     "const completedEmptyState",
+    "filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard })",
   ],
   [
     "completed operational cards",
     "const completedBookingsPanel",
     "const jobCardCopyEditState",
+    "filteredCompletedBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard })",
   ],
 ]) {
   const source = sliceBetween(appPage, start, end);
 
-  assertIncludes(source, "getLoadBookingsOperationalDisplayCard(savedBooking)", label);
+  assertIncludes(source, expectedDisplayItemMap, label);
   assertExcludes(source, "bookingCardPriceLine(savedBooking)", label);
   assertExcludes(source, "Customer override:", label);
   assertExcludes(source, "Vehicle / pax / price", label);

@@ -414,6 +414,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-read-query-shape-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Load Bookings DB Read Env Table Policy Guard Lock
+- Load Bookings DB-read env/table-policy readiness is guarded without executing a live DB read.
+- This lock does not approve DB-read activation, endpoint migration, env changes, deployment, migrations, or live reads.
+- Required env names are limited to `PRESTIGE_LOAD_BOOKINGS_TYPED_READ_ENABLED`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`; env values must not be printed, logged, committed, or echoed.
+- Future typed read activation must verify the target `bookings` table, joined read relationships `companies`, `bookers`, and `travelers`, read-only policy/RLS posture, and rollback before opening the gate.
+- The read helper must validate admin/dispatcher actor boundary before creating a Supabase client.
+- When booking persistence is enabled, the read helper must require `server-session-role-surface` and admin/dispatcher role before DB-read execution.
+- The read helper must use read-only list/detail operators only: select, eq, order, limit, and maybeSingle.
+- The read helper must not use insert, update, upsert, delete, rpc, storage, provider send, payment/PDF, auth, location/photo/calendar, parser/debug, internal/admin notes, secret/token fields, or legacy shim paths.
+- Load Bookings still keeps `GET /api/admin-saved-bookings` as booking/form/detail source and fallback.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- No `/api/admin-saved-bookings` route/helper change.
+- No parser or `/api/ai-parse` change.
+- No UI sector/card addition or new shim is approved by this lock.
+- This lock adds `scripts/test-load-bookings-db-read-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging Smoke for Load Bookings Typed Read Rollback Guard
 - `origin/staging` deployed to `4004b3a Add Load Bookings typed read rollback guard`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

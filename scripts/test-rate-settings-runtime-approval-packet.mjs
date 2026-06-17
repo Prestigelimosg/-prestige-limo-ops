@@ -70,22 +70,22 @@ const [
 const packetSection = sectionBetween(ledger, "### Rate Settings Runtime Approval Packet Lock");
 
 for (const phrase of [
-  "Approval status: pending future runtime-wiring approval.",
+  "Approval status: Stage 1 scalar runtime wiring is active behind the closed typed write gate; full `rate_settings` save/upsert migration remains pending future approval.",
   "This is a docs/test-only approval packet guarded by `scripts/test-rate-settings-runtime-approval-packet.mjs`.",
   "`rate_settings` read path is typed through `GET /api/admin-rate-setup`.",
-  "`rate_settings` save/upsert runtime remains parked.",
-  "`saveDefaultRates` still uses the legacy `rate_settings` shim path.",
+  "`rate_settings` safe scalar write path is called through `POST /api/admin-rate-settings-runtime-write-action`.",
+  "`saveDefaultRates` still uses the legacy `rate_settings` shim path for parked `customer_rates` and `driver_payout_rules` map fields.",
   "Disabled `rate_settings` write action setup exists at `GET /api/admin-rate-settings-write-action-disabled-setup` and remains no-write/no-op.",
-  "Future runtime lane must exclude `customer_rates`, `driver_payout_rules`, pricing, payout snapshots, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.",
+  "Current scalar runtime lane excludes `customer_rates`, `driver_payout_rules`, pricing, payout snapshots, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.",
   "Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.",
-  "Future runtime wiring must not change Save Booking + CRM.",
-  "Future runtime wiring must not change `/api/admin-saved-bookings`.",
-  "Future runtime wiring must not change parser behavior or `/api/ai-parse`.",
-  "Future runtime wiring must not add UI sectors/buttons/cards.",
-  "Future runtime wiring must not add new shims.",
+  "Current and future runtime wiring must not change Save Booking + CRM.",
+  "Current and future runtime wiring must not change `/api/admin-saved-bookings`.",
+  "Current and future runtime wiring must not change parser behavior or `/api/ai-parse`.",
+  "Current and future runtime wiring must not add UI sectors/buttons/cards.",
+  "Current and future runtime wiring must not add new shims.",
   "Required tests before any future wiring:",
   "Rollback note:",
-  "No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.",
+  "No UI/API/helper behavior change outside the scalar rate settings boundary, env change, deployment, DB write execution, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.",
 ]) {
   assertIncludes(packetSection, phrase, `Rate settings runtime approval packet phrase: ${phrase}`);
 }
@@ -109,6 +109,7 @@ for (const fragment of [
   "adminLegacyDataClient",
   ".from(adminLegacyTables.rateSettings)",
   "const scalarRateSettings = buildDefaultRateSettingsScalarPayload(rateSettings);",
+  "const scalarRuntimeSave = await saveDefaultRateSettingsScalarRuntime(scalarRateSettings);",
   "const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);",
   "customer_rates: customerRates",
   "driver_payout_rules: driverPayoutRules",

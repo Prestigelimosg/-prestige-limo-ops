@@ -1150,26 +1150,28 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Checks passed for the implementation: `node scripts/test-admin-rate-settings-write-action-disabled-setup-api-contract.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-admin-route-flow-lock.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser`, `git diff --check`, `git diff --cached --check`, and `git status --short`.
 
 ### Rate Settings Runtime Approval Packet Lock
-- Approval status: pending future runtime-wiring approval.
+- Approval status: Stage 1 scalar runtime wiring is active behind the closed typed write gate; full `rate_settings` save/upsert migration remains pending future approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-rate-settings-runtime-approval-packet.mjs`.
 - `rate_settings` read path is typed through `GET /api/admin-rate-setup`.
-- `rate_settings` save/upsert runtime remains parked.
-- `saveDefaultRates` still uses the legacy `rate_settings` shim path.
+- `rate_settings` safe scalar write path is called through `POST /api/admin-rate-settings-runtime-write-action`.
+- `saveDefaultRates` still uses the legacy `rate_settings` shim path for parked `customer_rates` and `driver_payout_rules` map fields.
 - Disabled `rate_settings` write action setup exists at `GET /api/admin-rate-settings-write-action-disabled-setup` and remains no-write/no-op.
-- Future runtime lane must exclude `customer_rates`, `driver_payout_rules`, pricing, payout snapshots, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.
+- Current scalar runtime lane excludes `customer_rates`, `driver_payout_rules`, pricing, payout snapshots, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.
 - Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.
-- Future runtime wiring must not change Save Booking + CRM.
-- Future runtime wiring must not change `/api/admin-saved-bookings`.
-- Future runtime wiring must not change parser behavior or `/api/ai-parse`.
-- Future runtime wiring must not add UI sectors/buttons/cards.
-- Future runtime wiring must not add new shims.
+- Current and future runtime wiring must not change Save Booking + CRM.
+- Current and future runtime wiring must not change `/api/admin-saved-bookings`.
+- Current and future runtime wiring must not change parser behavior or `/api/ai-parse`.
+- Current and future runtime wiring must not add UI sectors/buttons/cards.
+- Current and future runtime wiring must not add new shims.
 - Required tests before any future wiring: typed rate settings runtime contract test, `node scripts/test-rate-settings-runtime-approval-packet.mjs`, `node scripts/test-admin-rate-settings-write-action-disabled-setup-api-contract.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
 - Rollback note: keep `saveDefaultRates` on the parked legacy `rate_settings` shim path until typed runtime wiring is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy path unchanged.
-- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
+- No UI/API/helper behavior change outside the scalar rate settings boundary, env change, deployment, DB write execution, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
 
 ### Rate Settings Runtime Write Action Gate Lock
 - Typed `rate_settings` runtime write boundary is added at `POST /api/admin-rate-settings-runtime-write-action`.
-- The route remains unwired from `app/page.tsx`; `saveDefaultRates` still uses the parked legacy `rate_settings` shim path.
+- Stage 1 app wiring calls the route from `saveDefaultRates` through `saveDefaultRateSettingsScalarRuntime`; it sends only scalar default `rate_settings` fields.
+- Closed-gate blocked/no-op responses are treated as non-blocking so the current legacy save behavior remains preserved.
+- `saveDefaultRates` still uses the parked legacy `rate_settings` shim path for `customer_rates` and `driver_payout_rules` map fields.
 - The dedicated gate is `PRESTIGE_RATE_SETTINGS_WRITE_ENABLED`; it is closed by default and env values are never printed.
 - With the gate closed, the route returns blocked/no-op and does not create a Supabase client.
 - If the gate is opened later, a server-session admin/dispatcher actor is still required before any database client can be created.
@@ -1181,8 +1183,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Default rate save payload construction is split into `buildDefaultRateSettingsScalarPayload` and `buildDefaultRateSettingsLegacyRateMapsPayload`.
 - The scalar helper contains only `id`, `midnight_surcharge`, `extra_stop_surcharge`, `midnight_payout`, `extra_stop_payout`, `child_seat_customer_surcharge`, and `child_seat_driver_payout`.
 - The parked legacy maps helper contains `customer_rates` and `driver_payout_rules` only to preserve the current legacy `saveDefaultRates` behavior.
-- `saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` and does not call `POST /api/admin-rate-settings-runtime-write-action`.
-- No runtime endpoint migration, env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.
+- `saveDefaultRates` calls `saveDefaultRateSettingsScalarRuntime` before the parked legacy save; the typed call sends only scalar fields and treats closed-gate no-op responses as non-blocking.
+- `saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` for the parked legacy `customer_rates` and `driver_payout_rules` maps.
+- No env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.
 
 ### Pricing Customer Rates Runtime Approval Packet Lock
 - Approval status: pending future runtime-wiring approval.

@@ -363,7 +363,9 @@ const ledgerSection = sectionBetween(ledger, "### Rate Settings Runtime Write Ac
 
 for (const phrase of [
   "Typed `rate_settings` runtime write boundary is added at `POST /api/admin-rate-settings-runtime-write-action`.",
-  "The route remains unwired from `app/page.tsx`; `saveDefaultRates` still uses the parked legacy `rate_settings` shim path.",
+  "Stage 1 app wiring calls the route from `saveDefaultRates` through `saveDefaultRateSettingsScalarRuntime`; it sends only scalar default `rate_settings` fields.",
+  "Closed-gate blocked/no-op responses are treated as non-blocking so the current legacy save behavior remains preserved.",
+  "`saveDefaultRates` still uses the parked legacy `rate_settings` shim path for `customer_rates` and `driver_payout_rules` map fields.",
   "The dedicated gate is `PRESTIGE_RATE_SETTINGS_WRITE_ENABLED`; it is closed by default and env values are never printed.",
   "With the gate closed, the route returns blocked/no-op and does not create a Supabase client.",
   "If the gate is opened later, a server-session admin/dispatcher actor is still required before any database client can be created.",
@@ -418,10 +420,29 @@ assert.ok(clientIndex > actorIndex, "Rate settings runtime execute must create D
 assert.equal(countMatches(helperSource, /\.from\("rate_settings"\)/g), 1, "Rate settings runtime helper must use one table.");
 
 const saveDefaultRates = sliceBetween(appPage, "async function saveDefaultRates", "async function saveRateOverride");
+const scalarRuntimeClientHelper = sliceBetween(
+  appPage,
+  "async function saveDefaultRateSettingsScalarRuntime",
+  "type CompanyCrmIdentityContactPayload",
+);
+
+assertIncludes(appPage, `const adminRateSettingsRuntimeWriteActionApiPath =\n  "${routePathFragment}";`, "app/page.tsx rate settings runtime route path");
+assertIncludes(scalarRuntimeClientHelper, "payload: DefaultRateSettingsScalarRuntimePayload", "Rate settings scalar runtime payload type");
+assertIncludes(scalarRuntimeClientHelper, "fetch(adminRateSettingsRuntimeWriteActionApiPath", "Rate settings scalar runtime fetch");
+assertIncludes(scalarRuntimeClientHelper, "body: JSON.stringify(payload)", "Rate settings scalar runtime body");
+assertIncludes(scalarRuntimeClientHelper, '"content-type": "application/json"', "Rate settings scalar runtime JSON header");
+assertIncludes(scalarRuntimeClientHelper, '"x-prestige-admin-purpose": adminLegacyDataPurpose', "Rate settings scalar runtime admin purpose");
+assertIncludes(scalarRuntimeClientHelper, 'method: "POST"', "Rate settings scalar runtime method");
+assertIncludes(scalarRuntimeClientHelper, "isRateSettingsRuntimeWriteBlockedNoOp", "Rate settings scalar runtime closed-gate no-op");
+assertExcludes(scalarRuntimeClientHelper, "customer_rates", "Rate settings scalar runtime customer rate maps");
+assertExcludes(scalarRuntimeClientHelper, "driver_payout_rules", "Rate settings scalar runtime driver payout maps");
+assertExcludes(scalarRuntimeClientHelper, "normalizeCustomerRateRules", "Rate settings scalar runtime customer normalizer");
+assertExcludes(scalarRuntimeClientHelper, "normalizeDriverPayoutRules", "Rate settings scalar runtime driver normalizer");
 assertIncludes(saveDefaultRates, ".from(adminLegacyTables.rateSettings)", "saveDefaultRates remains parked on legacy shim");
+assertIncludes(saveDefaultRates, "const scalarRuntimeSave = await saveDefaultRateSettingsScalarRuntime(scalarRateSettings);", "saveDefaultRates scalar runtime call");
 assertIncludes(saveDefaultRates, "customer_rates: customerRates", "saveDefaultRates customer rates remain legacy");
 assertIncludes(saveDefaultRates, "driver_payout_rules: driverPayoutRules", "saveDefaultRates driver payout rules remain legacy");
-assertExcludes(appPage, routePathFragment, "app/page.tsx rate settings runtime route wiring");
+assert.equal(countMatches(appPage, routePathFragment), 1, "app/page.tsx must reference the rate settings runtime route only through its path constant.");
 assertExcludes(appPage, "executeAdminRateSettingsRuntimeWriteAction", "app/page.tsx runtime helper import");
 
 for (const [label, source] of [

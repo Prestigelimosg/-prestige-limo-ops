@@ -72,6 +72,8 @@ const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminDriverAssignmentDisplayApiPath = "/api/admin-driver-assignment-display";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
+const adminRateSettingsRuntimeWriteActionApiPath =
+  "/api/admin-rate-settings-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -3580,6 +3582,14 @@ type DefaultRateSettingsLegacyRateMapsPayload = {
   driver_payout_rules: Required<DriverPayoutRules>;
 };
 
+type RateSettingsRuntimeWriteResponse = {
+  error?: string;
+  no_op?: boolean;
+  ok?: boolean;
+  reason?: string;
+  rejected_fields?: unknown;
+};
+
 function buildDefaultRateSettingsScalarPayload(
   settings: RateSettings,
 ): DefaultRateSettingsScalarRuntimePayload {
@@ -3607,6 +3617,74 @@ function buildDefaultRateSettingsLegacyRateMapsPayload(
       ...normalizeDriverPayoutRules(settings.driverPayoutRules),
     },
   };
+}
+
+function rateSettingsRuntimeRejectedFields(value: RateSettingsRuntimeWriteResponse | null) {
+  return Array.isArray(value?.rejected_fields)
+    ? value.rejected_fields.map((field) => clean(field)).filter(Boolean)
+    : [];
+}
+
+function isRateSettingsRuntimeWriteBlockedNoOp(value: RateSettingsRuntimeWriteResponse | null) {
+  const reason = clean(value?.reason).toLowerCase();
+
+  return (
+    value?.ok !== true &&
+    value?.no_op === true &&
+    ["admin_session_required", "config_not_ready", "write_gate_closed"].includes(reason)
+  );
+}
+
+function rateSettingsRuntimeWriteError(
+  value: RateSettingsRuntimeWriteResponse | null,
+  fallback: string,
+) {
+  const rejectedFields = rateSettingsRuntimeRejectedFields(value);
+
+  if (rejectedFields.length > 0) {
+    return `${fallback} Rejected fields: ${rejectedFields.join(", ")}.`;
+  }
+
+  return clean(value?.error) || fallback;
+}
+
+async function saveDefaultRateSettingsScalarRuntime(
+  payload: DefaultRateSettingsScalarRuntimePayload,
+): Promise<{ ok: true } | { errorMessage: string; ok: false }> {
+  try {
+    const response = await fetch(adminRateSettingsRuntimeWriteActionApiPath, {
+      body: JSON.stringify(payload),
+      headers: {
+        "content-type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const responseBody = (await response.json().catch(() => null)) as RateSettingsRuntimeWriteResponse | null;
+
+    if (response.ok && responseBody?.ok === true) {
+      return { ok: true };
+    }
+
+    if (isRateSettingsRuntimeWriteBlockedNoOp(responseBody)) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      errorMessage: rateSettingsRuntimeWriteError(
+        responseBody,
+        "Default rate scalar save was rejected by the typed boundary.",
+      ),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorMessage: error instanceof Error
+        ? error.message
+        : "Default rate scalar save failed before the parked map save could continue.",
+    };
+  }
 }
 
 type CompanyCrmIdentityContactPayload = {
@@ -11471,6 +11549,12 @@ export default function Home() {
       const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);
       const customerRates = legacyRateMapFields.customer_rates;
       const driverPayoutRules = legacyRateMapFields.driver_payout_rules;
+      const scalarRuntimeSave = await saveDefaultRateSettingsScalarRuntime(scalarRateSettings);
+
+      if (!scalarRuntimeSave.ok) {
+        throw new Error(scalarRuntimeSave.errorMessage);
+      }
+
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.rateSettings)
         .upsert({

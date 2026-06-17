@@ -50,8 +50,9 @@ for (const phrase of [
   "Default rate save payload construction is split into `buildDefaultRateSettingsScalarPayload` and `buildDefaultRateSettingsLegacyRateMapsPayload`.",
   "The scalar helper contains only `id`, `midnight_surcharge`, `extra_stop_surcharge`, `midnight_payout`, `extra_stop_payout`, `child_seat_customer_surcharge`, and `child_seat_driver_payout`.",
   "The parked legacy maps helper contains `customer_rates` and `driver_payout_rules` only to preserve the current legacy `saveDefaultRates` behavior.",
-  "`saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` and does not call `POST /api/admin-rate-settings-runtime-write-action`.",
-  "No runtime endpoint migration, env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.",
+  "`saveDefaultRates` calls `saveDefaultRateSettingsScalarRuntime` before the parked legacy save; the typed call sends only scalar fields and treats closed-gate no-op responses as non-blocking.",
+  "`saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` for the parked legacy `customer_rates` and `driver_payout_rules` maps.",
+  "No env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Rate settings save defaults split ledger phrase: ${phrase}`);
 }
@@ -112,6 +113,26 @@ for (const fragment of [
   assertIncludes(legacyMapsHelper, fragment, `Parked maps helper ${fragment}`);
 }
 
+const scalarRuntimeHelper = sliceBetween(
+  appPage,
+  "async function saveDefaultRateSettingsScalarRuntime",
+  "type CompanyCrmIdentityContactPayload",
+);
+for (const fragment of [
+  "payload: DefaultRateSettingsScalarRuntimePayload",
+  "fetch(adminRateSettingsRuntimeWriteActionApiPath",
+  "body: JSON.stringify(payload)",
+  '"x-prestige-admin-purpose": adminLegacyDataPurpose',
+  'method: "POST"',
+  "isRateSettingsRuntimeWriteBlockedNoOp(responseBody)",
+]) {
+  assertIncludes(scalarRuntimeHelper, fragment, `Scalar runtime helper ${fragment}`);
+}
+assertExcludes(scalarRuntimeHelper, "customer_rates", "Scalar runtime helper customer rates");
+assertExcludes(scalarRuntimeHelper, "driver_payout_rules", "Scalar runtime helper driver payout rules");
+assertExcludes(scalarRuntimeHelper, "normalizeCustomerRateRules", "Scalar runtime helper customer-rate normalizer");
+assertExcludes(scalarRuntimeHelper, "normalizeDriverPayoutRules", "Scalar runtime helper driver-payout normalizer");
+
 const saveDefaultRates = sliceBetween(
   appPage,
   "async function saveDefaultRates",
@@ -122,6 +143,7 @@ for (const fragment of [
   "const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);",
   "const customerRates = legacyRateMapFields.customer_rates;",
   "const driverPayoutRules = legacyRateMapFields.driver_payout_rules;",
+  "const scalarRuntimeSave = await saveDefaultRateSettingsScalarRuntime(scalarRateSettings);",
   ".from(adminLegacyTables.rateSettings)",
   "customer_rates: customerRates",
   "driver_payout_rules: driverPayoutRules",
@@ -134,8 +156,9 @@ for (const fragment of [
 ]) {
   assertIncludes(saveDefaultRates, fragment, `saveDefaultRates split fragment: ${fragment}`);
 }
-assertExcludes(saveDefaultRates, typedRuntimeRoute, "saveDefaultRates typed runtime route wiring");
-assertExcludes(appPage, `fetch(${typedRuntimeRoute}`, "app/page.tsx typed runtime fetch wiring");
+assertIncludes(appPage, typedRuntimeRoute, "app/page.tsx typed runtime route path");
+assertExcludes(saveDefaultRates, typedRuntimeRoute, "saveDefaultRates direct typed runtime route literal");
+assertExcludes(appPage, `fetch(${typedRuntimeRoute}`, "app/page.tsx direct typed runtime fetch literal");
 
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite rate settings save defaults split guard");
 

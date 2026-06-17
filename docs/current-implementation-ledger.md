@@ -960,6 +960,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Additional `app/page.tsx` wiring beyond the existing Company/Boss Overrides identity/contact split and any live DB write execution remain separate future work and require dedicated verification before staging or production use.
 - Checks for this lock: `node scripts/test-company-traveler-crm-runtime-write-action-api-contract.mjs`, `node scripts/test-company-traveler-crm-runtime-write-approval-packet.mjs`, CRM identity/contact disabled action and audit setup guards, CRM identity/rate override payload split guard, rate override split/gating plan guard, shim cleanup no-new-shim guard, preactivation verification suite, lint, build, booking UI browser test, `git diff --check`, and `git status --short`.
 
+### Company/Traveler CRM Runtime Write Env Table Policy Guard Lock
+- CRM identity/contact runtime write env/table-policy readiness is guarded without opening the write gate or executing a live DB write.
+- This lock does not approve env changes, deployment, migrations, DB writes, live CRM activation, rate overrides, pricing, payout, provider/send, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, UI sectors/cards, or new shims.
+- Required env names are limited to `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`; env values must not be printed, logged, committed, or echoed.
+- The CRM write gate remains closed by default; closed-gate/no-op responses must preserve the existing legacy rate override fallback until a separate owner-approved gate-opening pass.
+- Future gate opening must verify table/policy readiness for `companies` and `travelers` only.
+- Allowed future `companies` write fields are limited to `company_name` and `domain`, plus safe returned `id`.
+- Allowed future `travelers` write fields are limited to `company_id`, `traveler_name`, `preferred_vehicle`, `default_address`, `default_pickup_address`, `default_dropoff_address`, `booker_name`, `booker_contact`, and `booker_email`, plus safe returned `id`.
+- Forbidden fields remain excluded: rate overrides, `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and tokens.
+- The helper must validate the CRM write gate and server-session admin/dispatcher actor boundary before creating any Supabase client.
+- The helper must not use `adminLegacyDataClient`, `adminLegacyTables`, `/api/admin-legacy-data`, or any new shim.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged and separate.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Rollback note: close `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`, keep the legacy rate override fallback unchanged, rerun CRM runtime, rate split, shim cleanup, preactivation, lint, build, and booking UI checks, and do not deploy or write live data until rollback is verified.
+- This lock adds `scripts/test-company-traveler-crm-runtime-write-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Company/Traveler CRM Identity/Contact Write Foundation Lock
 - This lock is guarded by `scripts/test-company-traveler-crm-write-foundation-lock.mjs`.
 - Typed company/traveler CRM identity/contact write contract foundation is done at `25d0703 Add typed company traveler CRM write foundation`.

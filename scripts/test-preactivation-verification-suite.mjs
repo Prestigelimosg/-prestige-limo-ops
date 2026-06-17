@@ -102,6 +102,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs",
   },
   {
+    label: "Load Bookings typed operational display merge guard",
+    script: "scripts/test-load-bookings-typed-operational-display-merge-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

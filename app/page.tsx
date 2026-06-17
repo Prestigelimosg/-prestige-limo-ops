@@ -5037,6 +5037,19 @@ function buildLoadBookingsTypedOperationalDisplayResult(
   return { cardsById, orderedCardIds };
 }
 
+function mergeLoadBookingsOperationalDisplayCard(
+  fallbackCard: LoadBookingsOperationalDisplayCard,
+  typedCard: LoadBookingsOperationalDisplayCard,
+): LoadBookingsOperationalDisplayCard {
+  const mergedCard = createEmptyLoadBookingsOperationalDisplayCard();
+
+  for (const fieldName of loadBookingsOperationalDisplayFieldNames) {
+    mergedCard[fieldName] = typedCard[fieldName] || fallbackCard[fieldName];
+  }
+
+  return mergedCard;
+}
+
 async function fetchLoadBookingsTypedOperationalDisplayResult(searchParams: URLSearchParams) {
   const response = await fetch(`${adminLoadBookingsTypedReadApiPath}?${searchParams.toString()}`, {
     headers: {
@@ -10660,19 +10673,7 @@ export default function Home() {
       return fallbackCard;
     }
 
-    return {
-      ...fallbackCard,
-      ...typedCard,
-      assigned_driver_display_name:
-        typedCard.assigned_driver_display_name || fallbackCard.assigned_driver_display_name,
-      assigned_driver_phone: typedCard.assigned_driver_phone || fallbackCard.assigned_driver_phone,
-      assigned_driver_plate: typedCard.assigned_driver_plate || fallbackCard.assigned_driver_plate,
-      audit_summary: typedCard.audit_summary || fallbackCard.audit_summary,
-      booking_id: typedCard.booking_id || fallbackCard.booking_id,
-      booking_reference: typedCard.booking_reference || fallbackCard.booking_reference,
-      booking_status: typedCard.booking_status || fallbackCard.booking_status,
-      updated_at: typedCard.updated_at || fallbackCard.updated_at,
-    };
+    return mergeLoadBookingsOperationalDisplayCard(fallbackCard, typedCard);
   }
   function buildLoadBookingsOperationalDisplayItems(
     sectionBookings: BookingRecord[],

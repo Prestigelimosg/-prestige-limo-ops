@@ -515,6 +515,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-operational-runtime-mapping-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No blind typed endpoint migration, Save Booking + CRM change, `/api/admin-saved-bookings` route/helper change, parser or `/api/ai-parse` change, env change, deployment, DB write, migration, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
 
+### Load Bookings Typed Operational Display Merge Guard Lock
+- Typed Load Bookings operational display merge is guarded.
+- Typed safe-card fields are primary for operational display.
+- Legacy saved-booking operational card fields are sanitized fallback only.
+- The merge is field-by-field across `loadBookingsOperationalDisplayFieldNames`.
+- Typed safe-card null/blank fields must not blank safe fallback operational display fields.
+- Typed safe-card data must not replace the `BookingRecord` source used by form/action/detail paths.
+- Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
+- No blind endpoint swap is approved.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` route/helper change.
+- No parser or `/api/ai-parse` change.
+- No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
+- This lock adds `scripts/test-load-bookings-typed-operational-display-merge-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging Deploy Smoke for Load Bookings Form Mapping Split
 - `origin/staging` deployed to `5b100a7 Split Load Bookings form mapping boundaries`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

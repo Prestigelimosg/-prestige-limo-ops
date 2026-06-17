@@ -219,8 +219,13 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "typedCard.assigned_driver_display_name || fallbackCard.assigned_driver_display_name",
-  "Typed read operational card primary field precedence",
+  "function mergeLoadBookingsOperationalDisplayCard",
+  "Typed read operational card primary field merge helper",
+);
+assertIncludes(
+  appPage,
+  "mergedCard[fieldName] = typedCard[fieldName] || fallbackCard[fieldName];",
+  "Typed read operational card field-by-field primary precedence",
 );
 assertIncludes(appPage, "type LoadBookingsOperationalDisplayItem = {", "Operational display item type");
 assertIncludes(appPage, "bookingRecord: BookingRecord;", "Operational display item legacy record boundary");

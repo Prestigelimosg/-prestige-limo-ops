@@ -307,6 +307,29 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-operational-record-mapper.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No runtime implementation, live API behavior change, typed endpoint migration, Load Bookings endpoint change, Save Booking + CRM change, `/api/admin-saved-bookings` behavior change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
 
+### Load Bookings Typed Read Gated Endpoint Lock
+- Gated typed Load Bookings read endpoint is added at `GET /api/admin-load-bookings-typed-read`.
+- New route: `app/api/admin-load-bookings-typed-read/route.ts`.
+- New helper: `lib/admin-load-bookings-typed-read-gated.ts`.
+- The endpoint is closed by default behind env-name gate `PRESTIGE_LOAD_BOOKINGS_TYPED_READ_ENABLED`; no env values are printed, required, or changed by this lock.
+- With the gate closed, the endpoint returns a safe blocked response and does not create a database client.
+- Open-gate behavior is covered only through mocked tests; no live DB read was executed.
+- It uses the existing saved-booking read helper only after the gate is open and maps records through the operational record mapper before returning data.
+- The endpoint response returns only safe operational `safe_dto` and `safe_card` shapes plus forbidden-field quarantine counts.
+- It does not return legacy finance/payout/internal/source values.
+- It does not add `app/page.tsx` wiring.
+- It does not change the current Load Bookings endpoint.
+- Load Bookings still uses `GET /api/admin-saved-bookings`.
+- The disabled typed Load Bookings read setup endpoint remains no-live/no-op.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Pricing, payout, payment/PDF, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and mock QA/dev archive fields remain excluded from typed read output.
+- No UI sectors/cards were added.
+- No new shims were added.
+- This lock adds `scripts/test-load-bookings-typed-read-gated-api-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No app runtime wiring, typed endpoint migration to the UI, env change, deployment, live DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

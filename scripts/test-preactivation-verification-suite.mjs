@@ -82,6 +82,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-operational-record-mapper.mjs",
   },
   {
+    label: "Load Bookings typed read gated API contract guard",
+    script: "scripts/test-load-bookings-typed-read-gated-api-contract.mjs",
+  },
+  {
     label: "Load Bookings operational runtime mapping guard",
     script: "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs",
   },

@@ -317,9 +317,11 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - It uses the existing saved-booking read helper only after the gate is open and maps records through the operational record mapper before returning data.
 - The endpoint response returns only safe operational `safe_dto` and `safe_card` shapes plus forbidden-field quarantine counts.
 - It does not return legacy finance/payout/internal/source values.
-- It does not add `app/page.tsx` wiring.
-- It does not change the current Load Bookings endpoint.
-- Load Bookings still uses `GET /api/admin-saved-bookings`.
+- It now has a bounded `app/page.tsx` operational display bridge: the app keeps `GET /api/admin-saved-bookings` as the loaded booking/form source and legacy fallback, then may use `GET /api/admin-load-bookings-typed-read` only for safe operational card display data when the existing gate and admin boundary allow it.
+- This is not a blind endpoint swap.
+- Typed safe-card data must not replace the `BookingRecord` source used by `bookingRecordToForm`, driver dispatch payout copy, driver assignment payout controls, billing readiness, or finance/payout/internal paths.
+- With the gate closed or the admin boundary blocked, the bridge falls back to the existing saved-bookings operational display mapping.
+- The current Load Bookings booking/form source still uses `GET /api/admin-saved-bookings`.
 - The disabled typed Load Bookings read setup endpoint remains no-live/no-op.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` remains separate and unchanged.
@@ -328,7 +330,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No UI sectors/cards were added.
 - No new shims were added.
 - This lock adds `scripts/test-load-bookings-typed-read-gated-api-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
-- No app runtime wiring, typed endpoint migration to the UI, env change, deployment, live DB read/write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
+- No env change, deployment, live DB write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
 
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
@@ -338,16 +340,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Safe DTO contract remains setup-only.
 - Safe UI adapter/card contract remains setup-only.
 - `app/page.tsx` uses a client-side operational display card mapper that mirrors the safe DTO plus safe UI adapter/card field shape without importing the server-only setup helpers.
+- `app/page.tsx` now has a gated typed-read operational display bridge that can hydrate operational display cards from `GET /api/admin-load-bookings-typed-read` when the typed read gate and admin boundary allow it.
+- The bridge keeps the loaded booking/form source on `GET /api/admin-saved-bookings` and silently falls back to the existing operational display card mapper when typed read is blocked, closed, or unavailable.
 - No blind endpoint swap is approved.
 - Operational display mapping uses safe operational card fields only.
 - Operational display mapping must not feed safe operational card data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.
 - Dashboard/recent/completed operational display cards no longer render finance/payout price lines.
 - Forbidden fields remain rejected/excluded from the operational mapping path: pricing, payout, `customer_rate`, `customer_price_amount`, `customer_rate_override`, `customer_price_override_reason`, `customer_rates`, `driver_payout_rules`, `driver_payout_min/max/amount/override/reason/unit`, `driver_notes`, `driver_dispatch_include_payout`, midnight_surcharge/payout, extra_stop_surcharge/payout, child_seat_customer_surcharge/driver_payout, `pricing_source`, rate overrides, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, and secrets.
 - Parser behavior and `/api/ai-parse` remain untouched.
-- No Supabase, `adminLegacyDataClient`, or DB read-write path is introduced by this mapping guard.
+- No direct Supabase, `adminLegacyDataClient`, or DB write path is introduced by this mapping guard.
 - No new shims are added.
 - This lock adds `scripts/test-load-bookings-operational-runtime-mapping-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
-- No typed endpoint migration, Save Booking + CRM change, `/api/admin-saved-bookings` route/helper change, parser or `/api/ai-parse` change, env change, deployment, DB read/write, migration, Supabase key use, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
+- No blind typed endpoint migration, Save Booking + CRM change, `/api/admin-saved-bookings` route/helper change, parser or `/api/ai-parse` change, env change, deployment, DB write, migration, `adminLegacyDataClient` behavior change, provider/sending, payment/PDF/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
 
 ### Staging Deploy Smoke for Load Bookings Form Mapping Split
 - `origin/staging` deployed to `5b100a7 Split Load Bookings form mapping boundaries`.

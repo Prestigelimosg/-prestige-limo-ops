@@ -71,6 +71,7 @@ const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminDriverAssignmentDisplayApiPath = "/api/admin-driver-assignment-display";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
+const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
 const adminSavedBookingDriverAssignmentsApiPath =
   "/api/admin-saved-booking-driver-assignments";
@@ -691,6 +692,21 @@ type LoadBookingsOperationalDisplayCard = Record<
   LoadBookingsOperationalDisplayField,
   string | null
 >;
+
+type AdminLoadBookingsTypedReadSafeBooking = {
+  quarantined_field_count?: number;
+  safe_card?: Partial<Record<LoadBookingsOperationalDisplayField, string | null>> | null;
+  safe_dto?: Partial<Record<LoadBookingsOperationalDisplayField, string | null>> | null;
+};
+
+type AdminLoadBookingsTypedReadResponse = {
+  bookings?: AdminLoadBookingsTypedReadSafeBooking[];
+  error?: string;
+  mode?: "detail" | "list";
+  ok?: boolean;
+  read_gate_open?: boolean;
+  status?: string;
+};
 
 type BookingStatusValue = "assigned" | "confirmed" | "driver_otw" | "pob" | "completed";
 
@@ -4258,6 +4274,81 @@ function buildLoadBookingsOperationalDisplayCard(
     updated_at: loadBookingsOperationalDisplayText(updatedAt || bookingRecord.updated_at, 120),
     vehicle_display: loadBookingsOperationalDisplayText(bookingRecord.vehicle, 220),
   };
+}
+
+function loadBookingsOperationalDisplayMaxLength(fieldName: LoadBookingsOperationalDisplayField) {
+  if (fieldName === "route_points_summary" || fieldName === "route_summary") {
+    return 1000;
+  }
+
+  if (
+    fieldName === "pickup_address" ||
+    fieldName === "dropoff_address" ||
+    fieldName === "job_card_display" ||
+    fieldName === "audit_summary"
+  ) {
+    return 500;
+  }
+
+  return 220;
+}
+
+function buildLoadBookingsOperationalDisplayCardFromTypedRead(
+  safeBooking: AdminLoadBookingsTypedReadSafeBooking,
+): LoadBookingsOperationalDisplayCard | null {
+  const safeCard = safeBooking.safe_card ?? {};
+  const safeDto = safeBooking.safe_dto ?? {};
+  const operationalCard = createEmptyLoadBookingsOperationalDisplayCard();
+
+  for (const fieldName of loadBookingsOperationalDisplayFieldNames) {
+    operationalCard[fieldName] = loadBookingsOperationalDisplayText(
+      safeCard[fieldName] ?? safeDto[fieldName],
+      loadBookingsOperationalDisplayMaxLength(fieldName),
+    );
+  }
+
+  if (!operationalCard.booking_id && !operationalCard.booking_reference) {
+    return null;
+  }
+
+  return operationalCard;
+}
+
+function loadBookingsOperationalDisplayCardKey(card: LoadBookingsOperationalDisplayCard) {
+  return card.booking_id || card.booking_reference || "";
+}
+
+function buildLoadBookingsTypedOperationalDisplayCardsById(
+  safeBookings: AdminLoadBookingsTypedReadSafeBooking[],
+) {
+  const cardsById: Record<string, LoadBookingsOperationalDisplayCard> = {};
+
+  for (const safeBooking of safeBookings) {
+    const operationalCard = buildLoadBookingsOperationalDisplayCardFromTypedRead(safeBooking);
+    const cardKey = operationalCard ? loadBookingsOperationalDisplayCardKey(operationalCard) : "";
+
+    if (operationalCard && cardKey) {
+      cardsById[cardKey] = operationalCard;
+    }
+  }
+
+  return cardsById;
+}
+
+async function fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams: URLSearchParams) {
+  const response = await fetch(`${adminLoadBookingsTypedReadApiPath}?${searchParams.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as AdminLoadBookingsTypedReadResponse | null;
+
+  if (!response.ok || responseBody?.ok !== true || !Array.isArray(responseBody.bookings)) {
+    return null;
+  }
+
+  return buildLoadBookingsTypedOperationalDisplayCardsById(responseBody.bookings);
 }
 
 function getLoadBookingsOperationalDisplayTitle(card: LoadBookingsOperationalDisplayCard) {
@@ -7871,6 +7962,10 @@ export default function Home() {
   const [aiAssistResponseNote, setAiAssistResponseNote] = useState("");
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [
+    loadBookingsTypedOperationalCardsById,
+    setLoadBookingsTypedOperationalCardsById,
+  ] = useState<Record<string, LoadBookingsOperationalDisplayCard>>({});
   const [drivers, setDrivers] = useState<DriverRecord[]>([]);
   const [driverProfileDisplayDrivers, setDriverProfileDisplayDrivers] = useState<
     DriverAssignmentDisplayRecord[]
@@ -9844,6 +9939,28 @@ export default function Home() {
   }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
+  function getLoadBookingsOperationalDisplayCard(bookingRecord: BookingRecord) {
+    const fallbackCard = buildLoadBookingsOperationalDisplayCard(bookingRecord);
+    const typedCard = loadBookingsTypedOperationalCardsById[String(bookingRecord.id)];
+
+    if (!typedCard) {
+      return fallbackCard;
+    }
+
+    return {
+      ...fallbackCard,
+      ...typedCard,
+      assigned_driver_display_name:
+        fallbackCard.assigned_driver_display_name || typedCard.assigned_driver_display_name,
+      assigned_driver_phone: fallbackCard.assigned_driver_phone || typedCard.assigned_driver_phone,
+      assigned_driver_plate: fallbackCard.assigned_driver_plate || typedCard.assigned_driver_plate,
+      audit_summary: fallbackCard.audit_summary || typedCard.audit_summary,
+      booking_id: fallbackCard.booking_id || typedCard.booking_id,
+      booking_reference: fallbackCard.booking_reference || typedCard.booking_reference,
+      booking_status: fallbackCard.booking_status || typedCard.booking_status,
+      updated_at: fallbackCard.updated_at || typedCard.updated_at,
+    };
+  }
   const dashboardDriverCandidates = useMemo(() => {
     const candidateMap = new Map<string, DashboardDriverCandidate>();
     const driversById = new Map(drivers.map((driver) => [driver.id, driver]));
@@ -12105,6 +12222,7 @@ export default function Home() {
     if (!options?.silent) {
       setMessage({ tone: "info", text: "Loading bookings..." });
     }
+    setLoadBookingsTypedOperationalCardsById({});
 
     try {
       const searchParams = new URLSearchParams({ limit: "25" });
@@ -12124,7 +12242,11 @@ export default function Home() {
         }
       } else {
         const loadedBookings = sortBookingsNewestFirst(responseBody.bookings);
+        const typedOperationalCardsById =
+          await fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams).catch(() => null);
+
         setBookings(loadedBookings);
+        setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {});
         if (!options?.silent) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
@@ -13859,7 +13981,7 @@ export default function Home() {
     return (
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {sectionBookings.map((savedBooking) => {
-          const operationalCard = buildLoadBookingsOperationalDisplayCard(savedBooking);
+          const operationalCard = getLoadBookingsOperationalDisplayCard(savedBooking);
           const driverDraft = getDriverDraft(savedBooking);
           const bookingId = String(savedBooking.id);
           const normalizedBookingStatus = clean(savedBooking.status).toLowerCase();
@@ -14506,7 +14628,7 @@ export default function Home() {
       {filteredRecentBookings.length > 0 ? (
       <div className="mt-3 max-h-80 space-y-2 overflow-auto">
         {filteredRecentBookings.map((savedBooking) => {
-          const operationalCard = buildLoadBookingsOperationalDisplayCard(savedBooking);
+          const operationalCard = getLoadBookingsOperationalDisplayCard(savedBooking);
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -14719,7 +14841,7 @@ export default function Home() {
           {filteredCompletedBookings.length > 0 ? (
           <div className="mt-3 max-h-[32rem] space-y-2 overflow-auto">
             {filteredCompletedBookings.map((savedBooking) => {
-              const operationalCard = buildLoadBookingsOperationalDisplayCard(savedBooking);
+              const operationalCard = getLoadBookingsOperationalDisplayCard(savedBooking);
               const routePoints = getRoutePoints(savedBooking);
               const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
               const dropoff =

@@ -115,7 +115,9 @@ for (const phrase of [
   "Operational display mapping must not feed safe operational card data into `bookingCardPriceLine`, `bookingRecordToForm` finance/payout mapping, driver dispatch payout copy, driver assignment payout controls, billing readiness finance paths, or `BookingRecord` finance/payout/internal fields.",
   "Dashboard/recent/completed operational display cards no longer render finance/payout price lines.",
   "Parser behavior and `/api/ai-parse` remain untouched.",
-  "No Supabase, `adminLegacyDataClient`, or DB read-write path is introduced by this mapping guard.",
+  "`app/page.tsx` now has a gated typed-read operational display bridge that can hydrate operational display cards from `GET /api/admin-load-bookings-typed-read` when the typed read gate and admin boundary allow it.",
+  "The bridge keeps the loaded booking/form source on `GET /api/admin-saved-bookings` and silently falls back to the existing operational display card mapper when typed read is blocked, closed, or unavailable.",
+  "No direct Supabase, `adminLegacyDataClient`, or DB write path is introduced by this mapping guard.",
   "No new shims are added.",
   "This lock adds `scripts/test-load-bookings-operational-runtime-mapping-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
@@ -149,6 +151,31 @@ assertIncludes(
   "Current Load Bookings endpoint",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");
+assertIncludes(
+  loadBookingsBlock,
+  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+  "Gated typed read operational display bridge",
+);
+assertIncludes(
+  appPage,
+  "function buildLoadBookingsOperationalDisplayCardFromTypedRead",
+  "Typed read safe-card adapter",
+);
+assertIncludes(
+  appPage,
+  "function getLoadBookingsOperationalDisplayCard",
+  "Operational display card selector",
+);
+assertIncludes(
+  appPage,
+  "setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {})",
+  "Typed read operational card state",
+);
+assertExcludes(
+  loadBookingsBlock,
+  "setBookings(typedOperationalCardsById",
+  "Typed read operational cards must not replace booking/form source",
+);
 assertExcludes(loadBookingsBlock, safeDtoHelperExport, "Load Bookings safe DTO runtime wiring");
 assertExcludes(loadBookingsBlock, safeDtoHelperFragment, "Load Bookings safe DTO runtime wiring");
 assertExcludes(loadBookingsBlock, safeUiAdapterHelperExport, "Load Bookings safe UI adapter runtime wiring");
@@ -411,7 +438,7 @@ for (const [label, start, end] of [
 ]) {
   const source = sliceBetween(appPage, start, end);
 
-  assertIncludes(source, "buildLoadBookingsOperationalDisplayCard(savedBooking)", label);
+  assertIncludes(source, "getLoadBookingsOperationalDisplayCard(savedBooking)", label);
   assertExcludes(source, "bookingCardPriceLine(savedBooking)", label);
   assertExcludes(source, "Customer override:", label);
   assertExcludes(source, "Vehicle / pax / price", label);

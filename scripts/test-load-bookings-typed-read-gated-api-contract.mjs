@@ -362,7 +362,36 @@ assertIncludes(
   "Current Load Bookings endpoint",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");
-assertExcludes(loadBookingsBlock, routePathFragment, "Load Bookings app typed route wiring");
+assertIncludes(
+  appPage,
+  `const adminLoadBookingsTypedReadApiPath = "${routePathFragment}"`,
+  "Load Bookings typed read display bridge path",
+);
+assertIncludes(
+  loadBookingsBlock,
+  "fetchLoadBookingsTypedOperationalDisplayCardsById(searchParams)",
+  "Load Bookings typed read display bridge",
+);
+assertIncludes(
+  appPage,
+  "function buildLoadBookingsOperationalDisplayCardFromTypedRead",
+  "Load Bookings typed read safe-card adapter",
+);
+assertIncludes(
+  appPage,
+  "function getLoadBookingsOperationalDisplayCard",
+  "Load Bookings operational card selector",
+);
+assertIncludes(
+  appPage,
+  "setLoadBookingsTypedOperationalCardsById(typedOperationalCardsById ?? {})",
+  "Load Bookings typed read safe-card state",
+);
+assertExcludes(
+  loadBookingsBlock,
+  "setBookings(typedOperationalCardsById",
+  "Load Bookings typed read must not replace booking/form source",
+);
 assertExcludes(loadBookingsBlock, "admin-load-bookings-typed-read-gated", "Load Bookings app typed helper wiring");
 
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");

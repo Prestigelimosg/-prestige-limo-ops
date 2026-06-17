@@ -530,6 +530,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-operational-display-merge-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Deploy Smoke for Load Bookings Typed Operational Display Merge
+- `origin/staging` deployed to `6d331bf Guard Load Bookings typed operational display merge`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; the passive browser smoke observed GET requests only.
+- Console/runtime errors: 0.
+- Load Bookings typed operational display merge remains guarded.
+- Typed safe-card fields remain primary for operational display, with sanitized legacy saved-booking operational card fields as fallback only.
+- Load Bookings still keeps `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
+- No blind endpoint swap was performed.
+- No env change, DB read/write, provider send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` route/helper change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim was included.
+
 ### Staging Deploy Smoke for Load Bookings Form Mapping Split
 - `origin/staging` deployed to `5b100a7 Split Load Bookings form mapping boundaries`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

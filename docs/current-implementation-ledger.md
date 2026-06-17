@@ -430,6 +430,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No UI sector/card addition or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-db-read-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Admin Setup Readiness Archive Label Hardening Lock
+- The collapsed admin archive header now uses the business-grade visible label `Setup Readiness Archive`.
+- The old visible label `Internal QA / Mock Workbench Archive — Mock Only` is removed from `app/page.tsx`.
+- The archive remains collapsed by default and keeps the existing `data-internal-qa-mock-archive` boundary for tests.
+- Customer and driver public-surface browser guards treat `Setup Readiness Archive` as forbidden outside the admin shell.
+- Dispatcher Intake `Clear Message` keeps an explicit 44px minimum touch target on small mobile viewports.
+- Existing monthly billing month-grouping pagination stacks on small phones to preserve readable touch targets.
+- No UI sector/card addition, route change, parser change, Save Booking change, DB read/write, provider send, pricing/payout/payment/PDF activation, or new shim is approved by this lock.
+- This lock adds `scripts/test-admin-setup-readiness-archive-label-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging Smoke for Load Bookings Typed Read Rollback Guard
 - `origin/staging` deployed to `4004b3a Add Load Bookings typed read rollback guard`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

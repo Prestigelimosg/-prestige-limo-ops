@@ -40,7 +40,7 @@ const viewports = [
   { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
 ];
 const appTabs = ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Rates"];
-const internalQaMockArchiveLabel = "Internal QA / Mock Workbench Archive — Mock Only";
+const internalQaMockArchiveLabel = "Setup Readiness Archive";
 const internalQaMockArchiveGroupLabels = [
   "Customer Intake / Account / Booking Review",
   "Dispatch / Driver / Fleet Readiness",
@@ -143,6 +143,7 @@ const mobileCustomerFacingPriceVisibilityPatterns = [
   { label: "admin finance wording", pattern: /\badmin\s+finance\b/i },
   { label: "parser/debug wording", pattern: /\b(?:parser(?:\/debug|\s+debug)|debug\s+output|manual\s+review\s+internals)\b/i },
   { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+  { label: "setup readiness archive label", pattern: /setup\s+readiness\s+archive/i },
 ];
 const mobileDriverPriceFinanceLeakPatterns = [
   { label: "customer price wording", pattern: /\bcustomer\s+price\b/i },
@@ -159,6 +160,7 @@ const mobileDriverPriceFinanceLeakPatterns = [
   { label: "customer account internals wording", pattern: /\bcustomer\s+account\s+internals?\b/i },
   { label: "mock QA/dev archive wording", pattern: /\bmock\s+qa\s*\/\s*dev\s+archive\b/i },
   { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+  { label: "setup readiness archive label", pattern: /setup\s+readiness\s+archive/i },
 ];
 const mobileAdminBookingPersistenceUiPatterns = [
   { label: "admin booking persistence wording", pattern: /\badmin\s+booking\s+persistence\b/i },
@@ -395,6 +397,32 @@ async function runChromeTest() {
             return Promise.resolve(
               new Response(JSON.stringify({
                 message: "Blocked admin app notification mutation in mobile usability browser test.",
+              }), {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
+          if (url.includes("/api/admin-saved-bookings")) {
+            window.__mobileUsabilityFetchCalls.push(\`\${method} \${url}\`);
+
+            if (method === "GET") {
+              return Promise.resolve(
+                new Response(JSON.stringify({
+                  bookings: bookingsFixture,
+                  ok: true,
+                  version: "mobile-admin-saved-bookings-read-mock",
+                }), {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                }),
+              );
+            }
+
+            return Promise.resolve(
+              new Response(JSON.stringify({
+                message: "Blocked admin saved booking mutation in mobile usability browser test.",
               }), {
                 status: 500,
                 headers: { "content-type": "application/json" },
@@ -2709,6 +2737,7 @@ async function runChromeTest() {
           "Billing month",
           "Ready trips count",
           "Blocked trips count",
+          "Completed billing audit",
           "Total trips in month",
           "Month grouping status",
           "Admin review status",
@@ -2758,9 +2787,11 @@ async function runChromeTest() {
         `${viewport.label}: expected Monthly Billing Month Grouping Review page summary`,
       );
       assert.equal(
-        state.boundary.includes("Guarded admin API read plus monthly billing draft-plan") &&
+        state.boundary.includes("Guarded admin API read plus completed-booking billing-readiness audit") &&
+          state.boundary.includes("monthly billing draft-plan") &&
           state.boundary.includes("invoice draft-prep") &&
           state.boundary.includes("item-review") &&
+          state.boundary.includes("billable price review") &&
           state.boundary.includes("issue-review") &&
           state.boundary.includes("issue-record save, invoice-number reservation, and PDF-review readiness only.") &&
           state.boundary.includes("No direct Supabase write outside approved API routes") &&
@@ -12890,9 +12921,9 @@ async function runChromeTest() {
       assert.deepEqual(
         recentOperationalCardState.sections.map((section) => section.key),
         ["booking", "route", "vehicle-pax-price"],
-        `${viewport.label}: expected Recent Bookings card to group booking, route, and vehicle/pax/price sections`,
+        `${viewport.label}: expected Recent Bookings card to group booking, route, and vehicle/pax sections`,
       );
-      for (const expectedText of ["BOOKING", "ROUTE", "VEHICLE / PAX / PRICE"]) {
+      for (const expectedText of ["BOOKING", "ROUTE", "VEHICLE / PAX"]) {
         assert.equal(
           recentOperationalCardState.sections.some((section) => section.text.includes(expectedText)),
           true,
@@ -12944,7 +12975,7 @@ async function runChromeTest() {
       assert.deepEqual(
         dashboardOperationalCardState.sections.map((section) => section.key),
         ["booking", "route", "vehicle-pax-price"],
-        `${viewport.label}: expected dashboard card to group booking, route, and vehicle/pax/price sections`,
+        `${viewport.label}: expected dashboard card to group booking, route, and vehicle/pax sections`,
       );
       for (const expectedText of [
         "Dispatcher Status",

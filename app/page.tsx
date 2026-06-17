@@ -19201,7 +19201,7 @@ export default function Home() {
         </section>
 
         <section
-          aria-label="Internal QA / Mock Workbench Archive — Mock Only"
+          aria-label="Setup Readiness Archive"
           className="order-last rounded-md bg-white ring-1 ring-slate-200"
           data-internal-qa-mock-archive="true"
           data-mock-workflow-review-group="true"
@@ -19215,7 +19215,7 @@ export default function Home() {
             type="button"
           >
             <span className="font-semibold text-slate-950">
-              Internal QA / Mock Workbench Archive — Mock Only
+              Setup Readiness Archive
             </span>
             <span className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
               {isInternalQaMockArchiveOpen ? "Expanded" : "Collapsed by default"}
@@ -26085,6 +26085,7 @@ export default function Home() {
                     className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-w-32"
                     data-dispatcher-clear-message-button="true"
                     onClick={clearBookingMessageInput}
+                    style={{ minHeight: 44 }}
                     type="button"
                   >
                     Clear Message
@@ -29580,7 +29581,7 @@ export default function Home() {
                   >
                     {monthlyBillingSavedGroupingPageLabel} / {monthlyBillingSavedGroupingFilterStatusLabel}
                   </span>
-                  <div className="mt-1 grid grid-cols-2 gap-1">
+                  <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2">
                     <button
                       className="min-h-9 min-w-0 rounded-md border border-teal-200 bg-white px-2 text-xs font-semibold text-teal-950 transition enabled:hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
                       data-admin-monthly-billing-month-grouping-previous-page="true"
@@ -29588,6 +29589,7 @@ export default function Home() {
                       onClick={() =>
                         setAdminMonthlyBillingGroupingPage((current) => Math.max(1, current - 1))
                       }
+                      style={{ minHeight: 36, minWidth: 72 }}
                       type="button"
                     >
                       Previous
@@ -29597,6 +29599,7 @@ export default function Home() {
                       data-admin-monthly-billing-month-grouping-next-page="true"
                       disabled={!monthlyBillingSavedGroupingCanGoNext}
                       onClick={() => setAdminMonthlyBillingGroupingPage((current) => current + 1)}
+                      style={{ minHeight: 36, minWidth: 72 }}
                       type="button"
                     >
                       Next

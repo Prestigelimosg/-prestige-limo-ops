@@ -102,6 +102,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-operational-runtime-mapping-guard.mjs",
   },
   {
+    label: "admin setup readiness archive label guard",
+    script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
+  },
+  {
     label: "admin route flow lock guard",
     script: "scripts/test-admin-route-flow-lock.mjs",
   },

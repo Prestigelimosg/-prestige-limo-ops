@@ -44,7 +44,7 @@ const tabExpectedText = {
   Drivers: "Driver Database",
   Rates: "Load Rates",
 };
-const internalQaMockArchiveLabel = "Internal QA / Mock Workbench Archive — Mock Only";
+const internalQaMockArchiveLabel = "Setup Readiness Archive";
 const internalQaMockArchiveGroupLabels = [
   "Customer Intake / Account / Booking Review",
   "Dispatch / Driver / Fleet Readiness",
@@ -567,6 +567,7 @@ const customerFacingPriceVisibilityPatterns = [
   { label: "admin finance wording", pattern: /\badmin\s+finance\b/i },
   { label: "parser/debug wording", pattern: /\b(?:parser(?:\/debug|\s+debug)|debug\s+output|manual\s+review\s+internals)\b/i },
   { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+  { label: "setup readiness archive label", pattern: /setup\s+readiness\s+archive/i },
 ];
 const driverPriceFinanceLeakPatterns = [
   { label: "customer price wording", pattern: /\bcustomer\s+price\b/i },
@@ -583,6 +584,7 @@ const driverPriceFinanceLeakPatterns = [
   { label: "customer account internals wording", pattern: /\bcustomer\s+account\s+internals?\b/i },
   { label: "mock QA/dev archive wording", pattern: /\bmock\s+qa\s*\/\s*dev\s+archive\b/i },
   { label: "internal QA mock archive label", pattern: /internal qa\s*\/\s*mock workbench archive/i },
+  { label: "setup readiness archive label", pattern: /setup\s+readiness\s+archive/i },
 ];
 const adminBookingPersistenceUiPatterns = [
   { label: "admin booking persistence wording", pattern: /\badmin\s+booking\s+persistence\b/i },

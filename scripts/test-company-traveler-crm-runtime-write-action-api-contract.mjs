@@ -100,6 +100,15 @@ function assertExcludes(source, fragmentOrPattern, label) {
   assert.equal(matches, false, `${label} must not include ${fragmentOrPattern}.`);
 }
 
+function sliceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `Missing source marker: ${startMarker}`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `Missing end marker after ${startMarker}: ${endMarker}`);
+
+  return source.slice(start, end);
+}
+
 function assertNoForbiddenOutput(value, label) {
   assert.equal(
     forbiddenOutputPattern.test(JSON.stringify(value)),
@@ -398,9 +407,50 @@ for (const forbiddenFragment of forbiddenFieldFragments) {
   assertExcludes(travelerSelectLine, forbiddenFragment, `CRM runtime traveler select forbidden ${forbiddenFragment}`);
 }
 
+const crmRuntimeClientHelper = sliceBetween(
+  appPage,
+  "async function saveCompanyTravelerCrmIdentityContactRuntime",
+  "function buildCompanyRateOverridePayload",
+);
+const saveRateOverrideSource = sliceBetween(
+  appPage,
+  "async function saveRateOverride",
+  "async function removeCompanyRateOverride",
+);
+const saveBookingSource = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
+
+assertIncludes(appPage, routePathFragment, "App page CRM runtime route path");
+assertIncludes(
+  crmRuntimeClientHelper,
+  "fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath",
+  "CRM runtime client helper fetch",
+);
+assertIncludes(crmRuntimeClientHelper, "JSON.stringify(payload)", "CRM runtime client helper payload");
+assertIncludes(crmRuntimeClientHelper, '"x-prestige-admin-purpose"', "CRM runtime client helper admin boundary");
+assertIncludes(crmRuntimeClientHelper, "isCrmRuntimeWriteBlockedNoOp", "CRM runtime helper closed-gate no-op handling");
+assertIncludes(saveRateOverrideSource, "saveCompanyTravelerCrmIdentityContactRuntime", "Rate override CRM identity split");
+assertIncludes(saveRateOverrideSource, "buildCompanyCrmIdentityContactPayload", "Rate override company identity split");
+assertIncludes(saveRateOverrideSource, "buildTravelerCrmIdentityContactPayload", "Rate override traveler identity split");
+assertIncludes(saveRateOverrideSource, "buildCompanyRateOverridePayload", "Rate override company rate lane");
+assertIncludes(saveRateOverrideSource, "buildTravelerRateOverridePayload", "Rate override traveler rate lane");
+assertIncludes(
+  saveRateOverrideSource,
+  "buildLegacyCompanyRateOverrideInsertPayload",
+  "Gate-closed company fallback preserves current rate override behavior",
+);
+assertIncludes(
+  saveRateOverrideSource,
+  "buildLegacyTravelerRateOverrideInsertPayload",
+  "Gate-closed traveler fallback preserves current rate override behavior",
+);
+assertExcludes(crmRuntimeClientHelper, /customer_rates|driver_payout_rules|customer_price|driver_payout|rate_override|pricing|payout|payment|billing|invoice|pdf|provider|auth_session|live_location|photo|calendar|internal_admin|admin_notes|debug_payload|secret|api_key|access_token/i, "CRM runtime client helper");
+assertExcludes(saveBookingSource, routePathFragment, "Save Booking + CRM must not call CRM runtime write route");
+assertExcludes(aiParseRoute, routePathFragment, "Parser route must not call CRM runtime write route");
+assertExcludes(adminBookingsRoute, routePathFragment, "Admin bookings route must not call CRM runtime write route");
+assertExcludes(adminSavedBookingsRoute, routePathFragment, "Admin saved bookings route must not call CRM runtime write route");
+
 for (const source of [appPage, aiParseRoute, adminBookingsRoute, adminSavedBookingsRoute]) {
-  assertExcludes(source, routePathFragment, "Runtime CRM route must remain unwired");
-  assertExcludes(source, "executeAdminCompanyTravelerCrmRuntimeWriteAction", "Runtime CRM helper must remain unwired");
+  assertExcludes(source, "executeAdminCompanyTravelerCrmRuntimeWriteAction", "Server CRM runtime helper must not be imported client-side or by unrelated routes");
 }
 
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite CRM runtime action guard entry");

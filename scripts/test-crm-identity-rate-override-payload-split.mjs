@@ -83,6 +83,11 @@ const legacyTravelerRateOverrideInsertPayload = sliceBetween(
   "function buildLegacyTravelerRateOverrideInsertPayload",
   "function statusClass",
 );
+const crmRuntimeClientHelper = sliceBetween(
+  appPage,
+  "async function saveCompanyTravelerCrmIdentityContactRuntime",
+  "function buildCompanyRateOverridePayload",
+);
 const saveRateOverride = sliceBetween(
   appPage,
   "async function saveRateOverride",
@@ -103,8 +108,8 @@ const ledgerSection = sectionBetween(ledger, "### CRM Identity/Rate Override Pay
 
 for (const phrase of [
   "CRM identity/contact payload code is separated from rate override payload code at `d65aac1 Split CRM identity payload from rate override payload`.",
-  "Runtime behavior remains unchanged.",
-  "Company/traveler CRM writes remain parked.",
+  "Stage 1 CRM identity/contact runtime route mapping calls the typed CRM runtime write action from the existing Company/Boss Overrides save path with identity/contact payloads only.",
+  "Closed-gate/no-op CRM route responses preserve current legacy rate override behavior.",
   "Rate override save/remove remains parked.",
   "`customer_rates` and `driver_payout_rules` remain parked.",
   "Save Booking + CRM is unchanged and remains on `POST /api/admin-bookings`.",
@@ -137,6 +142,14 @@ for (const [label, source] of [
 assertIncludes(companyCrmPayload, "company_name", "Company CRM identity/contact payload");
 assertIncludes(travelerCrmPayload, "company_id", "Traveler CRM identity/contact payload");
 assertIncludes(travelerCrmPayload, "traveler_name", "Traveler CRM identity/contact payload");
+assertIncludes(crmRuntimeClientHelper, "saveCompanyTravelerCrmIdentityContactRuntime", "CRM runtime client helper");
+assertIncludes(
+  crmRuntimeClientHelper,
+  "adminCompanyTravelerCrmRuntimeWriteActionApiPath",
+  "CRM runtime client helper",
+);
+assertIncludes(crmRuntimeClientHelper, "JSON.stringify(payload)", "CRM runtime client helper");
+assertExcludes(crmRuntimeClientHelper, forbiddenCrmPayloadPattern, "CRM runtime client helper");
 
 assertIncludes(
   legacyCompanyRateOverrideInsertPayload,
@@ -161,8 +174,9 @@ assertIncludes(
 
 assertIncludes(saveRateOverride, "buildLegacyCompanyRateOverrideInsertPayload", "Parked legacy override save");
 assertIncludes(saveRateOverride, "buildLegacyTravelerRateOverrideInsertPayload", "Parked legacy override save");
-assertExcludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "Parked legacy override save");
-assertExcludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "Parked legacy override save");
+assertIncludes(saveRateOverride, "saveCompanyTravelerCrmIdentityContactRuntime", "CRM identity/contact runtime split");
+assertIncludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "CRM identity/contact runtime split");
+assertIncludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "CRM identity/contact runtime split");
 assertIncludes(saveRateOverride, "buildCompanyRateOverridePayload", "Parked legacy override save");
 assertIncludes(saveRateOverride, "buildTravelerRateOverridePayload", "Parked legacy override save");
 assertIncludes(saveRateOverride, "adminLegacyDataClient", "Parked legacy override save");

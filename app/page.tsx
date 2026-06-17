@@ -67,6 +67,8 @@ const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
+const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
+  "/api/admin-company-traveler-crm-runtime-write-action";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminDriverAssignmentDisplayApiPath = "/api/admin-driver-assignment-display";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
@@ -3572,6 +3574,27 @@ type TravelerCrmIdentityContactPayload = {
   traveler_name: string;
 };
 
+type CompanyTravelerCrmIdentityContactRuntimePayload =
+  | (CompanyCrmIdentityContactPayload & {
+      action_type: "company_create" | "company_update";
+      id?: number;
+    })
+  | (TravelerCrmIdentityContactPayload & {
+      action_type: "traveler_create" | "traveler_update";
+      id?: number;
+    });
+
+type CompanyTravelerCrmRuntimeWriteResponse = {
+  error?: string;
+  no_op?: boolean;
+  ok?: boolean;
+  reason?: string;
+  record?: {
+    id?: number | string | null;
+  } | null;
+  rejected_fields?: unknown;
+};
+
 type CompanyRateOverridePayloadInput = {
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
@@ -3608,6 +3631,80 @@ function buildTravelerCrmIdentityContactPayload(
     company_id: companyId,
     traveler_name: travelerName,
   };
+}
+
+function crmRuntimeRecordId(value: CompanyTravelerCrmRuntimeWriteResponse | null) {
+  const id = Number(value?.record?.id);
+
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function crmRuntimeRejectedFields(value: CompanyTravelerCrmRuntimeWriteResponse | null) {
+  return Array.isArray(value?.rejected_fields)
+    ? value.rejected_fields.map((field) => clean(field)).filter(Boolean)
+    : [];
+}
+
+function isCrmRuntimeWriteBlockedNoOp(value: CompanyTravelerCrmRuntimeWriteResponse | null) {
+  const reason = clean(value?.reason).toLowerCase();
+
+  return (
+    value?.ok !== true &&
+    value?.no_op === true &&
+    ["admin_session_required", "config_not_ready", "write_gate_closed"].includes(reason)
+  );
+}
+
+function crmRuntimeWriteError(
+  value: CompanyTravelerCrmRuntimeWriteResponse | null,
+  fallback: string,
+) {
+  const rejectedFields = crmRuntimeRejectedFields(value);
+
+  if (rejectedFields.length > 0) {
+    return `${fallback} Rejected fields: ${rejectedFields.join(", ")}.`;
+  }
+
+  return clean(value?.error) || fallback;
+}
+
+async function saveCompanyTravelerCrmIdentityContactRuntime(
+  payload: CompanyTravelerCrmIdentityContactRuntimePayload,
+): Promise<{ ok: true; recordId: number | null } | { errorMessage: string; ok: false }> {
+  try {
+    const response = await fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath, {
+      body: JSON.stringify(payload),
+      headers: {
+        "content-type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const responseBody = (await response.json().catch(() => null)) as CompanyTravelerCrmRuntimeWriteResponse | null;
+
+    if (response.ok && responseBody?.ok === true) {
+      return { ok: true, recordId: crmRuntimeRecordId(responseBody) };
+    }
+
+    if (isCrmRuntimeWriteBlockedNoOp(responseBody)) {
+      return { ok: true, recordId: null };
+    }
+
+    return {
+      ok: false,
+      errorMessage: crmRuntimeWriteError(
+        responseBody,
+        "CRM identity/contact write was rejected by the typed boundary.",
+      ),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorMessage: error instanceof Error
+        ? error.message
+        : "CRM identity/contact write failed before the rate override could continue.",
+    };
+  }
 }
 
 function buildCompanyRateOverridePayload({
@@ -11432,6 +11529,7 @@ export default function Home() {
       let company: CompanyRecord | null = rateCompanies.find(
         (companyRecord) => clean(companyRecord.company_name).toLowerCase() === companyName.toLowerCase(),
       ) ?? null;
+      let companyIdentitySynced = false;
 
       if (!company) {
         const existingCompany = await adminLegacyDataClient
@@ -11446,6 +11544,29 @@ export default function Home() {
         }
 
         company = existingCompany.data as CompanyRecord | null;
+      }
+
+      if (!company) {
+        const companyIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
+          action_type: "company_create",
+          ...buildCompanyCrmIdentityContactPayload(companyName || "Internal Account"),
+        });
+
+        if (!companyIdentity.ok) {
+          throw new Error(companyIdentity.errorMessage);
+        }
+
+        if (companyIdentity.recordId) {
+          company = {
+            company_name: companyName || "Internal Account",
+            customer_rates: {},
+            domain: null,
+            driver_payout_rules: {},
+            id: companyIdentity.recordId,
+            transzend_excel_privacy: rateOverrideDraft.transzendExcelPrivacy,
+          };
+          companyIdentitySynced = true;
+        }
       }
 
       if (!company) {
@@ -11465,6 +11586,16 @@ export default function Home() {
         }
 
         company = createdCompany.data as CompanyRecord;
+      } else if (!companyIdentitySynced) {
+        const companyIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
+          action_type: "company_update",
+          id: company.id,
+          ...buildCompanyCrmIdentityContactPayload(clean(company.company_name) || companyName || "Internal Account"),
+        });
+
+        if (!companyIdentity.ok) {
+          throw new Error(companyIdentity.errorMessage);
+        }
       }
 
       const mergedCompanyRates = bossName
@@ -11515,6 +11646,16 @@ export default function Home() {
 
         if (existingTraveler.data) {
           const traveler = existingTraveler.data as TravelerRecord;
+          const travelerIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
+            action_type: "traveler_update",
+            id: traveler.id,
+            ...buildTravelerCrmIdentityContactPayload(company.id, bossName),
+          });
+
+          if (!travelerIdentity.ok) {
+            throw new Error(travelerIdentity.errorMessage);
+          }
+
           const travelerUpdate = await adminLegacyDataClient
             .from(adminLegacyTables.travelers)
             .update(
@@ -11536,14 +11677,34 @@ export default function Home() {
             throw new Error(travelerUpdate.error.message);
           }
         } else {
-          const travelerInsert = await adminLegacyDataClient.from(adminLegacyTables.travelers).insert(
-            buildLegacyTravelerRateOverrideInsertPayload({
-              companyId: company.id,
-              customerRates: overrideCustomerRates,
-              driverPayoutRules: overrideDriverPayoutRules,
-              travelerName: bossName,
-            }),
-          );
+          const travelerIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
+            action_type: "traveler_create",
+            ...buildTravelerCrmIdentityContactPayload(company.id, bossName),
+          });
+
+          if (!travelerIdentity.ok) {
+            throw new Error(travelerIdentity.errorMessage);
+          }
+
+          const travelerInsert = travelerIdentity.recordId
+            ? await adminLegacyDataClient
+                .from(adminLegacyTables.travelers)
+                .update(
+                  buildTravelerRateOverridePayload({
+                    customerRates: overrideCustomerRates,
+                    driverPayoutRules: overrideDriverPayoutRules,
+                    updatedAt: new Date().toISOString(),
+                  }),
+                )
+                .eq("id", travelerIdentity.recordId)
+            : await adminLegacyDataClient.from(adminLegacyTables.travelers).insert(
+                buildLegacyTravelerRateOverrideInsertPayload({
+                  companyId: company.id,
+                  customerRates: overrideCustomerRates,
+                  driverPayoutRules: overrideDriverPayoutRules,
+                  travelerName: bossName,
+                }),
+              );
 
           if (travelerInsert.error) {
             throw new Error(travelerInsert.error.message);

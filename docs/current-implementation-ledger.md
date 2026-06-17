@@ -941,7 +941,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - New route: `POST /api/admin-company-traveler-crm-runtime-write-action`.
 - New server-only helper: `lib/admin-company-traveler-crm-runtime-write-action.ts`.
 - The route uses the existing typed CRM identity/contact contract from `25d0703 Add typed company traveler CRM write foundation`.
-- Runtime app wiring is still not active; `app/page.tsx` does not call the route or helper.
+- Stage 1 runtime app wiring calls the route from the existing Company/Boss Overrides save path through `saveCompanyTravelerCrmIdentityContactRuntime`; it sends only identity/contact payloads.
+- Closed-gate/no-op CRM route responses are tolerated so current legacy rate override behavior is preserved until the CRM write gate is separately opened and verified.
+- The existing legacy rate override fallback remains in place for gate-closed company/traveler creation; rate/pricing/payout migration remains separate.
 - Load/save booking flow is unchanged; Save Booking + CRM remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` remains unchanged and separate.
 - Parser behavior and `/api/ai-parse` remain unchanged.
@@ -955,7 +957,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No customer-visible driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive fields are exposed.
 - No driver-visible customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive fields are exposed.
 - No UI sectors, buttons, cards, layout changes, provider activation, live sending, env changes, deployment, DB write execution, migrations, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky rate/pricing/payout activation, or new shim is included in this lock.
-- Runtime `app/page.tsx` wiring and any live DB write execution remain separate future work and require dedicated verification before staging or production use.
+- Additional `app/page.tsx` wiring beyond the existing Company/Boss Overrides identity/contact split and any live DB write execution remain separate future work and require dedicated verification before staging or production use.
 - Checks for this lock: `node scripts/test-company-traveler-crm-runtime-write-action-api-contract.mjs`, `node scripts/test-company-traveler-crm-runtime-write-approval-packet.mjs`, CRM identity/contact disabled action and audit setup guards, CRM identity/rate override payload split guard, rate override split/gating plan guard, shim cleanup no-new-shim guard, preactivation verification suite, lint, build, booking UI browser test, `git diff --check`, and `git status --short`.
 
 ### Company/Traveler CRM Identity/Contact Write Foundation Lock
@@ -1041,13 +1043,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - It validates safe company/traveler identity/contact fields.
 - It rejects forbidden rate/pricing/payout/payment/internal/debug fields.
 - It always stays no-write/no-op.
-- Runtime behavior remains unchanged.
-- Company/traveler CRM writes remain parked.
+- Stage 1 CRM identity/contact runtime route mapping calls the typed CRM runtime write action from the existing Company/Boss Overrides save path with identity/contact payloads only.
+- Closed-gate/no-op CRM route responses preserve current legacy rate override behavior.
 - Rate override payload logic remains separate and parked.
 - Rate override save/remove remains parked.
 - `customer_rates` and `driver_payout_rules` remain parked.
-- Typed CRM write foundation is still not wired to runtime saves.
-- No `app/page.tsx` wiring was added.
+- Typed CRM write foundation is wired only through the gated CRM identity/contact runtime action path.
+- `app/page.tsx` wiring is limited to the existing Company/Boss Overrides save flow; no UI layout, sector, button, or card was added.
 - Save Booking + CRM is unchanged and remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` is unchanged and remains separate.
 - Parser behavior and `/api/ai-parse` are unchanged.

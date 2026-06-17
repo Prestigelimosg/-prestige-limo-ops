@@ -332,6 +332,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-typed-read-gated-api-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No env change, deployment, live DB write, migration, provider/sending, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/button/card addition, or new shim is approved by this lock.
 
+### Staging Typed Load Bookings Read Activation
+- Staging project: `prestige-limo-ops-staging`.
+- Staging URL: `https://prestige-limo-ops-staging.vercel.app/`.
+- Staging typed-read gate env name enabled: `PRESTIGE_LOAD_BOOKINGS_TYPED_READ_ENABLED`.
+- No env values or secrets were printed.
+- Staging was redeployed through Vercel after the gate env was added.
+- Staging home returned HTTP 200.
+- Safe GET-only check to `GET /api/admin-load-bookings-typed-read?limit=2` returned HTTP 200.
+- Typed read response reported `status: ready`, `mode: list`, `read_gate_open: true`, `db_read_enabled: true`, and `live_write_enabled: false`.
+- Typed read response returned 2 safe operational records through `safe_dto` and `safe_card`.
+- Safe DTO/card key scan found no forbidden pricing, payout, customer rate, driver payout, payment, PDF, billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secret, or token keys.
+- No POST/write/send was attempted.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- Load Bookings booking/form source remains on `GET /api/admin-saved-bookings`; the typed endpoint is used only by the bounded operational display bridge and fallback remains in place.
+- `/api/admin-saved-bookings` behavior remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Provider sending remains inactive.
+- No live DB write, migration, payment/PDF/pricing/payout, auth, location, photo, calendar, UI sector/card addition, or new shim was introduced by this activation.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

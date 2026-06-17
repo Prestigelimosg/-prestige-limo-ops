@@ -1200,14 +1200,33 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No UI sector/card, env change, deployment, DB read/write execution, provider activation, live send, or new shim is included.
 
+### Customer Rates Runtime Write Gate Lock
+- Added gated customer_rates runtime write boundary.
+- New route: `POST /api/admin-customer-rates-runtime-write-action`.
+- New server-only helper: `lib/admin-customer-rates-runtime-write-action.ts`.
+- The write gate is closed by default through `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`.
+- Allowed input is existing company/traveler `id`, action type, and safe `customer_rates` keys only: MNG, DEP, TRF, DSP.
+- The route requires the existing admin/dispatcher boundary before any runtime write can proceed.
+- With the gate closed, the route remains no-op and does not create a database client.
+- If the gate is opened later, a server-session admin/dispatcher actor is still required before any database client can be created.
+- Forbidden fields remain rejected/excluded: `driver_payout_rules`, driver payout, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, and mock QA/dev archive fields.
+- The route is not wired from `app/page.tsx`.
+- Existing company/traveler rate override save/remove still uses the legacy combined `customer_rates` plus `driver_payout_rules` path until a separate app wiring pass.
+- No typed payout runtime write is wired by this gate.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- No parser or `/api/ai-parse` change.
+- No UI sector/card, env change, deployment, DB write execution, provider activation, live send, or new shim is included.
+
 ### Pricing Customer Rates Runtime Approval Packet Lock
 - Approval status: pending future runtime-wiring approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-pricing-customer-rates-approval-packet.mjs`.
-- Customer rates/pricing runtime remains parked.
+- Customer rates/pricing app runtime wiring remains parked.
 - Pricing is coupled to `rate_settings`, company/traveler overrides, booking price/payout snapshots, and billing/payment/PDF-adjacent paths.
 - `driver_payout_rules` and payout remain separate and parked.
 - Current `rate_settings` read path is typed, but pricing/customer_rates runtime wiring is not approved.
-- Current company/traveler rate override save/remove remains parked and still touches `customer_rates` with `driver_payout_rules`.
+- Current company/traveler rate override save/remove remains on the existing legacy combined path and still touches `customer_rates` with `driver_payout_rules`.
+- A gated customer_rates runtime write boundary exists, but it remains closed by default and is not wired from `app/page.tsx`.
 - Future pricing lane may include only customer-facing pricing/customer_rates setup or contract fields after separate approval.
 - Future pricing lane must exclude payout, `driver_payout_rules`, payment/PDF/billing activation, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.
 - Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.
@@ -1218,7 +1237,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future runtime wiring must not add new shims.
 - Required tests before any future wiring: typed pricing/customer_rates runtime contract test, forbidden-field exclusion guard for payout, `driver_payout_rules`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets, `node scripts/test-pricing-customer-rates-approval-packet.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-rate-settings-runtime-approval-packet.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
 - Rollback note: keep pricing/customer_rates runtime parked on the current legacy rate settings/company/traveler override and booking snapshot paths until a typed lane is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy paths unchanged.
-- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/payout/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
+- No `app/page.tsx` runtime wiring, UI behavior change, env change, deployment, live DB write execution, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/payout/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
 ### Payout Runtime Approval Packet Lock
 - Approval status: pending future runtime-wiring approval.

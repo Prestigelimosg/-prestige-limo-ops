@@ -3565,6 +3565,50 @@ function hasRateOverrideValues(record: Pick<CompanyRecord, "customer_rates" | "d
   return formatOverrideSummary(record.customer_rates, record.driver_payout_rules).hasOverrides;
 }
 
+type DefaultRateSettingsScalarRuntimePayload = {
+  child_seat_customer_surcharge: number;
+  child_seat_driver_payout: number;
+  extra_stop_payout: number;
+  extra_stop_surcharge: number;
+  id: "default";
+  midnight_payout: number;
+  midnight_surcharge: number;
+};
+
+type DefaultRateSettingsLegacyRateMapsPayload = {
+  customer_rates: Required<RateRules>;
+  driver_payout_rules: Required<DriverPayoutRules>;
+};
+
+function buildDefaultRateSettingsScalarPayload(
+  settings: RateSettings,
+): DefaultRateSettingsScalarRuntimePayload {
+  return {
+    child_seat_customer_surcharge: settings.childSeatCustomerSurcharge,
+    child_seat_driver_payout: settings.childSeatDriverPayout,
+    extra_stop_payout: settings.extraStopPayout,
+    extra_stop_surcharge: settings.extraStopSurcharge,
+    id: "default",
+    midnight_payout: settings.midnightPayout,
+    midnight_surcharge: settings.midnightSurcharge,
+  };
+}
+
+function buildDefaultRateSettingsLegacyRateMapsPayload(
+  settings: RateSettings,
+): DefaultRateSettingsLegacyRateMapsPayload {
+  return {
+    customer_rates: {
+      ...defaultCustomerRates,
+      ...normalizeCustomerRateRules(settings.customerRates),
+    },
+    driver_payout_rules: {
+      ...defaultDriverPayoutRules,
+      ...normalizeDriverPayoutRules(settings.driverPayoutRules),
+    },
+  };
+}
+
 type CompanyCrmIdentityContactPayload = {
   company_name: string;
 };
@@ -11423,26 +11467,22 @@ export default function Home() {
     setMessage({ tone: "info", text: "Saving default rates..." });
 
     try {
-      const customerRates = {
-        ...defaultCustomerRates,
-        ...normalizeCustomerRateRules(rateSettings.customerRates),
-      };
-      const driverPayoutRules = {
-        ...defaultDriverPayoutRules,
-        ...normalizeDriverPayoutRules(rateSettings.driverPayoutRules),
-      };
+      const scalarRateSettings = buildDefaultRateSettingsScalarPayload(rateSettings);
+      const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);
+      const customerRates = legacyRateMapFields.customer_rates;
+      const driverPayoutRules = legacyRateMapFields.driver_payout_rules;
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.rateSettings)
         .upsert({
-          id: "default",
+          id: scalarRateSettings.id,
           customer_rates: customerRates,
           driver_payout_rules: driverPayoutRules,
-          midnight_surcharge: rateSettings.midnightSurcharge,
-          extra_stop_surcharge: rateSettings.extraStopSurcharge,
-          midnight_payout: rateSettings.midnightPayout,
-          extra_stop_payout: rateSettings.extraStopPayout,
-          child_seat_customer_surcharge: rateSettings.childSeatCustomerSurcharge,
-          child_seat_driver_payout: rateSettings.childSeatDriverPayout,
+          midnight_surcharge: scalarRateSettings.midnight_surcharge,
+          extra_stop_surcharge: scalarRateSettings.extra_stop_surcharge,
+          midnight_payout: scalarRateSettings.midnight_payout,
+          extra_stop_payout: scalarRateSettings.extra_stop_payout,
+          child_seat_customer_surcharge: scalarRateSettings.child_seat_customer_surcharge,
+          child_seat_driver_payout: scalarRateSettings.child_seat_driver_payout,
           updated_at: new Date().toISOString(),
         })
         .select("id")

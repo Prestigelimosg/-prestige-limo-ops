@@ -130,6 +130,10 @@ const guardChecks = [
     script: "scripts/test-rate-settings-runtime-write-action-api-contract.mjs",
   },
   {
+    label: "rate settings save defaults boundary split guard",
+    script: "scripts/test-rate-settings-save-defaults-boundary-split.mjs",
+  },
+  {
     label: "pricing/customer_rates runtime approval packet guard",
     script: "scripts/test-pricing-customer-rates-approval-packet.mjs",
   },

@@ -118,10 +118,12 @@ const saveDefaultRates = sliceBetween(appPage, "async function saveDefaultRates"
 for (const fragment of [
   "adminLegacyDataClient",
   ".from(adminLegacyTables.rateSettings)",
+  "const scalarRateSettings = buildDefaultRateSettingsScalarPayload(rateSettings);",
+  "const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);",
   "driver_payout_rules: driverPayoutRules",
-  "midnight_payout: rateSettings.midnightPayout",
-  "extra_stop_payout: rateSettings.extraStopPayout",
-  "child_seat_driver_payout: rateSettings.childSeatDriverPayout",
+  "midnight_payout: scalarRateSettings.midnight_payout",
+  "extra_stop_payout: scalarRateSettings.extra_stop_payout",
+  "child_seat_driver_payout: scalarRateSettings.child_seat_driver_payout",
 ]) {
   assertIncludes(saveDefaultRates, fragment, `Parked saveDefaultRates payout fragment: ${fragment}`);
 }

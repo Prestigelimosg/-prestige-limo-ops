@@ -1177,6 +1177,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Forbidden fields remain rejected/excluded: `customer_rates`, `driver_payout_rules`, customer price/rate maps, rate overrides, pricing/payout snapshots, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and tokens.
 - No Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, env change, deployment, migration, live DB write execution, or new shim is included.
 
+### Rate Settings Save Defaults Boundary Split Lock
+- Default rate save payload construction is split into `buildDefaultRateSettingsScalarPayload` and `buildDefaultRateSettingsLegacyRateMapsPayload`.
+- The scalar helper contains only `id`, `midnight_surcharge`, `extra_stop_surcharge`, `midnight_payout`, `extra_stop_payout`, `child_seat_customer_surcharge`, and `child_seat_driver_payout`.
+- The parked legacy maps helper contains `customer_rates` and `driver_payout_rules` only to preserve the current legacy `saveDefaultRates` behavior.
+- `saveDefaultRates` still uses `.from(adminLegacyTables.rateSettings)` and does not call `POST /api/admin-rate-settings-runtime-write-action`.
+- No runtime endpoint migration, env change, deployment, DB write execution, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, or new shim is included.
+
 ### Pricing Customer Rates Runtime Approval Packet Lock
 - Approval status: pending future runtime-wiring approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-pricing-customer-rates-approval-packet.mjs`.

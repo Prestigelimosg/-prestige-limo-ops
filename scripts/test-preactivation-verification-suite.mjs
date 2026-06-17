@@ -162,6 +162,10 @@ const guardChecks = [
     script: "scripts/test-payout-runtime-split-guard.mjs",
   },
   {
+    label: "driver_payout_rules runtime write action guard",
+    script: "scripts/test-driver-payout-rules-runtime-write-action-api-contract.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

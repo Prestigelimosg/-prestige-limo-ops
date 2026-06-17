@@ -1331,6 +1331,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The guard is registered in the preactivation verification suite as `scripts/test-payout-runtime-split-guard.mjs`.
 - No UI sector/card, env change, deployment, DB write execution, provider activation, live send, or new shim is included.
 
+### Driver Payout Rules Runtime Write Gate Lock
+- Added gated `driver_payout_rules` runtime write boundary.
+- New route: `POST /api/admin-driver-payout-rules-runtime-write-action`.
+- New server-only helper: `lib/admin-driver-payout-rules-runtime-write-action.ts`.
+- The route remains closed by default through `PRESTIGE_DRIVER_PAYOUT_RULES_WRITE_ENABLED`.
+- It accepts company/traveler `driver_payout_rules` only.
+- It validates safe booking-type payout rule fields: `MNG`, `DEP`, `TRF`, `DSP` with `min`, `max`, `amount`, and `perHour`.
+- It rejects customer pricing, `customer_rates`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, secrets, PayNow, and payout preferences.
+- Closed-gate/no-op behavior is preserved; no DB client is created while the gate is closed.
+- No `app/page.tsx` runtime wiring was added.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- The guard is registered in the preactivation verification suite as `scripts/test-driver-payout-rules-runtime-write-action-api-contract.mjs`.
+- No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
+
 ### Full driver profile shim risk lock
 - Full driver profile shim replacement is payout/internal-field entangled.
 - `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.

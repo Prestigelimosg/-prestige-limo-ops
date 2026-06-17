@@ -1360,6 +1360,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The guard is registered in the preactivation verification suite as `scripts/test-driver-payout-rules-runtime-app-wiring.mjs`.
 - No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
 
+### Staging Deploy Smoke for Driver Payout Rules Runtime Fallback
+- `origin/staging` deployed to `4d1a187 Wire driver payout rules runtime fallback path`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Passive headless browser smoke rendered the main admin UI.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; passive network observation saw GET-only requests.
+- Console/runtime errors: 0.
+- Passive setup-only `GET /api/admin-email-activation-preflight-setup` returned 403 without provider send, write behavior, or runtime activation.
+- Driver payout runtime app wiring guard, driver payout runtime write action guard, payout split guard, payout approval guard, preactivation verification suite, core booking safe-path guard, lint, and build passed before/after deploy.
+- The `driver_payout_rules` runtime boundary remains closed by default through `PRESTIGE_DRIVER_PAYOUT_RULES_WRITE_ENABLED`; no live DB write was executed.
+- Customer pricing/customer_rates, payment/PDF/billing, provider/send, auth, location/photo/calendar, parser/debug, internal/admin notes, secrets, and broader payout surfaces remain separated or parked behind their own approvals.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No UI sectors/cards were added.
+- No new shims were added.
+
 ### Full driver profile shim risk lock
 - Full driver profile shim replacement is payout/internal-field entangled.
 - `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.

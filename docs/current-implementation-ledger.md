@@ -1469,6 +1469,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep full driver profile save/delete on the parked legacy `drivers` shim path until typed runtime wiring is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy path unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write/delete, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Full Driver Profile Runtime Write Action Gate Lock
+- Added gated full driver profile runtime write/delete boundary.
+- New route: `POST /api/admin-full-driver-profile-runtime-write-action`.
+- New server-only helper: `lib/admin-full-driver-profile-runtime-write-action.ts`.
+- The route remains closed by default through `PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED`.
+- It accepts safe operational driver fields only: `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, and `availability_status`.
+- Delete action accepts only a safe driver id plus the action type.
+- It rejects `payout_preferences`, `driver_payout_rules`, pricing, payout, notes, `preferred_areas`, `airport_permit_notes`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, PayNow, and mock/archive fields.
+- Closed-gate/no-op behavior is preserved; no DB client is created while the gate is closed.
+- No `app/page.tsx` runtime wiring was added.
+- Existing `loadDrivers`, `saveDriverProfile`, and `deleteDriverProfile` legacy fallback behavior remains unchanged.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- The guard is registered in the preactivation verification suite as `scripts/test-full-driver-profile-runtime-write-action-api-contract.mjs`.
+- No UI sector/card, env change, deployment, live DB write/delete execution, provider activation, live send, or new shim is included.
+
 ### Full Driver Profile Shim Split Approval Packet
 - Approval status: pending owner approval.
 - Goal: split safe driver display/operational fields from risky full profile save/delete fields before any future full-driver shim replacement.

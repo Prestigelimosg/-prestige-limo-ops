@@ -1237,6 +1237,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider send, env change, deployment, live DB write execution, or new shim is included.
 - This lock adds `scripts/test-rate-settings-scalar-runtime-legacy-fallback-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Visual Smoke for Rate Settings Scalar Runtime Fallback
+- `origin/staging` points to `68d75df109ab77af4259d213d29bdb83563a8d1d` (`68d75df Guard rate settings scalar runtime fallback`).
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Passive browser visual smoke rendered the main admin UI.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; checks were limited to passive page load, visible UI, screenshot, DOM, console, and safe GET evidence.
+- Browser console error logs: 0.
+- `Setup Readiness Archive` remained present; old `Internal QA / Mock Workbench Archive` / `Mock Workbench Archive` wording remained absent.
+- Rate settings scalar runtime legacy fallback remains guarded by `68d75df Guard rate settings scalar runtime fallback`.
+- The `rate_settings` typed scalar runtime write gate remains closed by default through `PRESTIGE_RATE_SETTINGS_WRITE_ENABLED`; no live DB write was executed.
+- `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, and mock QA/dev archive fields remain separated, parked, or excluded by their existing guards.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Pricing Customer Rates Boundary Split Lock
 - Company/traveler customer rate override payload builders are split from driver payout override payload builders.
 - `buildCompanyCustomerRateOverridePayload` and `buildTravelerCustomerRateOverridePayload` contain `customer_rates` only.

@@ -154,6 +154,10 @@ const guardChecks = [
     script: "scripts/test-company-traveler-crm-runtime-write-env-table-policy-guard.mjs",
   },
   {
+    label: "company/traveler CRM runtime write gate preflight setup guard",
+    script: "scripts/test-company-traveler-crm-runtime-write-gate-preflight-setup-api-contract.mjs",
+  },
+  {
     label: "company/traveler CRM identity/contact write contract guard",
     script: "scripts/test-admin-company-traveler-crm-identity-contact-write-contract.mjs",
   },

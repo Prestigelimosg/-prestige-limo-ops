@@ -977,6 +977,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: close `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`, keep the legacy rate override fallback unchanged, rerun CRM runtime, rate split, shim cleanup, preactivation, lint, build, and booking UI checks, and do not deploy or write live data until rollback is verified.
 - This lock adds `scripts/test-company-traveler-crm-runtime-write-env-table-policy-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Company/Traveler CRM Runtime Write Gate Preflight Setup Lock
+- Setup-only CRM runtime write gate preflight is added at `GET /api/admin-company-traveler-crm-runtime-write-gate-preflight-setup`.
+- New server-only helper: `lib/admin-company-traveler-crm-runtime-write-gate-preflight-setup.ts`.
+- It is admin-gated, GET-only, setup-only, no-live, and no-op.
+- It does not read or print env values; it lists env names only.
+- It does not import Supabase, create a DB client, call `adminLegacyDataClient`, call `/api/admin-legacy-data`, or execute DB read/write.
+- Gate opening remains blocked pending owner approval, env-name verification, `companies` and `travelers` table/policy verification, server-session admin/dispatcher verification, rollback/disable verification, and staging no-POST/write smoke.
+- Allowed future CRM write fields remain company `company_name`/`domain` and traveler identity/contact/default-address fields only.
+- Forbidden fields remain excluded: rate overrides, `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and tokens.
+- No `app/page.tsx` runtime wiring, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/card, provider activation, live send, DB read/write, env change, deployment, migration, or new shim is included.
+- This lock is guarded by `scripts/test-company-traveler-crm-runtime-write-gate-preflight-setup-api-contract.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Company/Traveler CRM Identity/Contact Write Foundation Lock
 - This lock is guarded by `scripts/test-company-traveler-crm-write-foundation-lock.mjs`.
 - Typed company/traveler CRM identity/contact write contract foundation is done at `25d0703 Add typed company traveler CRM write foundation`.

@@ -158,6 +158,10 @@ const guardChecks = [
     script: "scripts/test-payout-approval-packet.mjs",
   },
   {
+    label: "payout runtime split guard",
+    script: "scripts/test-payout-runtime-split-guard.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

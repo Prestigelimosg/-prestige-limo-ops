@@ -1319,6 +1319,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep `driver_payout_rules`/payout runtime parked on the current legacy rate settings/company/traveler override, full driver profile, saved-booking assignment, dispatch copy, and booking snapshot paths until a typed lane is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy paths unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/customer_rates/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Payout Runtime Split Guard Lock
+- `driver_payout_rules` payout payload builders remain split from customer_rates payload builders.
+- Customer_rates runtime payloads and route remain customer-rate only and must never carry payout fields.
+- Current payout writes remain on the existing parked legacy combined company/traveler override paths.
+- No `app/page.tsx` payout runtime wiring is active.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- Customer-visible and driver-visible finance separation remains mandatory.
+- The guard is registered in the preactivation verification suite as `scripts/test-payout-runtime-split-guard.mjs`.
+- No UI sector/card, env change, deployment, DB write execution, provider activation, live send, or new shim is included.
+
 ### Full driver profile shim risk lock
 - Full driver profile shim replacement is payout/internal-field entangled.
 - `loadDrivers` reads `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.

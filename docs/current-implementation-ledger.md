@@ -1233,6 +1233,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
 
+### Staging Smoke After Customer Rates Runtime Save Path
+- `origin/staging` points to `c9008b4 Wire customer rates runtime save path`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered with the expected compact admin tabs: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; the passive smoke blocked and recorded zero unsafe requests.
+- Runtime exceptions: 0.
+- Known setup-only/admin-gated `GET /api/admin-email-activation-preflight-setup` returned 403 during passive render without provider send, write behavior, or runtime activation.
+- Customer rates runtime app wiring remains guarded by `scripts/test-customer-rates-runtime-app-wiring.mjs`.
+- `customer_rates` runtime DB write remains closed by default through `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`.
+- `driver_payout_rules` and payout runtime remain separate and parked.
+- Load Bookings remains on `GET /api/admin-saved-bookings`.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Pricing Customer Rates Runtime Approval Packet Lock
 - Approval status: live DB write remains pending future approval; app-side gated customer_rates wiring is complete.
 - This is a docs/test-only approval packet guarded by `scripts/test-pricing-customer-rates-approval-packet.mjs`.

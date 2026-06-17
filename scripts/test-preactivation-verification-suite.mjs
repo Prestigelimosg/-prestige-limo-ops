@@ -142,6 +142,10 @@ const guardChecks = [
     script: "scripts/test-rate-settings-scalar-runtime-legacy-fallback-guard.mjs",
   },
   {
+    label: "rate settings scalar runtime activation readiness guard",
+    script: "scripts/test-rate-settings-scalar-runtime-activation-readiness-guard.mjs",
+  },
+  {
     label: "pricing/customer_rates runtime approval packet guard",
     script: "scripts/test-pricing-customer-rates-approval-packet.mjs",
   },

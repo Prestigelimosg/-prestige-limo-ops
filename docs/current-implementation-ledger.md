@@ -1256,6 +1256,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new UI sectors/cards were observed.
 - No new shims were added.
 
+### Rate Settings Scalar Runtime Activation Readiness Guard Lock
+- Approval status: pending future owner approval; this lock does not approve opening `PRESTIGE_RATE_SETTINGS_WRITE_ENABLED`.
+- This is a docs/test-only activation-readiness guard for `POST /api/admin-rate-settings-runtime-write-action`.
+- The `rate_settings` scalar runtime boundary is already wired but remains closed by default through `PRESTIGE_RATE_SETTINGS_WRITE_ENABLED`.
+- Allowed scalar `rate_settings` fields remain limited to `midnight_surcharge`, `extra_stop_surcharge`, `midnight_payout`, `extra_stop_payout`, `child_seat_customer_surcharge`, and `child_seat_driver_payout` with `id` fixed to `default`.
+- Future gate opening requires separate owner approval naming the exact staging target, exact env gate name, no env values or secrets, `public.rate_settings` table/policy proof, server-session admin/dispatcher proof, rollback/kill-switch proof, and one bounded evidence window.
+- Future staging target proof must confirm the project, URL, and commit hash before the gate is opened.
+- Future table/policy proof must verify scalar-column access for `public.rate_settings` only and must not include `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, or mock QA/dev archive fields.
+- Future rollback/kill-switch proof must close `PRESTIGE_RATE_SETTINGS_WRITE_ENABLED`, confirm the blocked/no-op response, and keep the legacy fallback/manual recovery plan intact.
+- Any future write attempt, if separately approved, must be one default-row scalar upsert through the existing route only.
+- Required tests before any future activation: `node scripts/test-rate-settings-scalar-runtime-activation-readiness-guard.mjs`, `node scripts/test-rate-settings-runtime-write-action-api-contract.mjs`, `node scripts/test-rate-settings-scalar-runtime-legacy-fallback-guard.mjs`, `node scripts/test-rate-settings-runtime-approval-packet.mjs`, `node scripts/test-admin-rate-settings-write-action-disabled-setup-api-contract.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `git diff --check`, `git diff --cached --check`, and `git status --short`.
+- No env change, deployment, DB read/write execution, migration, provider/send, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/button/card, new shim, `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, auth, location/photo/calendar activation, internal/admin notes, debug, secrets, or mock QA/dev archive change is approved by this lock.
+- This lock adds `scripts/test-rate-settings-scalar-runtime-activation-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Pricing Customer Rates Boundary Split Lock
 - Company/traveler customer rate override payload builders are split from driver payout override payload builders.
 - `buildCompanyCustomerRateOverridePayload` and `buildTravelerCustomerRateOverridePayload` contain `customer_rates` only.

@@ -936,6 +936,28 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep the future runtime write split one lane only; if any guard or browser test fails, revert the single runtime-wiring commit, restore the parked legacy company/traveler write paths unchanged, rerun CRM, rate override, route-flow, shim cleanup, preactivation, lint, and booking UI checks, and do not deploy or enable DB/write without separate owner approval.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Company/Traveler CRM Runtime Write Action Gate Lock
+- Bounded CRM identity/contact runtime write boundary is guarded by `scripts/test-company-traveler-crm-runtime-write-action-api-contract.mjs`.
+- New route: `POST /api/admin-company-traveler-crm-runtime-write-action`.
+- New server-only helper: `lib/admin-company-traveler-crm-runtime-write-action.ts`.
+- The route uses the existing typed CRM identity/contact contract from `25d0703 Add typed company traveler CRM write foundation`.
+- Runtime app wiring is still not active; `app/page.tsx` does not call the route or helper.
+- Load/save booking flow is unchanged; Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged and separate.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- The separate CRM write gate is `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`; it is closed by default and env values are never printed.
+- With the CRM write gate closed, the route returns blocked/no-op and does not create a Supabase client.
+- If the CRM write gate is opened later, a server-session admin/dispatcher actor is still required before any database client can be created.
+- The route never calls `adminLegacyDataClient`, `adminLegacyTables`, or `/api/admin-legacy-data`.
+- Safe company fields are limited to: `company_name`, `domain`, and safe record id.
+- Safe traveler fields are limited to: `company_id`, `traveler_name`, `preferred_vehicle`, `default_address`, `default_pickup_address`, `default_dropoff_address`, `booker_name`, `booker_contact`, `booker_email`, and safe record id.
+- Forbidden fields remain rejected/excluded: rate overrides, `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, and tokens.
+- No customer-visible driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive fields are exposed.
+- No driver-visible customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive fields are exposed.
+- No UI sectors, buttons, cards, layout changes, provider activation, live sending, env changes, deployment, DB write execution, migrations, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, risky rate/pricing/payout activation, or new shim is included in this lock.
+- Runtime `app/page.tsx` wiring and any live DB write execution remain separate future work and require dedicated verification before staging or production use.
+- Checks for this lock: `node scripts/test-company-traveler-crm-runtime-write-action-api-contract.mjs`, `node scripts/test-company-traveler-crm-runtime-write-approval-packet.mjs`, CRM identity/contact disabled action and audit setup guards, CRM identity/rate override payload split guard, rate override split/gating plan guard, shim cleanup no-new-shim guard, preactivation verification suite, lint, build, booking UI browser test, `git diff --check`, and `git status --short`.
+
 ### Company/Traveler CRM Identity/Contact Write Foundation Lock
 - This lock is guarded by `scripts/test-company-traveler-crm-write-foundation-lock.mjs`.
 - Typed company/traveler CRM identity/contact write contract foundation is done at `25d0703 Add typed company traveler CRM write foundation`.

@@ -74,7 +74,7 @@ for (const phrase of [
   "When the typed customer_rates boundary reports `saved`, the legacy follow-up omits `customer_rates` and writes only parked `driver_payout_rules` plus allowed metadata.",
   "Driver-only override saves do not call the customer_rates runtime boundary.",
   "Remove override supports safe customer_rates clear through an empty customer_rates map.",
-  "No typed payout or `driver_payout_rules` runtime write is wired.",
+  "Typed payout app wiring is tracked separately by the Driver Payout Rules Runtime App Wiring Lock and remains excluded from customer_rates payloads.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` remains unchanged.",
   "Parser behavior and `/api/ai-parse` remain unchanged.",
@@ -99,7 +99,7 @@ const companyRuntimePayload = sliceBetween(
 const travelerRuntimePayload = sliceBetween(
   appPage,
   "function buildTravelerCustomerRatesRuntimeWritePayload",
-  "function buildCompanyDriverPayoutOverridePayload",
+  "function buildCompanyDriverPayoutRulesRuntimeWritePayload",
 );
 
 for (const [label, source] of [
@@ -127,7 +127,7 @@ assertBefore(saveRateOverride, "const companyCustomerRatesRuntime", "const compa
 assertBefore(saveRateOverride, "const travelerCustomerRatesRuntime", "const travelerUpdate", "Traveler customer_rates runtime ordering");
 assertIncludes(saveRateOverride, "adminLegacyTables.companies", "Company legacy payout fallback remains parked");
 assertIncludes(saveRateOverride, "adminLegacyTables.travelers", "Traveler legacy payout fallback remains parked");
-assertIncludes(saveRateOverride, "driver_payout_rules", "Driver payout rules remain on parked legacy path");
+assertIncludes(saveRateOverride, "driver_payout_rules", "Driver payout rules remain outside customer_rates payloads");
 
 const removeCompanyRateOverride = sliceBetween(
   appPage,
@@ -158,8 +158,8 @@ assertExcludes(saveBooking, "/api/admin-saved-bookings", "Save Booking + CRM sav
 assertExcludes(aiParseRoute, routePathFragment, "Parser route customer_rates runtime separation");
 assertExcludes(adminBookingsRoute, routePathFragment, "Admin bookings route customer_rates runtime separation");
 assertExcludes(adminSavedBookingsRoute, routePathFragment, "Admin saved bookings route customer_rates runtime separation");
-assertExcludes(appPage, "adminDriverPayoutRuntime", "No driver payout runtime helper");
-assertExcludes(appPage, "/api/admin-driver-payout", "No driver payout runtime route");
+assertExcludes(companyRuntimePayload, /driver_payout|payout|paynow|pay_now/i, "Company customer_rates runtime payload remains payout-free");
+assertExcludes(travelerRuntimePayload, /driver_payout|payout|paynow|pay_now/i, "Traveler customer_rates runtime payload remains payout-free");
 
 assertIncludes(preactivationSuite, guardScript, "Preactivation customer rates runtime app wiring guard registration");
 

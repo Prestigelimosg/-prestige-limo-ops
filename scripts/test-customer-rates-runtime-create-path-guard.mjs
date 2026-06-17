@@ -72,7 +72,7 @@ for (const phrase of [
   "Legacy create payload builders accept `includeCustomerRates` and can omit `customer_rates` before the runtime boundary runs.",
   "When the customer_rates runtime boundary reports saved, legacy follow-up keeps customer_rates omitted.",
   "When the customer_rates runtime boundary is closed/no-op, the existing legacy fallback writes customer_rates to preserve behavior.",
-  "Driver payout rules remain on the parked legacy path and no typed payout runtime is wired.",
+  "Driver payout rules are handled by the separate payout runtime boundary and remain excluded from the customer_rates runtime boundary.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` remains unchanged.",
   "Parser behavior and `/api/ai-parse` remain unchanged.",
@@ -97,6 +97,7 @@ for (const [label, source] of [
   ["Legacy traveler create payload", legacyTravelerInsertBuilder],
 ]) {
   assertIncludes(source, "includeCustomerRates", `${label} customer_rates include gate`);
+  assertIncludes(source, "includeDriverPayoutRules", `${label} driver_payout_rules include gate`);
   assertIncludes(source, "build", `${label} split helper composition`);
   assertIncludes(source, "driverPayoutRules", `${label} parked driver payout payload`);
   assertExcludes(source, /payment|billing|invoice|pdf|provider|auth|location|photo|calendar|internal|debug|secret/i, label);
@@ -147,6 +148,11 @@ assertIncludes(
 );
 assertIncludes(
   newTravelerCreate,
+  "includeDriverPayoutRules: !hasDriverPayoutOverrides",
+  "Traveler create omits driver_payout_rules before payout runtime boundary",
+);
+assertIncludes(
+  newTravelerCreate,
   ".select(\"id, company_id, traveler_name, customer_rates, driver_payout_rules\")",
   "Traveler create must return id for runtime customer_rates boundary",
 );
@@ -157,18 +163,18 @@ assertIncludes(
 );
 assertIncludes(
   newTravelerCreate,
-  "if (!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides)",
+  "(!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides)",
   "Traveler create closed-gate legacy fallback",
 );
 assertIncludes(
   newTravelerCreate,
-  "includeCustomerRates: true",
+  "includeCustomerRates: !createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides",
   "Traveler create fallback writes customer_rates only after no-op runtime",
 );
 assertIncludes(
   newTravelerCreate,
-  "driverPayoutRules: overrideDriverPayoutRules",
-  "Traveler create keeps driver payout rules on parked legacy path",
+  "createdTravelerDriverPayoutRulesRuntime",
+  "Traveler create keeps driver payout rules on separate payout runtime path",
 );
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");

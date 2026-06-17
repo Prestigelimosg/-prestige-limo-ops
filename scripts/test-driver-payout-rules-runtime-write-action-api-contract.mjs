@@ -288,7 +288,7 @@ for (const phrase of [
   "The route remains closed by default through `PRESTIGE_DRIVER_PAYOUT_RULES_WRITE_ENABLED`.",
   "It accepts company/traveler `driver_payout_rules` only.",
   "It rejects customer pricing, `customer_rates`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, secrets, PayNow, and payout preferences.",
-  "No `app/page.tsx` runtime wiring was added.",
+  "App runtime wiring is guarded separately by `scripts/test-driver-payout-rules-runtime-app-wiring.mjs`.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` remains unchanged.",
   "Parser behavior and `/api/ai-parse` remain unchanged.",
@@ -318,8 +318,8 @@ assertIncludes(helperSource, "customer_rates", "Forbidden customer_rates rejecti
 assertIncludes(helperSource, "paynow", "Forbidden PayNow rejection");
 assertIncludes(helperSource, "payout_preferences", "Forbidden payout preferences rejection");
 
-assertExcludes(appPage, routePathFragment, "No app/page.tsx payout runtime wiring");
-assertExcludes(appPage, /saveDriverPayoutRulesRuntime|driverPayoutRulesRuntimeWrite|adminDriverPayoutRulesRuntime/i, "No app/page.tsx payout runtime client helper");
+assertIncludes(appPage, routePathFragment, "Guarded app/page.tsx payout runtime wiring");
+assertIncludes(appPage, "saveDriverPayoutRulesRuntime", "Guarded app/page.tsx payout runtime client helper");
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM endpoint");
@@ -333,6 +333,11 @@ assertExcludes(adminBookingsRoute, "driver_payout_rules", "Admin bookings safe p
 assertExcludes(adminSavedBookingsRoute, routePathFragment, "Admin saved bookings payout runtime separation");
 
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite driver payout runtime guard registration");
+assertIncludes(
+  preactivationSuite,
+  "scripts/test-driver-payout-rules-runtime-app-wiring.mjs",
+  "Preactivation suite driver payout runtime app wiring guard registration",
+);
 
 const localDevActor = {
   actor_label: "Local dev",

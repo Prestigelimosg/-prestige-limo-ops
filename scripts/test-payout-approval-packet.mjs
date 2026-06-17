@@ -66,13 +66,14 @@ const [
 const packetSection = sectionBetween(ledger, "### Payout Runtime Approval Packet Lock");
 
 for (const phrase of [
-  "Approval status: pending future runtime-wiring approval.",
+  "Approval status: gated driver_payout_rules boundary and app fallback wiring are implemented; live DB write remains pending future env/table-policy approval.",
   "This is a docs/test-only approval packet guarded by `scripts/test-payout-approval-packet.mjs`.",
-  "`driver_payout_rules`/payout runtime remains parked.",
+  "`driver_payout_rules` app runtime wiring now calls the closed-by-default payout boundary before legacy fallback.",
   "Payout is coupled to pricing/profit, `rate_settings`, company/traveler overrides, full driver profile, assignment, dispatch copy, and saved-booking snapshots.",
-  "`customer_rates`/pricing must remain separate and parked.",
+  "`customer_rates`/pricing must remain separate on the customer_rates runtime boundary.",
   "Payment/PDF/billing must remain separate and parked.",
-  "Current `rate_settings` save/upsert, company/traveler rate override save/remove, full driver profile save/delete, saved-booking driver assignment payout snapshots, and dispatch payout copy remain parked for payout purposes.",
+  "Current `rate_settings` save/upsert, full driver profile save/delete, saved-booking driver assignment payout snapshots, and dispatch payout copy remain parked for payout purposes.",
+  "Company/traveler rate override save/remove may call the gated payout boundary, but closed-gate/no-op responses preserve the existing legacy fallback.",
   "Future payout lane must prevent customer-visible payout leakage and driver-visible customer price/billing leakage.",
   "Future payout lane must exclude customer pricing, `customer_rates`, payment/PDF/billing activation, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.",
   "Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.",
@@ -81,9 +82,9 @@ for (const phrase of [
   "Future runtime wiring must not change parser behavior or `/api/ai-parse`.",
   "Future runtime wiring must not add UI sectors/buttons/cards.",
   "Future runtime wiring must not add new shims.",
-  "Required tests before any future wiring:",
+  "Required tests before any future live DB write or broader payout wiring:",
   "Rollback note:",
-  "No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/customer_rates/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.",
+  "No env change, deployment, live DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/customer_rates/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.",
 ]) {
   assertIncludes(packetSection, phrase, `Payout approval packet phrase: ${phrase}`);
 }
@@ -135,6 +136,8 @@ const saveRateOverride = sliceBetween(
 );
 for (const fragment of [
   "adminLegacyDataClient",
+  "saveDriverPayoutRulesRuntime",
+  "includeDriverPayoutRules",
   "customer_rates",
   "driver_payout_rules",
   "buildCompanyRateOverridePayload",

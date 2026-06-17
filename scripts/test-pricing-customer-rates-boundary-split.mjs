@@ -80,7 +80,7 @@ const companyCustomerPayload = sliceBetween(
 const travelerCustomerPayload = sliceBetween(
   appPage,
   "function buildTravelerCustomerRateOverridePayload",
-  "function buildCompanyDriverPayoutOverridePayload",
+  "function buildCompanyCustomerRatesRuntimeWritePayload",
 );
 const companyDriverPayoutPayload = sliceBetween(
   appPage,

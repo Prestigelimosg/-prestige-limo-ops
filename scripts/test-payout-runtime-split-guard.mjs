@@ -77,7 +77,8 @@ const ledgerSection = sectionBetween(ledger, "### Payout Runtime Split Guard Loc
 for (const phrase of [
   "`driver_payout_rules` payout payload builders remain split from customer_rates payload builders.",
   "Customer_rates runtime payloads and route remain customer-rate only and must never carry payout fields.",
-  "No `app/page.tsx` payout runtime wiring is active.",
+  "Payout app wiring is guarded separately by `scripts/test-driver-payout-rules-runtime-app-wiring.mjs`.",
+  "Closed-gate/no-op payout responses preserve the existing legacy combined company/traveler override fallback.",
   "Save Booking + CRM remains on `POST /api/admin-bookings`.",
   "`/api/admin-saved-bookings` remains unchanged.",
   "Parser behavior and `/api/ai-parse` remain unchanged.",
@@ -105,7 +106,7 @@ const companyCustomerRuntimePayload = sliceBetween(
 const travelerCustomerRuntimePayload = sliceBetween(
   appPage,
   "function buildTravelerCustomerRatesRuntimeWritePayload",
-  "function buildCompanyDriverPayoutOverridePayload",
+  "function buildCompanyDriverPayoutRulesRuntimeWritePayload",
 );
 const companyDriverPayoutPayload = sliceBetween(
   appPage,
@@ -156,6 +157,7 @@ for (const [label, source] of [
   assertIncludes(source, "customer_rates", label);
   assertIncludes(source, "driver_payout_rules", label);
   assertIncludes(source, "includeCustomerRates", label);
+  assertIncludes(source, "includeDriverPayoutRules", label);
 }
 
 const saveRateOverride = sliceBetween(
@@ -176,6 +178,7 @@ const removeBossRateOverride = sliceBetween(
 
 assertIncludes(saveRateOverride, "saveCustomerRatesRuntime", "Customer rates runtime call remains active");
 assertIncludes(saveRateOverride, "driver_payout_rules", "Payout rules remain explicit in legacy override flow");
+assertIncludes(saveRateOverride, "saveDriverPayoutRulesRuntime", "Payout runtime call remains guarded separately");
 assertIncludes(saveRateOverride, "buildCompanyRateOverridePayload", "Company combined legacy payload remains explicit");
 assertIncludes(saveRateOverride, "buildTravelerRateOverridePayload", "Traveler combined legacy payload remains explicit");
 assertBefore(
@@ -196,6 +199,7 @@ for (const [label, source] of [
   ["Traveler override remove", removeBossRateOverride],
 ]) {
   assertIncludes(source, "saveCustomerRatesRuntime", `${label} customer_rates runtime clear`);
+  assertIncludes(source, "saveDriverPayoutRulesRuntime", `${label} payout runtime clear`);
   assertIncludes(source, "driverPayoutRules: {}", `${label} parked payout clear remains explicit`);
   assertIncludes(source, "adminLegacyDataClient", `${label} payout remains on legacy fallback`);
 }
@@ -222,7 +226,6 @@ assertExcludes(saveBooking, payoutRuntimeRoutePath, "Save Booking + CRM payout r
 assertExcludes(saveBooking, "/api/admin-saved-bookings", "Save Booking + CRM saved-bookings separation");
 
 for (const [label, source] of [
-  ["app/page.tsx", appPage],
   ["AI parser route", aiParseRoute],
   ["admin bookings route", adminBookingsRoute],
   ["admin saved bookings route", adminSavedBookingsRoute],
@@ -230,15 +233,15 @@ for (const [label, source] of [
   assertExcludes(source, payoutRuntimeRoutePath, `${label} payout runtime route wiring`);
 }
 
-assertExcludes(
-  appPage,
-  /saveDriverPayoutRulesRuntime|driverPayoutRulesRuntimeWrite|adminDriverPayoutRulesRuntime/i,
-  "app/page.tsx payout runtime client wiring",
-);
 assertExcludes(adminBookingsRoute, "driver_payout_rules", "Admin bookings safe persistence payout separation");
 assertExcludes(aiParseRoute, "driver_payout_rules", "Parser payout rules separation");
 
 assertIncludes(preactivationSuite, guardScript, "Preactivation payout split guard registration");
+assertIncludes(
+  preactivationSuite,
+  "scripts/test-driver-payout-rules-runtime-app-wiring.mjs",
+  "Preactivation payout app wiring guard registration",
+);
 assertExcludes(
   preactivationSuite,
   payoutRuntimeRouteFile,

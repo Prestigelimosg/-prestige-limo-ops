@@ -76,6 +76,8 @@ const adminRateSettingsRuntimeWriteActionApiPath =
   "/api/admin-rate-settings-runtime-write-action";
 const adminCustomerRatesRuntimeWriteActionApiPath =
   "/api/admin-customer-rates-runtime-write-action";
+const adminDriverPayoutRulesRuntimeWriteActionApiPath =
+  "/api/admin-driver-payout-rules-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -3573,6 +3575,10 @@ function hasCustomerRateOverrideValues(rules: RateRules) {
   return Object.keys(normalizeCustomerRateRules(rules)).length > 0;
 }
 
+function hasDriverPayoutOverrideValues(rules: DriverPayoutRules) {
+  return Object.keys(normalizeDriverPayoutRules(rules)).length > 0;
+}
+
 type DefaultRateSettingsScalarRuntimePayload = {
   child_seat_customer_surcharge: number;
   child_seat_driver_payout: number;
@@ -3738,10 +3744,26 @@ type CustomerRatesRuntimeWriteResponse = {
   status?: string;
 };
 
+type DriverPayoutRulesRuntimeWritePayload = {
+  action_type: "company_driver_payout_rules_update" | "traveler_driver_payout_rules_update";
+  driver_payout_rules: DriverPayoutRules;
+  id: number;
+};
+
+type DriverPayoutRulesRuntimeWriteResponse = {
+  error?: string;
+  no_op?: boolean;
+  ok?: boolean;
+  reason?: string;
+  rejected_fields?: unknown;
+  status?: string;
+};
+
 type CompanyRateOverridePayloadInput = {
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   includeCustomerRates?: boolean;
+  includeDriverPayoutRules?: boolean;
   transzendExcelPrivacy?: boolean;
   updatedAt?: string;
 };
@@ -3750,6 +3772,7 @@ type TravelerRateOverridePayloadInput = {
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   includeCustomerRates?: boolean;
+  includeDriverPayoutRules?: boolean;
   updatedAt?: string;
 };
 
@@ -3927,10 +3950,90 @@ async function saveCustomerRatesRuntime(
   }
 }
 
+function driverPayoutRulesRuntimeRejectedFields(value: DriverPayoutRulesRuntimeWriteResponse | null) {
+  return Array.isArray(value?.rejected_fields)
+    ? value.rejected_fields.map((field) => clean(field)).filter(Boolean)
+    : [];
+}
+
+function isDriverPayoutRulesRuntimeWriteBlockedNoOp(
+  value: DriverPayoutRulesRuntimeWriteResponse | null,
+) {
+  const reason = clean(value?.reason).toLowerCase();
+
+  return (
+    value?.ok !== true &&
+    value?.no_op === true &&
+    (
+      !reason ||
+      ["admin_session_required", "config_not_ready", "write_gate_closed"].includes(reason)
+    )
+  );
+}
+
+function driverPayoutRulesRuntimeWriteError(
+  value: DriverPayoutRulesRuntimeWriteResponse | null,
+  fallback: string,
+) {
+  const rejectedFields = driverPayoutRulesRuntimeRejectedFields(value);
+
+  if (rejectedFields.length > 0) {
+    return `${fallback} Rejected fields: ${rejectedFields.join(", ")}.`;
+  }
+
+  return clean(value?.error) || fallback;
+}
+
+function driverPayoutRulesRuntimeWriteSaved(value: DriverPayoutRulesRuntimeWriteResponse | null) {
+  return value?.ok === true && value.status === "saved" && value.no_op !== true;
+}
+
+async function saveDriverPayoutRulesRuntime(
+  payload: DriverPayoutRulesRuntimeWritePayload,
+): Promise<{ ok: true; saved: boolean } | { errorMessage: string; ok: false }> {
+  try {
+    const response = await fetch(adminDriverPayoutRulesRuntimeWriteActionApiPath, {
+      body: JSON.stringify(payload),
+      headers: {
+        "content-type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const responseBody = (await response.json().catch(() => null)) as
+      | DriverPayoutRulesRuntimeWriteResponse
+      | null;
+
+    if (response.ok && responseBody?.ok === true) {
+      return { ok: true, saved: driverPayoutRulesRuntimeWriteSaved(responseBody) };
+    }
+
+    if (isDriverPayoutRulesRuntimeWriteBlockedNoOp(responseBody)) {
+      return { ok: true, saved: false };
+    }
+
+    return {
+      ok: false,
+      errorMessage: driverPayoutRulesRuntimeWriteError(
+        responseBody,
+        "Driver payout rules write was rejected by the typed boundary.",
+      ),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorMessage: error instanceof Error
+        ? error.message
+        : "Driver payout rules write failed before the parked legacy fallback could continue.",
+    };
+  }
+}
+
 function buildCompanyRateOverridePayload({
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
+  includeDriverPayoutRules = true,
   transzendExcelPrivacy,
   updatedAt,
 }: CompanyRateOverridePayloadInput) {
@@ -3939,7 +4042,9 @@ function buildCompanyRateOverridePayload({
 
   return {
     ...(includeCustomerRates ? { customer_rates: customerRateFields.customer_rates } : {}),
-    driver_payout_rules: driverPayoutFields.driver_payout_rules,
+    ...(includeDriverPayoutRules
+      ? { driver_payout_rules: driverPayoutFields.driver_payout_rules }
+      : {}),
     ...(transzendExcelPrivacy === undefined ? {} : { transzend_excel_privacy: transzendExcelPrivacy }),
     ...(updatedAt ? { updated_at: updatedAt } : {}),
   };
@@ -3949,6 +4054,7 @@ function buildTravelerRateOverridePayload({
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
+  includeDriverPayoutRules = true,
   updatedAt,
 }: TravelerRateOverridePayloadInput) {
   const customerRateFields = buildTravelerCustomerRateOverridePayload({ customerRates });
@@ -3956,7 +4062,9 @@ function buildTravelerRateOverridePayload({
 
   return {
     ...(includeCustomerRates ? { customer_rates: customerRateFields.customer_rates } : {}),
-    driver_payout_rules: driverPayoutFields.driver_payout_rules,
+    ...(includeDriverPayoutRules
+      ? { driver_payout_rules: driverPayoutFields.driver_payout_rules }
+      : {}),
     ...(updatedAt ? { updated_at: updatedAt } : {}),
   };
 }
@@ -3999,6 +4107,28 @@ function buildTravelerCustomerRatesRuntimeWritePayload(
   };
 }
 
+function buildCompanyDriverPayoutRulesRuntimeWritePayload(
+  id: number,
+  driverPayoutRules: DriverPayoutRules,
+): DriverPayoutRulesRuntimeWritePayload {
+  return {
+    action_type: "company_driver_payout_rules_update",
+    id,
+    ...buildCompanyDriverPayoutOverridePayload({ driverPayoutRules }),
+  };
+}
+
+function buildTravelerDriverPayoutRulesRuntimeWritePayload(
+  id: number,
+  driverPayoutRules: DriverPayoutRules,
+): DriverPayoutRulesRuntimeWritePayload {
+  return {
+    action_type: "traveler_driver_payout_rules_update",
+    id,
+    ...buildTravelerDriverPayoutOverridePayload({ driverPayoutRules }),
+  };
+}
+
 function buildCompanyDriverPayoutOverridePayload({
   driverPayoutRules,
 }: Pick<CompanyRateOverridePayloadInput, "driverPayoutRules">) {
@@ -4020,6 +4150,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
+  includeDriverPayoutRules = true,
   transzendExcelPrivacy,
 }: LegacyCompanyRateOverrideInsertPayloadInput) {
   return {
@@ -4028,6 +4159,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
       customerRates,
       driverPayoutRules,
       includeCustomerRates,
+      includeDriverPayoutRules,
       transzendExcelPrivacy,
     }),
   };
@@ -4038,6 +4170,7 @@ function buildLegacyTravelerRateOverrideInsertPayload({
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
+  includeDriverPayoutRules = true,
   travelerName,
 }: LegacyTravelerRateOverrideInsertPayloadInput) {
   return {
@@ -4046,6 +4179,7 @@ function buildLegacyTravelerRateOverrideInsertPayload({
       customerRates,
       driverPayoutRules,
       includeCustomerRates,
+      includeDriverPayoutRules,
     }),
   };
 }
@@ -11779,6 +11913,7 @@ export default function Home() {
     const overrideCustomerRates = normalizeCustomerRateRules(rateOverrideDraft.customerRates);
     const overrideDriverPayoutRules = normalizeDriverPayoutRules(rateOverrideDraft.driverPayoutRules);
     const hasCustomerRateOverrides = hasCustomerRateOverrideValues(overrideCustomerRates);
+    const hasDriverPayoutOverrides = hasDriverPayoutOverrideValues(overrideDriverPayoutRules);
     const hasOverrideValues = formatOverrideSummary(
       overrideCustomerRates,
       overrideDriverPayoutRules,
@@ -11814,6 +11949,7 @@ export default function Home() {
 
     let companyOverrideSaved = false;
     const shouldDeferCompanyCustomerRatesToRuntime = !bossName && hasCustomerRateOverrides;
+    const shouldDeferCompanyDriverPayoutToRuntime = !bossName && hasDriverPayoutOverrides;
 
     try {
       let company: CompanyRecord | null = rateCompanies.find(
@@ -11867,6 +12003,7 @@ export default function Home() {
             customerRates: bossName ? {} : overrideCustomerRates,
             driverPayoutRules: bossName ? {} : overrideDriverPayoutRules,
             includeCustomerRates: !shouldDeferCompanyCustomerRatesToRuntime,
+            includeDriverPayoutRules: !shouldDeferCompanyDriverPayoutToRuntime,
             transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
           }))
           .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
@@ -11912,6 +12049,17 @@ export default function Home() {
         throw new Error(companyCustomerRatesRuntime.errorMessage);
       }
 
+      const companyDriverPayoutRulesRuntime = bossName
+        || !hasDriverPayoutOverrides
+        ? { ok: true as const, saved: false }
+        : await saveDriverPayoutRulesRuntime(
+            buildCompanyDriverPayoutRulesRuntimeWritePayload(company.id, mergedCompanyPayouts),
+          );
+
+      if (!companyDriverPayoutRulesRuntime.ok) {
+        throw new Error(companyDriverPayoutRulesRuntime.errorMessage);
+      }
+
       const companyUpdate = await adminLegacyDataClient
         .from(adminLegacyTables.companies)
         .update(
@@ -11919,6 +12067,7 @@ export default function Home() {
             customerRates: mergedCompanyRates,
             driverPayoutRules: mergedCompanyPayouts,
             includeCustomerRates: !companyCustomerRatesRuntime.saved,
+            includeDriverPayoutRules: !companyDriverPayoutRulesRuntime.saved,
             transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
             updatedAt: new Date().toISOString(),
           }),
@@ -11962,6 +12111,10 @@ export default function Home() {
             ...normalizeCustomerRateRules(traveler.customer_rates),
             ...overrideCustomerRates,
           };
+          const mergedTravelerPayouts = {
+            ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
+            ...overrideDriverPayoutRules,
+          };
           const travelerCustomerRatesRuntime = hasCustomerRateOverrides
             ? await saveCustomerRatesRuntime(
                 buildTravelerCustomerRatesRuntimeWritePayload(traveler.id, mergedTravelerRates),
@@ -11972,16 +12125,24 @@ export default function Home() {
             throw new Error(travelerCustomerRatesRuntime.errorMessage);
           }
 
+          const travelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
+            ? await saveDriverPayoutRulesRuntime(
+                buildTravelerDriverPayoutRulesRuntimeWritePayload(traveler.id, mergedTravelerPayouts),
+              )
+            : { ok: true as const, saved: false };
+
+          if (!travelerDriverPayoutRulesRuntime.ok) {
+            throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
+          }
+
           const travelerUpdate = await adminLegacyDataClient
             .from(adminLegacyTables.travelers)
             .update(
               buildTravelerRateOverridePayload({
                 customerRates: mergedTravelerRates,
-                driverPayoutRules: {
-                  ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
-                  ...overrideDriverPayoutRules,
-                },
+                driverPayoutRules: mergedTravelerPayouts,
                 includeCustomerRates: !travelerCustomerRatesRuntime.saved,
+                includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
                 updatedAt: new Date().toISOString(),
               }),
             )
@@ -12015,6 +12176,24 @@ export default function Home() {
             }
           }
 
+          let travelerDriverPayoutRulesRuntime: { ok: true; saved: boolean } | { errorMessage: string; ok: false } = {
+            ok: true,
+            saved: false,
+          };
+
+          if (travelerIdentity.recordId && hasDriverPayoutOverrides) {
+            travelerDriverPayoutRulesRuntime = await saveDriverPayoutRulesRuntime(
+              buildTravelerDriverPayoutRulesRuntimeWritePayload(
+                travelerIdentity.recordId,
+                overrideDriverPayoutRules,
+              ),
+            );
+
+            if (!travelerDriverPayoutRulesRuntime.ok) {
+              throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
+            }
+          }
+
           if (travelerIdentity.recordId) {
             const travelerInsert = await adminLegacyDataClient
               .from(adminLegacyTables.travelers)
@@ -12023,6 +12202,7 @@ export default function Home() {
                   customerRates: overrideCustomerRates,
                   driverPayoutRules: overrideDriverPayoutRules,
                   includeCustomerRates: !travelerCustomerRatesRuntime.saved,
+                  includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
                   updatedAt: new Date().toISOString(),
                 }),
               )
@@ -12040,6 +12220,7 @@ export default function Home() {
                   customerRates: overrideCustomerRates,
                   driverPayoutRules: overrideDriverPayoutRules,
                   includeCustomerRates: !hasCustomerRateOverrides,
+                  includeDriverPayoutRules: !hasDriverPayoutOverrides,
                   travelerName: bossName,
                 }),
               )
@@ -12061,14 +12242,32 @@ export default function Home() {
               throw new Error(createdTravelerCustomerRatesRuntime.errorMessage);
             }
 
-            if (!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides) {
+            const createdTravelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
+              ? await saveDriverPayoutRulesRuntime(
+                  buildTravelerDriverPayoutRulesRuntimeWritePayload(
+                    createdTravelerRecord.id,
+                    overrideDriverPayoutRules,
+                  ),
+                )
+              : { ok: true as const, saved: false };
+
+            if (!createdTravelerDriverPayoutRulesRuntime.ok) {
+              throw new Error(createdTravelerDriverPayoutRulesRuntime.errorMessage);
+            }
+
+            if (
+              (!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides) ||
+              (!createdTravelerDriverPayoutRulesRuntime.saved && hasDriverPayoutOverrides)
+            ) {
               const travelerCustomerRatesFallback = await adminLegacyDataClient
                 .from(adminLegacyTables.travelers)
                 .update(
                   buildTravelerRateOverridePayload({
                     customerRates: overrideCustomerRates,
                     driverPayoutRules: overrideDriverPayoutRules,
-                    includeCustomerRates: true,
+                    includeCustomerRates: !createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides,
+                    includeDriverPayoutRules:
+                      !createdTravelerDriverPayoutRulesRuntime.saved && hasDriverPayoutOverrides,
                     updatedAt: new Date().toISOString(),
                   }),
                 )
@@ -12149,12 +12348,21 @@ export default function Home() {
         throw new Error(companyCustomerRatesRuntime.errorMessage);
       }
 
+      const companyDriverPayoutRulesRuntime = await saveDriverPayoutRulesRuntime(
+        buildCompanyDriverPayoutRulesRuntimeWritePayload(companyRecord.id, {}),
+      );
+
+      if (!companyDriverPayoutRulesRuntime.ok) {
+        throw new Error(companyDriverPayoutRulesRuntime.errorMessage);
+      }
+
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.companies)
         .update(buildCompanyRateOverridePayload({
           customerRates: {},
           driverPayoutRules: {},
           includeCustomerRates: !companyCustomerRatesRuntime.saved,
+          includeDriverPayoutRules: !companyDriverPayoutRulesRuntime.saved,
           updatedAt: new Date().toISOString(),
         }))
         .eq("id", companyRecord.id);
@@ -12237,12 +12445,21 @@ export default function Home() {
         throw new Error(travelerCustomerRatesRuntime.errorMessage);
       }
 
+      const travelerDriverPayoutRulesRuntime = await saveDriverPayoutRulesRuntime(
+        buildTravelerDriverPayoutRulesRuntimeWritePayload(travelerRecord.id, {}),
+      );
+
+      if (!travelerDriverPayoutRulesRuntime.ok) {
+        throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
+      }
+
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.travelers)
         .update(buildTravelerRateOverridePayload({
           customerRates: {},
           driverPayoutRules: {},
           includeCustomerRates: !travelerCustomerRatesRuntime.saved,
+          includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
           updatedAt: new Date().toISOString(),
         }))
         .eq("id", travelerRecord.id);

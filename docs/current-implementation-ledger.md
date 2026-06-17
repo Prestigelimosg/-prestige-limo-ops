@@ -25,7 +25,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver job link GET validation is fixed at `43c5970 Fix driver job link GET validation`; GET/read for `/api/admin-driver-job-links` now accepts safe dashboard-style booking refs without noisy 400s while POST create, PATCH revoke, and token creation/revocation behavior remain unchanged.
 - Calendar event lifecycle status: readiness foundation, preview/readiness API, disabled action API, action audit payload setup foundation, no-live guard, and final pre-activation lock are done; customer amendment/cancellation never auto-updates calendar; calendar create/update/cancel remains blocked until explicit approval.
 - Production hardening status: readiness foundation, preview/readiness API, disabled production action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock are done.
-- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done and wired into company/traveler display-read at `69c269d Wire company traveler identity display to typed APIs`; unused legacy bookings shim surface is retired; driver assignment display now uses the existing typed display-only API for the booking assignment display path; Driver Database display/search now uses separate typed display-only state fed by the existing `/api/admin-driver-assignment-display` route; company/traveler CRM write setup is locked through the activation stop; CRM identity/contact payload code is split from rate override payload code at `d65aac1 Split CRM identity payload from rate override payload`, the rate separation boundary is finished at `fb2e9ca Finish CRM write rate separation boundary`, the disabled CRM identity/contact write action API is done at `3cfd0a2 Add disabled CRM identity write action API`, the disabled/no-write typed `rate_settings` write action setup is done at `945e894 Add disabled rate settings write action setup`, the setup-only disabled/no-write full driver profile action boundary is done at `9ebaf97 Add disabled full driver profile action setup`, the disabled/no-write full driver profile audit payload setup is done at `0f25461 Add disabled full driver profile audit payload setup`, and the dedicated full driver profile no-live guard is done at `c9b1681 Add full driver profile no-live guard`; customer_rates now has a gated app boundary with live DB write closed by default; risky full-driver profile write/delete runtime paths, real `rate_settings` save/upsert, broader pricing, payout, and `driver_payout_rules` write paths remain parked.
+- Shim cleanup status: inventory and no-new-shim guard are done; companies CRM identity/domain typed API and travelers CRM identity/default-address typed API are done and wired into company/traveler display-read at `69c269d Wire company traveler identity display to typed APIs`; unused legacy bookings shim surface is retired; driver assignment display now uses the existing typed display-only API for the booking assignment display path; Driver Database display/search now uses separate typed display-only state fed by the existing `/api/admin-driver-assignment-display` route; company/traveler CRM write setup is locked through the activation stop; CRM identity/contact payload code is split from rate override payload code at `d65aac1 Split CRM identity payload from rate override payload`, the rate separation boundary is finished at `fb2e9ca Finish CRM write rate separation boundary`, the disabled CRM identity/contact write action API is done at `3cfd0a2 Add disabled CRM identity write action API`, the disabled/no-write typed `rate_settings` write action setup is done at `945e894 Add disabled rate settings write action setup`, the setup-only disabled/no-write full driver profile action boundary is done at `9ebaf97 Add disabled full driver profile action setup`, the disabled/no-write full driver profile audit payload setup is done at `0f25461 Add disabled full driver profile audit payload setup`, and the dedicated full driver profile no-live guard is done at `c9b1681 Add full driver profile no-live guard`; customer_rates and `driver_payout_rules` now have gated app boundaries with live DB writes closed by default; risky full-driver profile write/delete runtime paths, real `rate_settings` save/upsert, broader pricing, and broader payout surfaces remain parked.
 - Still blocked unless explicitly approved: live DB/write, migrations, deployment, provider/env activation, external APIs, live sending, payment/PDF/payout, auth activation, FlightAware live lookup, live location activation, photo upload/storage, CRM/calendar amendment updates, calendar event lifecycle create/update/cancel and live sync, job-card creation from customer amendments, and risky shim write paths.
 - Continue to use setup-only helpers/APIs and direct guards. Do not add new shims, duplicate UI/API/helper work, live provider behavior, or customer/driver-visible finance/internal details.
 
@@ -1227,7 +1227,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - When the typed customer_rates boundary reports `saved`, the legacy follow-up omits `customer_rates` and writes only parked `driver_payout_rules` plus allowed metadata.
 - Driver-only override saves do not call the customer_rates runtime boundary.
 - Remove override supports safe customer_rates clear through an empty customer_rates map.
-- No typed payout or `driver_payout_rules` runtime write is wired.
+- Typed payout app wiring is tracked separately by the Driver Payout Rules Runtime App Wiring Lock and remains excluded from customer_rates payloads.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` remains unchanged.
 - Parser behavior and `/api/ai-parse` remain unchanged.
@@ -1238,7 +1238,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Legacy create payload builders accept `includeCustomerRates` and can omit `customer_rates` before the runtime boundary runs.
 - When the customer_rates runtime boundary reports saved, legacy follow-up keeps customer_rates omitted.
 - When the customer_rates runtime boundary is closed/no-op, the existing legacy fallback writes customer_rates to preserve behavior.
-- Driver payout rules remain on the parked legacy path and no typed payout runtime is wired.
+- Driver payout rules are handled by the separate payout runtime boundary and remain excluded from the customer_rates runtime boundary.
 - Guarded by `scripts/test-customer-rates-runtime-create-path-guard.mjs` and registered in the preactivation verification suite.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` remains unchanged.
@@ -1300,13 +1300,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No UI behavior change, env change, deployment, live DB write execution, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/payout/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
 ### Payout Runtime Approval Packet Lock
-- Approval status: pending future runtime-wiring approval.
+- Approval status: gated driver_payout_rules boundary and app fallback wiring are implemented; live DB write remains pending future env/table-policy approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-payout-approval-packet.mjs`.
-- `driver_payout_rules`/payout runtime remains parked.
+- `driver_payout_rules` app runtime wiring now calls the closed-by-default payout boundary before legacy fallback.
 - Payout is coupled to pricing/profit, `rate_settings`, company/traveler overrides, full driver profile, assignment, dispatch copy, and saved-booking snapshots.
-- `customer_rates`/pricing must remain separate and parked.
+- `customer_rates`/pricing must remain separate on the customer_rates runtime boundary.
 - Payment/PDF/billing must remain separate and parked.
-- Current `rate_settings` save/upsert, company/traveler rate override save/remove, full driver profile save/delete, saved-booking driver assignment payout snapshots, and dispatch payout copy remain parked for payout purposes.
+- Current `rate_settings` save/upsert, full driver profile save/delete, saved-booking driver assignment payout snapshots, and dispatch payout copy remain parked for payout purposes.
+- Company/traveler rate override save/remove may call the gated payout boundary, but closed-gate/no-op responses preserve the existing legacy fallback.
 - Future payout lane must prevent customer-visible payout leakage and driver-visible customer price/billing leakage.
 - Future payout lane must exclude customer pricing, `customer_rates`, payment/PDF/billing activation, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets unless separately approved.
 - Future DB write requires separate owner approval, env verification, table/policy verification, and rollback/manual recovery verification before any write execution.
@@ -1315,15 +1316,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future runtime wiring must not change parser behavior or `/api/ai-parse`.
 - Future runtime wiring must not add UI sectors/buttons/cards.
 - Future runtime wiring must not add new shims.
-- Required tests before any future wiring: typed payout runtime contract test, customer/driver finance visibility guard, forbidden-field exclusion guard for customer pricing, `customer_rates`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets, `node scripts/test-payout-approval-packet.mjs`, `node scripts/test-pricing-customer-rates-approval-packet.mjs`, `node scripts/test-full-driver-profile-runtime-approval-packet.mjs`, `node scripts/test-rate-settings-runtime-approval-packet.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
-- Rollback note: keep `driver_payout_rules`/payout runtime parked on the current legacy rate settings/company/traveler override, full driver profile, saved-booking assignment, dispatch copy, and booking snapshot paths until a typed lane is separately approved, tested, and verified; if a future runtime wiring pass fails any guard, revert that single lane and restore the parked legacy paths unchanged.
-- No runtime implementation, UI/API/helper behavior change, env change, deployment, DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/customer_rates/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
+- Required tests before any future live DB write or broader payout wiring: typed payout runtime contract test, payout runtime app wiring guard, customer/driver finance visibility guard, forbidden-field exclusion guard for customer pricing, `customer_rates`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, and secrets, `node scripts/test-payout-approval-packet.mjs`, `node scripts/test-driver-payout-rules-runtime-app-wiring.mjs`, `node scripts/test-pricing-customer-rates-approval-packet.mjs`, `node scripts/test-full-driver-profile-runtime-approval-packet.mjs`, `node scripts/test-rate-settings-runtime-approval-packet.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `npm run test:booking-ui-browser` if `app/page.tsx` wiring changes, `git diff --check`, and `git status --short`.
+- Rollback note: if the payout gated runtime path fails any guard, revert that single lane and restore the closed-gate legacy fallback unchanged; keep broader payout surfaces in `rate_settings`, full driver profile, saved-booking assignment, dispatch copy, and booking snapshots parked until separately approved, tested, and verified.
+- No env change, deployment, live DB write, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/customer_rates/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
 ### Payout Runtime Split Guard Lock
 - `driver_payout_rules` payout payload builders remain split from customer_rates payload builders.
 - Customer_rates runtime payloads and route remain customer-rate only and must never carry payout fields.
-- Current payout writes remain on the existing parked legacy combined company/traveler override paths.
-- No `app/page.tsx` payout runtime wiring is active.
+- Payout app wiring is guarded separately by `scripts/test-driver-payout-rules-runtime-app-wiring.mjs`.
+- Closed-gate/no-op payout responses preserve the existing legacy combined company/traveler override fallback.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` remains unchanged.
 - Parser behavior and `/api/ai-parse` remain unchanged.
@@ -1340,11 +1341,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - It validates safe booking-type payout rule fields: `MNG`, `DEP`, `TRF`, `DSP` with `min`, `max`, `amount`, and `perHour`.
 - It rejects customer pricing, `customer_rates`, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal notes, debug, secrets, PayNow, and payout preferences.
 - Closed-gate/no-op behavior is preserved; no DB client is created while the gate is closed.
-- No `app/page.tsx` runtime wiring was added.
+- App runtime wiring is guarded separately by `scripts/test-driver-payout-rules-runtime-app-wiring.mjs`.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` remains unchanged.
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - The guard is registered in the preactivation verification suite as `scripts/test-driver-payout-rules-runtime-write-action-api-contract.mjs`.
+- No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
+
+### Driver Payout Rules Runtime App Wiring Lock
+- Company/traveler rate override save/remove now calls the gated `driver_payout_rules` runtime write boundary first.
+- The route remains closed by default through `PRESTIGE_DRIVER_PAYOUT_RULES_WRITE_ENABLED`.
+- Closed-gate/no-op responses fall back to the existing legacy path to preserve current behavior.
+- When the typed payout boundary reports `saved`, the legacy follow-up omits `driver_payout_rules`.
+- Customer_rates/pricing stays separate on the customer_rates runtime boundary.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- The guard is registered in the preactivation verification suite as `scripts/test-driver-payout-rules-runtime-app-wiring.mjs`.
 - No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
 
 ### Full driver profile shim risk lock

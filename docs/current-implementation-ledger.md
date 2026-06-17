@@ -1504,6 +1504,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No UI sectors/cards were added.
 - No new shims were added.
 
+### Full Driver Profile Runtime App Wiring Lock
+- Driver Database save/delete now calls the gated full driver profile runtime write boundary first.
+- The route remains closed by default through `PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED`.
+- Closed-gate/no-op responses fall back to the existing legacy `drivers` shim path to preserve current behavior.
+- When the typed full driver profile boundary reports `saved` or `deleted`, the legacy follow-up is skipped.
+- The runtime payload includes safe operational driver fields only: `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, and `availability_status`.
+- The delete runtime payload includes only a safe driver id plus action type.
+- Payout preferences, driver payout rules, notes, preferred areas, airport permit notes, pricing, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, debug, secrets, PayNow, and mock/archive fields remain outside the typed runtime payload.
+- Existing legacy fallback still contains the parked full-profile fields while the gate is closed.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- The guard is registered in the preactivation verification suite as `scripts/test-full-driver-profile-runtime-app-wiring.mjs`.
+- No UI sector/card, env change, deployment, live DB write/delete execution, provider activation, live send, or new shim is included.
+
 ### Full Driver Profile Shim Split Approval Packet
 - Approval status: pending owner approval.
 - Goal: split safe driver display/operational fields from risky full profile save/delete fields before any future full-driver shim replacement.

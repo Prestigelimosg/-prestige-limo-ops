@@ -10482,6 +10482,21 @@ async function runChromeTest() {
           return jsonResponse({ message: "Unhandled driver assignment display mock" }, 500);
         }
 
+        if (url.includes("/api/admin-full-driver-profile-runtime-write-action")) {
+          if (method === "POST") {
+            return jsonResponse({
+              no_op: true,
+              ok: false,
+              reason: "write_gate_closed",
+              status: "disabled",
+              version: "browser-admin-full-driver-profile-runtime-write-action-closed-mock",
+            }, 403);
+          }
+
+          window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
+          return jsonResponse({ message: "Unhandled full driver profile runtime mock" }, 405);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return window.__prestigeOriginalFetch(...args);
         }
@@ -10822,9 +10837,12 @@ async function runChromeTest() {
     );
     assert.ok(
       driverProfileSaveState.fetchCalls.every(
-        (call) => call.includes("/rest/v1/drivers") || call.includes("/api/admin-driver-assignment-display"),
+        (call) =>
+          call.includes("/rest/v1/drivers") ||
+          call.includes("/api/admin-driver-assignment-display") ||
+          call.includes("/api/admin-full-driver-profile-runtime-write-action"),
       ),
-      `Expected driver profile save to call only mocked drivers REST endpoints plus typed display read, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
+      `Expected driver profile save to call only mocked drivers REST endpoints, typed display read, and the closed full-driver runtime gate, got ${driverProfileSaveState.fetchCalls.join(", ")}`,
     );
     assert.ok(
       driverProfileSaveState.fetchCalls.every((call) => !call.includes("/rest/v1/bookings")),
@@ -12298,9 +12316,12 @@ async function runChromeTest() {
     );
     assert.ok(
       renamedDriverProfileSaveState.fetchCalls.every(
-        (call) => call.includes("/rest/v1/drivers") || call.includes("/api/admin-driver-assignment-display"),
+        (call) =>
+          call.includes("/rest/v1/drivers") ||
+          call.includes("/api/admin-driver-assignment-display") ||
+          call.includes("/api/admin-full-driver-profile-runtime-write-action"),
       ),
-      `Expected renamed driver profile save to call only drivers REST endpoints plus typed display read, got ${renamedDriverProfileSaveState.fetchCalls.join(", ")}`,
+      `Expected renamed driver profile save to call only drivers REST endpoints, typed display read, and the closed full-driver runtime gate, got ${renamedDriverProfileSaveState.fetchCalls.join(", ")}`,
     );
     assert.ok(
       renamedDriverProfileSaveState.fetchCalls.every((call) => !call.includes("driver_name=ilike")),
@@ -12764,9 +12785,12 @@ async function runChromeTest() {
     assert.match(deletedDriverState.deleteRequests[0]?.url || "", /\/rest\/v1\/drivers.*id=eq\.9905/);
     assert.ok(
       deletedDriverState.fetchCalls.every(
-        (call) => call.includes("/rest/v1/drivers") || call.includes("/api/admin-driver-assignment-display"),
+        (call) =>
+          call.includes("/rest/v1/drivers") ||
+          call.includes("/api/admin-driver-assignment-display") ||
+          call.includes("/api/admin-full-driver-profile-runtime-write-action"),
       ),
-      `Expected driver delete to call only drivers REST endpoints plus typed display read, got ${deletedDriverState.fetchCalls.join(", ")}`,
+      `Expected driver delete to call only drivers REST endpoints, typed display read, and the closed full-driver runtime gate, got ${deletedDriverState.fetchCalls.join(", ")}`,
     );
     assert.equal(deletedDriverState.bookingRequestCount, 0, "Expected driver delete not to update booking rows");
     assert.equal(deletedDriverState.feedbackText, "Driver deleted.");

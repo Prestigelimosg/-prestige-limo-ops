@@ -243,6 +243,10 @@ const guardChecks = [
     script: "scripts/test-full-driver-profile-runtime-write-action-api-contract.mjs",
   },
   {
+    label: "full driver profile runtime app wiring guard",
+    script: "scripts/test-full-driver-profile-runtime-app-wiring.mjs",
+  },
+  {
     label: "Customer Copy multi-channel guard",
     script: "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   },

@@ -78,6 +78,8 @@ const adminCustomerRatesRuntimeWriteActionApiPath =
   "/api/admin-customer-rates-runtime-write-action";
 const adminDriverPayoutRulesRuntimeWriteActionApiPath =
   "/api/admin-driver-payout-rules-runtime-write-action";
+const adminFullDriverProfileRuntimeWriteActionApiPath =
+  "/api/admin-full-driver-profile-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -3759,6 +3761,34 @@ type DriverPayoutRulesRuntimeWriteResponse = {
   status?: string;
 };
 
+type FullDriverProfileRuntimeSavePayload = {
+  action_type: "full_driver_profile_save";
+  availability_status: string;
+  contact_number: string;
+  driver_name: string;
+  id?: number;
+  plate_number: string;
+  vehicle_type: string;
+};
+
+type FullDriverProfileRuntimeDeletePayload = {
+  action_type: "full_driver_profile_delete";
+  id: number;
+};
+
+type FullDriverProfileRuntimeWritePayload =
+  | FullDriverProfileRuntimeDeletePayload
+  | FullDriverProfileRuntimeSavePayload;
+
+type FullDriverProfileRuntimeWriteResponse = {
+  error?: string;
+  no_op?: boolean;
+  ok?: boolean;
+  reason?: string;
+  rejected_fields?: unknown;
+  status?: string;
+};
+
 type CompanyRateOverridePayloadInput = {
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
@@ -4025,6 +4055,149 @@ async function saveDriverPayoutRulesRuntime(
       errorMessage: error instanceof Error
         ? error.message
         : "Driver payout rules write failed before the parked legacy fallback could continue.",
+    };
+  }
+}
+
+function fullDriverProfileRuntimeRecordId(value: unknown) {
+  const id = Number(value);
+
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function fullDriverProfileRuntimeRejectedFields(
+  value: FullDriverProfileRuntimeWriteResponse | null,
+) {
+  return Array.isArray(value?.rejected_fields)
+    ? value.rejected_fields.map((field) => clean(field)).filter(Boolean)
+    : [];
+}
+
+function isFullDriverProfileRuntimeWriteBlockedNoOp(
+  value: FullDriverProfileRuntimeWriteResponse | null,
+) {
+  const reason = clean(value?.reason).toLowerCase();
+
+  return (
+    value?.ok !== true &&
+    value?.no_op === true &&
+    (
+      !reason ||
+      ["admin_session_required", "config_not_ready", "write_gate_closed"].includes(reason)
+    )
+  );
+}
+
+function fullDriverProfileRuntimeWriteError(
+  value: FullDriverProfileRuntimeWriteResponse | null,
+  fallback: string,
+) {
+  const rejectedFields = fullDriverProfileRuntimeRejectedFields(value);
+
+  if (rejectedFields.length > 0) {
+    return `${fallback} Rejected fields: ${rejectedFields.join(", ")}.`;
+  }
+
+  return clean(value?.error) || fallback;
+}
+
+function fullDriverProfileRuntimeWriteDeleted(
+  value: FullDriverProfileRuntimeWriteResponse | null,
+) {
+  return value?.ok === true && value.status === "deleted" && value.no_op !== true;
+}
+
+function fullDriverProfileRuntimeWriteSaved(
+  value: FullDriverProfileRuntimeWriteResponse | null,
+) {
+  return value?.ok === true && value.status === "saved" && value.no_op !== true;
+}
+
+function buildFullDriverProfileRuntimeSavePayload({
+  availabilityStatus,
+  contactNumber,
+  driverName,
+  existingDriverId,
+  plateNumber,
+  vehicleType,
+}: {
+  availabilityStatus: string;
+  contactNumber: string;
+  driverName: string;
+  existingDriverId: string;
+  plateNumber: string;
+  vehicleType: string;
+}): FullDriverProfileRuntimeSavePayload {
+  const id = fullDriverProfileRuntimeRecordId(existingDriverId);
+
+  return {
+    action_type: "full_driver_profile_save",
+    availability_status: availabilityStatus || "available",
+    contact_number: contactNumber,
+    driver_name: driverName,
+    ...(id ? { id } : {}),
+    plate_number: plateNumber,
+    vehicle_type: vehicleType,
+  };
+}
+
+function buildFullDriverProfileRuntimeDeletePayload(
+  driverId: string,
+): FullDriverProfileRuntimeDeletePayload | null {
+  const id = fullDriverProfileRuntimeRecordId(driverId);
+
+  return id
+    ? {
+        action_type: "full_driver_profile_delete",
+        id,
+      }
+    : null;
+}
+
+async function saveFullDriverProfileRuntime(
+  payload: FullDriverProfileRuntimeWritePayload,
+): Promise<
+  | { deleted: boolean; ok: true; saved: boolean }
+  | { errorMessage: string; ok: false }
+> {
+  try {
+    const response = await fetch(adminFullDriverProfileRuntimeWriteActionApiPath, {
+      body: JSON.stringify(payload),
+      headers: {
+        "content-type": "application/json",
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const responseBody = (await response.json().catch(() => null)) as
+      | FullDriverProfileRuntimeWriteResponse
+      | null;
+
+    if (response.ok && responseBody?.ok === true) {
+      return {
+        deleted: fullDriverProfileRuntimeWriteDeleted(responseBody),
+        ok: true,
+        saved: fullDriverProfileRuntimeWriteSaved(responseBody),
+      };
+    }
+
+    if (isFullDriverProfileRuntimeWriteBlockedNoOp(responseBody)) {
+      return { deleted: false, ok: true, saved: false };
+    }
+
+    return {
+      ok: false,
+      errorMessage: fullDriverProfileRuntimeWriteError(
+        responseBody,
+        "Full driver profile write was rejected by the typed boundary.",
+      ),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorMessage: error instanceof Error
+        ? error.message
+        : "Full driver profile write failed before the parked legacy fallback could continue.",
     };
   }
 }
@@ -12693,12 +12866,32 @@ export default function Home() {
         airport_permit_notes: clean(driverProfileDraft.airportPermitNotes) || null,
         updated_at: new Date().toISOString(),
       };
-      const result = existingDriverId
-        ? await adminLegacyDataClient.from(adminLegacyTables.drivers).update(payload).eq("id", existingDriverId)
-        : await adminLegacyDataClient.from(adminLegacyTables.drivers).insert(payload);
+      const fullDriverProfileRuntime =
+        existingDriverId && !fullDriverProfileRuntimeRecordId(existingDriverId)
+          ? { deleted: false, ok: true as const, saved: false }
+          : await saveFullDriverProfileRuntime(
+              buildFullDriverProfileRuntimeSavePayload({
+                availabilityStatus: payload.availability_status,
+                contactNumber,
+                driverName,
+                existingDriverId,
+                plateNumber,
+                vehicleType,
+              }),
+            );
 
-      if (result.error) {
-        throw new Error(result.error.message);
+      if (!fullDriverProfileRuntime.ok) {
+        throw new Error(fullDriverProfileRuntime.errorMessage);
+      }
+
+      if (!fullDriverProfileRuntime.saved) {
+        const result = existingDriverId
+          ? await adminLegacyDataClient.from(adminLegacyTables.drivers).update(payload).eq("id", existingDriverId)
+          : await adminLegacyDataClient.from(adminLegacyTables.drivers).insert(payload);
+
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
       }
 
       setDriverProfileDraft(initialDriverProfileDraft);
@@ -12869,10 +13062,21 @@ export default function Home() {
     });
 
     try {
-      const result = await adminLegacyDataClient.from(adminLegacyTables.drivers).delete().eq("id", driverId);
+      const fullDriverProfileRuntimePayload = buildFullDriverProfileRuntimeDeletePayload(driverId);
+      const fullDriverProfileRuntime = fullDriverProfileRuntimePayload
+        ? await saveFullDriverProfileRuntime(fullDriverProfileRuntimePayload)
+        : { deleted: false, ok: true as const, saved: false };
 
-      if (result.error) {
-        throw new Error(result.error.message);
+      if (!fullDriverProfileRuntime.ok) {
+        throw new Error(fullDriverProfileRuntime.errorMessage);
+      }
+
+      if (!fullDriverProfileRuntime.deleted) {
+        const result = await adminLegacyDataClient.from(adminLegacyTables.drivers).delete().eq("id", driverId);
+
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
       }
 
       setDrivers((current) => current.filter((candidate) => String(candidate.id) !== driverId));

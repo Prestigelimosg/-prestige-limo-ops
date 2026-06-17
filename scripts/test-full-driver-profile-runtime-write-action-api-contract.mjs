@@ -391,8 +391,6 @@ assertIncludes(helperSource, "driver_payout_rules", "Forbidden driver payout rul
 assertIncludes(helperSource, "airport_permit_notes", "Forbidden airport permit notes rejection");
 assertIncludes(helperSource, "preferred_areas", "Forbidden preferred areas rejection");
 
-assertExcludes(appPage, routePathFragment, "App page must not wire full driver profile runtime route yet");
-
 const saveDriverProfile = sliceBetween(appPage, "async function saveDriverProfile()", "async function deactivateDriverProfile");
 const deleteDriverProfile = sliceBetween(appPage, "async function deleteDriverProfile", "async function saveBooking");
 assertIncludes(saveDriverProfile, ".from(adminLegacyTables.drivers)", "Existing full driver profile save fallback");

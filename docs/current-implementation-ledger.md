@@ -440,6 +440,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No UI sector/card addition, route change, parser change, Save Booking change, DB read/write, provider send, pricing/payout/payment/PDF activation, or new shim is approved by this lock.
 - This lock adds `scripts/test-admin-setup-readiness-archive-label-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Deploy Smoke for Admin Setup Archive Label
+- `origin/staging` deployed to `9772661 Harden admin setup archive label`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; the staging smoke used passive browser and GET-only checks.
+- Console/runtime errors: 0.
+- `Setup Readiness Archive` was present.
+- The old `Internal QA / Mock Workbench Archive` / `Mock Workbench Archive` wording was absent.
+- All 6 runtime lanes remain parked: Load Bookings runtime read wiring, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- Email, WhatsApp, SMS, and Telegram remain setup-only/no-live.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Staging Smoke for Load Bookings Typed Read Rollback Guard
 - `origin/staging` deployed to `4004b3a Add Load Bookings typed read rollback guard`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

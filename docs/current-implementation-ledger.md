@@ -386,6 +386,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new UI sectors/cards were added.
 - No new shims were added.
 
+### Load Bookings Typed Read Rollback Boundary Lock
+- Typed Load Bookings read rollback boundary is guarded.
+- Rollback path: close `PRESTIGE_LOAD_BOOKINGS_TYPED_READ_ENABLED`; Load Bookings continues to use `GET /api/admin-saved-bookings` as the booking/form/detail source and fallback.
+- Typed read failures, blocked responses, closed gates, or malformed responses must return `null` from the operational display bridge and must not block the legacy saved-bookings read.
+- Typed safe-card state resets to empty before each load and falls back to empty maps/orders when typed read is unavailable.
+- Typed read safe-card order is display-only and must not replace the legacy `BookingRecord` action/form/detail source.
+- The typed endpoint remains GET-only and read-only.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` route/helper change.
+- No parser or `/api/ai-parse` change.
+- No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
+- This lock adds `scripts/test-load-bookings-typed-read-rollback-boundary.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Operational-Only Load Bookings Runtime Mapping Guard Lock
 - Stage 1 operational-only Load Bookings display mapping is guarded.
 - Current Load Bookings remains on `GET /api/admin-saved-bookings`.

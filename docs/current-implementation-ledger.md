@@ -319,6 +319,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No new UI sectors/cards were observed.
 - No new shims were added.
 
+### Staging Deploy Smoke After Form Mapping Ledger Deploy
+- `origin/staging` deployed to `3ca1a59 Record staging smoke for Load Bookings form mapping split`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.
+- Main admin UI rendered.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was present but was not clicked.
+- No forms were submitted.
+- No POST/write/send was attempted; the passive smoke observed network GET only.
+- Console/runtime errors: 0.
+- Load Bookings form mapping split remains safe and was not actively exercised.
+- All 6 runtime lanes remain parked: Load Bookings runtime read wiring, company/traveler CRM runtime writes, `rate_settings` save/upsert runtime, full driver profile save/delete runtime, `customer_rates`/pricing, and `driver_payout_rules`/payout.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Staging Deploy Smoke for Load Bookings Operational Display
 - `origin/staging` deployed to `bc72391 Wire Load Bookings to operational safe display adapter`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

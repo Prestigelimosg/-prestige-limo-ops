@@ -150,6 +150,10 @@ const guardChecks = [
     script: "scripts/test-customer-rates-runtime-app-wiring.mjs",
   },
   {
+    label: "customer_rates runtime create path guard",
+    script: "scripts/test-customer-rates-runtime-create-path-guard.mjs",
+  },
+  {
     label: "payout runtime approval packet guard",
     script: "scripts/test-payout-approval-packet.mjs",
   },

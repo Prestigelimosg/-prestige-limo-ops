@@ -4019,6 +4019,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
   companyName,
   customerRates,
   driverPayoutRules,
+  includeCustomerRates = true,
   transzendExcelPrivacy,
 }: LegacyCompanyRateOverrideInsertPayloadInput) {
   return {
@@ -4026,6 +4027,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
     ...buildCompanyRateOverridePayload({
       customerRates,
       driverPayoutRules,
+      includeCustomerRates,
       transzendExcelPrivacy,
     }),
   };
@@ -4035,6 +4037,7 @@ function buildLegacyTravelerRateOverrideInsertPayload({
   companyId,
   customerRates,
   driverPayoutRules,
+  includeCustomerRates = true,
   travelerName,
 }: LegacyTravelerRateOverrideInsertPayloadInput) {
   return {
@@ -4042,6 +4045,7 @@ function buildLegacyTravelerRateOverrideInsertPayload({
     ...buildTravelerRateOverridePayload({
       customerRates,
       driverPayoutRules,
+      includeCustomerRates,
     }),
   };
 }
@@ -11809,6 +11813,7 @@ export default function Home() {
     setMessage({ tone: "info", text: "Saving rate override..." });
 
     let companyOverrideSaved = false;
+    const shouldDeferCompanyCustomerRatesToRuntime = !bossName && hasCustomerRateOverrides;
 
     try {
       let company: CompanyRecord | null = rateCompanies.find(
@@ -11861,6 +11866,7 @@ export default function Home() {
             companyName: companyName || "Internal Account",
             customerRates: bossName ? {} : overrideCustomerRates,
             driverPayoutRules: bossName ? {} : overrideDriverPayoutRules,
+            includeCustomerRates: !shouldDeferCompanyCustomerRatesToRuntime,
             transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
           }))
           .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
@@ -12009,29 +12015,69 @@ export default function Home() {
             }
           }
 
-          const travelerInsert = travelerIdentity.recordId
-            ? await adminLegacyDataClient
+          if (travelerIdentity.recordId) {
+            const travelerInsert = await adminLegacyDataClient
+              .from(adminLegacyTables.travelers)
+              .update(
+                buildTravelerRateOverridePayload({
+                  customerRates: overrideCustomerRates,
+                  driverPayoutRules: overrideDriverPayoutRules,
+                  includeCustomerRates: !travelerCustomerRatesRuntime.saved,
+                  updatedAt: new Date().toISOString(),
+                }),
+              )
+              .eq("id", travelerIdentity.recordId);
+
+            if (travelerInsert.error) {
+              throw new Error(travelerInsert.error.message);
+            }
+          } else {
+            const createdTraveler = await adminLegacyDataClient
+              .from(adminLegacyTables.travelers)
+              .insert(
+                buildLegacyTravelerRateOverrideInsertPayload({
+                  companyId: company.id,
+                  customerRates: overrideCustomerRates,
+                  driverPayoutRules: overrideDriverPayoutRules,
+                  includeCustomerRates: !hasCustomerRateOverrides,
+                  travelerName: bossName,
+                }),
+              )
+              .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
+              .single();
+
+            if (createdTraveler.error) {
+              throw new Error(createdTraveler.error.message);
+            }
+
+            const createdTravelerRecord = createdTraveler.data as TravelerRecord;
+            const createdTravelerCustomerRatesRuntime = hasCustomerRateOverrides
+              ? await saveCustomerRatesRuntime(
+                  buildTravelerCustomerRatesRuntimeWritePayload(createdTravelerRecord.id, overrideCustomerRates),
+                )
+              : { ok: true as const, saved: false };
+
+            if (!createdTravelerCustomerRatesRuntime.ok) {
+              throw new Error(createdTravelerCustomerRatesRuntime.errorMessage);
+            }
+
+            if (!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides) {
+              const travelerCustomerRatesFallback = await adminLegacyDataClient
                 .from(adminLegacyTables.travelers)
                 .update(
                   buildTravelerRateOverridePayload({
                     customerRates: overrideCustomerRates,
                     driverPayoutRules: overrideDriverPayoutRules,
-                    includeCustomerRates: !travelerCustomerRatesRuntime.saved,
+                    includeCustomerRates: true,
                     updatedAt: new Date().toISOString(),
                   }),
                 )
-                .eq("id", travelerIdentity.recordId)
-            : await adminLegacyDataClient.from(adminLegacyTables.travelers).insert(
-                buildLegacyTravelerRateOverrideInsertPayload({
-                  companyId: company.id,
-                  customerRates: overrideCustomerRates,
-                  driverPayoutRules: overrideDriverPayoutRules,
-                  travelerName: bossName,
-                }),
-              );
+                .eq("id", createdTravelerRecord.id);
 
-          if (travelerInsert.error) {
-            throw new Error(travelerInsert.error.message);
+              if (travelerCustomerRatesFallback.error) {
+                throw new Error(travelerCustomerRatesFallback.error.message);
+              }
+            }
           }
         }
       }

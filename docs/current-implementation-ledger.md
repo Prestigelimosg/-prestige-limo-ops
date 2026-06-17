@@ -1233,6 +1233,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
 
+### Customer Rates Runtime Create Path Lock
+- New company/traveler rate override create paths defer customer_rates to the gated runtime boundary when customer rate overrides are present.
+- Legacy create payload builders accept `includeCustomerRates` and can omit `customer_rates` before the runtime boundary runs.
+- When the customer_rates runtime boundary reports saved, legacy follow-up keeps customer_rates omitted.
+- When the customer_rates runtime boundary is closed/no-op, the existing legacy fallback writes customer_rates to preserve behavior.
+- Driver payout rules remain on the parked legacy path and no typed payout runtime is wired.
+- Guarded by `scripts/test-customer-rates-runtime-create-path-guard.mjs` and registered in the preactivation verification suite.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No UI sector/card, env change, deployment, live DB write execution, provider activation, live send, or new shim is included.
+
 ### Staging Smoke After Customer Rates Runtime Save Path
 - `origin/staging` points to `c9008b4 Wire customer rates runtime save path`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

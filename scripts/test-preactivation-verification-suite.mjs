@@ -18,6 +18,10 @@ const guardChecks = [
     script: "scripts/test-pre-edit-source-of-truth-contract.mjs",
   },
   {
+    label: "business-grade forward completion sequence guard",
+    script: "scripts/test-business-grade-forward-completion-sequence.mjs",
+  },
+  {
     label: "staging deployment approval packet guard",
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },

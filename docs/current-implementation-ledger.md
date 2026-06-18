@@ -1,18 +1,18 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this public driver Flight ETA setup surface guard:
-247e446 Record no-screenshot staging smoke for public app notification guard
+Latest verified clean checkpoint before this public driver Flight ETA setup surface staging smoke record:
+234ac6f Guard public driver Flight ETA setup surface
 
 Latest staging-smoked app checkpoint:
-52c6c29 Guard public app notification surface
+234ac6f Guard public driver Flight ETA setup surface
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this public driver Flight ETA setup surface guard: `247e446 Record no-screenshot staging smoke for public app notification guard`.
-- Latest staging-smoked app checkpoint to preserve: `52c6c29 Guard public app notification surface`; `origin/staging` points to `52c6c2912a31d7b87362526b5dd1939d6d39e346`.
+- Last verified repo checkpoint before this public driver Flight ETA setup surface staging smoke record: `234ac6f Guard public driver Flight ETA setup surface`.
+- Latest implementation checkpoint to preserve: `234ac6f Guard public driver Flight ETA setup surface`; `origin/staging` points to `234ac6f8535cbdd4b992c5fdfc60dcb39bd2934e`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, and company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`.
 - Next forward lane after this staging smoke record: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, admin dashboard horizontal overflow fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, Save Booking + CRM button placement near Job Card Preview actions, Save Booking duplicate-submit guard, separated Save Booking + CRM and calendar actions, Save Booking + CRM safe admin booking persistence reroute, disabled admin booking read/list/detail contract setup and no-live guard, unused legacy bookings shim surface retirement, booking UI browser test stabilization, calendar event lifecycle readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, customer amendment/cancellation review handoff setup foundation/API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, billing/payment readiness setup foundation, preview API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, production deployment hardening readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, staging deployment approval packet and guard, core admin booking persistence activation readiness packet, guard, safe path guard, and Save Booking + CRM safe reroute, global pre-activation no-live guard, activation decision matrix guard, pre-activation verification suite, shim cleanup typed API inventory, shim cleanup no-new-shim guard, companies CRM identity/domain typed helper/API and typed display wiring, travelers CRM identity/default-address typed helper/API and typed display wiring, company/traveler CRM write-readiness setup foundation/API, disabled action API, audit payload setup foundation, no-live guard, and pre-activation audit lock, driver assignment/display typed helper/API and booking assignment display wiring, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, app smoke email preflight setup-only allowlist, driver ack customer message handoff setup foundation/API, ledger guards.
@@ -1329,6 +1329,33 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No new shims are added.
 - This lock adds `scripts/test-public-driver-flight-eta-setup-surface-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging No-Screenshot Request Smoke for Public Driver Flight ETA Setup Surface Guard
+- `origin/staging` points to `234ac6f8535cbdd4b992c5fdfc60dcb39bd2934e` (`234ac6f Guard public driver Flight ETA setup surface`), verified directly with `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.
+- Safe GET to `/api/admin-load-bookings-typed-read?limit=1` with `x-prestige-admin-purpose=admin-booking-persistence` returned HTTP 403 at the admin boundary; no booking rows or safe cards were returned by that check.
+- Passive browser request smoke rendered the main admin UI at desktop viewport with document title `Prestige Limo Ops`; no screenshot was captured.
+- Expected UI text rendered: `Prestige Limo Ops`, `Create Job Card`, `Dispatch`, `Dashboard`, `Bookings`, `Drivers`, `Completed`, and `Rates`.
+- Save Booking was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser request/response summary: 37 staging GET requests, 37 staging GET responses, 37 HTTP 200 responses, 0 non-GET requests, 0 non-200 responses, 0 missing responses, and 0 failed-before-response requests.
+- Browser-canceled staging request count after observed response: 2 GET-only RSC prefetch load-completion events for `/driver-job/mock-driver-job-valid-a` after HTTP 200; these were not POST/write/send requests.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Chrome process stderr emitted non-app background lines: allocator warning, GCM `PHONE_REGISTRATION_ERROR`, GCM `DEPRECATED_ENDPOINT`, TensorFlow Lite XNNPACK delegate creation, and GoogleUpdater/Crashpad settings noise; these were not page console/runtime exceptions and did not come from an app POST/write/send request.
+- Screenshot captured: false.
+- The public driver Flight ETA setup surface guard remains docs/test-only/read-only and does not approve endpoint migration.
+- `/api/driver-job/[token]/flight-eta-setup` remains token-scoped, GET-only, setup-only, and limited to safe setup statuses for customer update status, driver ETA notification status, driver ETA acknowledgement status, future MNG/Arrival eligibility, future driver notification minutes, and future admin-and-driver-only scope.
+- `/api/driver-job/[token]/flight-eta-acknowledgement-setup` remains token-scoped, GET-only, setup-only, and limited to disabled acknowledgement/action/resend/admin-escalation statuses, MNG/Arrival-only eligibility, future before-OTW acknowledgement, 2-attempt escalation rule, and replacement-driver admin action wording.
+- Both routes remain free of external flight provider calls, notification sends, Supabase client creation, env reads, cookie setting, request-body parsing, form submission, geolocation/media/file APIs, and DB reads/writes.
+- The public driver job page does not call the Flight ETA setup or acknowledgement setup routes.
+- Driver Flight ETA setup surfaces exclude customer price, billing, invoice/payment/PDF, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, tokens/secrets, provider/send payloads, live location/photo fields, and mock QA/dev archive fields.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, auth activation, live location/photo activation, FlightAware live lookup, or new shim was included.
 
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.

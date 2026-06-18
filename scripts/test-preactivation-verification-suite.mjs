@@ -166,6 +166,10 @@ const guardChecks = [
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
   },
   {
+    label: "public client navigation boundary guard",
+    script: "scripts/test-public-client-navigation-boundary-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

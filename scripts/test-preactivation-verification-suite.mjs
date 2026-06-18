@@ -202,6 +202,10 @@ const guardChecks = [
     script: "scripts/test-public-customer-driver-app-notification-surface-guard.mjs",
   },
   {
+    label: "public driver Flight ETA setup surface guard",
+    script: "scripts/test-public-driver-flight-eta-setup-surface-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

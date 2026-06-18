@@ -106,6 +106,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-operational-display-merge-guard.mjs",
   },
   {
+    label: "Load Bookings endpoint migration readiness guard",
+    script: "scripts/test-load-bookings-endpoint-migration-readiness-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

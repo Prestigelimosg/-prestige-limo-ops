@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this source-of-truth repair:
-d070ad6 Record staging smoke for CRM runtime activation guard
+Latest verified clean checkpoint before this Load Bookings endpoint migration readiness guard:
+8938a91 Repair ledger handoff checkpoint
 
 Latest staging-smoked app checkpoint:
 dea22b3 Add CRM runtime write activation readiness guard
@@ -11,7 +11,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this source-of-truth repair: `d070ad6 Record staging smoke for CRM runtime activation guard`.
+- Last verified repo checkpoint before this Load Bookings endpoint migration readiness guard: `8938a91 Repair ledger handoff checkpoint`.
 - Latest implementation checkpoint to preserve: `dea22b3 Add CRM runtime write activation readiness guard`; `origin/staging` points to `dea22b3b05ff0afdbaac7b0e0e7510e1c900d453`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, and company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`.
 - Next forward lane after this ledger source-of-truth repair: Load Bookings typed-read readiness hardening only; keep it read-only and do not change env/deploy/DB write/provider send/migrations/parser/Save Booking/`/api/admin-saved-bookings`/payment/PDF/pricing/payout/auth/location/photo/calendar/UI sectors/new shims without separate approval.
@@ -534,6 +534,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No parser or `/api/ai-parse` change.
 - No DB write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-typed-operational-display-merge-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Load Bookings Endpoint Migration Readiness Guard Lock
+- Load Bookings endpoint migration readiness is guarded before any future endpoint swap.
+- This is a docs/test-only readiness guard; it does not approve endpoint migration.
+- Current Load Bookings booking/form/detail source remains `GET /api/admin-saved-bookings`.
+- The typed read endpoint remains `GET /api/admin-load-bookings-typed-read` and is used only for safe operational display-card hydration when the existing gate and admin boundary allow it.
+- Typed safe-card data must not replace the legacy `BookingRecord` source used by `bookingRecordToForm`, `loadSelectedBooking`, Save Booking + CRM, driver dispatch payout copy, driver assignment payout controls, billing readiness, or finance/payout/internal paths.
+- Future endpoint migration requires separate owner approval, rollback proof, no forbidden-field leak proof, and a bounded staging smoke.
+- Forbidden fields remain excluded from typed output and must not reach customers or drivers: pricing, payout, customer rates, driver payout rules, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, tokens, and mock QA/dev archive fields.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No env change, deployment, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim is approved by this lock.
+- This lock adds `scripts/test-load-bookings-endpoint-migration-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Staging Deploy Smoke for Load Bookings Typed Operational Display Merge
 - `origin/staging` deployed to `6d331bf Guard Load Bookings typed operational display merge`.

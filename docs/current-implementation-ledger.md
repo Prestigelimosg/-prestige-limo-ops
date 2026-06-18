@@ -1100,6 +1100,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
+### Public Customer Portal Session Issue Surface Guard Lock
+- Public customer portal session issue surfaces are guarded across `/api/customer-portal-sessions`, `lib/customer-portal-session-issue.ts`, `/my-bookings`, and the customer portal saved-bookings adapter.
+- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.
+- The customer portal session issue helper must remain server-only, default-off, same-origin `/my-bookings` referer gated, purpose-header gated, server-token gated, and cookie-name fail-closed.
+- Only `POST /api/customer-portal-sessions` may issue a cookie, and successful or blocked responses must stay `Cache-Control: no-store`.
+- Successful session issue responses must expose only `{ ok: true, version }` in the body; the session token remains only in the HttpOnly Secure SameSite=Lax Priority=High cookie.
+- GET, PUT, PATCH, and DELETE on `/api/customer-portal-sessions` must stay blocked and must not issue cookies.
+- `/my-bookings` and the customer portal saved-bookings adapter must not call or expose `/api/customer-portal-sessions`, the session issue token header, customer session-token plumbing, Cookie, Authorization, or server env names.
+- The customer portal saved-bookings adapter must keep using only `/api/customer-saved-bookings?limit=25&page=1` with `cache: "no-store"`, `credentials: "same-origin"`, and the customer saved-bookings purpose header.
+- The session issue source must not touch Supabase, DB write/query clients, RPC, provider sends, admin saved-bookings, parser, payment/PDF/pricing/payout/auth activation, location/photo/calendar, or new shims.
+- This guard coordinates the customer portal session issue API contract, public API session cookie/cache guard, customer saved-bookings auth handoff readiness, public API request input guard, and public API client caller guard in the preactivation suite.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new shims are added.
+- This lock adds `scripts/test-public-customer-portal-session-issue-surface-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.

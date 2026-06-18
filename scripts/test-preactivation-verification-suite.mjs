@@ -118,6 +118,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-failure-payload-guard.mjs",
   },
   {
+    label: "Load Bookings typed-read detail isolation guard",
+    script: "scripts/test-load-bookings-typed-read-detail-isolation-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

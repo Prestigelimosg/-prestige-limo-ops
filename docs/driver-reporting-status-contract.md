@@ -6,6 +6,8 @@ This contract defines the driver reporting path from safe driver detail acknowle
 
 Driver reporting must stay a narrow operational workflow for one assigned job. The public driver job link is the controlled surface for safe job review, driver and vehicle detail acknowledgement, driver issue reporting, and status progression.
 
+This document is the current source of truth for driver public reporting/status boundaries. Older driver-job planning docs remain useful historical planning context, but any older PayNow, live-location, OTS photo, reminder, exception, or broad future workflow wording must defer to this contract and its executable guard before runtime work proceeds.
+
 The current source-of-truth modules are:
 
 - `lib/driver-job-status-workflow.ts` for status values, aliases, labels, and sequence enforcement.

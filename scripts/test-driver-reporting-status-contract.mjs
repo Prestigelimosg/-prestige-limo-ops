@@ -6,7 +6,9 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-driver-reporting-status-contract.mjs";
 
+const docsIndexPath = "docs/test-and-safety-docs-index.md";
 const driverPagePath = "app/driver-job/[token]/page.tsx";
+const driverWorkflowPlanPath = "docs/driver-job-link-workflow-plan.md";
 const driverIssueChoicesPath = "lib/driver-job-issue-alert.ts";
 const driverStatusWorkflowPath = "lib/driver-job-status-workflow.ts";
 const driverLinkPath = "lib/driver-job-link.ts";
@@ -49,6 +51,7 @@ const requiredContractFragments = [
   "status after JC: reject as `already_completed`.",
   "Driver issue reporting must stay enum-only and operational/safety-only",
   "Issue reports must create internal app/admin handling only.",
+  "Older driver-job planning docs remain useful historical planning context",
   "Do not broaden the driver status list to represent every real-world exception.",
   "Future admin-only handling states may be planned separately",
 ];
@@ -122,8 +125,10 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
 const fileEntries = await Promise.all(
   [
     contractPath,
+    docsIndexPath,
     ledgerPath,
     preactivationSuitePath,
+    driverWorkflowPlanPath,
     driverPagePath,
     driverIssueChoicesPath,
     driverStatusWorkflowPath,
@@ -135,8 +140,10 @@ const fileEntries = await Promise.all(
 const files = Object.fromEntries(fileEntries);
 
 const contract = files[contractPath];
+const docsIndex = files[docsIndexPath];
 const ledger = files[ledgerPath];
 const preactivationSuite = files[preactivationSuitePath];
+const driverWorkflowPlan = files[driverWorkflowPlanPath];
 const driverPage = files[driverPagePath];
 const issueChoices = files[driverIssueChoicesPath];
 const statusWorkflow = files[driverStatusWorkflowPath];
@@ -151,6 +158,21 @@ for (const fragment of requiredContractFragments) {
 
 for (const fragment of requiredPrivacyFragments) {
   assertIncludes(contract, fragment, `driver reporting privacy phrase: ${fragment}`);
+}
+
+for (const fragment of [
+  "The current guarded driver public reporting/status boundary is `docs/driver-reporting-status-contract.md`.",
+  "Any older PayNow-number, live-location, OTS-photo, reminder, exception, or expanded workflow wording in this plan remains planning-only and must defer to that current contract before implementation.",
+]) {
+  assertIncludes(driverWorkflowPlan, fragment, `driver workflow plan current-contract note ${fragment}`);
+}
+
+for (const fragment of [
+  "[Driver Reporting Status Contract](driver-reporting-status-contract.md) owns the current source-of-truth driver public reporting/status boundary",
+  "[Driver Job Link Workflow Plan](driver-job-link-workflow-plan.md) owns older broad planning context",
+  "current public reporting/status boundaries defer to the Driver Reporting Status Contract",
+]) {
+  assertIncludes(docsIndex, fragment, `test and safety docs index driver reporting cross-link ${fragment}`);
 }
 
 for (const status of allowedWorkflowStatuses) {

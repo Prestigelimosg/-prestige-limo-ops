@@ -2,6 +2,8 @@
 
 This is a documentation-only planning checkpoint. It does not approve app behavior changes, migrations, schema changes, Supabase commands, real notifications, real live location, real flight APIs, payment or bank APIs, invoices, statements, PDFs, or parser changes.
 
+Current source-of-truth note: this is an older broad workflow plan. The current guarded driver public reporting/status boundary is `docs/driver-reporting-status-contract.md`. Any older PayNow-number, live-location, OTS-photo, reminder, exception, or expanded workflow wording in this plan remains planning-only and must defer to that current contract before implementation.
+
 ## 1. Driver Job Link Flow
 
 The future driver job link should open to a clear, simple job card. The page should be easy to scan on a phone and should show only the information a driver needs for that one assigned job.

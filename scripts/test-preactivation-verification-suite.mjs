@@ -162,6 +162,10 @@ const guardChecks = [
     script: "scripts/test-public-api-runtime-gate-boundary-guard.mjs",
   },
   {
+    label: "public API client caller boundary guard",
+    script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

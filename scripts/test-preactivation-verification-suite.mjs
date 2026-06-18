@@ -122,6 +122,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-detail-isolation-guard.mjs",
   },
   {
+    label: "Load Bookings typed-read admin display exposure guard",
+    script: "scripts/test-load-bookings-typed-read-admin-display-exposure-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

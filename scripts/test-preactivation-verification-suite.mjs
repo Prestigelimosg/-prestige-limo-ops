@@ -150,6 +150,10 @@ const guardChecks = [
     script: "scripts/test-public-api-request-input-boundary-guard.mjs",
   },
   {
+    label: "public API session cookie/cache boundary guard",
+    script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

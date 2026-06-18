@@ -62,7 +62,7 @@ Workflow notes:
 - OTS means the driver is on the spot and at the correct pickup location.
 - For arrival jobs, OTS should include photo proof or upload later.
 - POB means passenger on board.
-- Live location should auto-disable 5 minutes after POB later.
+- Live location should auto-disable when POB is marked later; any backend cleanup grace must not keep customer-visible tracking open after POB.
 - JC means the job is completed.
 
 The current stage only documents this flow. It does not add real live location, real upload, real storage, or real status persistence.

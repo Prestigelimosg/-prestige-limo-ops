@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 const contractPath = "docs/customer-driver-status-visibility-contract.md";
 const driverReportingContractPath = "docs/driver-reporting-status-contract.md";
 const adminDriverExceptionContractPath = "docs/admin-driver-exception-handling-contract.md";
+const limoApiIntegrationPlanPath = "docs/limo-api-integration-plan.md";
+const driverWorkflowPlanPath = "docs/driver-job-link-workflow-plan.md";
 const docsIndexPath = "docs/test-and-safety-docs-index.md";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -123,6 +125,8 @@ const fileEntries = await Promise.all(
     contractPath,
     driverReportingContractPath,
     adminDriverExceptionContractPath,
+    limoApiIntegrationPlanPath,
+    driverWorkflowPlanPath,
     docsIndexPath,
     ledgerPath,
     preactivationSuitePath,
@@ -137,6 +141,8 @@ const files = Object.fromEntries(fileEntries);
 const contract = files[contractPath];
 const driverReportingContract = files[driverReportingContractPath];
 const adminDriverExceptionContract = files[adminDriverExceptionContractPath];
+const limoApiIntegrationPlan = files[limoApiIntegrationPlanPath];
+const driverWorkflowPlan = files[driverWorkflowPlanPath];
 const docsIndex = files[docsIndexPath];
 const ledger = files[ledgerPath];
 const preactivationSuite = files[preactivationSuitePath];
@@ -151,12 +157,24 @@ for (const fragment of [
   "Customer surfaces must not receive raw driver reporting, raw driver issue reports, admin exception state, dispatcher notes, replacement-driver review, live location state, OTS photo/proof state, or internal closeout notes.",
   "Current customer saved-booking display remains generic and customer-safe.",
   "These are customer-facing booking states, not raw driver workflow states.",
+  "Owner direction: do not mix future driver-progress display into `/my-bookings` or the Customer Portal saved-booking list.",
   "The current customer saved-booking record may use `customer_facing_status` only.",
+  "This current path is referenced only to prove it remains generic and protected. It is not the approved placement for future driver-progress display.",
   "Future customer driver-progress display is not approved by this contract.",
   "Those labels must be derived through a customer-safe projection.",
+  "Future customer driver-progress runtime must be separately approved as its own customer-safe status surface or handoff.",
+  "Future customer live-location alert/link direction is a separate handoff, not Customer Portal saved-booking list content.",
+  "For eligible DEP, TRF, and hourly jobs, the target customer alert/link window is 30 minutes before pickup only after owner approval of customer live links.",
+  "Arrival/MNG customer live location stays disabled unless separately approved.",
+  "Customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.",
+  "This contract does not activate live-location capture, access, route, provider send, notification send, map provider, storage, DB writes, timing automation, or customer link delivery.",
   "No customer surface may show raw issue values",
   "Customer public surfaces may show only customer-safe booking status/progress summaries.",
-  "reuse the existing customer portal/status surfaces instead of adding a new UI sector;",
+  "keep `/my-bookings` and the Customer Portal saved-booking list generic;",
+  "use a separately approved customer-safe driver-progress surface or handoff instead of mixing driver progress into the portal by default;",
+  "route customer live-location progress, if approved, through a separate secure time-limited link that opens 30 minutes before pickup for eligible DEP, TRF, and hourly jobs only;",
+  "auto-disable customer-visible live location when the driver presses POB or POB is marked;",
+  "keep Arrival/MNG customer live location disabled unless separately approved;",
   "preserve `/my-bookings` adapter allowlists and forbidden-field filtering;",
 ]) {
   assertIncludes(contract, fragment, `customer driver status contract phrase ${fragment}`);
@@ -177,6 +195,27 @@ for (const fragment of [
   assertIncludes(contract, fragment, `driver status chain in customer visibility contract ${fragment}`);
   assertIncludes(driverReportingContract, fragment, `driver status chain in driver reporting contract ${fragment}`);
 }
+
+for (const fragment of [
+  "the customer can receive a live location link 30 minutes before pickup",
+  "For Arrival/MNG jobs, customer live location is not used.",
+  "Live location should auto-end when POB is marked.",
+  "Driver location auto-ends at POB.",
+  "No live location production behavior is implemented in this task.",
+]) {
+  assertIncludes(limoApiIntegrationPlan, fragment, `limo API live-location planning boundary ${fragment}`);
+}
+
+assertIncludes(
+  driverWorkflowPlan,
+  "Live location should auto-disable when POB is marked later; any backend cleanup grace must not keep customer-visible tracking open after POB.",
+  "driver workflow plan POB auto-disable boundary",
+);
+assertExcludes(
+  driverWorkflowPlan,
+  /Live location should auto-disable 5 minutes after POB later\./,
+  "driver workflow plan old customer-visible POB timing",
+);
 
 for (const fragment of [
   "No raw driver issue detail or internal handling state without a future approved customer contract.",
@@ -277,8 +316,8 @@ for (const fragment of [
 
 for (const fragment of [
   "[Customer Driver Status Visibility Contract](customer-driver-status-visibility-contract.md)",
-  "customer-safe visibility boundary for any future driver/job progress shown on customer-facing surfaces",
-  "without exposing raw driver statuses, issue reports, admin exceptions, replacement review, live location, photo/proof, finance, payout, billing, or payment data",
+  "customer-safe visibility boundary for any future 30-minute customer live-location alert/link handoff while keeping Customer Portal saved-bookings generic",
+  "with POB auto-disable and without exposing raw driver statuses, issue reports, admin exceptions, replacement review, raw live-location state, photo/proof, finance, payout, billing, or payment data",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index customer driver status link ${fragment}`);
 }
@@ -287,6 +326,8 @@ for (const fragment of [
   "Customer Driver Status Visibility Contract Lock",
   "`docs/customer-driver-status-visibility-contract.md`",
   "`scripts/test-customer-driver-status-visibility-contract.mjs`",
+  "Future customer live-location alert/link direction is a separate handoff, not Customer Portal saved-booking list content; for eligible DEP, TRF, and hourly jobs, the target customer alert/link window is 30 minutes before pickup only after owner approval of customer live links.",
+  "Arrival/MNG customer live location stays disabled unless separately approved, and customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.",
   "No runtime implementation, UI/API behavior change, UI sector, UI button, endpoint migration, env change, deployment, DB read/write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, or new shim is approved by this lock.",
 ]) {
   assertIncludes(ledgerSection, fragment, `ledger customer driver status visibility fragment ${fragment}`);

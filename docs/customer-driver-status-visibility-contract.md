@@ -16,6 +16,8 @@ Current customer saved-booking display remains generic and customer-safe. The cu
 
 These are customer-facing booking states, not raw driver workflow states.
 
+Owner direction: do not mix future driver-progress display into `/my-bookings` or the Customer Portal saved-booking list. The portal remains a generic customer booking/status list.
+
 ## Current Data Boundary
 
 The current customer saved-bookings path is:
@@ -24,6 +26,8 @@ The current customer saved-bookings path is:
 - `lib/customer-portal-saved-bookings-adapter.ts`
 - `lib/customer-saved-bookings-read.ts`
 - `/api/customer-saved-bookings`
+
+This current path is referenced only to prove it remains generic and protected. It is not the approved placement for future driver-progress display.
 
 The current customer saved-booking record may use `customer_facing_status` only. It must not expose `driver_otw`, `ots`, `pob`, driver status history, driver issue report type, admin exception category, replacement-driver review, dispatcher note, internal status, or status event rows.
 
@@ -38,6 +42,18 @@ Future customer driver-progress display is not approved by this contract. If sep
 - `Completed`
 
 Those labels must be derived through a customer-safe projection. They must not expose raw status event rows, exact internal status values, issue reports, safe admin notes, dispatcher calls, replacement review notes, driver payout, PayNow payout, billing, payment, PDF, live location, photo/proof, auth internals, parser/debug internals, or mock QA/dev archive details.
+
+Future customer driver-progress runtime must be separately approved as its own customer-safe status surface or handoff. It must not be embedded into the Customer Portal saved-booking list by default.
+
+## Future Live-Location Handoff Direction
+
+Future customer live-location alert/link direction is a separate handoff, not Customer Portal saved-booking list content.
+
+For eligible DEP, TRF, and hourly jobs, the target customer alert/link window is 30 minutes before pickup only after owner approval of customer live links. Arrival/MNG customer live location stays disabled unless separately approved.
+
+Customer-visible live location must auto-disable when the driver presses POB or POB is marked; any backend cleanup grace must not leave customer tracking visible after POB.
+
+This contract does not activate live-location capture, access, route, provider send, notification send, map provider, storage, DB writes, timing automation, or customer link delivery.
 
 ## Mapping Rule
 
@@ -79,8 +95,12 @@ Drivers must never see customer price, billing, invoice/payment, payout comparis
 
 If future customer driver-progress visibility is approved, it must:
 
-- reuse the existing customer portal/status surfaces instead of adding a new UI sector;
+- keep `/my-bookings` and the Customer Portal saved-booking list generic;
+- use a separately approved customer-safe driver-progress surface or handoff instead of mixing driver progress into the portal by default;
+- route customer live-location progress, if approved, through a separate secure time-limited link that opens 30 minutes before pickup for eligible DEP, TRF, and hourly jobs only;
+- auto-disable customer-visible live location when the driver presses POB or POB is marked;
+- keep Arrival/MNG customer live location disabled unless separately approved;
 - keep customer summaries separate from raw driver workflow and admin exception states;
 - keep customer issue/update wording separately approved and customer-safe;
 - preserve `/my-bookings` adapter allowlists and forbidden-field filtering;
-- prove no finance, payout, PayNow, billing, invoice, payment, PDF, parser/debug, auth, live location, photo/proof, provider send, token, or mock archive leakage.
+- prove no finance, payout, PayNow, billing, invoice, payment, PDF, parser/debug, auth, live-location state outside the approved handoff, photo/proof, provider send, token, or mock archive leakage.

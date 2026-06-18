@@ -1100,6 +1100,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
+### Driver Reporting Status Contract Lock
+- Driver reporting/status is defined in `docs/driver-reporting-status-contract.md` as the source-of-truth contract for the driver path from safe driver detail acknowledgement to JC.
+- This is a docs/test-only contract lock; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
+- The driver public path remains one assigned job per secure `/driver-job/[token]` link.
+- Driver input remains local driver/vehicle detail confirmation followed by Save & Acknowledge Job before status updates are accepted.
+- Driver workflow status remains exactly `driver_otw -> ots -> pob -> completed`.
+- Driver-facing labels remain exactly OTW -> OTS -> POB -> Job Completed.
+- JC remains the terminal `completed` status; status updates after JC must be rejected.
+- `guardDriverJobStatusTransition` remains the transition gate for invalid, acknowledgement-required, out-of-order, already-completed, and exact-next-step acceptance behavior.
+- Driver issue reports remain enum-only and operational/safety-only: `cannot_find_passenger`, `passenger_no_show`, `passenger_late`, `flight_or_pickup_timing_changed`, `route_or_itinerary_changed`, `vehicle_issue`, `traffic_delay`, `accident_or_safety_concern`, and `other_issue`.
+- Driver issue reports remain internal app/admin handling only; they do not approve Telegram, WhatsApp, SMS, email, provider, or customer sends from the public driver surface.
+- Driver public link data remains limited to the safe one-job payload, local acknowledgement, guarded status buttons, enum-only issue alert, safe app updates, and safe status history.
+- Admin/dispatcher reporting remains limited to saved driver status event summary, latest status, safe status history/timing, operational issue alert summary, source surface, and safe actor label.
+- Customer public surfaces may receive only separately approved customer-safe status summaries; raw driver issue detail and internal handling states remain blocked until a future customer contract approves them.
+- Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive.
+- Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive.
+- Future admin-only states such as no-show review, replacement needed, dispatcher review, cancellation, completed with exception, late risk, or flight ETA review must not become public driver statuses without a separate contract, privacy guard, and verification pass.
+- This lock adds `scripts/test-driver-reporting-status-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No runtime implementation, UI/API behavior change, env change, deployment, DB read/write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, UI sector/button/card addition, or new shim is approved by this lock.
+
 ### Public Customer Portal Session Issue Surface Guard Lock
 - Public customer portal session issue surfaces are guarded across `/api/customer-portal-sessions`, `lib/customer-portal-session-issue.ts`, `/my-bookings`, and the customer portal saved-bookings adapter.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.

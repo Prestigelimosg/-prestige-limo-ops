@@ -1708,6 +1708,30 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, deployment, DB read/write/delete execution, migration, provider/send, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/button/card, new shim, `payout_preferences`, `driver_payout_rules`, pricing, payout, notes, preferred areas, airport permit notes, payment/PDF/billing, auth, location/photo/calendar activation, internal/admin notes, debug, secrets, PayNow, or mock QA/dev archive change is approved by this lock.
 - This lock adds `scripts/test-full-driver-profile-runtime-activation-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Visual Smoke for Full Driver Profile Activation Readiness Guard
+- `origin/staging` points to `566fdba7e34a88d189761d8fbd215446394c90ed` (`566fdba Add full driver profile activation readiness guard`).
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Safe GET to `/api/admin-full-driver-profile-runtime-write-action` returned HTTP 405, confirming the boundary remains POST-only and did not expose a GET/write/delete path.
+- Passive browser visual smoke rendered the main admin UI at desktop viewport.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send/delete action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser response summary: 38 staging GET responses, 38 HTTP 200 responses, and 0 non-GET requests.
+- CDP also reported 1 browser-canceled GET-only RSC prefetch load-completion event to the pre-existing admin Token Demo route `/driver-job/mock-driver-job-valid-a`; it had an HTTP 200 response before cancellation and was not a POST/write/send/delete action.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot evidence was captured at `/private/tmp/prestige-staging-566fdba-smoke.png`.
+- The full driver profile runtime activation-readiness guard remains docs/test-only and does not approve opening `PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED`.
+- The full driver profile typed runtime write/delete gate remains closed by default through `PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED`; no live DB write/delete was executed.
+- `payout_preferences`, `driver_payout_rules`, customer pricing, `customer_rates`, PayNow payout details, payout preferences, notes, preferred areas, airport permit notes, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, and customer/driver mock QA/dev archive fields remain separated, parked, or excluded by their existing guards.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Staging Deploy Smoke for Full Driver Profile Runtime App Wiring
 - `origin/staging` deployed to `4daf6ec Fix email activation preflight staging read`, including `9bffce6 Wire full driver profile runtime fallback path`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

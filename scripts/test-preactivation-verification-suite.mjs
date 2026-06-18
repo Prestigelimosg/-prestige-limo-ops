@@ -218,6 +218,10 @@ const guardChecks = [
     script: "scripts/test-public-billing-payment-surface-guard.mjs",
   },
   {
+    label: "public live-location surface guard",
+    script: "scripts/test-public-live-location-surface-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

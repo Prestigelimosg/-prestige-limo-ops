@@ -1,20 +1,20 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this public live location surface guard:
-f892af7 Record no-screenshot staging smoke for billing payment guard
+Latest verified clean checkpoint before this public live location surface staging smoke record:
+bfa61e5 Guard public live location surface
 
 Latest staging-smoked app checkpoint:
-df51173 Guard public billing payment surface
+bfa61e5 Guard public live location surface
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this public live location surface guard: `f892af7 Record no-screenshot staging smoke for billing payment guard`.
-- Latest implementation checkpoint to preserve: `df51173 Guard public billing payment surface`; `origin/staging` points to `df5117324223fe06da50cebbf5dba5f9bd086385`.
-- Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, and public billing/payment surface guard `df51173` plus smoke record `f892af7`.
-- Next forward lane after this public live location surface guard: promote the guard implementation checkpoint to staging and run the no-screenshot safe GET/passive browser smoke before any further implementation; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
+- Last verified repo checkpoint before this public live location surface staging smoke record: `bfa61e5 Guard public live location surface`.
+- Latest implementation checkpoint to preserve: `bfa61e5 Guard public live location surface`; `origin/staging` points to `bfa61e556838adb27a5ca530c084503b82691c0d`.
+- Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, and public live location surface guard `bfa61e5`.
+- Next forward lane after this staging smoke record: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, admin dashboard horizontal overflow fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, Save Booking + CRM button placement near Job Card Preview actions, Save Booking duplicate-submit guard, separated Save Booking + CRM and calendar actions, Save Booking + CRM safe admin booking persistence reroute, disabled admin booking read/list/detail contract setup and no-live guard, unused legacy bookings shim surface retirement, booking UI browser test stabilization, calendar event lifecycle readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, customer amendment/cancellation review handoff setup foundation/API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, billing/payment readiness setup foundation, preview API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, production deployment hardening readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, staging deployment approval packet and guard, core admin booking persistence activation readiness packet, guard, safe path guard, and Save Booking + CRM safe reroute, global pre-activation no-live guard, activation decision matrix guard, pre-activation verification suite, shim cleanup typed API inventory, shim cleanup no-new-shim guard, companies CRM identity/domain typed helper/API and typed display wiring, travelers CRM identity/default-address typed helper/API and typed display wiring, company/traveler CRM write-readiness setup foundation/API, disabled action API, audit payload setup foundation, no-live guard, and pre-activation audit lock, driver assignment/display typed helper/API and booking assignment display wiring, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, app smoke email preflight setup-only allowlist, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp activation; FlightAware live; live location activation; OTS photo activation; customer/driver auth activation; billing/payment activation; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
@@ -1498,6 +1498,34 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No new shims are added.
 - This lock adds `scripts/test-public-live-location-surface-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging No-Screenshot Request Smoke for Public Live Location Surface Guard
+- `origin/staging` points to `bfa61e556838adb27a5ca530c084503b82691c0d` (`bfa61e5 Guard public live location surface`), verified directly with `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.
+- Safe GET to `/api/admin-load-bookings-typed-read?limit=1` with `x-prestige-admin-purpose=admin-booking-persistence` returned HTTP 403 at the admin boundary with `ok: false` and `status: "blocked"`; no booking rows or safe cards were returned by that check.
+- Passive browser request smoke rendered the main admin UI at desktop viewport with document title `Prestige Limo Ops`; no screenshot was captured.
+- Expected UI text rendered: `Prestige Limo Ops`, `Create Job Card`, `Dispatch`, `Dashboard`, `Bookings`, `Drivers`, `Completed`, and `Rates`.
+- Save Booking was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser request/response summary: 37 staging GET requests, 37 staging GET responses, 37 HTTP 200 responses, 0 non-GET requests, 0 non-200 responses, 0 missing responses, and 0 failed-before-response requests.
+- Browser-canceled staging request count after observed response: 1 GET-only RSC prefetch load-completion event for `/driver-job/mock-driver-job-valid-a` after HTTP 200; this was not a POST/write/send request.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Chrome process stderr emitted non-app background lines: attempted IPH before browser initialization, allocator warning, GCM `DEPRECATED_ENDPOINT`, GCM `PHONE_REGISTRATION_ERROR`, TensorFlow Lite XNNPACK delegate creation, and GoogleUpdater/Crashpad settings noise; these were not page console/runtime exceptions and did not come from an app POST/write/send request.
+- Screenshot captured: false.
+- The public live-location surface guard remains docs/test-only/read-only and does not approve endpoint migration.
+- `/api/admin-live-location-setup` remains behind the internal admin/dispatcher boundary, GET-only, setup-only, and limited to disabled live-location, admin-map, customer-map, and driver-capture setup payloads.
+- `/api/admin-live-location-window-policy-preview-readiness-setup` remains behind the internal admin/dispatcher boundary and returns setup-only preview/readiness payloads with `gpsCaptureEnabled`, `liveMapEnabled`, `customerVisible`, `locationStorageEnabled`, and `liveAccessEnabled` all false.
+- `/api/admin-live-location-access-capture-disabled-setup` remains behind the internal admin/dispatcher boundary, GET-only, setup-only, disabled/no-op, GPS-capture-free, live-map-free, customer-map-link-free, location-storage-free, provider-send-free, cookie-free, and limited to blocked access/capture/readiness/preview payloads.
+- The setup and window policy helpers remain setup-only, no-live, no-op, and do not use GPS capture APIs, map provider APIs, provider/env reads, Supabase clients, DB/storage writes, auth/session activation, file APIs, or photo APIs.
+- Public client pages do not call live-location setup, access, capture, or preview routes.
+- Live-location setup surfaces exclude customer price, billing, invoice/payment/PDF, driver payout, PayNow payout details, internal finance/admin notes, parser/debug internals, tokens/secrets, provider/send payloads, live GPS coordinates, map provider payloads, photo/file fields, and mock QA/dev archive fields.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, live GPS capture, admin live map, customer map link, location storage, or new shim was included.
 
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.

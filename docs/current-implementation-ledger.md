@@ -1043,6 +1043,30 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, deployment, DB read/write execution, migration, provider/send, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/button/card, new shim, rate override activation, `customer_rates`, `driver_payout_rules`, pricing, payout, payment/PDF/billing, auth, location/photo/calendar activation, internal/admin notes, debug, secrets, PayNow, or mock QA/dev archive change is approved by this lock.
 - This lock adds `scripts/test-company-traveler-crm-runtime-write-activation-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Visual Smoke for Company/Traveler CRM Runtime Write Activation Readiness Guard
+- `origin/staging` points to `dea22b3b05ff0afdbaac7b0e0e7510e1c900d453` (`dea22b3 Add CRM runtime write activation readiness guard`).
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Safe GET to `/api/admin-company-traveler-crm-runtime-write-action` returned HTTP 405, confirming the boundary remains POST-only and did not expose a GET/write path.
+- Passive browser visual smoke rendered the main admin UI at desktop viewport with document title `Prestige Limo Ops`.
+- Expected UI text rendered: `Prestige Limo Ops`, `Create Job Card`, `Dispatch`, `Dashboard`, `Bookings`, `Drivers`, `Completed`, and `Rates`.
+- Save Booking was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser request/response summary: 37 staging GET requests, 37 staging GET responses, 37 HTTP 200 responses, 0 non-GET requests, and 0 non-200 responses.
+- CDP also reported 2 browser-canceled GET-only RSC prefetch load-completion events to the pre-existing admin Token Demo route `/driver-job/mock-driver-job-valid-a` after HTTP 200; these were not POST/write/send actions.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot evidence was captured at `/private/tmp/prestige-staging-dea22b3-smoke.png`.
+- The company/traveler CRM runtime write activation-readiness guard remains docs/test-only and does not approve opening `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`.
+- The company/traveler CRM typed runtime write gate remains closed by default through `PRESTIGE_COMPANY_TRAVELER_CRM_IDENTITY_CONTACT_WRITE_ENABLED`; no live DB write was executed.
+- Rate overrides, `customer_rates`, `driver_payout_rules`, customer pricing, driver payout, PayNow payout details, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, tokens, and customer/driver mock QA/dev archive fields remain separated, parked, or excluded by their existing guards.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new UI sectors/buttons/cards were added.
+- No new shims were added.
+
 ### Company/Traveler CRM Identity/Contact Write Foundation Lock
 - This lock is guarded by `scripts/test-company-traveler-crm-write-foundation-lock.mjs`.
 - Typed company/traveler CRM identity/contact write contract foundation is done at `25d0703 Add typed company traveler CRM write foundation`.

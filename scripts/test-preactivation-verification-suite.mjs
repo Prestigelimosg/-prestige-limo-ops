@@ -154,6 +154,10 @@ const guardChecks = [
     script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
   },
   {
+    label: "public API logging/error boundary guard",
+    script: "scripts/test-public-api-logging-error-boundary-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

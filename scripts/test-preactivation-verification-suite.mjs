@@ -134,6 +134,10 @@ const guardChecks = [
     script: "scripts/test-public-route-source-privacy-boundary-guard.mjs",
   },
   {
+    label: "public API source privacy boundary guard",
+    script: "scripts/test-public-api-source-privacy-boundary-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

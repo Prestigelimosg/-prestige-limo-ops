@@ -20,6 +20,7 @@ This index is a docs-only cross-reference for existing Prestige Limo Ops testing
 ## Production And Environment Safety
 
 - [Production Environment Checklist](production-environment-checklist.md) owns staging/live rollout safety, environment variable handling, secret handling, and production readiness gates.
+- [Owner Feature Approval Contract](owner-feature-approval-contract.md) owns the global no-new-feature-without-explicit-owner-approval rule, including that vague forward-motion wording is not approval for UI/API/runtime behavior.
 - [Admin Persistence Enable Approval Checklist](admin-persistence-enable-approval-checklist.md) owns the read-only persistence enablement approval/audit checklist, mocked backend gate list, kill-switch requirements, forbidden fields, and no-real-write approval boundary.
 - [Admin Persistence Real-Write Approval Proposal](admin-persistence-real-write-approval-proposal.md) owns the docs-only William review packet for any future staging-only controlled real-write proposal, including required approvals, environment gates, rollback steps, forbidden fields, and test gates.
 - [Admin Persistence Staging Verification Packet](admin-persistence-staging-verification-packet.md) owns the docs-only staging verification packet for the controlled admin persistence path, including preflight checks, future evidence requirements, rollback steps, stop conditions, and the no-live-write approval boundary.

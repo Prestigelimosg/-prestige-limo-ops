@@ -10,6 +10,10 @@ const guardChecks = [
     script: "scripts/test-activation-decision-matrix-guard.mjs",
   },
   {
+    label: "owner feature approval contract guard",
+    script: "scripts/test-owner-feature-approval-contract.mjs",
+  },
+  {
     label: "staging deployment approval packet guard",
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },

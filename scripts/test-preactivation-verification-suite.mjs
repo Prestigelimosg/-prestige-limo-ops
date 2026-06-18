@@ -158,6 +158,10 @@ const guardChecks = [
     script: "scripts/test-public-api-logging-error-boundary-guard.mjs",
   },
   {
+    label: "public API runtime gate boundary guard",
+    script: "scripts/test-public-api-runtime-gate-boundary-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

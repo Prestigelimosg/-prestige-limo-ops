@@ -142,6 +142,10 @@ const guardChecks = [
     script: "scripts/test-public-api-response-privacy-boundary-guard.mjs",
   },
   {
+    label: "public API method surface boundary guard",
+    script: "scripts/test-public-api-method-surface-boundary-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

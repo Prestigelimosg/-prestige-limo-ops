@@ -1186,6 +1186,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, auth activation, or new shim was included.
 
+### Public Customer Booking Status Surface Guard Lock
+- Public customer booking status lookup surfaces are guarded across `/api/customer-booking-statuses`, `lib/customer-booking-status-read.ts`, `/my-bookings`, and public customer client code.
+- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.
+- The customer booking status route must keep GET read handling only, with POST and PATCH blocked by the auth-required result and no PUT, DELETE, HEAD, OPTIONS, TRACE, or CONNECT exports.
+- The status reader must remain server-only, default-off, same-origin `/my-bookings` referer gated, purpose-header gated, explicit server session-token gated, cookie-free, and limited to `booking_reference`, `limit`, and `page` query params.
+- `/book`, `/my-bookings`, and the customer portal saved-bookings adapter must not call `/api/customer-booking-statuses` or expose the status purpose header, status session-token header, booking-status env names, Cookie, Authorization, or browser credential storage.
+- Customer booking status API output must stay limited to safe customer-facing status, review status, booking reference, pickup/drop-off, passenger, service, created, and updated metadata and must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.
+- This guard coordinates the customer booking status API contract, public API method surface guard, public API request input guard, public API response privacy guard, public API session cookie/cache guard, and public API runtime gate guard in the preactivation suite.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new shims are added.
+- This lock adds `scripts/test-public-customer-booking-status-surface-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.

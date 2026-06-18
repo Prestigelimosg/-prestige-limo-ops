@@ -967,6 +967,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
+### Public Customer Form Surface Boundary Guard Lock
+- Public customer booking request form surfaces are guarded across `/book`, `/my-bookings`, and `lib/customer-booking-request-adapter.ts`.
+- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
+- `/book` and `/my-bookings` `BookingRequestForm` keys must stay limited to request-only customer trip/contact fields.
+- `/book` required fields must stay limited to contact number, passenger name, pickup date, pickup time, pickup location, and drop-off location.
+- `/my-bookings` new-request required fields must stay limited to contact number, passenger name, pickup date, and pickup time.
+- Customer request field data attributes and static control names must stay on the approved form-field allowlist and must not introduce pricing, payout, PayNow, billing, invoice, payment/PDF, provider/send, auth, location-photo, calendar, parser/debug, token/secret, internal/admin finance/note, mock archive, or rate fields.
+- `/book` continues to submit through `submitCustomerBookingRequest` and the customer-safe adapter, not raw fetch/session/admin plumbing.
+- `/my-bookings` new-request form remains local review-only and does not submit to customer booking request persistence.
+- Customer request copy must remain request-only and must not create a price, payment, invoice, PDF, or billing file from these forms.
+- The customer request adapter may submit only the approved API payload fields and must not forward `specialRequest` or finance/internal/free-note fields.
+- This guard coordinates the customer booking page API audit, public route source privacy guard, public API request input guard, and customer booking request adapter contract in the preactivation suite.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new shims are added.
+- This lock adds `scripts/test-public-customer-form-surface-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.

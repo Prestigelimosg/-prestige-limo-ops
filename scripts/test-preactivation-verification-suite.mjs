@@ -126,6 +126,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-admin-display-exposure-guard.mjs",
   },
   {
+    label: "public customer/driver visibility boundary guard",
+    script: "scripts/test-public-customer-driver-visibility-boundary-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

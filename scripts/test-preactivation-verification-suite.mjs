@@ -114,6 +114,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-typed-read-admin-boundary-order-guard.mjs",
   },
   {
+    label: "Load Bookings typed-read failure payload guard",
+    script: "scripts/test-load-bookings-typed-read-failure-payload-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

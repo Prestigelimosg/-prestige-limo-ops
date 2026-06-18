@@ -186,6 +186,10 @@ const guardChecks = [
     script: "scripts/test-driver-payout-rules-runtime-app-wiring.mjs",
   },
   {
+    label: "driver_payout_rules runtime activation readiness guard",
+    script: "scripts/test-driver-payout-rules-runtime-activation-readiness-guard.mjs",
+  },
+  {
     label: "company/traveler identity read lock guard",
     script: "scripts/test-company-traveler-identity-read-lock.mjs",
   },

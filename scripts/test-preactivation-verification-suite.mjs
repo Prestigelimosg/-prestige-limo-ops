@@ -22,6 +22,10 @@ const guardChecks = [
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },
   {
+    label: "admin Dispatch Release existing workflow lock guard",
+    script: "scripts/test-admin-dispatch-release-existing-workflow-lock.mjs",
+  },
+  {
     label: "staging deployment approval packet guard",
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },

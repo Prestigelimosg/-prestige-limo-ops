@@ -1402,6 +1402,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: if the customer_rates gated runtime path fails any guard, revert that single lane and restore the closed-gate legacy fallback unchanged; keep broader pricing/customer_rates, booking snapshots, billing/payment/PDF, and payout lanes parked until separately approved, tested, and verified.
 - No UI behavior change, env change, deployment, live DB write execution, migration, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/payout/provider/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Customer Rates Runtime Activation Readiness Guard Lock
+- Approval status: pending future owner approval; this lock does not approve opening `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`.
+- This is a docs/test-only activation-readiness guard for `POST /api/admin-customer-rates-runtime-write-action`.
+- The `customer_rates` runtime boundary is already wired but remains closed by default through `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`.
+- Allowed customer_rates activation scope remains limited to existing company/traveler `id`, action type, and safe `customer_rates` keys only: MNG, DEP, TRF, and DSP.
+- Future gate opening requires separate owner approval naming the exact staging target, exact env gate name, no env values or secrets, `public.companies.customer_rates` and `public.travelers.customer_rates` table/policy proof, server-session admin/dispatcher proof, rollback/kill-switch proof, and one bounded evidence window.
+- Future staging target proof must confirm the project, URL, and commit hash before the gate is opened.
+- Future table/policy proof must verify `customer_rates` column access for `public.companies` and `public.travelers` only and must not include `driver_payout_rules`, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, or mock QA/dev archive fields.
+- Future rollback/kill-switch proof must close `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`, confirm the blocked/no-op response, and keep the legacy fallback/manual recovery plan intact.
+- Any future write attempt, if separately approved, must be one bounded company/traveler `customer_rates` update or clear through the existing route only.
+- Required tests before any future activation: `node scripts/test-customer-rates-runtime-activation-readiness-guard.mjs`, `node scripts/test-customer-rates-runtime-write-action-api-contract.mjs`, `node scripts/test-customer-rates-runtime-app-wiring.mjs`, `node scripts/test-customer-rates-runtime-create-path-guard.mjs`, `node scripts/test-pricing-customer-rates-approval-packet.mjs`, `node scripts/test-pricing-customer-rates-boundary-split.mjs`, `node scripts/test-rate-override-split-gating-plan.mjs`, `node scripts/test-remaining-shim-parked-state-lock.mjs`, `node scripts/test-shim-cleanup-no-new-shim-guard.mjs`, `node scripts/test-preactivation-verification-suite.mjs`, `npm run lint`, `git diff --check`, `git diff --cached --check`, and `git status --short`.
+- No env change, deployment, DB read/write execution, migration, provider/send, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/button/card, new shim, `driver_payout_rules`, payout, payment/PDF/billing, auth, location/photo/calendar activation, internal/admin notes, debug, secrets, or mock QA/dev archive change is approved by this lock.
+- This lock adds `scripts/test-customer-rates-runtime-activation-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Payout Runtime Approval Packet Lock
 - Approval status: gated driver_payout_rules boundary and app fallback wiring are implemented; live DB write remains pending future env/table-policy approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-payout-approval-packet.mjs`.

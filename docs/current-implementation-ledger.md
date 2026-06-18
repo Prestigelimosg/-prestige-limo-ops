@@ -1013,6 +1013,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
+### Public Customer Portal Saved-Booking Surface Guard Lock
+- Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.
+- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
+- `/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields.
+- `/my-bookings` saved-booking actions must stay limited to disabled PDF, local edit-review feedback, local cancel-review feedback, and local detail expansion.
+- The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.
+- Edit and cancel controls must remain local review requests only and must not call APIs, mutate bookings, submit forms, or change `/api/customer-saved-bookings`.
+- The customer portal saved-bookings adapter must keep using the guarded read endpoint with `cache: "no-store"`, `credentials: "same-origin"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.
+- Customer saved-booking API and adapter output must stay limited to the approved saved-booking record fields and must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.
+- This guard coordinates the customer portal saved-bookings adapter contract, customer saved-bookings API contract, public API response privacy guard, and public API client caller guard in the preactivation suite.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new shims are added.
+- This lock adds `scripts/test-public-customer-portal-saved-booking-surface-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.

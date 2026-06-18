@@ -174,6 +174,10 @@ const guardChecks = [
     script: "scripts/test-public-customer-form-surface-boundary-guard.mjs",
   },
   {
+    label: "public customer portal saved-booking surface guard",
+    script: "scripts/test-public-customer-portal-saved-booking-surface-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

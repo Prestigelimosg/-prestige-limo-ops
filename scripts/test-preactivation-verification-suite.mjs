@@ -130,6 +130,10 @@ const guardChecks = [
     script: "scripts/test-public-customer-driver-visibility-boundary-guard.mjs",
   },
   {
+    label: "ledger checkpoint source-of-truth guard",
+    script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

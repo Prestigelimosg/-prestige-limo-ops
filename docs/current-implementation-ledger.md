@@ -1144,6 +1144,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, auth activation, or new shim was included.
 
+### Public Customer Booking Memory Surface Guard Lock
+- Public customer booking memory suggestion surfaces are guarded across `/book`, `lib/customer-booking-memory-adapter.ts`, `lib/customer-booking-memory-form.ts`, `lib/customer-booking-memory-read.ts`, and `/api/customer-booking-memory`.
+- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.
+- `/book` booking memory must remain a quiet passenger datalist suggestion read only; it must not submit forms, show extra customer-facing memory instructions, expose auth failures, or overwrite customer date/time choices.
+- The customer booking memory adapter must keep using only `GET /api/customer-booking-memory?limit=10` with optional safe `q`, `cache: "no-store"`, `credentials: "same-origin"`, and the customer booking-memory purpose header without manual Cookie, Authorization, customer session-token, admin headers, or browser credential storage.
+- The customer booking memory route must keep GET read handling only, with POST, PUT, PATCH, and DELETE blocked by the auth-required result.
+- The server reader must remain server-only, same-origin `/book` referer gated, purpose-header gated, server-session-token/server-validated cookie gated, default-off, and limited to `limit` and `q` query params.
+- Customer booking memory API and adapter output must stay limited to passenger name, pickup/drop-off, service, vehicle, and last-used metadata and must exclude customer price, driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug, secrets/tokens, provider/send, notification payloads, live location/photo, and mock QA/dev archive fields.
+- This guard coordinates the customer booking memory UI contract, customer booking memory API contract, public API request input guard, public API response privacy guard, public API session cookie/cache guard, and public API client caller guard in the preactivation suite.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new shims are added.
+- This lock adds `scripts/test-public-customer-booking-memory-surface-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.

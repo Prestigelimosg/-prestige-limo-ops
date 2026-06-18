@@ -1416,6 +1416,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, deployment, DB read/write execution, migration, provider/send, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/button/card, new shim, `driver_payout_rules`, payout, payment/PDF/billing, auth, location/photo/calendar activation, internal/admin notes, debug, secrets, or mock QA/dev archive change is approved by this lock.
 - This lock adds `scripts/test-customer-rates-runtime-activation-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Visual Smoke for Customer Rates Activation Readiness Guard
+- `origin/staging` points to `d4d22e38f327e9a2d15ebe3d4511f4cf05bd02e7` (`d4d22e3 Add customer rates activation readiness guard`).
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Passive browser visual smoke rendered the main admin UI at desktop viewport.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser request summary: 39 requests, 39 HTTP 200 responses, 0 non-GET requests.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Screenshot evidence was captured at `/private/tmp/prestige-staging-d4d22e3-smoke.png`.
+- The `customer_rates` runtime activation-readiness guard remains docs/test-only and does not approve opening `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`.
+- The `customer_rates` typed runtime write gate remains closed by default through `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED`; no live DB write was executed.
+- `driver_payout_rules`, payout, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, and mock QA/dev archive fields remain separated, parked, or excluded by their existing guards.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Payout Runtime Approval Packet Lock
 - Approval status: gated driver_payout_rules boundary and app fallback wiring are implemented; live DB write remains pending future env/table-policy approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-payout-approval-packet.mjs`.

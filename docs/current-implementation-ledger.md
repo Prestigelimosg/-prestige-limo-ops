@@ -45,6 +45,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future approved UI, if any, must stay compact, colocated with the existing similar area, and protected by matching tests.
 - This lock adds `scripts/test-owner-feature-approval-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+## Pre-Edit Source Of Truth Contract Lock
+
+- Pre-edit source-of-truth inspection is defined in `docs/pre-edit-source-of-truth-contract.md`.
+- Before editing any repo file, Codex must read recent git history (`git log --oneline -12` or wider equivalent), current worktree state (`git status --short`), and `docs/current-implementation-ledger.md`.
+- The ledger remains the repo source of truth before choosing a task, adding docs/tests, changing UI/API/helper behavior, or committing.
+- This lock prevents repeating completed work, moving backward to old staging checkpoints, treating vague forward-motion wording as feature approval, missing a parked risky lane, editing over an unclean worktree, or using inconsistent checkpoint counters instead of commit hashes and task names.
+- Allowed next work remains bounded to read-only verification, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit unless the owner explicitly approves a new feature.
+- This lock does not approve runtime implementation, UI/API behavior change, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.
+- Final task summaries must name the commit hash and task name when a commit is made, list checks that passed, and report final `git status --short`.
+- This lock adds `scripts/test-pre-edit-source-of-truth-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ## Admin Route Flow Lock
 
 - Current route-flow map is locked by `scripts/test-admin-route-flow-lock.mjs`.

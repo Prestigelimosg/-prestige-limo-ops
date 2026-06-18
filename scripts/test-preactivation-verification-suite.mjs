@@ -14,6 +14,10 @@ const guardChecks = [
     script: "scripts/test-owner-feature-approval-contract.mjs",
   },
   {
+    label: "pre-edit source-of-truth contract guard",
+    script: "scripts/test-pre-edit-source-of-truth-contract.mjs",
+  },
+  {
     label: "staging deployment approval packet guard",
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },

@@ -222,6 +222,10 @@ const guardChecks = [
     script: "scripts/test-public-live-location-surface-guard.mjs",
   },
   {
+    label: "public OTS photo proof surface guard",
+    script: "scripts/test-public-ots-photo-proof-surface-guard.mjs",
+  },
+  {
     label: "ledger checkpoint source-of-truth guard",
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },

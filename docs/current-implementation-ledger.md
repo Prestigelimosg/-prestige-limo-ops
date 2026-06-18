@@ -1512,6 +1512,29 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, deployment, DB read/write execution, migration, provider/send, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/button/card, new shim, customer pricing, `customer_rates`, PayNow payout details, payout preferences, payment/PDF/billing, auth, location/photo/calendar activation, internal/admin notes, debug, secrets, or mock QA/dev archive change is approved by this lock.
 - This lock adds `scripts/test-driver-payout-rules-runtime-activation-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Visual Smoke for Driver Payout Rules Activation Readiness Guard
+- `origin/staging` points to `49039b90df8338af48e598308b7ebf5845fd8908` (`49039b9 Add driver payout activation readiness guard`).
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Passive browser visual smoke rendered the main admin UI at desktop viewport.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser response summary: 37 staging GET responses, 37 HTTP 200 responses, and 0 non-GET requests.
+- CDP also reported 2 browser-canceled GET-only RSC prefetch load-completion events to the pre-existing admin Token Demo route `/driver-job/mock-driver-job-valid-a`; both had HTTP 200 responses before cancellation and were not POST/write/send actions.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot evidence was captured at `/private/tmp/prestige-staging-49039b9-smoke-rerun.png`.
+- The `driver_payout_rules` runtime activation-readiness guard remains docs/test-only and does not approve opening `PRESTIGE_DRIVER_PAYOUT_RULES_WRITE_ENABLED`.
+- The `driver_payout_rules` typed runtime write gate remains closed by default through `PRESTIGE_DRIVER_PAYOUT_RULES_WRITE_ENABLED`; no live DB write was executed.
+- Customer pricing, `customer_rates`, PayNow payout details, payout preferences, payment/PDF/billing, provider/send, auth, location/photo/calendar, internal/admin notes, parser/debug, secrets, and customer/driver mock QA/dev archive fields remain separated, parked, or excluded by their existing guards.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new UI sectors/cards were observed.
+- No new shims were added.
+
 ### Staging Deploy Smoke for Driver Payout Rules Runtime Fallback
 - `origin/staging` deployed to `4d1a187 Wire driver payout rules runtime fallback path`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200.

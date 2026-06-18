@@ -110,6 +110,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-endpoint-migration-readiness-guard.mjs",
   },
   {
+    label: "Load Bookings typed-read admin boundary order guard",
+    script: "scripts/test-load-bookings-typed-read-admin-boundary-order-guard.mjs",
+  },
+  {
     label: "admin setup readiness archive label guard",
     script: "scripts/test-admin-setup-readiness-archive-label-guard.mjs",
   },

@@ -1055,6 +1055,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
+### Public Driver Job Action Surface Guard Lock
+- Public driver job display/action surfaces are guarded across `/driver-job/[token]`, the driver job status workflow, issue choices, and driver job action routes.
+- This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
+- The driver page action surface must stay limited to safe job GET, saved app-update GET, issue-alert POST with `issue_type`, and status PATCH with the guarded status value.
+- Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.
+- Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.
+- Driver app updates and saved status history must render only safe fields: `safe_title`, `safe_message`, notification metadata, status labels/times, and `safeNote`.
+- Driver job detail display must stay limited to date/time, service, pickup, drop-off, route, waypoints, flight, and passenger display fields.
+- Pasted driver details remain local-only and filtered so bank/account/PayNow/payment/payout lines are not parsed into driver-visible details.
+- The driver page must not attach manual Cookie, Authorization, admin purpose, session-token, service-role, Supabase env, local/session storage, credential, geolocation, media, file, FormData, or object URL plumbing.
+- The driver page must not submit forms, create downloads, expose outbound admin links, or call notification PATCH from the public driver UI.
+- This guard coordinates the driver job route action contract, driver status persistence safe input contract, public route source privacy guard, public API client caller guard, and public API request input guard in the preactivation suite.
+- No Save Booking + CRM change.
+- No `/api/admin-saved-bookings` change.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new shims are added.
+- This lock adds `scripts/test-public-driver-job-action-surface-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging No-Screenshot Request Smoke for Public API Logging Error Boundary Guard
 - `origin/staging` points to `aa99c03e0770e2a587aa6fcaec9c045a0ad959f8` (`aa99c03 Guard public API logging error boundary`), verified directly with `git ls-remote`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.

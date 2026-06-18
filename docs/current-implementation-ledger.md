@@ -1,20 +1,20 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this public API request input boundary guard:
-a624273 Record no-screenshot staging smoke for public API method guard
+Latest verified clean checkpoint before this public API request input boundary staging smoke record:
+969506a Guard public API request input boundary
 
 Latest staging-smoked app checkpoint:
-cc331e4 Guard public API method surface boundary
+969506a Guard public API request input boundary
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this public API request input boundary guard: `a624273 Record no-screenshot staging smoke for public API method guard`.
-- Latest staging-smoked app checkpoint to preserve: `cc331e4 Guard public API method surface boundary`; `origin/staging` points to `cc331e49298c4c5ba18f0cc1f72b4fe91661559a`.
+- Last verified repo checkpoint before this public API request input boundary staging smoke record: `969506a Guard public API request input boundary`.
+- Latest implementation checkpoint to preserve: `969506a Guard public API request input boundary`; `origin/staging` points to `969506aa82146e0ee8525110476e29b3405c0001`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, and company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`.
-- Next forward lane after this guard: promote the exact resulting public API request input boundary guard commit to staging once, then run no-screenshot safe request smoke; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
+- Next forward lane after this staging smoke record: choose the next bounded docs/test-only or read-only preactivation hardening guard from the remaining backlog; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, admin dashboard horizontal overflow fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, Save Booking + CRM button placement near Job Card Preview actions, Save Booking duplicate-submit guard, separated Save Booking + CRM and calendar actions, Save Booking + CRM safe admin booking persistence reroute, disabled admin booking read/list/detail contract setup and no-live guard, unused legacy bookings shim surface retirement, booking UI browser test stabilization, calendar event lifecycle readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, customer amendment/cancellation review handoff setup foundation/API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, billing/payment readiness setup foundation, preview API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, production deployment hardening readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, staging deployment approval packet and guard, core admin booking persistence activation readiness packet, guard, safe path guard, and Save Booking + CRM safe reroute, global pre-activation no-live guard, activation decision matrix guard, pre-activation verification suite, shim cleanup typed API inventory, shim cleanup no-new-shim guard, companies CRM identity/domain typed helper/API and typed display wiring, travelers CRM identity/default-address typed helper/API and typed display wiring, company/traveler CRM write-readiness setup foundation/API, disabled action API, audit payload setup foundation, no-live guard, and pre-activation audit lock, driver assignment/display typed helper/API and booking assignment display wiring, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, app smoke email preflight setup-only allowlist, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp activation; FlightAware live; live location activation; OTS photo activation; customer/driver auth activation; billing/payment activation; shim cleanup; production.
 - Rules: no duplicate work, no new shims, no unnecessary UI/giant cards, no live risky features without approval.
@@ -814,6 +814,34 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - No new shims are added.
 - This lock adds `scripts/test-public-api-request-input-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging No-Screenshot Request Smoke for Public API Request Input Boundary Guard
+- `origin/staging` points to `969506aa82146e0ee8525110476e29b3405c0001` (`969506a Guard public API request input boundary`), verified directly with `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.
+- Safe GET to `/api/admin-load-bookings-typed-read?limit=1` with `x-prestige-admin-purpose=admin-booking-persistence` returned HTTP 403 at the admin boundary; no booking rows or safe cards were returned by that check.
+- Passive browser request smoke rendered the main admin UI at desktop viewport with document title `Prestige Limo Ops`; no screenshot was captured.
+- Expected UI text rendered: `Prestige Limo Ops`, `Create Job Card`, `Dispatch`, `Dashboard`, `Bookings`, `Drivers`, `Completed`, and `Rates`.
+- Save Booking was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser request/response summary: 37 staging GET requests, 37 staging GET responses, 37 HTTP 200 responses, 0 non-GET requests, 0 non-200 responses, and 0 missing responses.
+- Browser-canceled staging request count after observed response: 0.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Chrome process stderr emitted non-app background lines: DevTools listening, allocator warning, GCM `DEPRECATED_ENDPOINT`, TensorFlow Lite XNNPACK delegate creation, and GoogleUpdater/Crashpad noise; these were not page console/runtime exceptions and did not come from an app POST/write/send request.
+- Screenshot captured: false.
+- The public API request input boundary guard remains docs/test-only/read-only and does not approve endpoint migration.
+- Public customer/driver API request input boundaries remain guarded across customer booking request, customer saved bookings, customer booking memory, customer booking status, customer portal session issue, customer app notifications, driver job status, driver job notifications, driver issue-alert, driver flight ETA setup, and driver bidding routes.
+- Customer booking request POST input remains limited to the approved customer form fields and rejects forbidden or unknown finance/internal/parser/token/archive fields before persistence.
+- Customer saved-bookings, booking-memory, and booking-status read inputs keep explicit query allowlists and forbidden-fragment checks on both query keys and values.
+- Customer portal session issue input remains server-gated by purpose/origin/referer/token headers and is not called from customer UI/client code.
+- Driver status and notification inputs remain limited to current safe status, safe note/context, notification id/status, and driver_app delivery surface boundaries; driver issue-alert input remains enum-only.
+- Driver bidding remains blocked for GET/POST/PATCH until approved driver auth exists.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No env change, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
 ### Staging No-Screenshot Request Smoke for Public API Method Surface Boundary Guard
 - `origin/staging` points to `cc331e49298c4c5ba18f0cc1f72b4fe91661559a` (`cc331e4 Guard public API method surface boundary`), verified directly with `git ls-remote`.

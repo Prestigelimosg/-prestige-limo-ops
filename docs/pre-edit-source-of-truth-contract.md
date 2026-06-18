@@ -1,18 +1,20 @@
 # Pre-Edit Source Of Truth Contract
 
-This contract locks the required pre-edit inspection order for Codex work on Prestige Limo Ops.
+This contract locks the required task-start and pre-edit inspection order for Codex work on Prestige Limo Ops.
 
 It is docs/test-only. It does not approve runtime implementation, UI/API behavior change, new UI sectors, new buttons, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.
 
-## Required Before Editing
+## Required At Every Task Start
 
-Before editing any repo file, read:
+Before choosing the next task, moving forward, or editing any repo file, read:
 
 - recent git history, using `git log --oneline -12` or a wider equivalent when needed;
 - current worktree state, using `git status --short`;
 - the current implementation ledger at `docs/current-implementation-ledger.md`.
 
-The ledger must be read as the repo source of truth before choosing a task, adding docs, adding tests, changing UI/API/helper behavior, or committing.
+This applies to every task, including docs-only, test-only, read-only, review, smoke, bug-fix, and commit work. The source-of-truth read must happen before selecting the forward lane, before deciding that work is already done, before adding docs, before adding tests, before changing UI/API/helper behavior, and before committing.
+
+The ledger must be read as the repo source of truth before choosing a task, adding docs, adding tests, changing UI/API/helper behavior, or committing. Git history must be read first so the task is anchored to commit hashes and task names, not memory or checkpoint counters.
 
 ## Why This Exists
 
@@ -22,6 +24,7 @@ The required read order prevents:
 - moving backward to old staging checkpoints;
 - treating vague forward-motion wording as approval for a new feature;
 - missing a parked risky lane;
+- moving to a next task without first checking the source-of-truth files;
 - editing over an unclean worktree without noticing;
 - using inconsistent checkpoint counters instead of commit hashes and task names.
 

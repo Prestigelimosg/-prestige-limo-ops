@@ -30,18 +30,22 @@ const ledgerSection = sectionBetween(ledger, "## Pre-Edit Source Of Truth Contra
 
 for (const fragment of [
   "# Pre-Edit Source Of Truth Contract",
-  "required pre-edit inspection order",
+  "required task-start and pre-edit inspection order",
   "It is docs/test-only.",
   "It does not approve runtime implementation, UI/API behavior change, new UI sectors, new buttons, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.",
-  "Before editing any repo file, read:",
+  "Before choosing the next task, moving forward, or editing any repo file, read:",
   "recent git history, using `git log --oneline -12`",
   "current worktree state, using `git status --short`",
   "the current implementation ledger at `docs/current-implementation-ledger.md`",
+  "This applies to every task, including docs-only, test-only, read-only, review, smoke, bug-fix, and commit work.",
+  "The source-of-truth read must happen before selecting the forward lane",
+  "Git history must be read first so the task is anchored to commit hashes and task names, not memory or checkpoint counters.",
   "The ledger must be read as the repo source of truth before choosing a task, adding docs, adding tests, changing UI/API/helper behavior, or committing.",
   "repeating completed work",
   "moving backward to old staging checkpoints",
   "treating vague forward-motion wording as approval for a new feature",
   "missing a parked risky lane",
+  "moving to a next task without first checking the source-of-truth files",
   "editing over an unclean worktree without noticing",
   "using inconsistent checkpoint counters instead of commit hashes and task names",
   "Allowed without explicit new-feature approval:",
@@ -61,8 +65,9 @@ for (const fragment of [
   "Pre-Edit Source Of Truth Contract",
   "`docs/pre-edit-source-of-truth-contract.md`",
   "`scripts/test-pre-edit-source-of-truth-contract.mjs`",
-  "Before editing any repo file, Codex must read recent git history (`git log --oneline -12` or wider equivalent), current worktree state (`git status --short`), and `docs/current-implementation-ledger.md`.",
+  "At every task start, before choosing the next task, moving forward, or editing any repo file, Codex must read recent git history first (`git log --oneline -12` or wider equivalent), current worktree state (`git status --short`), and `docs/current-implementation-ledger.md`.",
   "The ledger remains the repo source of truth before choosing a task, adding docs/tests, changing UI/API/helper behavior, or committing.",
+  "This lock applies to docs-only, test-only, read-only, review, smoke, bug-fix, and commit work; it prevents moving to a next task without source-of-truth inspection",
   "This lock does not approve runtime implementation, UI/API behavior change, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.",
   "This lock adds `scripts/test-pre-edit-source-of-truth-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
@@ -71,8 +76,9 @@ for (const fragment of [
 
 for (const fragment of [
   "[Pre-Edit Source Of Truth Contract](pre-edit-source-of-truth-contract.md)",
-  "pre-edit source-of-truth inspection order",
+  "task-start and pre-edit source-of-truth inspection order",
   "`git log --oneline -12`, `git status --short`, and `docs/current-implementation-ledger.md`",
+  "before choosing next work or editing repo files",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index pre-edit source-of-truth link ${fragment}`);
 }

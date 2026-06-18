@@ -50,9 +50,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ## Pre-Edit Source Of Truth Contract Lock
 
 - Pre-edit source-of-truth inspection is defined in `docs/pre-edit-source-of-truth-contract.md`.
-- Before editing any repo file, Codex must read recent git history (`git log --oneline -12` or wider equivalent), current worktree state (`git status --short`), and `docs/current-implementation-ledger.md`.
+- At every task start, before choosing the next task, moving forward, or editing any repo file, Codex must read recent git history first (`git log --oneline -12` or wider equivalent), current worktree state (`git status --short`), and `docs/current-implementation-ledger.md`.
 - The ledger remains the repo source of truth before choosing a task, adding docs/tests, changing UI/API/helper behavior, or committing.
-- This lock prevents repeating completed work, moving backward to old staging checkpoints, treating vague forward-motion wording as feature approval, missing a parked risky lane, editing over an unclean worktree, or using inconsistent checkpoint counters instead of commit hashes and task names.
+- This lock applies to docs-only, test-only, read-only, review, smoke, bug-fix, and commit work; it prevents moving to a next task without source-of-truth inspection, repeating completed work, moving backward to old staging checkpoints, treating vague forward-motion wording as feature approval, missing a parked risky lane, editing over an unclean worktree, or using inconsistent checkpoint counters instead of commit hashes and task names.
 - Allowed next work remains bounded to read-only verification, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit unless the owner explicitly approves a new feature.
 - This lock does not approve runtime implementation, UI/API behavior change, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.
 - Final task summaries must name the commit hash and task name when a commit is made, list checks that passed, and report final `git status --short`.

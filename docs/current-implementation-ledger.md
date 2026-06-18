@@ -1120,6 +1120,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-driver-reporting-status-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - No runtime implementation, UI/API behavior change, env change, deployment, DB read/write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, UI sector/button/card addition, or new shim is approved by this lock.
 
+### Admin Driver Exception Handling Contract Lock
+- Admin-only driver exception handling is defined in `docs/admin-driver-exception-handling-contract.md` as the source-of-truth contract for operational driver exceptions that must not become public driver statuses.
+- This is a docs/test-only contract lock; it does not approve runtime implementation, UI/API behavior change, new UI sectors, new buttons, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.
+- Public driver status remains exactly `driver_otw -> ots -> pob -> completed` with labels OTW -> OTS -> POB -> Job Completed.
+- Future admin exception work, if separately approved, must stay compact and colocated with existing admin operational areas: Day-of-Trip Exception Escalation, Dispatch Recovery / Replacement Readiness, and Completed Trip Closeout Review.
+- Existing app anchors remain the target placement: `data-admin-day-of-trip-exception-escalation`, `data-admin-dispatch-recovery-replacement-readiness`, and the existing completed closeout review section.
+- Driver issue reports may inform admin-only exception handling, but raw issue detail, dispatcher notes, replacement-driver review, and closeout exception notes must not become public customer or public driver states without a separate customer/driver-safe contract.
+- Contract-level admin exception categories include driver no response, driver late/reminder due, cannot find passenger, passenger no-show review, passenger late review, timing/route changed, vehicle issue, replacement driver needed, replacement vehicle needed, dispatcher call needed, customer update review, completed-with-exception review, and closed after dispatcher review.
+- The existing workflow-status planning areas remain the only planned persistence placement for this lane: `day_of_trip_exception`, `dispatch_recovery`, `trip_completion`, and `closeout_review`.
+- Public driver pages must keep dispatcher exception/cancel/replacement workflows absent and future/staff-controlled.
+- Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive.
+- Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, mock QA/dev archive, dispatcher exception notes, replacement-driver review notes, or customer billing/payment/PDF readiness.
+- This lock adds `scripts/test-admin-driver-exception-handling-contract.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- No new admin UI sector, UI button, runtime behavior, endpoint migration, env change, deployment, DB read/write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, or new shim is approved by this lock.
+
 ### Public Customer Portal Session Issue Surface Guard Lock
 - Public customer portal session issue surfaces are guarded across `/api/customer-portal-sessions`, `lib/customer-portal-session-issue.ts`, `/my-bookings`, and the customer portal saved-bookings adapter.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.

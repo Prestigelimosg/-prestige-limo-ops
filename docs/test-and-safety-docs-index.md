@@ -58,6 +58,7 @@ This index is a docs-only cross-reference for existing Prestige Limo Ops testing
 ## Driver Workflow And Public Driver Link Safety
 
 - [Driver Reporting Status Contract](driver-reporting-status-contract.md) owns the current source-of-truth driver public reporting/status boundary from safe driver detail acknowledgement to JC, including OTW/OTS/POB/Job Completed, enum-only issue reports, role visibility, and no finance/payout/privacy leak rules.
+- [Admin Driver Exception Handling Contract](admin-driver-exception-handling-contract.md) owns the current admin-only driver exception handling boundary for no-response, late/reminder, passenger issue, replacement, recovery, and completed-with-exception review without adding new UI sectors or public driver statuses.
 - [Driver Job Link Production Design](driver-job-link-production-design.md) owns the production driver-link design boundary, safe public projection, token verification expectations, and future table planning.
 - [Driver Job Link Workflow Plan](driver-job-link-workflow-plan.md) owns older broad planning context for driver acknowledgement, driver detail, OTW/OTS/POB/Job Completed, exception, live-location, and testing; current public reporting/status boundaries defer to the Driver Reporting Status Contract.
 

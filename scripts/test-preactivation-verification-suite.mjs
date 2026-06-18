@@ -186,6 +186,10 @@ const guardChecks = [
     script: "scripts/test-driver-reporting-status-contract.mjs",
   },
   {
+    label: "admin driver exception handling contract guard",
+    script: "scripts/test-admin-driver-exception-handling-contract.mjs",
+  },
+  {
     label: "public customer portal session issue surface guard",
     script: "scripts/test-public-customer-portal-session-issue-surface-guard.mjs",
   },

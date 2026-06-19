@@ -563,6 +563,10 @@ const guardChecks = [
     script: "scripts/test-admin-billing-payment-finance-activation-split-approval-packet.mjs",
   },
   {
+    label: "admin monthly invoice PDF generation approval packet guard",
+    script: "scripts/test-admin-monthly-invoice-pdf-generation-approval-packet.mjs",
+  },
+  {
     label: "customer amendment no-live guard",
     script: "scripts/test-customer-amendment-no-live-guard.mjs",
   },

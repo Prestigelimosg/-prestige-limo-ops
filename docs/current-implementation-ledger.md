@@ -1,18 +1,18 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this public OTS photo proof surface staging smoke record:
-168f710 Guard public OTS photo proof surface
+Latest verified clean checkpoint before this customer copy multi-channel workflow staging smoke record:
+46b5217 Lock existing customer copy multi-channel workflow
 
 Latest staging-smoked app checkpoint:
-168f710 Guard public OTS photo proof surface
+46b5217 Lock existing customer copy multi-channel workflow
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this public OTS photo proof surface staging smoke record: `168f710 Guard public OTS photo proof surface`.
-- Latest implementation checkpoint to preserve: `168f710 Guard public OTS photo proof surface`; `origin/staging` points to `168f710da521aa8cd213abef9435c7b4c08b42db`.
+- Last verified repo checkpoint before this customer copy multi-channel workflow staging smoke record: `46b5217 Lock existing customer copy multi-channel workflow`.
+- Latest implementation checkpoint to preserve: `46b5217 Lock existing customer copy multi-channel workflow`; `origin/staging` points to `46b52179a66582cc23bc8b9b35428c0d997c7fc0`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this staging smoke record: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Current business-grade forward direction is now sequence-locked: do not repeat completed persistence/RLS/staging/production verification unless a new runtime/deploy/env change creates a fresh reason; the next runtime direction, only after explicit owner approval, is admin-only Confirmed Booking To Dispatch Release from `docs/business-workflow-resume-stage4a410.md`; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
@@ -2179,6 +2179,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing coverage lives in `scripts/test-customer-copy-multi-channel-no-live-guard.mjs`, `scripts/test-app-smoke-browser.mjs`, `scripts/test-booking-ui-browser.mjs`, and `scripts/test-mobile-usability-browser.mjs`.
 - Future approved changes must stabilize or extend the existing compact Customer Copy multi-channel row only, stay colocated with Customer Copy, keep provider/env reads, provider sends, notification sends, customer messages, driver notifications, payment/PDF/pricing/payout/auth/location/photo/calendar behavior, parser changes, and DB writes blocked unless separately approved, and keep customer/driver privacy boundaries intact.
 - This lock adds `scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging No-Screenshot Request Smoke for Customer Copy Multi-Channel Workflow Lock
+- `origin/staging` points to `46b52179a66582cc23bc8b9b35428c0d997c7fc0` (`46b5217 Lock existing customer copy multi-channel workflow`), verified directly with `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/?smoke=46b5217` returned HTTP 200 by safe GET with `content-type: text/html; charset=utf-8` and Vercel response headers.
+- Passive browser request smoke rendered the main admin UI at `https://prestige-limo-ops-staging.vercel.app/?visual-smoke=46b5217-response-tracked-idle`; no screenshot was captured.
+- Expected UI text rendered: `Prestige Limo`, `Create Job Card`, `Job Card Preview`, `Driver Dispatch`, `Save Booking + CRM`, `Dispatch`, `Dashboard`, `Bookings`, `Drivers`, `Completed`, and `Rates`.
+- Save Booking + CRM was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser request/response summary: 38 staging GET requests, 38 staging GET responses, 38 HTTP 200 responses, 0 non-GET requests, 0 non-200 responses, 0 missing responses, and 0 failed-before-response requests.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot captured: false.
+- The Customer Copy multi-channel existing workflow lock remains docs/test-only and does not approve runtime implementation, UI/API behavior change, endpoint migration, env changes, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, customer/driver portal changes, UI sectors/buttons/cards, or new shims.
+- Existing Customer Copy Email/WhatsApp/SMS setup-only disabled-send review surfaces remain colocated inside the existing Customer Copy section.
+- Email, WhatsApp, SMS, Telegram, customer messages, driver notifications, provider/env reads, and provider sends remain blocked until separate explicit approval.
+- Save Booking + CRM remains separate and was not used by this smoke.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No env change, DB read/write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim was included.
 
 ## Customer Amendment/Cancellation Pre-Activation Completion Audit Lock
 

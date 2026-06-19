@@ -10,7 +10,8 @@ Prestige Limo Ops should move forward from the current protected foundation towa
 2. Do not repeat completed persistence, RLS, staging, or production verification unless a new runtime/deploy/env change creates a fresh reason.
 3. Keep production persistence default OFF outside approved verification or activation windows.
 4. Treat customer auth/RLS, driver auth/token persistence, notifications, billing, payment, PDF, payout, live location, OTS photo proof, calendar, provider sending, parser changes, and production launch as later separately approved gates.
-5. The next runtime direction, if the owner explicitly approves runtime work, is the admin-only Confirmed Booking To Dispatch Release workflow described in `docs/business-workflow-resume-stage4a410.md`.
+5. Confirmed Booking To Dispatch Release is complete: confirmed-only eligibility is implemented, the existing Dispatch Release workflow is reused, staging smoke is recorded, and no duplicate Dispatch Release UI sector/button/card/route/helper/shim was added.
+6. The next runtime lane is not auto-selected by this sequence. It requires a fresh no-edit readiness audit and explicit owner approval naming the lane.
 
 ## Next Approved Work Without New Feature Approval
 
@@ -25,19 +26,20 @@ Without a new explicit owner approval, allowed work remains:
 
 These activities may identify blockers, but they must not silently convert into feature implementation.
 
-## Next Runtime Work If Explicitly Approved
+## Future Runtime Work If Explicitly Approved
 
-The next sensible business-grade runtime task is admin-only Confirmed Booking To Dispatch Release, bounded to one existing admin workflow. It should:
+Confirmed Booking To Dispatch Release must not be repeated as the next runtime task. It is now a completed app/business workflow checkpoint.
 
-- Reuse existing booking intake, customer request review, assigned driver, customer copy readiness, driver dispatch copy readiness, and driver job link readiness surfaces.
-- Stay compact and colocated with similar admin dispatch controls.
+The next sensible business-grade runtime task must be selected only after a fresh no-edit readiness audit and explicit owner approval naming the lane. It should:
+
+- Reuse the relevant existing admin/customer/driver workflow surfaces.
+- Stay compact and colocated with similar admin controls.
 - Start UI/local-state only unless the owner separately approves narrow persistence.
-- Show one booking readiness checklist before manual dispatch release.
 - Keep Save Booking + CRM on `POST /api/admin-bookings`.
 - Keep `/api/admin-saved-bookings` separate and unchanged.
 - Avoid new public/customer/driver behavior in the same pass.
 
-This is not approved by this document. It is only the forward direction to ask about when runtime implementation becomes allowed.
+This document does not approve or choose that lane. It only requires a fresh audit and explicit owner approval before runtime implementation becomes allowed.
 
 ## Blockers That Must Stay Visible
 

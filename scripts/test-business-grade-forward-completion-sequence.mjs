@@ -49,15 +49,17 @@ for (const fragment of [
   "Prestige Limo Ops should move forward from the current protected foundation toward a business-grade limo operations app by completing the business workflow in the order already proven by the repo:",
   "Do not repeat completed persistence, RLS, staging, or production verification unless a new runtime/deploy/env change creates a fresh reason.",
   "Keep production persistence default OFF outside approved verification or activation windows.",
-  "The next runtime direction, if the owner explicitly approves runtime work, is the admin-only Confirmed Booking To Dispatch Release workflow described in `docs/business-workflow-resume-stage4a410.md`.",
+  "Confirmed Booking To Dispatch Release is complete: confirmed-only eligibility is implemented, the existing Dispatch Release workflow is reused, staging smoke is recorded, and no duplicate Dispatch Release UI sector/button/card/route/helper/shim was added.",
+  "The next runtime lane is not auto-selected by this sequence. It requires a fresh no-edit readiness audit and explicit owner approval naming the lane.",
   "Without a new explicit owner approval, allowed work remains:",
   "These activities may identify blockers, but they must not silently convert into feature implementation.",
-  "The next sensible business-grade runtime task is admin-only Confirmed Booking To Dispatch Release, bounded to one existing admin workflow.",
-  "Stay compact and colocated with similar admin dispatch controls.",
+  "Confirmed Booking To Dispatch Release must not be repeated as the next runtime task. It is now a completed app/business workflow checkpoint.",
+  "The next sensible business-grade runtime task must be selected only after a fresh no-edit readiness audit and explicit owner approval naming the lane.",
+  "Stay compact and colocated with similar admin controls.",
   "Start UI/local-state only unless the owner separately approves narrow persistence.",
   "Keep Save Booking + CRM on `POST /api/admin-bookings`.",
   "Keep `/api/admin-saved-bookings` separate and unchanged.",
-  "This is not approved by this document. It is only the forward direction to ask about when runtime implementation becomes allowed.",
+  "This document does not approve or choose that lane. It only requires a fresh audit and explicit owner approval before runtime implementation becomes allowed.",
   "Runtime implementation needs explicit owner approval naming the feature.",
   "Customer auth/RLS is not activated.",
   "Driver auth/token persistence is not activated.",
@@ -79,13 +81,15 @@ assertOrdered(sequence, [
   "2. Do not repeat completed persistence, RLS, staging, or production verification unless a new runtime/deploy/env change creates a fresh reason.",
   "3. Keep production persistence default OFF outside approved verification or activation windows.",
   "4. Treat customer auth/RLS, driver auth/token persistence, notifications, billing, payment, PDF, payout, live location, OTS photo proof, calendar, provider sending, parser changes, and production launch as later separately approved gates.",
-  "5. The next runtime direction, if the owner explicitly approves runtime work, is the admin-only Confirmed Booking To Dispatch Release workflow described in `docs/business-workflow-resume-stage4a410.md`.",
+  "5. Confirmed Booking To Dispatch Release is complete: confirmed-only eligibility is implemented, the existing Dispatch Release workflow is reused, staging smoke is recorded, and no duplicate Dispatch Release UI sector/button/card/route/helper/shim was added.",
+  "6. The next runtime lane is not auto-selected by this sequence. It requires a fresh no-edit readiness audit and explicit owner approval naming the lane.",
 ]);
 
 for (const fragment of [
-  "Build the next approved app/business step as an admin-only **Confirmed Booking To Dispatch Release** workflow.",
-  "Keep the first implementation admin-only and UI/local-state only unless William separately approves a narrow persistence update.",
-  "A later implementation stage should be explicitly approved and should stay bounded to one admin dashboard workflow.",
+  "The previously recommended admin-only **Confirmed Booking To Dispatch Release** workflow is complete.",
+  "`766f305 Guard confirmed dispatch release eligibility` implemented the confirmed-only Dispatch Release eligibility boundary.",
+  "`ef080ee Record staging smoke for confirmed dispatch release` recorded and promoted the staging smoke evidence.",
+  "A later implementation stage should be explicitly approved, named after a fresh no-edit readiness audit, and stay bounded to one existing workflow.",
 ]) {
   assertIncludes(workflow, fragment, `workflow reference ${fragment}`);
 }
@@ -93,7 +97,8 @@ for (const fragment of [
 for (const fragment of [
   "[Business-Grade Forward Completion Sequence](business-grade-forward-completion-sequence.md)",
   "forward-only completion order after persistence evidence",
-  "next runtime direction is admin-only Confirmed Booking To Dispatch Release only after explicit owner approval",
+  "treat Confirmed Booking To Dispatch Release as complete",
+  "fresh no-edit readiness audit plus explicit owner approval before any next runtime lane",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index fragment ${fragment}`);
 }
@@ -104,13 +109,27 @@ for (const fragment of [
   "Business-grade forward completion sequencing is locked by `docs/business-grade-forward-completion-sequence.md`.",
   "This is a docs/test-only lock; it does not approve runtime implementation, UI/API behavior change, UI sectors/buttons/cards, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, or new shims.",
   "Do not repeat completed persistence, RLS, staging, or production verification unless a new runtime/deploy/env change creates a fresh reason.",
-  "The next runtime direction, only after explicit owner approval, is admin-only Confirmed Booking To Dispatch Release from `docs/business-workflow-resume-stage4a410.md`.",
+  "Confirmed Booking To Dispatch Release is complete: confirmed-only eligibility is implemented and guarded, the staging smoke for the eligibility fix is recorded, and the existing Dispatch Release workflow was reused without adding a duplicate UI sector/button/card/route/helper/shim.",
+  "The next runtime lane is not auto-selected by this sequence; it requires a fresh no-edit readiness audit and explicit owner approval naming the lane.",
   "Without new owner approval, allowed forward work remains read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.",
   "Testing and staging remain required at the correct layer; staging smoke is required after deploy-relevant runtime change and should not be used to move backward over already-smoked checkpoints.",
-  "Business workflow resume Stage 4A-410 audit is registered in `scripts/test-preactivation-verification-suite.mjs` through `scripts/test-business-workflow-resume-stage4a410.mjs`; it keeps the Confirmed Booking To Dispatch Release recommendation docs/test-only and verifies the public customer booking request route does not expose internal admin review statuses.",
+  "Business workflow resume Stage 4A-410 audit is registered in `scripts/test-preactivation-verification-suite.mjs` through `scripts/test-business-workflow-resume-stage4a410.mjs`; it keeps the completed Confirmed Booking To Dispatch Release outcome docs/test-only and verifies the public customer booking request route does not expose internal admin review statuses.",
+  "The source-of-truth alignment after `ef080ee` is guarded by `scripts/test-business-workflow-source-of-truth-after-confirmed-dispatch-release.mjs`; stale wording must not pull Codex backward into treating Confirmed Booking To Dispatch Release as the next runtime task.",
   "This lock adds `scripts/test-business-grade-forward-completion-sequence.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, fragment, `ledger sequence fragment ${fragment}`);
+}
+
+for (const [label, text] of [
+  ["sequence", sequence],
+  ["ledgerSection", ledgerSection],
+  ["docsIndex", docsIndex],
+]) {
+  assertNotMatches(
+    text,
+    /next runtime direction (?:is|, only after explicit owner approval, is|.*Confirmed Booking To Dispatch Release)/i,
+    `${label} stale Confirmed Booking To Dispatch Release next-runtime wording`,
+  );
 }
 
 assertIncludes(preactivationSuite, guardScript, "preactivation suite sequence guard registration");

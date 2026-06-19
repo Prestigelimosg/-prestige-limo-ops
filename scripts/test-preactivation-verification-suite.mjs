@@ -26,6 +26,10 @@ const guardChecks = [
     script: "scripts/test-business-workflow-resume-stage4a410.mjs",
   },
   {
+    label: "business workflow source-of-truth after confirmed Dispatch Release guard",
+    script: "scripts/test-business-workflow-source-of-truth-after-confirmed-dispatch-release.mjs",
+  },
+  {
     label: "admin Dispatch Release existing workflow lock guard",
     script: "scripts/test-admin-dispatch-release-existing-workflow-lock.mjs",
   },

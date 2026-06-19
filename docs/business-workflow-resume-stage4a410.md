@@ -11,27 +11,27 @@ Stage 4A-410 resumes app/business workflow planning after production admin persi
 - Driver job pages and status routes already provide mock/safe acknowledgement, OTW, OTS, POB, and Job Completed workflow coverage. Production driver job links remain disabled until a later secure token/RLS stage.
 - Monthly billing preparation has planning coverage, but billing, invoice, payment, PDF, payout, and accounting behavior remain blocked.
 
-## Recommended Next Bigger Bounded Workflow
+## Completed Bounded Workflow Outcome
 
-Build the next approved app/business step as an admin-only **Confirmed Booking To Dispatch Release** workflow.
+The previously recommended admin-only **Confirmed Booking To Dispatch Release** workflow is complete.
 
-This should connect existing operational surfaces instead of starting another Supabase write stage:
+Completed outcome:
 
-- Start from an applied admin operational snapshot or a reviewed customer booking request.
-- Show a compact dispatcher release checklist for one booking: required trip fields, customer/request review status, short-notice clearance, assigned driver name/contact/plate, customer copy readiness, driver dispatch copy readiness, and driver job link readiness.
-- Let staff mark the booking as ready for manual dispatch only after the checklist is satisfied.
-- Keep the first implementation admin-only and UI/local-state only unless William separately approves a narrow persistence update.
-- Reuse existing driver assignment fields, copy previews, status labels, and driver job link mock boundaries.
-- Preserve customer-safe and driver-safe visibility rules.
+- `766f305 Guard confirmed dispatch release eligibility` implemented the confirmed-only Dispatch Release eligibility boundary.
+- `ef080ee Record staging smoke for confirmed dispatch release` recorded and promoted the staging smoke evidence.
+- Existing Dispatch Release checklist, mark-ready control, handoff packet, and `/api/admin-booking-workflow-statuses` integration are reused.
+- Requested, Pending Staff Review, Cancelled, and Completed bookings are not eligible for Dispatch Release; Completed remains closeout/review-only.
+- No duplicate Dispatch Release UI sector/button/card/route/helper/shim was added.
+- Save Booking, `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, and shims remain parked unless separately approved.
 
-Why this is the best next step: production persistence has been verified, but staff still need a reliable operational bridge from "request or saved booking exists" to "dispatcher can safely release this job to a driver." This has more practical limo-operations value than another database verification stage and is less risky than customer auth, driver token persistence, notifications, billing, PDF, payment, payout, or live location.
+Why this matters: production persistence has been verified, and staff now have a guarded operational bridge from "request or saved booking exists" to "dispatcher can safely release this confirmed job to a driver." That completed bridge is less risky than customer auth, driver token persistence, notifications, billing, PDF, payment, payout, or live location.
 
 ## Approved Now
 
-- Documenting the next workflow direction.
+- Documenting the completed workflow outcome.
 - Reviewing existing admin/customer/driver workflow code and docs.
-- Adding focused docs/test evidence for the recommendation.
-- Planning a later UI-only/admin-only implementation stage.
+- Adding focused docs/test evidence for source-of-truth alignment.
+- Planning a later UI-only/admin-only implementation stage only after a fresh no-edit readiness audit and explicit owner approval naming the lane.
 
 ## Still Blocked
 
@@ -43,7 +43,7 @@ Why this is the best next step: production persistence has been verified, but st
 
 ## Later Implementation Guardrails
 
-A later implementation stage should be explicitly approved and should stay bounded to one admin dashboard workflow. It should not change public/customer/driver route behavior except for route-leak tests. It should include browser coverage proving the release checklist is admin-only, no customer price or driver payout leaks, no billing/payment/PDF/payout controls appear, no notifications are sent, no live DB write happens by default, and mobile/no-horizontal-overflow remains clean.
+A later implementation stage should be explicitly approved, named after a fresh no-edit readiness audit, and stay bounded to one existing workflow. It should not change public/customer/driver route behavior except for route-leak tests. It should include browser coverage proving the workflow is admin-only, no customer price or driver payout leaks, no billing/payment/PDF/payout controls appear, no notifications are sent, no live DB write happens by default, and mobile/no-horizontal-overflow remains clean.
 
 Recommended focused checks for that later stage:
 

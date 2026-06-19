@@ -36,21 +36,30 @@ for (const requiredText of [
   "Customer booking request submission exists at `/book` through `/api/customer-booking-requests`, with customer-safe wording and admin-review status fields.",
   "Driver job pages and status routes already provide mock/safe acknowledgement, OTW, OTS, POB, and Job Completed workflow coverage.",
   "Monthly billing preparation has planning coverage, but billing, invoice, payment, PDF, payout, and accounting behavior remain blocked.",
-  "Build the next approved app/business step as an admin-only **Confirmed Booking To Dispatch Release** workflow.",
-  "Start from an applied admin operational snapshot or a reviewed customer booking request.",
-  "Show a compact dispatcher release checklist for one booking",
-  "Let staff mark the booking as ready for manual dispatch only after the checklist is satisfied.",
-  "Keep the first implementation admin-only and UI/local-state only unless William separately approves a narrow persistence update.",
-  "Why this is the best next step: production persistence has been verified",
-  "Documenting the next workflow direction.",
-  "Planning a later UI-only/admin-only implementation stage.",
+  "The previously recommended admin-only **Confirmed Booking To Dispatch Release** workflow is complete.",
+  "`766f305 Guard confirmed dispatch release eligibility` implemented the confirmed-only Dispatch Release eligibility boundary.",
+  "`ef080ee Record staging smoke for confirmed dispatch release` recorded and promoted the staging smoke evidence.",
+  "Requested, Pending Staff Review, Cancelled, and Completed bookings are not eligible for Dispatch Release; Completed remains closeout/review-only.",
+  "No duplicate Dispatch Release UI sector/button/card/route/helper/shim was added.",
+  "Why this matters: production persistence has been verified",
+  "Documenting the completed workflow outcome.",
+  "Planning a later UI-only/admin-only implementation stage only after a fresh no-edit readiness audit and explicit owner approval naming the lane.",
   "Supabase CLI, raw SQL, migrations, dashboard fixes, live save/load, production writes, or broad production reads.",
   "Customer auth, customer RLS, driver auth, driver token persistence, or production driver status writes.",
   "Billing, payment, invoice, statement, PDF, payout, PayNow payout, accounting, finance export, or monthly billing activation.",
   "Parser-learning, parser rule changes, or parser/debug internals exposure.",
-  "A later implementation stage should be explicitly approved and should stay bounded to one admin dashboard workflow.",
+  "A later implementation stage should be explicitly approved, named after a fresh no-edit readiness audit, and stay bounded to one existing workflow.",
 ]) {
   assertIncludes(recommendation, requiredText);
+}
+
+for (const staleText of [
+  "Build the next approved app/business step as an admin-only **Confirmed Booking To Dispatch Release** workflow.",
+  "Documenting the next workflow direction.",
+  "Planning a later UI-only/admin-only implementation stage.",
+  "A later implementation stage should be explicitly approved and should stay bounded to one admin dashboard workflow.",
+]) {
+  assertNotMatches(recommendation, new RegExp(staleText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `stale Stage 4A-410 wording: ${staleText}`);
 }
 
 for (const currentSurface of [

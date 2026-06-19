@@ -30,6 +30,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing admin-only Monthly Billing Month Grouping workflow is now no-duplicate locked: reuse `data-admin-monthly-billing-month-grouping-review`, `data-admin-monthly-billing-month-grouping-read-controls`, `data-admin-completed-booking-billing-readiness-audit-action`, `data-admin-monthly-billing-draft-plan-save-action`, and the existing monthly invoice draft/review action controls; do not add a second month grouping/draft/invoice review UI sector/button/card/route/helper/shim or activate invoice creation, PDF generation/sending, payment, payout, billing automation, customer messages, or driver notifications without explicit owner approval.
 - Existing admin-only Monthly Billing Queue to Month Grouping sequencing is now docs/test guard-locked through derived readiness state: Monthly Billing Queue ready state feeds Month Grouping local fallback counts only when no saved monthly billing group is loaded, blocked queue/saved trips block grouped readiness, and Month Grouping stays on existing read/review controls without activating invoice/PDF/payment/payout/provider/billing automation/customer/driver sends.
 - Existing admin-only Monthly Billing Month Grouping to Draft Plan / Invoice Review sequencing is now docs/test guard-locked through derived readiness state: saved Month Grouping gates draft-plan and invoice draft-prep, saved invoice draft gates item review, saved item review and reviewed amount gate billable price review, approved billable price review gates issue review, saved issue review gates issue record creation, locked issue record gates invoice-number reservation, and reserved invoice number gates PDF-review readiness without activating invoice creation/PDF generation or sending/payment/payout/provider/billing automation/customer or driver sends.
+- Admin billing/payment finance activation split is now docs/test guard-locked: future finance runtime work must choose exactly one separately approved sub-lane from invoice number readiness, invoice/PDF format, PDF generation, invoice sending, payment links/provider, manual payment reconciliation, or payout/accounting/finance export, with payout/accounting kept separate from customer billing/payment.
 - Existing admin Customer Copy multi-channel workflow is now no-duplicate locked: reuse `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-edit-button="customerCopy"`, `data-copy-copy-button="customerCopy"`, `data-copy-preview="customerCopy"`, `data-customer-live-location-helper`, `data-admin-customer-driver-details-email-review-item`, the existing Email/WhatsApp/SMS disabled-send review buttons, and `data-admin-email-activation-preflight-status`; do not add duplicate Email/WhatsApp/SMS/customer-message/driver-notification/provider-send UI sectors/buttons/cards/routes/helpers/shims or activate live provider/env sends without explicit owner approval.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, admin dashboard horizontal overflow fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, Save Booking + CRM button placement near Job Card Preview actions, Save Booking duplicate-submit guard, separated Save Booking + CRM and calendar actions, Save Booking + CRM safe admin booking persistence reroute, disabled admin booking read/list/detail contract setup and no-live guard, unused legacy bookings shim surface retirement, booking UI browser test stabilization, calendar event lifecycle readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, customer amendment/cancellation review handoff setup foundation/API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, billing/payment readiness setup foundation, preview API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, production deployment hardening readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, staging deployment approval packet and guard, core admin booking persistence activation readiness packet, guard, safe path guard, and Save Booking + CRM safe reroute, global pre-activation no-live guard, activation decision matrix guard, pre-activation verification suite, shim cleanup typed API inventory, shim cleanup no-new-shim guard, companies CRM identity/domain typed helper/API and typed display wiring, travelers CRM identity/default-address typed helper/API and typed display wiring, company/traveler CRM write-readiness setup foundation/API, disabled action API, audit payload setup foundation, no-live guard, and pre-activation audit lock, driver assignment/display typed helper/API and booking assignment display wiring, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, app smoke email preflight setup-only allowlist, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp activation; FlightAware live; live location activation; OTS photo activation; customer/driver auth activation; billing/payment activation; shim cleanup; production.
@@ -2476,6 +2477,56 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Action audit payload setup foundation is done.
 - Billing/payment no-live guard is done.
 - Invoice PDF generation, invoice sending, payment links, payout automation, production auto-billing, payment provider/env, and DB/write remain blocked until explicit approval.
+
+### Admin Billing/Payment Finance Activation Split Approval Packet Lock
+
+- This packet is docs/test-only.
+- It does not approve runtime implementation, UI/API behavior change, env change, DB read/write, provider send, production deploy, Save Booking route change, `/api/admin-saved-bookings` change, parser change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim.
+- Billing/payment is complete only up to the activation stop.
+- Existing setup-only boundaries stay on `admin-billing-payment-readiness-preview-setup` and `admin-billing-payment-action-disabled-setup`.
+- Future finance runtime work must be split into exactly one separately approved sub-lane per task.
+- Split sub-lanes: Invoice number reservation readiness.
+- Split sub-lanes: Invoice/PDF format approval.
+- Split sub-lanes: PDF generation.
+- Split sub-lanes: Invoice sending/delivery.
+- Split sub-lanes: Payment links/provider.
+- Split sub-lanes: Manual payment record/reconciliation.
+- Split sub-lanes: Payout/accounting/finance export.
+- Payout/accounting/finance export is separate from customer billing/payment.
+- Each future runtime lane requires explicit owner approval naming exactly one sub-lane before implementation.
+- Required future approval proof: Exact staging target and commit hash.
+- Required future approval proof: Env gate names only, with no values or secrets.
+- Required future approval proof: Table, RLS, storage, and access-policy proof for only the named sub-lane.
+- Required future approval proof: Admin/dispatcher/finance role-boundary proof.
+- Required future approval proof: Customer and driver privacy proof.
+- Required future approval proof: Rollback, kill-switch, and manual recovery plan.
+- Required future approval proof: One bounded evidence window and stop conditions.
+- Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive.
+- Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive.
+- Existing billing/payment setup remains planned-only and blocked.
+- `invoicePdfEnabled` stays false.
+- `invoiceSendingEnabled` stays false.
+- `paymentLinksEnabled` stays false.
+- `payoutAutomationEnabled` stays false.
+- `productionAutoBillingEnabled` stays false.
+- `paymentProviderConfigured` stays false.
+- `liveBillingEnabled` stays false.
+- `auditWriteEnabled` stays false.
+- `external_send` stays false.
+- Missing requirement remains `invoice_pdf_generation_approval`.
+- Missing requirement remains `invoice_sending_approval`.
+- Missing requirement remains `payment_provider`.
+- Missing requirement remains `payment_links_approval`.
+- Missing requirement remains `payout_automation_approval`.
+- Missing requirement remains `production_auto_billing_approval`.
+- Missing requirement remains `live_billing_approval`.
+- Before PDF generation, owner approval must define invoice/statement format, invoice-number rules, included rows, tax/GST treatment, adjustment rules, staff review steps, generated-file access/storage, customer/month selection, rollback, and leak-proofing.
+- Before invoice sending/delivery, owner approval must define channel, recipients, copy/template, opt-out or manual-send policy, audit logging, failure/retry handling, and proof provider sends remain disabled until approved.
+- Before payment links/provider, owner approval must define test-mode scope, provider, secret-handling plan, webhook security, idempotency, payment-status mapping, failure states, disabled-by-default production posture, and rollback.
+- Before manual payment record/reconciliation, owner approval must define who can record payments, evidence storage, customer-visible fields, audit requirements, correction workflow, and rollback.
+- Before payout/accounting/finance export, owner approval must define finance-only role access, exported fields, PayNow handling, accounting destination, customer/driver visibility proof, and rollback.
+- This packet does not approve invoice creation, PDF generation, PDF storage, invoice sending, provider sends, payment links, payment provider setup, webhook setup, payment recording, payout automation, finance export, customer-visible finance changes, driver-visible finance changes, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
+- This lock adds `scripts/test-admin-billing-payment-finance-activation-split-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ## Production Hardening Pre-Activation Completion Audit Lock
 

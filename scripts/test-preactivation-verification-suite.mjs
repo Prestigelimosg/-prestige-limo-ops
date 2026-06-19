@@ -559,6 +559,10 @@ const guardChecks = [
     script: "scripts/test-admin-billing-payment-no-live-guard.mjs",
   },
   {
+    label: "admin billing/payment finance activation split approval packet guard",
+    script: "scripts/test-admin-billing-payment-finance-activation-split-approval-packet.mjs",
+  },
+  {
     label: "customer amendment no-live guard",
     script: "scripts/test-customer-amendment-no-live-guard.mjs",
   },

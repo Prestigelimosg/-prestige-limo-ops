@@ -1,18 +1,18 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this ledger preactivation suite registration staging smoke record:
-00c683e Guard ledger preactivation suite registrations
+Latest verified clean checkpoint before this confirmed Dispatch Release staging smoke record:
+766f305 Guard confirmed dispatch release eligibility
 
 Latest staging-smoked app checkpoint:
-00c683e Guard ledger preactivation suite registrations
+766f305 Guard confirmed dispatch release eligibility
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this ledger preactivation suite registration staging smoke record: `00c683e Guard ledger preactivation suite registrations`.
-- Latest implementation checkpoint to preserve: `00c683e Guard ledger preactivation suite registrations`; `origin/staging` points to `00c683eeb930dad61027e4e86a061d3bba67c60c`.
+- Last verified repo checkpoint before this confirmed Dispatch Release staging smoke record: `766f305 Guard confirmed dispatch release eligibility`.
+- Latest implementation checkpoint to preserve: `766f305 Guard confirmed dispatch release eligibility`; `origin/staging` points to `766f305cfb96c3e6e6c7386e8d11ac829763680c`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this staging smoke record: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Current business-grade forward direction is now sequence-locked: do not repeat completed persistence/RLS/staging/production verification unless a new runtime/deploy/env change creates a fresh reason; the next runtime direction, only after explicit owner approval, is admin-only Confirmed Booking To Dispatch Release from `docs/business-workflow-resume-stage4a410.md`; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
@@ -98,6 +98,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Public customer and driver surfaces cannot trigger Dispatch Release; the boundary remains admin/dispatcher-only.
 - This lock does not activate provider sends, payment/PDF, pricing, payout, auth/location/photo/calendar, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, env changes, deploy, live DB reads/writes, or migrations.
 - This lock adds `scripts/test-confirmed-booking-dispatch-release-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging Deploy Smoke for Confirmed Dispatch Release Eligibility
+
+- `origin/staging` points to `766f305cfb96c3e6e6c7386e8d11ac829763680c` (`766f305 Guard confirmed dispatch release eligibility`), verified directly with `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Passive no-click Chrome/CDP staging smoke rendered the main admin UI with title `Prestige Limo Ops`.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was visible but was not clicked.
+- Dispatch Release rendered exactly one checklist, one mark-ready control, and one handoff packet.
+- No Dispatch Release controls were clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Browser request audit observed 38 GET requests, 0 non-GET requests, 0 POST/write/send requests, 0 non-200 responses, and 0 missing responses.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot captured: false.
+- The earlier Chrome/CDP abort was a local tooling blocker; the unsandboxed rerun passed and did not require any app/runtime changes.
+- Confirmed-only Dispatch Release eligibility remains guarded by `scripts/test-confirmed-booking-dispatch-release-boundary-guard.mjs`.
+- Save Booking remains on `POST /api/admin-bookings`; `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, UI sectors/cards/buttons, and shims remain unchanged.
 
 ## Admin Driver Acknowledgement Existing Workflow Lock
 

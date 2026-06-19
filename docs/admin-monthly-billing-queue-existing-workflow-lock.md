@@ -8,6 +8,7 @@ The admin-only Monthly Billing Queue Readiness and Monthly Billing Queue Excepti
 
 - `app/page.tsx` owns the existing Monthly Billing Queue Readiness Review at `data-admin-monthly-billing-queue-readiness-review`.
 - `app/page.tsx` owns the existing Monthly Billing Queue Exception Review at `data-admin-monthly-billing-queue-exception-review`.
+- Existing billing-preparation sequencing feeds the monthly queue through local readiness state only.
 - These surfaces are local admin review controls only.
 - They do not create invoices, PDFs, payment links, payout records, monthly billing groups, billing automation, accounting posts, notification sends, customer messages, driver notifications, auth changes, parser changes, Supabase writes, or live database access.
 - The separate Monthly Billing Month Grouping Review and its read/action controls are not activated or changed by this lock.
@@ -17,12 +18,14 @@ The admin-only Monthly Billing Queue Readiness and Monthly Billing Queue Excepti
 - `scripts/test-app-smoke-browser.mjs` covers both monthly billing queue surfaces across mobile and desktop viewports.
 - `scripts/test-booking-ui-browser.mjs` covers the existing local control labels, status text, local-only boundary, and forbidden private text checks.
 - `scripts/test-mobile-usability-browser.mjs` covers compact mobile layout, readable rows/controls/notes, and no-horizontal-overflow behavior.
+- `scripts/test-admin-closeout-billing-preparation-sequencing-guard.mjs` covers the existing closeout-to-billing preparation to monthly queue sequencing evidence.
 
 ## Future Work Rule
 
 Future work must reuse the existing Monthly Billing Queue Readiness and Exception workflow instead of adding another UI sector, card, button, route, helper, or shim for the same purpose.
 
 Allowed future work, only after explicit owner approval, must stay compact and colocated with the existing monthly billing queue review controls.
+Preserve the existing closeout-to-billing preparation to monthly queue derived-readiness sequence.
 
 Still blocked without separate explicit approval:
 

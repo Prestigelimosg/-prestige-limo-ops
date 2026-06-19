@@ -62,6 +62,10 @@ const guardChecks = [
     script: "scripts/test-admin-closeout-billing-preparation-existing-workflow-lock.mjs",
   },
   {
+    label: "admin Closeout to Billing Preparation sequencing guard",
+    script: "scripts/test-admin-closeout-billing-preparation-sequencing-guard.mjs",
+  },
+  {
     label: "admin Monthly Billing Queue existing workflow lock guard",
     script: "scripts/test-admin-monthly-billing-queue-existing-workflow-lock.mjs",
   },

@@ -1,18 +1,18 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this business workflow source-of-truth alignment:
-ef080ee Record staging smoke for confirmed dispatch release
+Latest verified clean checkpoint before this source-of-truth staging alignment record:
+f370968 Align workflow source of truth after dispatch release
 
 Latest staging-smoked app checkpoint:
-ef080ee Record staging smoke for confirmed dispatch release
+f370968 Align workflow source of truth after dispatch release
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this business workflow source-of-truth alignment: `ef080ee Record staging smoke for confirmed dispatch release`.
-- Latest staging-smoked app checkpoint to preserve: `ef080ee Record staging smoke for confirmed dispatch release`; `origin/staging` points to `ef080ee1edc44d8e38997eed2423e366054ee94f`.
+- Last verified repo checkpoint before this source-of-truth staging alignment record: `f370968 Align workflow source of truth after dispatch release`.
+- Latest staging-smoked app checkpoint to preserve: `f370968 Align workflow source of truth after dispatch release`; `origin/staging` points to `f370968cbdbd20a48f07d7baabaec0a8cb092792`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this source-of-truth alignment: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Current business-grade forward direction is now sequence-locked: Confirmed Booking To Dispatch Release is complete, confirmed-only eligibility is implemented and guarded, staging smoke is recorded, and the existing Dispatch Release workflow was reused without duplicate UI sector/button/card/route/helper/shim; do not repeat it. Any next runtime lane requires a fresh no-edit readiness audit plus explicit owner approval naming the lane; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
@@ -135,6 +135,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Screenshot captured: false.
 - Confirmed Booking To Dispatch Release is complete, confirmed-only eligibility remains guarded, and the existing Dispatch Release workflow is reused.
 - No duplicate Dispatch Release UI sector/button/card/route/helper/shim was added.
+- Save Booking remains on `POST /api/admin-bookings`; `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, UI sectors/cards/buttons, and shims remain unchanged.
+
+### Staging Docs/Test Source-of-Truth Alignment Promotion
+
+- `origin/staging` points to `f370968cbdbd20a48f07d7baabaec0a8cb092792` (`f370968 Align workflow source of truth after dispatch release`), verified directly with `git ls-remote`.
+- `f370968` is a docs/test-only source-of-truth alignment checkpoint after the completed confirmed Dispatch Release smoke record.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops` after the docs/test-only checkpoint was promoted.
+- No new browser smoke was run for `f370968`; the latest applicable recorded browser smoke remains the no-click `766f305` confirmed Dispatch Release smoke recorded by `ef080ee`.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- The recorded browser request audit observed 38 GET requests, 0 non-GET requests, 0 POST/write/send requests, 0 non-200 responses, and 0 missing responses.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot captured: false.
+- Confirmed Booking To Dispatch Release remains complete and must not be repeated as the next runtime lane.
+- The next runtime lane still requires a fresh no-edit readiness audit plus explicit owner approval naming the lane.
 - Save Booking remains on `POST /api/admin-bookings`; `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, UI sectors/cards/buttons, and shims remain unchanged.
 
 ## Admin Driver Acknowledgement Existing Workflow Lock

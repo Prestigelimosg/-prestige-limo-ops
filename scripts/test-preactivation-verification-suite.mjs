@@ -70,6 +70,10 @@ const guardChecks = [
     script: "scripts/test-admin-monthly-billing-queue-existing-workflow-lock.mjs",
   },
   {
+    label: "admin Monthly Billing Queue to Month Grouping sequencing guard",
+    script: "scripts/test-admin-monthly-billing-queue-month-grouping-sequencing-guard.mjs",
+  },
+  {
     label: "admin Monthly Billing Month Grouping existing workflow lock guard",
     script: "scripts/test-admin-monthly-billing-month-grouping-existing-workflow-lock.mjs",
   },

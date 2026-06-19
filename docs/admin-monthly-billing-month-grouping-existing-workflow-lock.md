@@ -11,6 +11,7 @@ The admin-only Monthly Billing Month Grouping workflow already exists in the cur
 - `app/page.tsx` owns the existing completed-booking billing-readiness audit action at `data-admin-completed-booking-billing-readiness-audit-action`.
 - `app/page.tsx` owns the existing monthly billing draft-plan, invoice draft-prep, item-review, billable price review, issue-review, issue-record, invoice-number reservation, and PDF-review readiness action controls within the same existing Monthly Billing Month Grouping Review.
 - The saved monthly billing grouping read path is `GET /api/admin-monthly-billing-groups`, backed by `lib/admin-monthly-billing-grouping-read.ts`.
+- Existing Monthly Billing Queue to Month Grouping Sequencing feeds local queue readiness into Month Grouping only when no saved monthly billing group is loaded.
 - These surfaces are admin-only operational review and preparation controls.
 - They do not create invoices, generate PDFs, send PDFs, collect payment, automate payouts, activate billing automation, send notifications, send customer messages, send driver notifications, change auth, change parser behavior, or change Save Booking behavior.
 
@@ -20,6 +21,14 @@ The admin-only Monthly Billing Month Grouping workflow already exists in the cur
 - `scripts/test-booking-ui-browser.mjs` covers the existing local review controls, guarded read calls, draft/review action buttons, saved grouping pagination/filtering, and no unexpected Load Booking call shape changes.
 - `scripts/test-mobile-usability-browser.mjs` covers compact mobile layout, read filters, pagination controls, readable rows/controls/notes, and no-horizontal-overflow behavior.
 - Dedicated API contract tests already exist for the guarded monthly billing grouping read and monthly billing draft/review routes.
+- `scripts/test-admin-monthly-billing-queue-month-grouping-sequencing-guard.mjs` covers this queue-to-grouping boundary.
+
+## Existing Monthly Billing Queue to Month Grouping Sequencing
+
+- Month Grouping can mark grouped locally only when the existing Monthly Billing Queue is ready locally or a saved admin group is ready.
+- Blocked queue trips and blocked saved trips remain blockers for Month Grouping readiness.
+- The existing Month Grouping review, saved grouping read controls, completed-booking billing-readiness audit action, and draft/review action controls are reused.
+- This sequencing evidence does not activate invoice creation, PDF generation/sending, payment, payout, provider sends, billing automation, customer messages, driver notifications, auth/location/photo/calendar, parser behavior, Save Booking, `/api/admin-saved-bookings`, or new shims.
 
 ## Future Work Rule
 

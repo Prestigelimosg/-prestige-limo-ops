@@ -31,6 +31,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing admin-only Monthly Billing Queue to Month Grouping sequencing is now docs/test guard-locked through derived readiness state: Monthly Billing Queue ready state feeds Month Grouping local fallback counts only when no saved monthly billing group is loaded, blocked queue/saved trips block grouped readiness, and Month Grouping stays on existing read/review controls without activating invoice/PDF/payment/payout/provider/billing automation/customer/driver sends.
 - Existing admin-only Monthly Billing Month Grouping to Draft Plan / Invoice Review sequencing is now docs/test guard-locked through derived readiness state: saved Month Grouping gates draft-plan and invoice draft-prep, saved invoice draft gates item review, saved item review and reviewed amount gate billable price review, approved billable price review gates issue review, saved issue review gates issue record creation, locked issue record gates invoice-number reservation, and reserved invoice number gates PDF-review readiness without activating invoice creation/PDF generation or sending/payment/payout/provider/billing automation/customer or driver sends.
 - Admin billing/payment finance activation split is now docs/test guard-locked: future finance runtime work must choose exactly one separately approved sub-lane from invoice number readiness, invoice/PDF format, PDF generation, invoice sending, payment links/provider, manual payment reconciliation, or payout/accounting/finance export, with payout/accounting kept separate from customer billing/payment.
+- Admin monthly invoice PDF format approval/readiness is now docs/test guard-locked: future invoice/PDF format decisions remain a separate sub-lane before PDF generation, must define invoice/statement naming, included rows, trip snapshots, tax/GST handling, payment terms, staff review, private-field exclusions, and generated-file access policy, and still cannot implement runtime format behavior, create invoices, generate PDFs, send invoices, create payment links, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
 - Admin monthly invoice PDF generation approval/readiness is now docs/test guard-locked: future PDF generation remains a separate sub-lane after PDF-readiness review and still cannot generate PDFs, send invoices, create payment links, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
 - Admin monthly invoice customer/company prefix running-number approval/readiness is now docs/test guard-locked: future invoice prefix and sequence policy remains a separate sub-lane, must use admin-approved unique prefixes per billing customer/company, must prevent duplicate or reused voided/cancelled invoice numbers, and still cannot assign runtime invoice numbers, generate PDFs, send invoices, create payment links, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
 - Admin monthly invoice sending/delivery approval/readiness is now docs/test guard-locked: future invoice sending remains a separate sub-lane after invoice-number reservation and separately approved PDF generation, and still cannot send invoices, deliver customer messages, activate providers, create payment links, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
@@ -2530,6 +2531,71 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Before payout/accounting/finance export, owner approval must define finance-only role access, exported fields, PayNow handling, accounting destination, customer/driver visibility proof, and rollback.
 - This packet does not approve invoice creation, PDF generation, PDF storage, invoice sending, provider sends, payment links, payment provider setup, webhook setup, payment recording, payout automation, finance export, customer-visible finance changes, driver-visible finance changes, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
 - This lock adds `scripts/test-admin-billing-payment-finance-activation-split-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Admin Monthly Invoice PDF Format Approval Packet Lock
+
+- This packet is docs/test-only.
+- It does not approve runtime invoice format implementation, invoice creation, PDF generation, PDF storage, invoice sending, customer email, WhatsApp, SMS, provider send, payment links/provider, payment recording, payout/accounting/export, billing automation, env changes, DB read/write execution, migrations, production deploy, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sector/card/button additions, or new shims.
+- Admin Monthly Invoice PDF Format is a future finance decision sub-lane.
+- It remains blocked until explicit owner approval names this exact invoice/PDF-format-only lane.
+- Invoice/PDF format approval is separate from: Invoice number reservation.
+- Invoice/PDF format approval is separate from: Customer/company prefix and running-number policy.
+- Invoice/PDF format approval is separate from: PDF generation.
+- Invoice/PDF format approval is separate from: Invoice sending/delivery.
+- Invoice/PDF format approval is separate from: Payment links/provider.
+- Invoice/PDF format approval is separate from: Manual payment record/reconciliation.
+- Invoice/PDF format approval is separate from: Payout/accounting/export.
+- Invoice/PDF format approval is separate from: Billing automation.
+- Invoice/PDF format approval must not be bundled with runtime invoice creation, PDF generation, PDF storage, invoice sending, payment links/provider, payment recording, payout/accounting/export, billing automation, provider sends, customer messages, driver notifications, or production activation.
+- Future invoice/PDF format approval requires explicit owner decisions for: Invoice versus statement naming.
+- Future invoice/PDF format approval requires explicit owner decisions for: Header, footer, logo, company registration, and contact display.
+- Future invoice/PDF format approval requires explicit owner decisions for: Invoice-number placement and reserved-number reference.
+- Future invoice/PDF format approval requires explicit owner decisions for: Billing customer/company identity snapshot.
+- Future invoice/PDF format approval requires explicit owner decisions for: Billing month and trip grouping display.
+- Future invoice/PDF format approval requires explicit owner decisions for: Included row rules.
+- Future invoice/PDF format approval requires explicit owner decisions for: Trip snapshot fields.
+- Future invoice/PDF format approval requires explicit owner decisions for: Booking reference, service type, pickup, dropoff, date, time, vehicle, and passenger display.
+- Future invoice/PDF format approval requires explicit owner decisions for: Rate, charge, adjustment, credit, waiting time, and discount display.
+- Future invoice/PDF format approval requires explicit owner decisions for: Currency and rounding rules.
+- Future invoice/PDF format approval requires explicit owner decisions for: Tax/GST treatment, including explicit no-GST wording if applicable.
+- Future invoice/PDF format approval requires explicit owner decisions for: Payment terms and bank-transfer instruction reference.
+- Future invoice/PDF format approval requires explicit owner decisions for: Internal-only fields to exclude.
+- Future invoice/PDF format approval requires explicit owner decisions for: Customer-visible fields allowed.
+- Future invoice/PDF format approval requires explicit owner decisions for: Driver-visible exclusion proof.
+- Future invoice/PDF format approval requires explicit owner decisions for: Staff review and approval steps before generation.
+- Future invoice/PDF format approval requires explicit owner decisions for: Generated-file name pattern, access, storage, retention, and redaction policy for any later PDF generation lane.
+- Existing invoice-number reservation stays on `data-admin-monthly-invoice-number-reservation-action`.
+- Existing PDF-readiness review stays on `data-admin-monthly-invoice-pdf-readiness-action`.
+- Existing guarded routes stay `/api/admin-monthly-invoice-number-reservations` and `/api/admin-monthly-invoice-issue-record-pdf-readiness`.
+- Existing finance setup routes stay setup-only and blocked/no-live on `admin-billing-payment-readiness-preview-setup` and `admin-billing-payment-action-disabled-setup`.
+- Existing PDF generation approval remains separate and must treat this format packet as a prerequisite decision packet, not as generation approval.
+- This packet does not add a duplicate UI sector/card/button, route, helper, or shim.
+- Future runtime work after this format decision requires separate owner approval with Exact staging target and commit hash proof.
+- Future runtime work after this format decision requires separate owner approval with The one named finance sub-lane being opened.
+- Future runtime work after this format decision requires separate owner approval with Admin/dispatcher/finance role-boundary proof.
+- Future runtime work after this format decision requires separate owner approval with Customer and driver privacy proof.
+- Future runtime work after this format decision requires separate owner approval with Table, storage, and access-policy proof for only the named sub-lane.
+- Future runtime work after this format decision requires separate owner approval with Rollback and kill-switch proof.
+- Future runtime work after this format decision requires separate owner approval with One bounded evidence window.
+- Future runtime work after this format decision requires separate owner approval with Env gate names only, with no env values or secrets printed.
+- Future invoice/PDF format approval must not imply: Invoice creation.
+- Future invoice/PDF format approval must not imply: Invoice number assignment or sequence increment.
+- Future invoice/PDF format approval must not imply: PDF generation.
+- Future invoice/PDF format approval must not imply: PDF storage.
+- Future invoice/PDF format approval must not imply: Invoice sending/delivery.
+- Future invoice/PDF format approval must not imply: Customer email, WhatsApp, or SMS sending.
+- Future invoice/PDF format approval must not imply: Provider live send.
+- Future invoice/PDF format approval must not imply: Payment link creation.
+- Future invoice/PDF format approval must not imply: Payment provider activation.
+- Future invoice/PDF format approval must not imply: Payment recording.
+- Future invoice/PDF format approval must not imply: Customer portal billing/payment activation.
+- Future invoice/PDF format approval must not imply: Payout/accounting/export.
+- Future invoice/PDF format approval must not imply: Billing automation writes.
+- Each of those remains a separate finance sub-lane requiring later explicit owner approval.
+- Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive.
+- Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive.
+- This packet does not approve runtime invoice format implementation, invoice creation, invoice number assignment, invoice prefix writes, sequence writes, PDF generation, PDF storage, invoice sending, invoice delivery, customer email, WhatsApp, SMS, provider sends, payment links, payment provider setup, webhook setup, payment recording, payout automation, accounting export, finance export, billing automation, customer-visible finance changes, driver-visible finance changes, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
+- This lock adds `scripts/test-admin-monthly-invoice-pdf-format-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Admin Monthly Invoice PDF Generation Approval Packet Lock
 

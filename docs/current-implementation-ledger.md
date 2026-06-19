@@ -2617,6 +2617,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This packet does not approve runtime invoice number generation, invoice prefix assignment or update, sequence increment execution, DB reads/writes, migrations, PDF generation, PDF storage, invoice sending, provider sends, payment links, payment provider setup, webhook setup, payment recording, payout automation, accounting export, finance export, billing automation, customer-visible finance changes, driver-visible finance changes, env changes, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
 - This lock adds `scripts/test-admin-monthly-invoice-number-prefix-sequence-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Safe GET for Monthly Invoice PDF and Prefix Sequence Approval Guards
+
+- `origin/staging` was promoted from `8abe172cc6d2d0436677d7cb3000b77239c8a476` to `d3861d8caa2864ef465e06c00aec0cae628c3839`.
+- Staging includes `3f731f0 Guard monthly invoice PDF generation approval` and `d3861d8 Guard monthly invoice prefix sequence approval`.
+- `git ls-remote --heads origin staging` confirmed `d3861d8caa2864ef465e06c00aec0cae628c3839` after push.
+- A non-fatal local sandbox warning prevented updating the local `refs/remotes/origin/staging` tracking ref, so the remote hash source of truth for this record is `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Safe GET response title was `Prestige Limo Ops`.
+- Safe GET response included expected admin tab text: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- No browser clicks were performed.
+- No forms were submitted.
+- No POST/write/send action was attempted.
+- Screenshot captured: false.
+- The staged commits remain docs/test-only guard work and do not approve runtime invoice number generation, PDF generation, invoice sending, payment links/provider, payment recording, payout/accounting/export, billing automation, provider sends, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
+
 ## Production Hardening Pre-Activation Completion Audit Lock
 
 - Production hardening is complete up to the activation stop.

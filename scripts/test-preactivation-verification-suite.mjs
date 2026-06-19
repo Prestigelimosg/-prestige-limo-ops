@@ -583,6 +583,10 @@ const guardChecks = [
     script: "scripts/test-admin-monthly-invoice-payment-links-provider-approval-packet.mjs",
   },
   {
+    label: "admin monthly invoice manual payment reconciliation approval packet guard",
+    script: "scripts/test-admin-monthly-invoice-manual-payment-reconciliation-approval-packet.mjs",
+  },
+  {
     label: "customer amendment no-live guard",
     script: "scripts/test-customer-amendment-no-live-guard.mjs",
   },

@@ -567,6 +567,10 @@ const guardChecks = [
     script: "scripts/test-admin-monthly-invoice-pdf-generation-approval-packet.mjs",
   },
   {
+    label: "admin monthly invoice number prefix sequence approval packet guard",
+    script: "scripts/test-admin-monthly-invoice-number-prefix-sequence-approval-packet.mjs",
+  },
+  {
     label: "customer amendment no-live guard",
     script: "scripts/test-customer-amendment-no-live-guard.mjs",
   },

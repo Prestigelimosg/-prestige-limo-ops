@@ -730,6 +730,14 @@ type AdminLoadBookingsTypedReadResponse = {
 
 type BookingStatusValue = "assigned" | "confirmed" | "driver_otw" | "pob" | "completed";
 
+const dispatchReleaseConfirmedBookingStatus = "confirmed";
+const dispatchReleaseNonEligibleBookingStatuses = [
+  "requested",
+  "pending staff review",
+  "cancelled",
+  "completed",
+] as const;
+
 type Message = {
   tone: "info" | "success" | "error";
   text: string;
@@ -13566,6 +13574,14 @@ export default function Home() {
   async function saveDispatchReleaseWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
 
+    if (!dispatchReleaseConfirmedOnlyEligible) {
+      setDispatchReleaseMessage({
+        tone: "error",
+        text: `Dispatch release requires a confirmed booking before staff can mark it ready. Current status: ${dispatchReleaseStatusDisplay}.`,
+      });
+      return;
+    }
+
     if (!dispatchReleaseReady) {
       setDispatchReleaseMessage({
         tone: "info",
@@ -16053,8 +16069,25 @@ export default function Home() {
   const customerCopyText = getDispatchCopyText("customerCopy");
   const driverDispatchCopyText = getDispatchCopyText("driverDispatch");
   const showDriverJobLinkCopy = Boolean(clean(loadedBookingId));
+  const dispatchReleaseLoadedBookingRecord = loadedBookingId
+    ? bookings.find((bookingRecord) => String(bookingRecord.id) === loadedBookingId) ?? null
+    : null;
   const dispatchReleaseTripWarnings = getDispatchReleaseTripWarnings(booking);
   const dispatchReleaseTripComplete = dispatchReleaseTripWarnings.length === 0;
+  const dispatchReleaseRawBookingStatus = appliedAdminBookingSnapshot
+    ? adminBookingPersistencePrimaryStatus(appliedAdminBookingSnapshot)
+    : clean(dispatchReleaseLoadedBookingRecord?.status);
+  const dispatchReleaseNormalizedBookingStatus = clean(dispatchReleaseRawBookingStatus)
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  const dispatchReleaseConfirmedOnlyEligible =
+    dispatchReleaseNormalizedBookingStatus === dispatchReleaseConfirmedBookingStatus;
+  const dispatchReleaseNonConfirmedStatusExplicitlyBlocked =
+    dispatchReleaseNonEligibleBookingStatuses.includes(
+      dispatchReleaseNormalizedBookingStatus as (typeof dispatchReleaseNonEligibleBookingStatuses)[number],
+    );
+  const dispatchReleaseStatusDisplay = clean(dispatchReleaseRawBookingStatus) || "missing status";
   const dispatchReleaseAppliedStatus = appliedAdminBookingSnapshot
     ? adminBookingPersistencePrimaryStatus(appliedAdminBookingSnapshot)
     : "";
@@ -16069,6 +16102,7 @@ export default function Home() {
   const dispatchReleaseReviewStatusLower = dispatchReleaseReviewStatus.toLowerCase();
   const dispatchReleaseReviewCleared =
     dispatchReleaseTripComplete &&
+    dispatchReleaseConfirmedOnlyEligible &&
     !dispatchReleaseShortNoticeRequiresReview &&
     (!dispatchReleaseAppliedIsCustomerRequest ||
       dispatchReleaseReviewStatusLower === "ready for confirmation" ||
@@ -16117,11 +16151,17 @@ export default function Home() {
     {
       detail: dispatchReleaseReviewCleared
         ? "Clear."
-        : dispatchReleaseShortNoticeRequiresReview
-          ? "Admin review needed."
-          : dispatchReleaseAppliedIsCustomerRequest
-            ? `Status: ${dispatchReleaseReviewStatus || "Needs review"}.`
-            : "Complete trip details.",
+        : !dispatchReleaseConfirmedOnlyEligible
+          ? dispatchReleaseNormalizedBookingStatus === "completed"
+            ? "Completed belongs to closeout/review."
+            : dispatchReleaseNonConfirmedStatusExplicitlyBlocked
+              ? `Status: ${dispatchReleaseStatusDisplay} is not dispatch-release eligible.`
+              : `Status: ${dispatchReleaseStatusDisplay} is not confirmed.`
+          : dispatchReleaseShortNoticeRequiresReview
+            ? "Admin review needed."
+            : dispatchReleaseAppliedIsCustomerRequest
+              ? `Status: ${dispatchReleaseReviewStatus || "Needs review"}.`
+              : "Complete trip details.",
       key: "review-clearance",
       label: "Review clearance",
       state: dispatchReleaseReviewCleared ? "ready" : "needs-action",
@@ -16161,7 +16201,9 @@ export default function Home() {
       state: dispatchReleaseDriverJobLinkReady ? "ready" : "needs-action",
     },
   ];
-  const dispatchReleaseReady = dispatchReleaseChecklist.every((item) => item.state === "ready");
+  const dispatchReleaseReady =
+    dispatchReleaseConfirmedOnlyEligible &&
+    dispatchReleaseChecklist.every((item) => item.state === "ready");
   const dispatchReleaseContextLabel = appliedAdminBookingSnapshot
     ? `Applied snapshot: ${clean(appliedAdminBookingSnapshot.booking_reference) || "selected operational snapshot"}`
     : loadedBookingId
@@ -28513,7 +28555,11 @@ export default function Home() {
                 <button
                   className="min-h-9 rounded-md border border-sky-300 bg-white px-3 py-1.5 text-left text-sm font-semibold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   data-admin-dispatch-release-mark-ready="true"
-                  disabled={!dispatchReleaseReady || adminBookingWorkflowStatusAction !== null}
+                  disabled={
+                    !dispatchReleaseConfirmedOnlyEligible ||
+                    !dispatchReleaseReady ||
+                    adminBookingWorkflowStatusAction !== null
+                  }
                   onClick={saveDispatchReleaseWorkflowStatus}
                   type="button"
                 >

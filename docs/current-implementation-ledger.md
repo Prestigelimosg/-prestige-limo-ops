@@ -89,6 +89,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future approved changes must stabilize or extend the existing workflow only, stay compact and colocated, and keep customer/driver privacy boundaries intact.
 - This lock adds `scripts/test-admin-dispatch-release-existing-workflow-lock.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+## Confirmed Booking Dispatch Release Boundary Lock
+
+- Only normalized `confirmed` bookings are eligible for the existing admin Dispatch Release mark-ready/save path.
+- Requested, Pending Staff Review, Cancelled, and Completed bookings are explicitly non-eligible for Dispatch Release; Completed remains closeout/review-only and is not dispatch-release eligible.
+- Existing Dispatch Release checklist, mark-ready control, handoff packet, and `/api/admin-booking-workflow-statuses` route are reused without adding a duplicate UI sector, card, button, route, helper, or shim.
+- The confirmed-only check runs before the existing workflow-status POST and keeps the mark-ready control disabled until the booking is confirmed and the existing checklist is ready.
+- Public customer and driver surfaces cannot trigger Dispatch Release; the boundary remains admin/dispatcher-only.
+- This lock does not activate provider sends, payment/PDF, pricing, payout, auth/location/photo/calendar, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, env changes, deploy, live DB reads/writes, or migrations.
+- This lock adds `scripts/test-confirmed-booking-dispatch-release-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ## Admin Driver Acknowledgement Existing Workflow Lock
 
 - The existing admin-only Driver Acknowledgement workflow is locked by `docs/admin-driver-acknowledgement-existing-workflow-lock.md`.

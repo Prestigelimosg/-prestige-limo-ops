@@ -20,6 +20,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing admin-only Driver Acknowledgement workflow is now no-duplicate locked: reuse the current readiness, mark-ready control, follow-up tracker, and `/api/admin-booking-workflow-statuses` integration; do not add a second Driver Acknowledgement UI sector/button/card/route/helper/shim without explicit owner approval.
 - Existing admin-only Driver Acknowledgement Dispatch Release sequencing is now boundary-locked: Driver Acknowledgement mark-ready/save and follow-up advancement require the existing Dispatch Release workflow status to be saved ready first; reuse the current readiness, mark-ready control, follow-up tracker, and `/api/admin-booking-workflow-statuses` integration.
 - Existing admin-only Day-of-Trip Dispatch Monitor is now no-duplicate locked: reuse the current monitor, local status controls, saved driver status readout, and GET-only `/api/admin-driver-job-statuses` integration; do not add a second day-of-trip monitor UI sector/button/card/route/helper/shim without explicit owner approval.
+- Existing admin-only Day-of-Trip Dispatch Monitor Driver Acknowledgement sequencing is now guard-locked: local OTW, OTS, POB, and Completed progress controls remain blocked until Driver Acknowledgement is acknowledged through the gated Driver Acknowledgement follow-up outcome; reminder/needs-call states remain available for manual exception handling.
 - Existing admin-only driver exception/recovery contract now covers the current Post-Recovery Update Readiness anchor: reuse `data-admin-day-of-trip-exception-escalation`, `data-admin-dispatch-recovery-replacement-readiness`, `data-admin-post-recovery-update-readiness`, and the existing completed closeout review section; do not add a second exception, recovery, post-recovery, or closeout exception UI sector/button/card/route/helper/shim without explicit owner approval.
 - Existing admin-only Day-of-Trip Completion Handoff and Completed Trip Closeout Review workflow is now no-duplicate locked: reuse the current completion handoff, completed closeout review, and guarded `/api/admin-completed-booking-closeouts` integration; do not add a second closeout UI sector/button/card/route/helper/shim without explicit owner approval.
 - Existing admin-only Closeout to Billing Preparation workflow is now no-duplicate locked: reuse `data-admin-closeout-to-billing-preparation-review`, `data-admin-billing-preparation-exception-review`, and `data-admin-billing-preparation-summary-ready-review`; do not add a second billing-prep UI sector/button/card/route/helper/shim or activate invoice/PDF/payment/payout/billing automation without explicit owner approval.
@@ -210,6 +211,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing coverage lives in `scripts/test-app-smoke-browser.mjs`, `scripts/test-booking-ui-browser.mjs`, `scripts/test-mobile-usability-browser.mjs`, and `docs/backend-api-integration-audit.md`.
 - Future approved changes must stabilize or extend the existing monitor only, stay compact and colocated, keep the admin route read-only unless separately approved, and keep customer/driver privacy boundaries intact.
 - This lock adds `scripts/test-admin-day-of-trip-dispatch-monitor-existing-workflow-lock.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+## Admin Day-of-Trip Dispatch Monitor Driver Acknowledgement Boundary Lock
+
+- Day-of-Trip progress controls for OTW, OTS, POB, and Completed remain blocked until Driver Acknowledgement is acknowledged through the gated Driver Acknowledgement follow-up outcome.
+- Reminder Due and Needs Call remain available before Driver Acknowledgement so dispatchers can handle manual reminders and exceptions without advancing trip progress.
+- The existing Day-of-Trip Dispatch Monitor, local progress controls, saved driver status readout, and GET-only `/api/admin-driver-job-statuses` integration are reused; no duplicate Day-of-Trip UI sector/button/card/route/helper/shim is added.
+- The admin driver-status route remains read-only for monitoring; driver token writes stay on the tokenized driver job route.
+- Public customer and driver surfaces cannot trigger the admin Day-of-Trip monitor controls.
+- Save Booking remains on `POST /api/admin-bookings`; `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, UI sectors/cards/buttons, and shims remain unchanged.
+- This lock adds `scripts/test-admin-day-of-trip-dispatch-monitor-driver-ack-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ## Admin Completed Trip Closeout Existing Workflow Lock
 

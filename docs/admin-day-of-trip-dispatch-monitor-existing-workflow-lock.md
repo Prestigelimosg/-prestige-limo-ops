@@ -15,6 +15,7 @@ Existing runtime surfaces:
 - The existing route is GET-only and read-only for admin monitoring.
 - The existing helper is `lib/admin-driver-job-status-read.ts`.
 - Driver token writes stay on the tokenized driver job route, not this admin monitor route.
+- Existing OTW, OTS, POB, and Completed local progress controls remain blocked until Driver Acknowledgement is acknowledged through the gated Driver Acknowledgement follow-up outcome.
 
 Existing coverage:
 
@@ -22,6 +23,7 @@ Existing coverage:
 - `scripts/test-booking-ui-browser.mjs` covers the guarded saved booking load GET to `/api/admin-driver-job-statuses`, the safe request shape, and the existing readout rendering.
 - `scripts/test-mobile-usability-browser.mjs` covers compact mobile Day-of-Trip Dispatch Monitor controls, rows, saved driver status readout, and no-horizontal-overflow boundaries.
 - `docs/backend-api-integration-audit.md` records `/api/admin-driver-job-statuses` as integrated read-only in the existing Day-of-Trip Dispatch Monitor.
+- `scripts/test-admin-day-of-trip-dispatch-monitor-driver-ack-boundary-guard.mjs` covers the Driver Acknowledgement prerequisite before local day-of-trip progress can advance beyond reminder/needs-call states.
 
 ## Forward Rule
 
@@ -30,6 +32,7 @@ Future work must reuse the existing Day-of-Trip Dispatch Monitor instead of addi
 If the owner explicitly approves a runtime improvement later, it must stay bounded to the existing admin dashboard Day-of-Trip Dispatch Monitor and:
 
 - Reuse the existing monitor, saved driver status readout, and `/api/admin-driver-job-statuses` read route.
+- Preserve the gated Driver Acknowledgement prerequisite before local OTW, OTS, POB, and Completed progress controls can advance.
 - Keep the admin route read-only for monitoring unless a separate explicit approval changes that boundary.
 - Keep driver token writes on the tokenized driver job route.
 - Stay compact and colocated with the current dispatch/admin workflow controls.

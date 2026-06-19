@@ -35,6 +35,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin monthly invoice PDF generation approval/readiness is now docs/test guard-locked: future PDF generation remains a separate sub-lane after PDF-readiness review and still cannot generate PDFs, send invoices, create payment links, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
 - Admin monthly invoice customer/company prefix running-number approval/readiness is now docs/test guard-locked: future invoice prefix and sequence policy remains a separate sub-lane, must use admin-approved unique prefixes per billing customer/company, must prevent duplicate or reused voided/cancelled invoice numbers, and still cannot assign runtime invoice numbers, generate PDFs, send invoices, create payment links, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
 - Admin monthly invoice sending/delivery approval/readiness is now docs/test guard-locked: future invoice sending remains a separate sub-lane after invoice-number reservation and separately approved PDF generation, and still cannot send invoices, deliver customer messages, activate providers, create payment links, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
+- Admin monthly invoice payment links/provider approval/readiness is now docs/test guard-locked: future payment links/provider remains a separate sub-lane after staff-reviewed billing/payment context, must define test-mode scope, provider, secret handling, webhook security, idempotency, payment-status mapping, failure states, disabled-by-default production posture, no-auto-send proof, and rollback, and still cannot create payment links, create checkout sessions, activate webhooks, use live Stripe mode, send invoices/customer messages, record payments, automate payouts/accounting/export, run billing automation, or change runtime without explicit owner approval.
 - Existing admin Customer Copy multi-channel workflow is now no-duplicate locked: reuse `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-edit-button="customerCopy"`, `data-copy-copy-button="customerCopy"`, `data-copy-preview="customerCopy"`, `data-customer-live-location-helper`, `data-admin-customer-driver-details-email-review-item`, the existing Email/WhatsApp/SMS disabled-send review buttons, and `data-admin-email-activation-preflight-status`; do not add duplicate Email/WhatsApp/SMS/customer-message/driver-notification/provider-send UI sectors/buttons/cards/routes/helpers/shims or activate live provider/env sends without explicit owner approval.
 - Completed foundations/APIs/UI not to repeat: Flight ETA setup-only chain, email setup-only chain, Telegram disabled/internal admin alert setup foundations, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, WhatsApp customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, SMS customer driver details setup foundation, preview/readiness API, disabled send API, send audit payload setup, and no-live guard, secure customer driver-details link setup foundation, preview/readiness API, disabled access API, access audit payload setup, and no-live guard, email no-live guard, customer driver details email preview/readiness API, disabled customer driver details email send API, customer driver details email send audit payload setup foundation, customer driver details email review item API, Customer Copy customer driver details email review UI, disabled-send button, email activation preflight status UI, WhatsApp/SMS disabled-send UI, compact multi-channel buttons row/layout fix, admin dashboard horizontal overflow fix, and multi-channel no-live guard, Dispatch pricing/review/OneMap section reorder, Save Booking + CRM button placement near Job Card Preview actions, Save Booking duplicate-submit guard, separated Save Booking + CRM and calendar actions, Save Booking + CRM safe admin booking persistence reroute, disabled admin booking read/list/detail contract setup and no-live guard, unused legacy bookings shim surface retirement, booking UI browser test stabilization, calendar event lifecycle readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, customer amendment/cancellation review handoff setup foundation/API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, live location window policy setup foundation/API, disabled access/capture API, and no-live guard, OTS photo proof setup foundation, preview/readiness API, disabled access/upload API, audit payload setup foundation, and no-live guard, customer/driver auth readiness setup foundation/API, disabled access API, access audit payload setup foundation, no-live guard, and pre-activation audit lock, billing/payment readiness setup foundation, preview API, disabled action API, action audit payload setup foundation, no-live guard, and pre-activation audit lock, production deployment hardening readiness setup foundation/API, disabled action API, action audit payload setup foundation, and no-live guard, staging deployment approval packet and guard, core admin booking persistence activation readiness packet, guard, safe path guard, and Save Booking + CRM safe reroute, global pre-activation no-live guard, activation decision matrix guard, pre-activation verification suite, shim cleanup typed API inventory, shim cleanup no-new-shim guard, companies CRM identity/domain typed helper/API and typed display wiring, travelers CRM identity/default-address typed helper/API and typed display wiring, company/traveler CRM write-readiness setup foundation/API, disabled action API, audit payload setup foundation, no-live guard, and pre-activation audit lock, driver assignment/display typed helper/API and booking assignment display wiring, email provider readiness setup foundation/API, email provider selection setup foundation/API, email activation preflight setup API, app smoke email preflight setup-only allowlist, driver ack customer message handoff setup foundation/API, ledger guards.
 - Uncompleted backlog: provider activation/live sending later; Telegram/WhatsApp activation; FlightAware live; live location activation; OTS photo activation; customer/driver auth activation; billing/payment activation; shim cleanup; production.
@@ -2780,6 +2781,67 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No POST/write/send action was attempted.
 - Screenshot captured: false.
 - The staged commit remains docs/test-only guard work and does not approve runtime invoice sending, invoice delivery, customer email, WhatsApp, SMS, provider sends, PDF generation, payment links/provider, payment recording, payout/accounting/export, billing automation, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
+
+### Admin Monthly Invoice Payment Links Provider Approval Packet Lock
+
+- This packet is docs/test-only.
+- It does not approve runtime payment link creation, payment provider setup, checkout session creation, webhook setup, live Stripe mode, live payment collection, invoice sending, PDF generation, payment recording, payout/accounting/export, billing automation, env changes, DB read/write execution, migrations, production deploy, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sector/card/button additions, or new shims.
+- Admin Monthly Invoice Payment Links Provider is a future finance sub-lane.
+- It remains blocked until explicit owner approval names this exact payment-links/provider-only lane.
+- Payment links/provider is separate from: Invoice number reservation.
+- Payment links/provider is separate from: Customer/company prefix and running-number policy.
+- Payment links/provider is separate from: Invoice/PDF format approval.
+- Payment links/provider is separate from: PDF generation.
+- Payment links/provider is separate from: Invoice sending/delivery.
+- Payment links/provider is separate from: Manual payment record/reconciliation.
+- Payment links/provider is separate from: Payout/accounting/export.
+- Payment links/provider is separate from: Billing automation.
+- Payment links/provider is separate from: Customer portal billing/payment activation.
+- Payment links/provider must not be bundled with invoice creation, PDF generation, invoice sending/delivery, payment recording, payout/accounting/export, billing automation, provider sends, customer messages, driver notifications, or production activation.
+- Future payment links/provider work may only happen after staff has reviewed the customer, booking or monthly billing context, amount, currency, description, duplicate-link risk, payment status, and invoice or draft billing relationship.
+- Future payment link creation must start in test mode only unless a later explicit live-mode approval is granted.
+- Payment links must not be auto-sent immediately after creation.
+- Existing finance setup routes stay setup-only and blocked/no-live on `admin-billing-payment-readiness-preview-setup` and `admin-billing-payment-action-disabled-setup`.
+- Existing invoice-number reservation stays on `data-admin-monthly-invoice-number-reservation-action`.
+- Existing PDF-readiness review stays on `data-admin-monthly-invoice-pdf-readiness-action`.
+- Existing guarded routes stay `/api/admin-monthly-invoice-number-reservations` and `/api/admin-monthly-invoice-issue-record-pdf-readiness`.
+- The existing Stripe Test-Mode Payment-Link Workflow Plan remains planning-only and does not create payment records, payment links, checkout sessions, invoices, PDFs, webhook routes, API routes, Supabase rows, customer notifications, or customer-facing payment behavior.
+- Existing Customer Copy Email/WhatsApp/SMS provider-send locks remain separate and must not be used as implicit payment-link sending approval.
+- This packet does not add a duplicate UI sector/card/button, route, helper, or shim.
+- Future runtime payment links/provider work requires explicit owner approval with: Exact staging target and commit hash proof.
+- Future runtime payment links/provider work requires explicit owner approval with: Test-mode scope decision.
+- Future runtime payment links/provider work requires explicit owner approval with: Provider decision.
+- Future runtime payment links/provider work requires explicit owner approval with: Secret-handling plan.
+- Future runtime payment links/provider work requires explicit owner approval with: Webhook security plan.
+- Future runtime payment links/provider work requires explicit owner approval with: Idempotency and duplicate-link prevention plan.
+- Future runtime payment links/provider work requires explicit owner approval with: Payment-status mapping decision.
+- Future runtime payment links/provider work requires explicit owner approval with: Failure, expired, cancelled, unpaid, paid, refunded, and disputed state handling.
+- Future runtime payment links/provider work requires explicit owner approval with: Disabled-by-default production posture.
+- Future runtime payment links/provider work requires explicit owner approval with: Staff review and confirmation requirement.
+- Future runtime payment links/provider work requires explicit owner approval with: No auto-send proof.
+- Future runtime payment links/provider work requires explicit owner approval with: Admin/dispatcher/finance role-boundary proof.
+- Future runtime payment links/provider work requires explicit owner approval with: Customer and driver privacy proof.
+- Future runtime payment links/provider work requires explicit owner approval with: Rollback and kill-switch proof.
+- Future runtime payment links/provider work requires explicit owner approval with: One bounded evidence window.
+- Future runtime payment links/provider work requires explicit owner approval with: Env gate names only, with no env values or secrets printed.
+- Future payment links/provider approval must not imply: Invoice creation.
+- Future payment links/provider approval must not imply: Invoice number assignment or sequence increment.
+- Future payment links/provider approval must not imply: PDF generation.
+- Future payment links/provider approval must not imply: PDF storage.
+- Future payment links/provider approval must not imply: Invoice sending/delivery.
+- Future payment links/provider approval must not imply: Customer email, WhatsApp, or SMS sending.
+- Future payment links/provider approval must not imply: Provider live send outside the exact approved payment provider lane.
+- Future payment links/provider approval must not imply: Webhook status update activation.
+- Future payment links/provider approval must not imply: Payment recording.
+- Future payment links/provider approval must not imply: Customer portal billing/payment activation.
+- Future payment links/provider approval must not imply: Payout/accounting/export.
+- Future payment links/provider approval must not imply: Billing automation writes.
+- Future payment links/provider approval must not imply: Stripe live mode.
+- Each of those remains a separate finance sub-lane requiring later explicit owner approval.
+- Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive.
+- Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive.
+- This packet does not approve runtime payment link creation, payment provider setup, checkout session creation, webhook setup, live Stripe mode, live payment collection, invoice creation, invoice number assignment, PDF generation, PDF storage, invoice sending, invoice delivery, customer email, WhatsApp, SMS, provider sends, payment recording, payout automation, accounting export, finance export, billing automation, customer-visible finance changes, driver-visible finance changes, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
+- This lock adds `scripts/test-admin-monthly-invoice-payment-links-provider-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ## Production Hardening Pre-Activation Completion Audit Lock
 

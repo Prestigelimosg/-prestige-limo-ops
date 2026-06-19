@@ -34,6 +34,10 @@ const guardChecks = [
     script: "scripts/test-admin-day-of-trip-dispatch-monitor-existing-workflow-lock.mjs",
   },
   {
+    label: "admin Completed Trip Closeout existing workflow lock guard",
+    script: "scripts/test-admin-completed-trip-closeout-existing-workflow-lock.mjs",
+  },
+  {
     label: "staging deployment approval packet guard",
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },

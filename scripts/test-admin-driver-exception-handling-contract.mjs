@@ -115,10 +115,11 @@ for (const fragment of [
   "Future runtime work, if separately approved, must stay compact and colocated with the existing admin operational areas:",
   "Day-of-Trip Exception Escalation: `data-admin-day-of-trip-exception-escalation`.",
   "Dispatch Recovery / Replacement Readiness: `data-admin-dispatch-recovery-replacement-readiness`.",
+  "Post-Recovery Update Readiness: `data-admin-post-recovery-update-readiness`.",
   "Completed Trip Closeout Review for post-JC exception resolution review.",
   "These names are contract-level categories only. They do not approve new database values, runtime status values, API inputs, UI buttons, customer messages, or driver-visible states.",
   "Safe public driver issue reports may inform admin review, but they must not directly become public customer or driver workflow states.",
-  "reuse the existing compact admin exception/recovery areas instead of adding a new UI sector;",
+  "reuse the existing compact admin exception/recovery/post-recovery areas instead of adding a new UI sector;",
   "keep public driver statuses unchanged;",
   "keep driver issue input enum-only;",
 ]) {
@@ -165,6 +166,12 @@ for (const fragment of [
   '{ label: "Copy Ready", value: "copy-ready" }',
   '{ label: "Job Link Ready", value: "job-link-ready" }',
   '{ label: "Ready Locally", value: "ready-locally" }',
+  'data-admin-post-recovery-update-readiness="true"',
+  "postRecoveryUpdateOptions",
+  '{ label: "Customer Copy", value: "customer-copy-reviewed" }',
+  '{ label: "Driver Copy", value: "driver-copy-reviewed" }',
+  '{ label: "Original Driver", value: "original-driver-reviewed" }',
+  '{ label: "ETA Ready", value: "eta-ready" }',
   "Completed Trip Closeout Review",
 ]) {
   assertIncludes(app, fragment, `existing admin exception/recovery placement ${fragment}`);
@@ -179,6 +186,11 @@ assert.equal(
   countOccurrences(app, 'data-admin-dispatch-recovery-replacement-readiness="true"'),
   1,
   "admin exception contract must reuse the one existing dispatch recovery replacement section",
+);
+assert.equal(
+  countOccurrences(app, 'data-admin-post-recovery-update-readiness="true"'),
+  1,
+  "admin exception contract must reuse the one existing post-recovery update section",
 );
 
 for (const fragment of [
@@ -211,6 +223,7 @@ for (const fragment of [
 for (const forbiddenPublicDriverFragment of [
   "data-admin-day-of-trip-exception-escalation",
   "data-admin-dispatch-recovery-replacement-readiness",
+  "data-admin-post-recovery-update-readiness",
   "dispatcher exception",
   "replacement driver may be needed",
   "completed with exception",

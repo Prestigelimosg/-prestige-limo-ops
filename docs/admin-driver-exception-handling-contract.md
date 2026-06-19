@@ -21,6 +21,7 @@ Future runtime work, if separately approved, must stay compact and colocated wit
 
 - Day-of-Trip Exception Escalation: `data-admin-day-of-trip-exception-escalation`.
 - Dispatch Recovery / Replacement Readiness: `data-admin-dispatch-recovery-replacement-readiness`.
+- Post-Recovery Update Readiness: `data-admin-post-recovery-update-readiness`.
 - Completed Trip Closeout Review for post-JC exception resolution review.
 
 Current matching workflow persistence planning uses:
@@ -84,7 +85,7 @@ Drivers must never see customer price, billing, invoice/payment, payout comparis
 
 If future runtime implementation is approved, it must:
 
-- reuse the existing compact admin exception/recovery areas instead of adding a new UI sector;
+- reuse the existing compact admin exception/recovery/post-recovery areas instead of adding a new UI sector;
 - keep public driver statuses unchanged;
 - keep driver issue input enum-only;
 - keep customer visibility separately approved and customer-safe;

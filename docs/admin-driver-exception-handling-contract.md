@@ -31,6 +31,14 @@ Current matching workflow persistence planning uses:
 - `trip_completion`.
 - `closeout_review`.
 
+## Existing Exception/Recovery To Closeout Sequencing
+
+- Dispatch Recovery / Replacement readiness feeds Post-Recovery replacement-driver copy and new-driver job-link readiness.
+- Post-Recovery Update ready locally feeds Day-of-Trip Completion Handoff customer closeout readiness.
+- Closed Day-of-Trip Exception Escalation feeds Day-of-Trip Completion Handoff exception/resolution review.
+- Day-of-Trip Completion Handoff feeds the existing Completed Trip Closeout Review customer closeout and exception/resolution checklist states.
+- This is existing derived-readiness evidence only; it does not approve new runtime controls, endpoint migration, UI sectors/buttons, customer messages, driver notifications, payment/PDF/pricing/payout/billing activation, or provider sends.
+
 ## Admin-Only Exception Types
 
 Admin-only driver exception handling may classify operational cases such as:

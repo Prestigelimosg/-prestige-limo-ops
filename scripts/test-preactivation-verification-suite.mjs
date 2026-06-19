@@ -254,6 +254,10 @@ const guardChecks = [
     script: "scripts/test-admin-driver-exception-handling-contract.mjs",
   },
   {
+    label: "admin exception/recovery to closeout sequencing guard",
+    script: "scripts/test-admin-exception-recovery-closeout-sequencing-guard.mjs",
+  },
+  {
     label: "customer driver status visibility contract guard",
     script: "scripts/test-customer-driver-status-visibility-contract.mjs",
   },

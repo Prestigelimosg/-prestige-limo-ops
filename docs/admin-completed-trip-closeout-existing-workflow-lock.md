@@ -11,6 +11,7 @@ Existing runtime surfaces:
 - `app/page.tsx` owns the existing local Day-of-Trip Completion Handoff at `data-admin-day-of-trip-completion-handoff`.
 - `app/page.tsx` owns the existing Completed Trip Closeout Review at `data-admin-completed-trip-closeout-review`.
 - `app/page.tsx` owns the existing completed closeout save/load path through `/api/admin-completed-booking-closeouts`.
+- Existing exception/recovery sequencing feeds the closeout workflow through existing derived readiness state only.
 - The existing closeout route is guarded by the admin/dispatcher boundary and supports closeout GET and status-only POST save/load behavior.
 - The existing helper is `lib/admin-completed-booking-closeout-persistence.ts`.
 - The existing persistence guard rejects finance, invoice, payment, PDF, payout, PayNow, notification, auth, live location, photo/proof, parser/debug, internal note, secret, mock QA, and dev archive fields.
@@ -21,6 +22,7 @@ Existing coverage:
 - `scripts/test-booking-ui-browser.mjs` covers guarded completed closeout GET/POST shape, existing closeout review save feedback, and forbidden request body fields.
 - `scripts/test-mobile-usability-browser.mjs` covers compact mobile completion handoff, completed closeout review, completed-closeout API boundary, and no-horizontal-overflow behavior.
 - `scripts/test-admin-completed-booking-closeout-api-contract.mjs` covers the guarded completed closeout API contract.
+- `scripts/test-admin-exception-recovery-closeout-sequencing-guard.mjs` covers the existing exception/recovery to completion/closeout sequencing evidence.
 - `docs/backend-api-integration-audit.md` records `/api/admin-completed-booking-closeouts` as integrated for the existing completed trip closeout control.
 
 ## Forward Rule
@@ -30,6 +32,7 @@ Future work must reuse the existing Completion Handoff and Completed Trip Closeo
 If the owner explicitly approves a runtime improvement later, it must stay bounded to the existing admin dashboard closeout workflow and:
 
 - Reuse the existing completion handoff, completed closeout review, and `/api/admin-completed-booking-closeouts` route.
+- Preserve the existing exception/recovery to completion/closeout derived-readiness sequence.
 - Keep completed closeout status-only unless a separate explicit approval changes that boundary.
 - Keep invoice, PDF, payment, payout, PayNow payout, and billing automation blocked unless separately approved.
 - Stay compact and colocated with the current dispatch/admin workflow controls.

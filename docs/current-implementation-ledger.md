@@ -22,6 +22,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing admin-only Day-of-Trip Dispatch Monitor is now no-duplicate locked: reuse the current monitor, local status controls, saved driver status readout, and GET-only `/api/admin-driver-job-statuses` integration; do not add a second day-of-trip monitor UI sector/button/card/route/helper/shim without explicit owner approval.
 - Existing admin-only Day-of-Trip Dispatch Monitor Driver Acknowledgement sequencing is now guard-locked: local OTW, OTS, POB, and Completed progress controls remain blocked until Driver Acknowledgement is acknowledged through the gated Driver Acknowledgement follow-up outcome; reminder/needs-call states remain available for manual exception handling.
 - Existing admin-only driver exception/recovery contract now covers the current Post-Recovery Update Readiness anchor: reuse `data-admin-day-of-trip-exception-escalation`, `data-admin-dispatch-recovery-replacement-readiness`, `data-admin-post-recovery-update-readiness`, and the existing completed closeout review section; do not add a second exception, recovery, post-recovery, or closeout exception UI sector/button/card/route/helper/shim without explicit owner approval.
+- Existing admin-only exception/recovery to closeout sequencing is now docs/test guard-locked through derived readiness state: Dispatch Recovery feeds Post-Recovery update readiness, Post-Recovery and closed exception review feed Day-of-Trip Completion Handoff, and Completion Handoff feeds Completed Trip Closeout Review checklist states.
 - Existing admin-only Day-of-Trip Completion Handoff and Completed Trip Closeout Review workflow is now no-duplicate locked: reuse the current completion handoff, completed closeout review, and guarded `/api/admin-completed-booking-closeouts` integration; do not add a second closeout UI sector/button/card/route/helper/shim without explicit owner approval.
 - Existing admin-only Closeout to Billing Preparation workflow is now no-duplicate locked: reuse `data-admin-closeout-to-billing-preparation-review`, `data-admin-billing-preparation-exception-review`, and `data-admin-billing-preparation-summary-ready-review`; do not add a second billing-prep UI sector/button/card/route/helper/shim or activate invoice/PDF/payment/payout/billing automation without explicit owner approval.
 - Existing admin-only Monthly Billing Queue workflow is now no-duplicate locked: reuse `data-admin-monthly-billing-queue-readiness-review` and `data-admin-monthly-billing-queue-exception-review`; do not add a second monthly billing queue UI sector/button/card/route/helper/shim or activate invoice/PDF/payment/payout/billing automation/month grouping writes without explicit owner approval.
@@ -221,6 +222,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Public customer and driver surfaces cannot trigger the admin Day-of-Trip monitor controls.
 - Save Booking remains on `POST /api/admin-bookings`; `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, UI sectors/cards/buttons, and shims remain unchanged.
 - This lock adds `scripts/test-admin-day-of-trip-dispatch-monitor-driver-ack-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+## Admin Exception Recovery To Closeout Sequencing Guard Lock
+
+- Exception/recovery to closeout sequencing is now docs/test guard-locked through existing derived readiness state.
+- Dispatch Recovery / Replacement readiness feeds Post-Recovery replacement-driver copy and new-driver job-link readiness.
+- Post-Recovery Update ready locally feeds Day-of-Trip Completion Handoff customer closeout readiness.
+- Closed Day-of-Trip Exception Escalation feeds Day-of-Trip Completion Handoff exception/resolution review.
+- Day-of-Trip Completion Handoff feeds Completed Trip Closeout Review customer closeout and exception/resolution checklist states.
+- Existing admin surfaces are reused: `data-admin-day-of-trip-exception-escalation`, `data-admin-dispatch-recovery-replacement-readiness`, `data-admin-post-recovery-update-readiness`, `data-admin-day-of-trip-completion-handoff`, and `data-admin-completed-trip-closeout-review`; no duplicate UI sector/button/card/route/helper/shim is added.
+- The existing completed closeout route remains `/api/admin-completed-booking-closeouts`, guarded/status-only, and separate from Save Booking and `/api/admin-saved-bookings`.
+- This lock does not approve stronger runtime-control blocking, endpoint migration, env changes, DB writes, provider sends, parser changes, payment/PDF/pricing/payout/billing activation, auth/location/photo/calendar activation, customer messages, driver notifications, UI sectors/buttons/cards, or new shims.
+- This lock adds `scripts/test-admin-exception-recovery-closeout-sequencing-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ## Admin Completed Trip Closeout Existing Workflow Lock
 
@@ -1359,6 +1372,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver issue reports may inform admin-only exception handling, but raw issue detail, dispatcher notes, replacement-driver review, and closeout exception notes must not become public customer or public driver states without a separate customer/driver-safe contract.
 - Contract-level admin exception categories include driver no response, driver late/reminder due, cannot find passenger, passenger no-show review, passenger late review, timing/route changed, vehicle issue, replacement driver needed, replacement vehicle needed, dispatcher call needed, customer update review, completed-with-exception review, and closed after dispatcher review.
 - The existing workflow-status planning areas remain the only planned persistence placement for this lane: `day_of_trip_exception`, `dispatch_recovery`, `trip_completion`, and `closeout_review`.
+- Exception/recovery to closeout sequencing is guard-locked by `scripts/test-admin-exception-recovery-closeout-sequencing-guard.mjs`: Dispatch Recovery / Replacement readiness feeds Post-Recovery update readiness, Post-Recovery ready locally and closed exception review feed Day-of-Trip Completion Handoff, and Completion Handoff feeds Completed Trip Closeout Review customer closeout and exception/resolution checklist states.
 - Public driver pages must keep dispatcher exception/cancel/replacement workflows absent and future/staff-controlled.
 - Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive.
 - Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, mock QA/dev archive, dispatcher exception notes, replacement-driver review notes, or customer billing/payment/PDF readiness.

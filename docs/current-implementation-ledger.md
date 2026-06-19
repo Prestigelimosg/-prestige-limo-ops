@@ -1,21 +1,21 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this source-of-truth staging alignment record:
-f370968 Align workflow source of truth after dispatch release
+Latest verified clean checkpoint before this Driver Acknowledgement staging smoke record:
+7b13575 Guard driver acknowledgement dispatch release boundary
 
 Latest staging-smoked app checkpoint:
-f370968 Align workflow source of truth after dispatch release
+7b13575 Guard driver acknowledgement dispatch release boundary
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this source-of-truth staging alignment record: `f370968 Align workflow source of truth after dispatch release`.
-- Latest staging-smoked app checkpoint to preserve: `f370968 Align workflow source of truth after dispatch release`; `origin/staging` points to `f370968cbdbd20a48f07d7baabaec0a8cb092792`.
+- Last verified repo checkpoint before this Driver Acknowledgement staging smoke record: `7b13575 Guard driver acknowledgement dispatch release boundary`.
+- Latest staging-smoked app checkpoint to preserve: `7b13575 Guard driver acknowledgement dispatch release boundary`; `origin/staging` points to `7b13575320b878190a9c983d72e0eb1a6ce2b016`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this source-of-truth alignment: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
-- Current business-grade forward direction is now sequence-locked: Confirmed Booking To Dispatch Release is complete, confirmed-only eligibility is implemented and guarded, staging smoke is recorded, and the existing Dispatch Release workflow was reused without duplicate UI sector/button/card/route/helper/shim; do not repeat it. Any next runtime lane requires a fresh no-edit readiness audit plus explicit owner approval naming the lane; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
+- Current business-grade forward direction is now sequence-locked: Confirmed Booking To Dispatch Release is complete, confirmed-only eligibility is implemented and guarded, staging smoke is recorded, and the existing Dispatch Release workflow was reused without duplicate UI sector/button/card/route/helper/shim; do not repeat it. Admin Driver Acknowledgement Dispatch Release sequencing is complete, staging-smoked, and guarded; do not repeat it. Any next runtime lane requires a fresh no-edit readiness audit plus explicit owner approval naming the lane; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
 - Existing admin-only Dispatch Release workflow is now no-duplicate locked: reuse the current checklist, mark-ready control, handoff packet, and `/api/admin-booking-workflow-statuses` integration; do not add a second Dispatch Release UI sector/button/card/route/helper/shim without explicit owner approval.
 - Existing admin-only Driver Acknowledgement workflow is now no-duplicate locked: reuse the current readiness, mark-ready control, follow-up tracker, and `/api/admin-booking-workflow-statuses` integration; do not add a second Driver Acknowledgement UI sector/button/card/route/helper/shim without explicit owner approval.
 - Existing admin-only Driver Acknowledgement Dispatch Release sequencing is now boundary-locked: Driver Acknowledgement mark-ready/save and follow-up advancement require the existing Dispatch Release workflow status to be saved ready first; reuse the current readiness, mark-ready control, follow-up tracker, and `/api/admin-booking-workflow-statuses` integration.
@@ -176,6 +176,29 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Public customer and driver surfaces cannot trigger Driver Acknowledgement workflow status changes.
 - Save Booking remains on `POST /api/admin-bookings`; `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, UI sectors/cards/buttons, and shims remain unchanged.
 - This lock adds `scripts/test-admin-driver-acknowledgement-dispatch-release-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging Deploy Smoke for Driver Acknowledgement Dispatch Release Boundary
+
+- `origin/staging` points to `7b13575320b878190a9c983d72e0eb1a6ce2b016` (`7b13575 Guard driver acknowledgement dispatch release boundary`), verified directly with `git ls-remote`.
+- Remote staging before promotion was `f370968cbdbd20a48f07d7baabaec0a8cb092792`.
+- The push to `origin/staging` succeeded; local remote-tracking ref update was blocked by the sandbox lock-file permission, so direct `git ls-remote` is the remote source of truth.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.
+- Passive no-click Chrome/CDP staging smoke rendered the main admin UI with title `Prestige Limo Ops`.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was visible but was not clicked.
+- Dispatch Release rendered exactly one checklist, one mark-ready control, and one handoff packet.
+- Driver Acknowledgement rendered exactly one readiness surface, one mark-ready control, and one follow-up tracker.
+- Driver Acknowledgement Dispatch Release boundary text rendered, proving the staged app includes the saved Dispatch Release prerequisite.
+- No Dispatch Release or Driver Acknowledgement controls were clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Browser request audit rerun observed 38 GET requests, 38 HTTP 200 responses, 0 non-GET requests, 0 POST/write/send requests, 0 non-200 responses, and 0 missing responses.
+- A shorter preliminary CDP audit saw one GET-only load completion still pending; the longer detail rerun passed cleanly and is the recorded smoke result.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot captured: false.
+- Save Booking remains on `POST /api/admin-bookings`; `/api/admin-saved-bookings`, parser behavior, provider send, payment/PDF, pricing, payout, auth/location/photo/calendar, UI sectors/cards/buttons, and shims remain unchanged.
 
 ## Admin Day-of-Trip Dispatch Monitor Existing Workflow Lock
 

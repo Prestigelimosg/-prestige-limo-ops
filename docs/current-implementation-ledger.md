@@ -1,18 +1,18 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this customer copy multi-channel workflow staging smoke record:
-46b5217 Lock existing customer copy multi-channel workflow
+Latest verified clean checkpoint before this ledger preactivation suite registration staging smoke record:
+00c683e Guard ledger preactivation suite registrations
 
 Latest staging-smoked app checkpoint:
-46b5217 Lock existing customer copy multi-channel workflow
+00c683e Guard ledger preactivation suite registrations
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this customer copy multi-channel workflow staging smoke record: `46b5217 Lock existing customer copy multi-channel workflow`.
-- Latest implementation checkpoint to preserve: `46b5217 Lock existing customer copy multi-channel workflow`; `origin/staging` points to `46b52179a66582cc23bc8b9b35428c0d997c7fc0`.
+- Last verified repo checkpoint before this ledger preactivation suite registration staging smoke record: `00c683e Guard ledger preactivation suite registrations`.
+- Latest implementation checkpoint to preserve: `00c683e Guard ledger preactivation suite registrations`; `origin/staging` points to `00c683eeb930dad61027e4e86a061d3bba67c60c`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this staging smoke record: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Current business-grade forward direction is now sequence-locked: do not repeat completed persistence/RLS/staging/production verification unless a new runtime/deploy/env change creates a fresh reason; the next runtime direction, only after explicit owner approval, is admin-only Confirmed Booking To Dispatch Release from `docs/business-workflow-resume-stage4a410.md`; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
@@ -1943,6 +1943,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Any ledger line that says a `scripts/test-*.mjs` guard is registered in the preactivation suite must match an actual script entry in `scripts/test-preactivation-verification-suite.mjs`.
 - This prevents future source-of-truth drift where the ledger claims master-suite coverage that the suite does not run.
 - This lock adds `scripts/test-ledger-preactivation-suite-registration-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging No-Screenshot Request Smoke for Ledger Pre-Activation Suite Registration Guard
+- `origin/staging` points to `00c683eeb930dad61027e4e86a061d3bba67c60c` (`00c683e Guard ledger preactivation suite registrations`), verified directly with `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.
+- Passive browser request smoke rendered the main admin UI at desktop viewport with document title `Prestige Limo Ops`; no screenshot was captured.
+- Expected UI text rendered: `Prestige Limo Ops`, `Create Job Card`, `Save Booking + CRM`, `Dispatch`, `Dashboard`, `Bookings`, `Drivers`, `Completed`, and `Rates`.
+- Save Booking + CRM was visible but was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Observed browser request/response summary: 38 staging GET requests, 38 staging GET responses, 38 HTTP 200 responses, 0 non-GET requests, 0 non-200 responses, and 0 missing responses.
+- CDP also reported 2 browser-canceled load-completion events after all staging GET responses had HTTP 200; these were not POST/write/send actions.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot captured: false.
+- The ledger preactivation suite registration guard remains docs/test-only and does not approve endpoint migration, env changes, DB read/write, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors/buttons/cards, or new shims.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No new UI sectors/buttons/cards were added.
+- No new shims were added.
 
 ### Current Implementation Ledger Alignment Suite Registration
 - The existing current implementation ledger alignment guard is repaired for the current ledger checkpoint markers and registered in `scripts/test-preactivation-verification-suite.mjs`.

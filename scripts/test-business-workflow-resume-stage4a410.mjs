@@ -4,10 +4,13 @@ import path from "node:path";
 
 const recommendationPath = path.join(process.cwd(), "docs/business-workflow-resume-stage4a410.md");
 const docsIndexPath = path.join(process.cwd(), "docs/test-and-safety-docs-index.md");
+const preactivationSuitePath = path.join(process.cwd(), "scripts/test-preactivation-verification-suite.mjs");
 const adminPagePath = path.join(process.cwd(), "app/page.tsx");
 const customerRoutePath = path.join(process.cwd(), "app/api/customer-booking-requests/route.ts");
+const bookingPersistencePath = path.join(process.cwd(), "lib/admin-booking-persistence.ts");
 const driverStatusRoutePath = path.join(process.cwd(), "app/api/driver-job/[token]/status/route.ts");
 const monthlyBillingPlanPath = path.join(process.cwd(), "docs/regular-customer-monthly-billing-workflow-plan.md");
+const guardScript = "scripts/test-business-workflow-resume-stage4a410.mjs";
 
 function assertIncludes(text, expected, message = `Missing required text: ${expected}`) {
   assert.ok(text.includes(expected), message);
@@ -19,8 +22,10 @@ function assertNotMatches(text, pattern, message = `Forbidden pattern present: $
 
 const recommendation = await readFile(recommendationPath, "utf8");
 const docsIndex = await readFile(docsIndexPath, "utf8");
+const preactivationSuite = await readFile(preactivationSuitePath, "utf8");
 const adminPage = await readFile(adminPagePath, "utf8");
 const customerRoute = await readFile(customerRoutePath, "utf8");
+const bookingPersistence = await readFile(bookingPersistencePath, "utf8");
 const driverStatusRoute = await readFile(driverStatusRoutePath, "utf8");
 const monthlyBillingPlan = await readFile(monthlyBillingPlanPath, "utf8");
 
@@ -63,11 +68,27 @@ for (const customerRouteText of [
   "customer-booking-request",
   "Customer booking request",
   "customer_facing_status",
-  "admin_internal_status",
+  "short_notice_review_required",
   "short_notice_review_status",
 ]) {
   assertIncludes(customerRoute, customerRouteText);
 }
+
+for (const persistenceText of [
+  "parseCustomerBookingRequestPayload",
+  "customer_facing_status",
+  "admin_internal_status",
+  "short_notice_review_status",
+  "request_review_status",
+]) {
+  assertIncludes(bookingPersistence, persistenceText);
+}
+
+assertNotMatches(
+  customerRoute,
+  /request:\s*\{[\s\S]+?(admin_internal_status|request_review_status)/,
+  "Customer booking request public response must not expose internal admin review status fields.",
+);
 
 for (const driverRouteText of [
   "applyProductionDriverJobStatusUpdate",
@@ -89,6 +110,12 @@ assertIncludes(
   docsIndex,
   "[Business Workflow Resume Stage 4A-410](business-workflow-resume-stage4a410.md)",
   "Docs index must point at the Stage 4A-410 workflow recommendation.",
+);
+
+assertIncludes(
+  preactivationSuite,
+  guardScript,
+  "Preactivation suite must include the Stage 4A-410 workflow recommendation guard.",
 );
 
 for (const [label, text] of [

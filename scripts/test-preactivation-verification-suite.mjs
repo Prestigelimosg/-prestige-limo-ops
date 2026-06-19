@@ -22,6 +22,10 @@ const guardChecks = [
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },
   {
+    label: "business workflow resume Stage 4A-410 audit",
+    script: "scripts/test-business-workflow-resume-stage4a410.mjs",
+  },
+  {
     label: "admin Dispatch Release existing workflow lock guard",
     script: "scripts/test-admin-dispatch-release-existing-workflow-lock.mjs",
   },

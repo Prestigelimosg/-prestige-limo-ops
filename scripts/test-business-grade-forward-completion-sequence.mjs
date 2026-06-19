@@ -107,6 +107,7 @@ for (const fragment of [
   "The next runtime direction, only after explicit owner approval, is admin-only Confirmed Booking To Dispatch Release from `docs/business-workflow-resume-stage4a410.md`.",
   "Without new owner approval, allowed forward work remains read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.",
   "Testing and staging remain required at the correct layer; staging smoke is required after deploy-relevant runtime change and should not be used to move backward over already-smoked checkpoints.",
+  "Business workflow resume Stage 4A-410 audit is registered in `scripts/test-preactivation-verification-suite.mjs` through `scripts/test-business-workflow-resume-stage4a410.mjs`; it keeps the Confirmed Booking To Dispatch Release recommendation docs/test-only and verifies the public customer booking request route does not expose internal admin review statuses.",
   "This lock adds `scripts/test-business-grade-forward-completion-sequence.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, fragment, `ledger sequence fragment ${fragment}`);

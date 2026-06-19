@@ -2597,6 +2597,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This packet does not approve runtime invoice format implementation, invoice creation, invoice number assignment, invoice prefix writes, sequence writes, PDF generation, PDF storage, invoice sending, invoice delivery, customer email, WhatsApp, SMS, provider sends, payment links, payment provider setup, webhook setup, payment recording, payout automation, accounting export, finance export, billing automation, customer-visible finance changes, driver-visible finance changes, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
 - This lock adds `scripts/test-admin-monthly-invoice-pdf-format-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Safe GET for Monthly Invoice PDF Format Approval Guard
+
+- `origin/staging` was promoted from `028d3985138db4b0a85aa2143f7006a3072a35d4` to `988b65887eff3ee02e00c883aa578c4425c40a47`.
+- Staging includes `988b658 Guard monthly invoice PDF format approval`.
+- `git ls-remote --heads origin staging` confirmed `988b65887eff3ee02e00c883aa578c4425c40a47` after push.
+- A non-fatal local sandbox warning prevented updating the local `refs/remotes/origin/staging` tracking ref during push, so the remote hash source of truth for this record is `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Safe GET response title was `Prestige Limo Ops`.
+- Safe GET response included expected admin tab text: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Safe GET response included `Save Booking + CRM`, but it was not clicked.
+- No browser clicks were performed.
+- No forms were submitted.
+- No POST/write/send action was attempted.
+- Screenshot captured: false.
+- The staged commit remains docs/test-only guard work and does not approve runtime invoice format implementation, invoice creation, invoice number assignment, invoice prefix writes, sequence writes, PDF generation, PDF storage, invoice sending, payment links/provider, payment recording, payout/accounting/export, billing automation, provider sends, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
+
 ### Admin Monthly Invoice PDF Generation Approval Packet Lock
 
 - This packet is docs/test-only.

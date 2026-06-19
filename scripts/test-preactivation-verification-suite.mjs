@@ -290,6 +290,10 @@ const guardChecks = [
     script: "scripts/test-ledger-checkpoint-source-of-truth-guard.mjs",
   },
   {
+    label: "ledger preactivation suite registration guard",
+    script: "scripts/test-ledger-preactivation-suite-registration-guard.mjs",
+  },
+  {
     label: "current implementation ledger alignment guard",
     script: "scripts/test-current-implementation-ledger-alignment.mjs",
   },

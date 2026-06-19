@@ -2843,6 +2843,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This packet does not approve runtime payment link creation, payment provider setup, checkout session creation, webhook setup, live Stripe mode, live payment collection, invoice creation, invoice number assignment, PDF generation, PDF storage, invoice sending, invoice delivery, customer email, WhatsApp, SMS, provider sends, payment recording, payout automation, accounting export, finance export, billing automation, customer-visible finance changes, driver-visible finance changes, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
 - This lock adds `scripts/test-admin-monthly-invoice-payment-links-provider-approval-packet.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Safe GET for Monthly Invoice Payment Links Provider Approval Guard
+
+- `origin/staging` was promoted from `adefd36848919b89d2420ed18a2d6bc88aced95d` to `6323a4c8005475ff6068d851a65cf0fddebaa889`.
+- Staging includes `6323a4c Guard monthly invoice payment links provider approval`.
+- `git ls-remote --heads origin staging` confirmed `6323a4c8005475ff6068d851a65cf0fddebaa889` after push.
+- A non-fatal local sandbox warning prevented updating the local `refs/remotes/origin/staging` tracking ref during push, so the remote hash source of truth for this record is `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Safe GET response title was `Prestige Limo Ops`.
+- Safe GET response included expected admin tab text: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Safe GET response included `Save Booking + CRM`, but it was not clicked.
+- No browser clicks were performed.
+- No forms were submitted.
+- No POST/write/send action was attempted.
+- Screenshot captured: false.
+- The staged commit remains docs/test-only guard work and does not approve runtime payment link creation, payment provider setup, checkout session creation, webhook setup, live Stripe mode, live payment collection, invoice creation, invoice number assignment, PDF generation, PDF storage, invoice sending, invoice delivery, customer email, WhatsApp, SMS, provider sends, payment recording, payout automation, accounting export, finance export, billing automation, customer-visible finance changes, driver-visible finance changes, env changes, DB reads/writes, migrations, production deployment, Save Booking route changes, `/api/admin-saved-bookings` changes, parser changes, pricing/payout activation, auth/location/photo/calendar activation, UI sectors/cards/buttons, or new shims.
+
 ## Production Hardening Pre-Activation Completion Audit Lock
 
 - Production hardening is complete up to the activation stop.

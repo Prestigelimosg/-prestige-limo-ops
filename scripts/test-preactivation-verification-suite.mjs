@@ -50,6 +50,10 @@ const guardChecks = [
     script: "scripts/test-admin-monthly-billing-month-grouping-existing-workflow-lock.mjs",
   },
   {
+    label: "Customer Copy multi-channel existing workflow lock guard",
+    script: "scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs",
+  },
+  {
     label: "staging deployment approval packet guard",
     script: "scripts/test-staging-deployment-approval-packet-guard.mjs",
   },

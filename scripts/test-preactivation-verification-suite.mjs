@@ -42,6 +42,10 @@ const guardChecks = [
     script: "scripts/test-admin-driver-acknowledgement-existing-workflow-lock.mjs",
   },
   {
+    label: "admin Driver Acknowledgement Dispatch Release boundary guard",
+    script: "scripts/test-admin-driver-acknowledgement-dispatch-release-boundary-guard.mjs",
+  },
+  {
     label: "admin Day-of-Trip Dispatch Monitor existing workflow lock guard",
     script: "scripts/test-admin-day-of-trip-dispatch-monitor-existing-workflow-lock.mjs",
   },

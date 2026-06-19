@@ -1663,6 +1663,7 @@ function assertBookingUiState(state) {
   assert.deepEqual(
     state.driverAcknowledgementReadiness.items.map((item) => item.label),
     [
+      "Dispatch release saved",
       "Driver assigned",
       "Driver contact available",
       "Dispatch copy prepared",
@@ -1674,6 +1675,7 @@ function assertBookingUiState(state) {
   assert.deepEqual(
     state.driverAcknowledgementReadiness.items.map((item) => item.key),
     [
+      "dispatch-release-saved",
       "driver-assigned",
       "driver-contact",
       "dispatch-copy",
@@ -1681,6 +1683,10 @@ function assertBookingUiState(state) {
       "acknowledgement-local-status",
       "next-dispatcher-action",
     ],
+  );
+  assert.equal(
+    state.driverAcknowledgementReadiness.items.find((item) => item.key === "dispatch-release-saved")?.state,
+    "needs-action",
   );
   assert.equal(
     state.driverAcknowledgementReadiness.items.find((item) => item.key === "driver-assigned")?.state,
@@ -1704,7 +1710,7 @@ function assertBookingUiState(state) {
   );
   assert.equal(
     state.driverAcknowledgementReadiness.items.find((item) => item.key === "next-dispatcher-action")?.detail,
-    "Add driver contact before acknowledgement.",
+    "Save dispatch release ready status first.",
   );
   assert.equal(state.driverAcknowledgementReadiness.markReadyDisabled, true);
   assert.deepEqual(
@@ -1795,7 +1801,7 @@ function assertBookingUiState(state) {
   );
   assert.equal(
     state.driverAcknowledgementFollowUp.items.find((item) => item.key === "next-dispatcher-action")?.detail,
-    "Complete readiness first.",
+    "Complete driver acknowledgement readiness first.",
   );
   assert.equal(
     state.driverAcknowledgementFollowUp.items.find((item) => item.key === "local-follow-up-note")?.detail,

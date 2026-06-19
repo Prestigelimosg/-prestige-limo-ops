@@ -14,6 +14,7 @@ Existing runtime surfaces:
 - The existing workflow status route is `/api/admin-booking-workflow-statuses`.
 - The existing workflow area is `driver_acknowledgement`.
 - The existing saved status label is `Driver acknowledgement ready`.
+- The existing mark-ready/save and follow-up advancement boundary now requires the existing Dispatch Release workflow status to be saved ready first.
 
 Existing coverage:
 
@@ -21,6 +22,7 @@ Existing coverage:
 - `scripts/test-booking-ui-browser.mjs` covers the guarded workflow-status GET/POST shape for driver acknowledgement and verifies forbidden finance, notification, parser, secret, and token fields are absent from request bodies.
 - `scripts/test-mobile-usability-browser.mjs` covers compact mobile Driver Acknowledgement readiness/follow-up and no-horizontal-overflow boundaries.
 - `scripts/test-admin-booking-workflow-status-api-contract.mjs` covers the guarded workflow-status API contract.
+- `scripts/test-admin-driver-acknowledgement-dispatch-release-boundary-guard.mjs` covers the saved Dispatch Release sequencing boundary before Driver Acknowledgement mark-ready/save or follow-up advancement.
 
 ## Forward Rule
 
@@ -29,6 +31,7 @@ Future work must reuse the existing Driver Acknowledgement workflow instead of a
 If the owner explicitly approves a runtime improvement later, it must stay bounded to the existing admin dashboard Driver Acknowledgement workflow and:
 
 - Reuse the existing readiness, follow-up, and workflow-status API route.
+- Preserve the saved Dispatch Release ready requirement before Driver Acknowledgement mark-ready/save or follow-up advancement.
 - Stay compact and colocated with the current dispatch/admin workflow controls.
 - Keep Save Booking + CRM on `POST /api/admin-bookings`.
 - Keep `/api/admin-saved-bookings` separate and unchanged.

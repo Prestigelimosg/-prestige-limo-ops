@@ -13651,6 +13651,14 @@ export default function Home() {
   async function saveDriverAcknowledgementWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
 
+    if (!driverAcknowledgementReleaseEligible) {
+      setDriverAcknowledgementMessage({
+        tone: "info",
+        text: "Save dispatch release ready status before marking driver acknowledgement ready.",
+      });
+      return;
+    }
+
     if (!driverAcknowledgementCoreReady) {
       setDriverAcknowledgementMessage({
         tone: "info",
@@ -16274,32 +16282,46 @@ export default function Home() {
   const driverAcknowledgementSavedReady =
     clean(driverAcknowledgementWorkflowStatus?.workflow_area) === adminDriverAcknowledgementWorkflowArea &&
     clean(driverAcknowledgementWorkflowStatus?.status_value) === "ready";
+  const driverAcknowledgementReleaseEligible = dispatchReleaseSavedReady;
+  const driverAcknowledgementReady =
+    driverAcknowledgementReleaseEligible &&
+    driverAcknowledgementCoreReady;
   const driverAcknowledgementLocalStatus =
     adminBookingWorkflowStatusAction === "save-driver-acknowledgement"
       ? "Saving workflow status"
       : adminBookingWorkflowStatusAction === "load-driver-acknowledgement"
         ? "Loading saved workflow status"
-        : driverAcknowledgementSavedReady && driverAcknowledgementCoreReady
+        : driverAcknowledgementSavedReady && driverAcknowledgementReady
           ? "Saved ready status"
           : driverAcknowledgementSavedReady
             ? "Saved status needs current details"
-            : driverAcknowledgementMessage && driverAcknowledgementCoreReady
+            : driverAcknowledgementMessage && driverAcknowledgementReady
               ? "Ready locally"
-              : driverAcknowledgementCoreReady
+              : driverAcknowledgementReady
                 ? "Ready to mark locally"
                 : "Acknowledgement pending";
-  const driverAcknowledgementNextAction = !dispatchReleaseDriverName
-    ? "Assign driver before acknowledgement."
-    : !dispatchReleaseDriverContact
-      ? "Add driver contact before acknowledgement."
-      : !dispatchReleaseDriverDispatchReady
-        ? "Prepare driver dispatch copy."
-        : !dispatchReleaseDriverJobLinkReady
-          ? "Prepare driver job link."
-          : driverAcknowledgementSavedReady || driverAcknowledgementMessage
-            ? "Monitor manual driver acknowledgement."
-            : "Mark ready locally, then contact driver manually.";
+  const driverAcknowledgementNextAction = !driverAcknowledgementReleaseEligible
+    ? "Save dispatch release ready status first."
+    : !dispatchReleaseDriverName
+      ? "Assign driver before acknowledgement."
+      : !dispatchReleaseDriverContact
+        ? "Add driver contact before acknowledgement."
+        : !dispatchReleaseDriverDispatchReady
+          ? "Prepare driver dispatch copy."
+          : !dispatchReleaseDriverJobLinkReady
+            ? "Prepare driver job link."
+            : driverAcknowledgementSavedReady || driverAcknowledgementMessage
+              ? "Monitor manual driver acknowledgement."
+              : "Mark ready locally, then contact driver manually.";
   const driverAcknowledgementItems: DispatchReleaseChecklistItem[] = [
+    {
+      detail: driverAcknowledgementReleaseEligible
+        ? "Saved dispatch release status ready."
+        : "Save dispatch release ready status first.",
+      key: "dispatch-release-saved",
+      label: "Dispatch release saved",
+      state: driverAcknowledgementReleaseEligible ? "ready" : "needs-action",
+    },
     {
       detail: dispatchReleaseDriverName ? dispatchReleaseDriverName : "Driver not assigned.",
       key: "driver-assigned",
@@ -16328,13 +16350,13 @@ export default function Home() {
       detail: driverAcknowledgementLocalStatus,
       key: "acknowledgement-local-status",
       label: "Acknowledgement local status",
-      state: driverAcknowledgementCoreReady ? "ready" : "needs-action",
+      state: driverAcknowledgementReady ? "ready" : "needs-action",
     },
     {
       detail: driverAcknowledgementNextAction,
       key: "next-dispatcher-action",
       label: "Next dispatcher action",
-      state: driverAcknowledgementCoreReady ? "ready" : "needs-action",
+      state: driverAcknowledgementReady ? "ready" : "needs-action",
     },
   ];
   const customerDriverDetailsEmailReviewVehicleType =
@@ -16917,8 +16939,11 @@ export default function Home() {
       : driverAcknowledgementFollowUpStatus === "needs-call"
         ? "No response / needs call"
         : "Acknowledgement pending";
-  const driverAcknowledgementFollowUpNextAction = !driverAcknowledgementCoreReady
-    ? "Complete readiness first."
+  const driverAcknowledgementFollowUpOutcomeReady =
+    driverAcknowledgementReady &&
+    driverAcknowledgementFollowUpStatus === "acknowledged";
+  const driverAcknowledgementFollowUpNextAction = !driverAcknowledgementReady
+    ? "Complete driver acknowledgement readiness first."
     : driverAcknowledgementFollowUpStatus === "acknowledged"
       ? "Monitor trip after local acknowledgement."
       : driverAcknowledgementFollowUpStatus === "needs-call"
@@ -16964,10 +16989,7 @@ export default function Home() {
       detail: driverAcknowledgementFollowUpNextAction,
       key: "next-dispatcher-action",
       label: "Next dispatcher action",
-      state:
-        driverAcknowledgementCoreReady && driverAcknowledgementFollowUpStatus === "acknowledged"
-          ? "ready"
-          : "needs-action",
+      state: driverAcknowledgementFollowUpOutcomeReady ? "ready" : "needs-action",
     },
     {
       detail: `${driverAcknowledgementFollowUpStatusLabel}. ${
@@ -16978,7 +17000,7 @@ export default function Home() {
       state: driverAcknowledgementFollowUpStatus === "acknowledged" ? "ready" : "needs-action",
     },
   ];
-  const dayOfTripDriverAcknowledged = driverAcknowledgementFollowUpStatus === "acknowledged";
+  const dayOfTripDriverAcknowledged = driverAcknowledgementFollowUpOutcomeReady;
   const dayOfTripNoResponse =
     driverAcknowledgementFollowUpStatus === "needs-call" ||
     dayOfTripDispatchMonitorStatus === "needs-call";
@@ -28718,7 +28740,7 @@ export default function Home() {
                     </h3>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1 ${
-                        driverAcknowledgementCoreReady
+                        driverAcknowledgementReady
                           ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
                           : "bg-amber-100 text-amber-950 ring-amber-200"
                       }`}
@@ -28740,7 +28762,7 @@ export default function Home() {
                 <button
                   className="min-h-9 rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-left text-sm font-semibold text-indigo-950 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   data-admin-driver-acknowledgement-mark-ready="true"
-                  disabled={!driverAcknowledgementCoreReady || adminBookingWorkflowStatusAction !== null}
+                  disabled={!driverAcknowledgementReady || adminBookingWorkflowStatusAction !== null}
                   onClick={saveDriverAcknowledgementWorkflowStatus}
                   type="button"
                 >
@@ -28846,7 +28868,7 @@ export default function Home() {
                 >
                   {driverAcknowledgementFollowUpOptions.map((option) => {
                     const isSelected = driverAcknowledgementFollowUpStatus === option.value;
-                    const isDisabled = option.value !== "pending" && !driverAcknowledgementCoreReady;
+                    const isDisabled = option.value !== "pending" && !driverAcknowledgementReady;
 
                     return (
                       <button

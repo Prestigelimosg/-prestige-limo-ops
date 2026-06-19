@@ -78,6 +78,10 @@ const guardChecks = [
     script: "scripts/test-admin-monthly-billing-month-grouping-existing-workflow-lock.mjs",
   },
   {
+    label: "admin Monthly Billing Draft and Invoice Review sequencing guard",
+    script: "scripts/test-admin-monthly-billing-draft-invoice-sequencing-guard.mjs",
+  },
+  {
     label: "Customer Copy multi-channel existing workflow lock guard",
     script: "scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs",
   },

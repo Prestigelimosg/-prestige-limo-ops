@@ -22,6 +22,7 @@ The admin-only Monthly Billing Month Grouping workflow already exists in the cur
 - `scripts/test-mobile-usability-browser.mjs` covers compact mobile layout, read filters, pagination controls, readable rows/controls/notes, and no-horizontal-overflow behavior.
 - Dedicated API contract tests already exist for the guarded monthly billing grouping read and monthly billing draft/review routes.
 - `scripts/test-admin-monthly-billing-queue-month-grouping-sequencing-guard.mjs` covers this queue-to-grouping boundary.
+- `scripts/test-admin-monthly-billing-draft-invoice-sequencing-guard.mjs` covers this draft/invoice sequencing boundary.
 
 ## Existing Monthly Billing Queue to Month Grouping Sequencing
 
@@ -29,6 +30,20 @@ The admin-only Monthly Billing Month Grouping workflow already exists in the cur
 - Blocked queue trips and blocked saved trips remain blockers for Month Grouping readiness.
 - The existing Month Grouping review, saved grouping read controls, completed-booking billing-readiness audit action, and draft/review action controls are reused.
 - This sequencing evidence does not activate invoice creation, PDF generation/sending, payment, payout, provider sends, billing automation, customer messages, driver notifications, auth/location/photo/calendar, parser behavior, Save Booking, `/api/admin-saved-bookings`, or new shims.
+
+## Existing Monthly Billing Month Grouping to Draft Plan / Invoice Review Sequencing
+
+- Saved monthly billing grouping is the prerequisite for draft plan and invoice draft-prep actions.
+- A saved invoice draft with linked trips is the prerequisite for item review.
+- A saved item review and reviewed amount are prerequisites for billable price review.
+- An approved billable price review is the prerequisite for issue review.
+- A saved issue review is the prerequisite for issue record creation.
+- A locked draft issue record is the prerequisite for invoice-number reservation.
+- A reserved invoice number on a locked issue record is the prerequisite for PDF-review readiness.
+- The existing Month Grouping review reuses `data-admin-monthly-billing-draft-plan-save-action`, `data-admin-monthly-invoice-draft-save-action`, `data-admin-monthly-invoice-draft-item-review-save-action`, `data-admin-monthly-invoice-billable-price-review-save-action`, `data-admin-monthly-invoice-issue-review-save-action`, `data-admin-monthly-invoice-issue-record-save-action`, `data-admin-monthly-invoice-number-reservation-action`, and `data-admin-monthly-invoice-pdf-readiness-action`.
+- The existing guarded admin routes are reused: `/api/admin-monthly-billing-draft-plans`, `/api/admin-monthly-invoice-drafts`, `/api/admin-monthly-invoice-draft-item-reviews`, `/api/admin-monthly-invoice-billable-item-price-reviews`, `/api/admin-monthly-invoice-issue-reviews`, `/api/admin-monthly-invoice-issue-records`, `/api/admin-monthly-invoice-number-reservations`, and `/api/admin-monthly-invoice-issue-record-pdf-readiness`.
+- This sequencing evidence does not activate invoice creation, PDF generation/sending, payment, payout, provider sends, billing automation, customer messages, driver notifications, auth/location/photo/calendar, parser behavior, Save Booking, `/api/admin-saved-bookings`, or new shims.
+- `scripts/test-admin-monthly-billing-draft-invoice-sequencing-guard.mjs` covers this draft/invoice sequencing boundary.
 
 ## Future Work Rule
 

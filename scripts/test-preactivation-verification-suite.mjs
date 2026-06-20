@@ -254,6 +254,10 @@ const guardChecks = [
     script: "scripts/test-customer-voice-booking-draft-input-contract.mjs",
   },
   {
+    label: "Customer Voice Booking Speak button UI guard",
+    script: "scripts/test-customer-voice-booking-speak-button-ui-guard.mjs",
+  },
+  {
     label: "public customer portal saved-booking surface guard",
     script: "scripts/test-public-customer-portal-saved-booking-surface-guard.mjs",
   },

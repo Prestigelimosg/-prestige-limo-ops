@@ -1272,21 +1272,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-public-customer-form-surface-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Voice Booking Draft Input Contract Lock
-- This is a docs/test-only contract guard for future Customer Voice Booking Draft Input; it does not approve runtime implementation, UI/API behavior change, parser changes, `/api/ai-parse` changes, Save Booking changes, `/api/admin-saved-bookings` changes, new customer booking routes, audio recording/storage, speech-to-text provider integration, provider sends, env changes, DB read/write, production deploy, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, UI sector/button/card additions, or new shims.
-- Future voice booking is input-helper-only and must stay compact and colocated inside the existing `/book` customer booking page/form.
+- This is the bounded contract for the approved compact Customer Voice Booking Draft Input helper; it does not approve parser changes, `/api/ai-parse` changes, Save Booking changes, `/api/admin-saved-bookings` changes, new customer booking routes, audio recording/storage, speech-to-text provider integration, provider sends, env changes, DB read/write, production deploy, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, UI sector/button/card additions, or new shims.
+- Customer voice booking is input-helper-only and must stay compact and colocated inside the existing `/book` customer booking page/form.
+- The approved Speak control is one compact `type="button"` beside the existing `/book` Portal link in the header action group.
 - No new sector, giant card, duplicate booking page, duplicate booking workflow, duplicate route/helper/shim, or customer booking surface is approved by this lock.
-- Voice transcript may only fill a bounded draft transcript field or existing safe customer booking request fields.
+- Voice transcript may only fill the bounded local draft transcript helper or existing safe customer booking request fields if a future parser/draft-fill lane is separately approved.
 - Customer must review/edit and manually press BOOK / Submit Booking Request.
 - Admin review remains required after customer submission.
 - Speaking alone must not create a booking, auto-submit, auto-confirm, auto-dispatch, trigger Dispatch Release, or trigger Driver Acknowledgement.
 - No audio storage, customer/traveler memory write, speech-to-text provider integration, provider send, env change, DB read/write, parser change, `/api/ai-parse` exposure, Save Booking change, `/api/admin-saved-bookings` change, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, or new shim is approved.
-- Browser `SpeechRecognition` or browser-only dictation, if later approved, must include an unsupported-browser fallback and must not require backend audio storage.
+- Transcript stays in local component state only and is not submitted.
+- Browser `SpeechRecognition` or browser-only dictation must include an unsupported-browser fallback and must not require backend audio storage.
 - Parser/draft-fill from voice requires separate owner approval unless a future guard proves a safe customer draft parser path.
 - Existing `/book` submit path stays `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
 - Customer booking requests continue to map to customer-facing `Request Received` and internal admin `Admin Review Required` review state.
 - Existing WhatsApp transcript parsing and admin dispatcher intake parser/draft-fill are not Customer Voice Booking Draft Input and must not be treated as already-approved customer voice behavior.
 - `/api/ai-parse` cannot be exposed or reused for customer voice without separate owner approval.
-- This lock adds `docs/customer-voice-booking-draft-input-contract.md`, adds `scripts/test-customer-voice-booking-draft-input-contract.mjs`, and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- This lock is guarded by `docs/customer-voice-booking-draft-input-contract.md`, `scripts/test-customer-voice-booking-draft-input-contract.mjs`, `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Staging Safe GET for Customer Voice Booking Draft Input Contract Guard
 

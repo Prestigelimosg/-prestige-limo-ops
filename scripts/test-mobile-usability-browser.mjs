@@ -836,6 +836,7 @@ async function runChromeTest() {
       assert.deepEqual(
         state.items.map((item) => item.label),
         [
+          "Dispatch release saved",
           "Driver assigned",
           "Driver contact available",
           "Dispatch copy prepared",

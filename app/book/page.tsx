@@ -77,6 +77,45 @@ type CustomerBookingConfirmationStatus = {
   title: string;
 };
 
+type BrowserSpeechRecognitionAlternative = {
+  transcript: string;
+};
+
+type BrowserSpeechRecognitionResult = {
+  readonly 0?: BrowserSpeechRecognitionAlternative;
+};
+
+type BrowserSpeechRecognitionResultList = {
+  readonly length: number;
+  readonly [index: number]: BrowserSpeechRecognitionResult | undefined;
+};
+
+type BrowserSpeechRecognitionEvent = {
+  results: BrowserSpeechRecognitionResultList;
+};
+
+type BrowserSpeechRecognitionErrorEvent = {
+  error?: string;
+};
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onend: (() => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+type CustomerVoiceWindow = Window & {
+  SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+};
+
 const initialForm: BookingRequestForm = {
   companyName: "",
   contactNo: "",
@@ -163,12 +202,35 @@ function applyBookingMemoryToForm(
   });
 }
 
+function getSpeechRecognitionConstructor() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const browserWindow = window as CustomerVoiceWindow;
+
+  return browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null;
+}
+
+function transcriptFromSpeechEvent(event: BrowserSpeechRecognitionEvent) {
+  return Array.from({ length: event.results.length }, (_, index) => event.results[index]?.[0]?.transcript || "")
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function CustomerBookingPage() {
   const [form, setForm] = useState<BookingRequestForm>(initialForm);
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const bookingMemoryLoadStarted = useRef(false);
+  const voiceRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceHelperText, setVoiceHelperText] = useState(
+    "Use Speak as a local draft helper. Review the transcript, then type or edit the trip fields yourself.",
+  );
   const [confirmationStatus, setConfirmationStatus] = useState<CustomerBookingConfirmationStatus | null>(null);
   const [feedback, setFeedback] = useState<Feedback>({
     tone: "info",
@@ -237,6 +299,56 @@ export default function CustomerBookingPage() {
     });
     setMissingFields((current) => current.filter((item) => item !== "pickupTime"));
     setConfirmationStatus(null);
+  }
+
+  function handleSpeakDraft() {
+    if (voiceListening) {
+      voiceRecognitionRef.current?.stop();
+      setVoiceListening(false);
+      setVoiceHelperText("Voice draft stopped. Review the transcript, then type or edit the trip fields yourself.");
+      return;
+    }
+
+    const SpeechRecognitionConstructor = getSpeechRecognitionConstructor();
+
+    if (!SpeechRecognitionConstructor) {
+      setVoiceHelperText("Voice dictation is not supported in this browser. Type the trip details manually.");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionConstructor();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-SG";
+    recognition.onresult = (event) => {
+      const transcript = transcriptFromSpeechEvent(event);
+
+      if (transcript) {
+        setVoiceTranscript(transcript);
+        setVoiceHelperText("Voice draft captured locally. Review it, then type or edit the trip fields yourself.");
+      }
+    };
+    recognition.onerror = () => {
+      setVoiceListening(false);
+      setVoiceHelperText("Voice draft was not captured. Type the trip details manually.");
+    };
+    recognition.onend = () => {
+      setVoiceListening(false);
+      voiceRecognitionRef.current = null;
+    };
+
+    voiceRecognitionRef.current = recognition;
+    setVoiceTranscript("");
+    setVoiceListening(true);
+    setVoiceHelperText("Listening locally. Speak the trip details, then review the transcript before editing fields.");
+
+    try {
+      recognition.start();
+    } catch {
+      setVoiceListening(false);
+      voiceRecognitionRef.current = null;
+      setVoiceHelperText("Voice dictation could not start. Type the trip details manually.");
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -315,13 +427,28 @@ export default function CustomerBookingPage() {
                 Limo staff replies.
               </p>
             </div>
-            <Link
-              className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
-              data-customer-booking-portal-link="true"
-              href="/my-bookings"
+            <div
+              className="flex shrink-0 flex-wrap items-center gap-2"
+              data-customer-booking-header-actions="true"
             >
-              Portal
-            </Link>
+              <button
+                aria-pressed={voiceListening}
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950 transition hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
+                data-customer-voice-booking-mode="local-transcript-helper"
+                data-customer-voice-booking-speak-button="true"
+                onClick={handleSpeakDraft}
+                type="button"
+              >
+                {voiceListening ? "Listening" : "Speak"}
+              </button>
+              <Link
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+                data-customer-booking-portal-link="true"
+                href="/my-bookings"
+              >
+                Portal
+              </Link>
+            </div>
           </div>
           <p
             className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
@@ -329,6 +456,19 @@ export default function CustomerBookingPage() {
           >
             Mobile web request form for trip details only. Prestige Limo will reply before confirmation.
           </p>
+          <div
+            className="mt-3 text-sm leading-6 text-slate-700"
+            data-customer-voice-booking-helper="true"
+            data-customer-voice-booking-local-only="true"
+          >
+            <p data-customer-voice-booking-status="true">{voiceHelperText}</p>
+            {voiceTranscript ? (
+              <p className="mt-1" data-customer-voice-booking-draft-note="true">
+                <span className="font-semibold text-slate-950">Voice draft: </span>
+                <span data-customer-voice-booking-transcript="true">{voiceTranscript}</span>
+              </p>
+            ) : null}
+          </div>
           <ol
             aria-label="Booking request next steps"
             className="mt-4 grid gap-2 text-sm sm:grid-cols-3"

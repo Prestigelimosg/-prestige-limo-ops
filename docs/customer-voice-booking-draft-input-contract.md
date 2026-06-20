@@ -1,10 +1,11 @@
 # Customer Voice Booking Draft Input Contract
 
-This document is docs/test-only. It does not approve runtime implementation, UI/API behavior change, UI sectors, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, dispatch activation, audio recording/storage, speech-to-text provider integration, or new shims.
+This document records the bounded Customer Voice Booking Draft Input contract. It now approves only one compact browser-local Speak helper beside the existing `/book` Portal link. It does not approve UI sectors, endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, dispatch activation, audio recording/storage, speech-to-text provider integration, or new shims.
 
 ## Current Evidence
 
 - Existing customer booking page/form: `app/book/page.tsx`.
+- Existing compact Speak helper: one `type="button"` control beside the existing Portal link in the `/book` header action group.
 - Existing customer booking adapter: `lib/customer-booking-request-adapter.ts`.
 - Existing customer booking submit route: `POST /api/customer-booking-requests`.
 - Existing `/book` flow uses structured customer request fields: passenger, date, time, pickup, drop-off, service, vehicle, pax, luggage, and extra stops.
@@ -16,10 +17,10 @@ This document is docs/test-only. It does not approve runtime implementation, UI/
 
 ## Future Contract
 
-- Future Customer Voice Booking Draft Input is an input helper only.
-- Any future Speak control must be compact and placed inside the existing `/book` customer booking page/form.
+- Customer Voice Booking Draft Input is an input helper only.
+- The approved Speak control must stay compact and placed beside the existing Portal link inside the existing `/book` customer booking page/form header.
 - Do not add a new sector, giant card, duplicate booking page, duplicate booking workflow, duplicate route, duplicate helper, or new shim for the first version.
-- Voice transcript may only fill a bounded draft transcript field or existing safe customer booking request fields.
+- Voice transcript may only fill a bounded local draft transcript helper or existing safe customer booking request fields if a future parser/draft-fill lane is separately approved.
 - Customer must review and edit the draft before submission.
 - Customer must manually press BOOK / Submit Booking Request.
 - Admin review remains required after submission.
@@ -32,7 +33,7 @@ This document is docs/test-only. It does not approve runtime implementation, UI/
 - No audio storage in the first version.
 - No customer/traveler memory writes in the first version.
 - No speech-to-text provider integration in the first version.
-- Browser `SpeechRecognition` or browser-only dictation, if later approved, must include an unsupported-browser fallback and must not require backend audio storage.
+- Browser `SpeechRecognition` or browser-only dictation must include an unsupported-browser fallback and must not require backend audio storage.
 - Parser/draft-fill from voice requires separate owner approval unless a future guard proves a safe customer draft parser path.
 - `/api/ai-parse` cannot be exposed or reused for customer voice without separate owner approval.
 - Existing `/book` submit route must be reused: `POST /api/customer-booking-requests`.
@@ -55,9 +56,9 @@ Future safe behavior:
 
 ## Not Approved
 
-- Adding the Speak button.
-- UI implementation.
-- Runtime implementation.
+- Adding another Speak button.
+- Adding another voice UI sector, card, page, route, helper, workflow, or shim.
+- Runtime behavior beyond the one browser-local transcript helper.
 - Parser changes.
 - `/api/ai-parse` changes.
 - Save Booking route changes.
@@ -76,4 +77,4 @@ Future safe behavior:
 
 ## Guard
 
-This contract is guarded by `scripts/test-customer-voice-booking-draft-input-contract.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
+This contract is guarded by `scripts/test-customer-voice-booking-draft-input-contract.mjs` and `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, both registered in `scripts/test-preactivation-verification-suite.mjs`.

@@ -147,8 +147,9 @@ const ledgerSection = sectionBetween(ledger, "### Customer Voice Booking Draft I
 
 for (const fragment of [
   "# Customer Voice Booking Draft Input Contract",
-  "docs/test-only",
+  "bounded Customer Voice Booking Draft Input contract",
   "Existing customer booking page/form: `app/book/page.tsx`.",
+  "Existing compact Speak helper: one `type=\"button\"` control beside the existing Portal link in the `/book` header action group.",
   "Existing customer booking adapter: `lib/customer-booking-request-adapter.ts`.",
   "Existing customer booking submit route: `POST /api/customer-booking-requests`.",
   "Existing `/book` flow uses structured customer request fields",
@@ -157,10 +158,10 @@ for (const fragment of [
   "Parser/draft-fill exists in the admin dispatcher intake, not the customer `/book` page.",
   "Existing WhatsApp transcript parsing is not Customer Voice Booking Draft Input.",
   "`/api/ai-parse` is not safe to expose or reuse for customer voice without separate owner approval",
-  "Future Customer Voice Booking Draft Input is an input helper only.",
-  "Any future Speak control must be compact and placed inside the existing `/book` customer booking page/form.",
+  "Customer Voice Booking Draft Input is an input helper only.",
+  "The approved Speak control must stay compact and placed beside the existing Portal link inside the existing `/book` customer booking page/form header.",
   "Do not add a new sector, giant card, duplicate booking page, duplicate booking workflow, duplicate route, duplicate helper, or new shim for the first version.",
-  "Voice transcript may only fill a bounded draft transcript field or existing safe customer booking request fields.",
+  "Voice transcript may only fill a bounded local draft transcript helper or existing safe customer booking request fields if a future parser/draft-fill lane is separately approved.",
   "Customer must review and edit the draft before submission.",
   "Customer must manually press BOOK / Submit Booking Request.",
   "Admin review remains required after submission.",
@@ -173,7 +174,7 @@ for (const fragment of [
   "No audio storage in the first version.",
   "No customer/traveler memory writes in the first version.",
   "No speech-to-text provider integration in the first version.",
-  "Browser `SpeechRecognition` or browser-only dictation, if later approved, must include an unsupported-browser fallback",
+  "Browser `SpeechRecognition` or browser-only dictation must include an unsupported-browser fallback",
   "Parser/draft-fill from voice requires separate owner approval unless a future guard proves a safe customer draft parser path.",
   "`/api/ai-parse` cannot be exposed or reused for customer voice without separate owner approval.",
   "Existing `/book` submit route must be reused: `POST /api/customer-booking-requests`.",
@@ -182,37 +183,43 @@ for (const fragment of [
   "`/api/admin-saved-bookings` must remain untouched.",
   "No pricing, payout, payment, PDF, invoice, billing, finance, PayNow payout, customer price, driver payout",
   "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road.",
-  "This contract is guarded by `scripts/test-customer-voice-booking-draft-input-contract.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.",
+  "This contract is guarded by `scripts/test-customer-voice-booking-draft-input-contract.mjs` and `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, both registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(contract, fragment, `voice contract phrase ${fragment}`);
 }
 
 for (const fragment of [
   "Customer Voice Booking Draft Input Contract Lock",
-  "This is a docs/test-only contract guard",
-  "Future voice booking is input-helper-only",
-  "compact and colocated inside the existing `/book` customer booking page/form",
+  "This is the bounded contract for the approved compact Customer Voice Booking Draft Input helper",
+  "Customer voice booking is input-helper-only",
+  "The approved Speak control is one compact `type=\"button\"` beside the existing `/book` Portal link in the header action group.",
   "No new sector, giant card, duplicate booking page, duplicate booking workflow, duplicate route/helper/shim",
   "Customer must review/edit and manually press BOOK / Submit Booking Request",
   "Admin review remains required",
   "Speaking alone must not create a booking, auto-submit, auto-confirm, auto-dispatch, trigger Dispatch Release, or trigger Driver Acknowledgement.",
   "No audio storage, customer/traveler memory write, speech-to-text provider integration, provider send, env change, DB read/write, parser change, `/api/ai-parse` exposure, Save Booking change, `/api/admin-saved-bookings` change, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, or new shim is approved.",
+  "Transcript stays in local component state only and is not submitted.",
   "Existing `/book` submit path stays `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.",
-  "This lock adds `docs/customer-voice-booking-draft-input-contract.md`, adds `scripts/test-customer-voice-booking-draft-input-contract.mjs`, and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
+  "This lock is guarded by `docs/customer-voice-booking-draft-input-contract.md`, `scripts/test-customer-voice-booking-draft-input-contract.mjs`, `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, fragment, `ledger voice contract fragment ${fragment}`);
 }
 
 for (const fragment of [
   "[Customer Voice Booking Draft Input Contract](customer-voice-booking-draft-input-contract.md)",
-  "future compact Speak input helper",
-  "input-helper-only",
+  "approved compact Speak input helper",
+  "browser-local transcript helper beside Portal",
   "manual customer submit and admin review required",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index voice contract fragment ${fragment}`);
 }
 
 assertIncludes(preactivationSuite, guardScript, "preactivation suite voice contract registration");
+assertIncludes(
+  preactivationSuite,
+  "scripts/test-customer-voice-booking-speak-button-ui-guard.mjs",
+  "preactivation suite Speak button UI guard registration",
+);
 
 assertSameList(
   extractTypeKeys(bookPage, "BookingRequestForm"),
@@ -234,6 +241,12 @@ for (const fragment of [
   'data-customer-booking-page="true"',
   'data-customer-booking-form="true"',
   'data-customer-booking-submit="true"',
+  'data-customer-voice-booking-speak-button="true"',
+  'data-customer-voice-booking-mode="local-transcript-helper"',
+  'data-customer-voice-booking-local-only="true"',
+  'data-customer-voice-booking-transcript="true"',
+  "browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null",
+  "Voice dictation is not supported in this browser. Type the trip details manually.",
   "submitCustomerBookingRequest(form)",
   "This is a booking request only, not a confirmed booking yet.",
   "Our team will review and confirm availability before your booking is confirmed.",
@@ -290,20 +303,16 @@ for (const fragment of [
 assertIncludes(aiParserSchema, "customerPriceOverride", "AI parser schema remains admin/parser-shaped");
 assertIncludes(bookingParser, "WhatsAppTranscript", "Existing parser remains WhatsApp-transcript-oriented");
 
-for (const forbidden of [
-  "SpeechRecognition",
-  "webkitSpeechRecognition",
-  "data-customer-voice-booking",
-  "data-customer-booking-speak",
-  "Speak Booking",
-  "voice input",
-]) {
+for (const forbidden of ["data-customer-booking-speak", "Speak Booking", "voice input"]) {
   assertExcludes(bookPage, forbidden, "/book runtime source");
 }
 
 assertExcludes(bookPage, "/api/ai-parse", "/book must not call admin AI parser route");
 assertExcludes(bookPage, "/api/admin-bookings", "/book must not call admin booking route");
 assertExcludes(bookPage, "/api/admin-saved-bookings", "/book must not call admin saved bookings route");
+assertExcludes(bookPage, "fetch(\"/api", "/book must not add direct API fetch for voice");
+assertExcludes(bookPage, "MediaRecorder", "/book must not record audio");
+assertExcludes(bookPage, "navigator.mediaDevices", "/book must not request audio storage/capture APIs");
 
 const adapterBodyBlock =
   customerRequestAdapter.match(/function toCustomerBookingRequestApiBody[\s\S]+?\n}/)?.[0] || "";
@@ -313,6 +322,10 @@ for (const field of safeCustomerBookingFields) {
 }
 
 for (const forbidden of forbiddenCustomerVoiceFragments) {
+  assertExcludes(adapterBodyBlock, forbidden, `customer request adapter body ${forbidden}`);
+}
+
+for (const forbidden of ["voiceTranscript", "voice_transcript", "transcript", "audio", "speech", "stt"]) {
   assertExcludes(adapterBodyBlock, forbidden, `customer request adapter body ${forbidden}`);
 }
 

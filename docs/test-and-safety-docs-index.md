@@ -96,7 +96,7 @@ This index is a docs-only cross-reference for existing Prestige Limo Ops testing
 ## Customer, Payment, Billing, And Portal Planning
 
 - [Customer-Facing Booking Page Separation Plan](customer-facing-booking-page-plan.md) owns the separation between `/customers` and future customer-safe booking request pages.
-- [Customer Voice Booking Draft Input Contract](customer-voice-booking-draft-input-contract.md) owns the future compact Speak input helper boundary for `/book`: input-helper-only, browser-only/draft-first unless separately approved, no audio storage/provider/parser/API/runtime activation, manual customer submit and admin review required.
+- [Customer Voice Booking Draft Input Contract](customer-voice-booking-draft-input-contract.md) owns the approved compact Speak input helper boundary for `/book`: one browser-local transcript helper beside Portal, no audio storage/provider/parser/API submit-path activation, manual customer submit and admin review required.
 - [Customer Payments Workflow Design](customer-payments-workflow-design.md) owns internal customer folders, outstanding payments, manual-first collection, invoice prefix, and billing workflow planning.
 - [Customer Payment Owner Decision Answer Sheet](customer-payment-owner-decision-answer-sheet.md) owns owner decision prompts for customer/payment roles, payment updates, invoice numbers, audit rules, and production defaults.
 - [Customer Payment Production Open Decisions](customer-payment-production-open-decisions.md) owns the unresolved decision gates before customer/payment production implementation.

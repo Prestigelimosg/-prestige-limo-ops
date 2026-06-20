@@ -250,6 +250,10 @@ const guardChecks = [
     script: "scripts/test-public-customer-form-surface-boundary-guard.mjs",
   },
   {
+    label: "Customer Voice Booking Draft Input contract guard",
+    script: "scripts/test-customer-voice-booking-draft-input-contract.mjs",
+  },
+  {
     label: "public customer portal saved-booking surface guard",
     script: "scripts/test-public-customer-portal-saved-booking-surface-guard.mjs",
   },

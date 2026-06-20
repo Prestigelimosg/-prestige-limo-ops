@@ -1313,6 +1313,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Safe future mapping example after separate implementation approval: `passengerName` Stanley, `pickupDate` 2 June, `pickupTime` 1000, `pickupLocation` 123 Orchard Road, `dropoffLocation` airport, and `flightNumber` SQ123.
 - This lock is guarded by `docs/customer-voice-booking-draft-field-fill-contract.md`, `scripts/test-customer-voice-booking-draft-field-fill-contract.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Safe GET for Customer Voice Booking Draft Field-Fill Contract Guard
+- `origin/staging` was promoted from `92b7976aea812cb47721114dd40c1a4ff3e513b2` to `046102707b95408c25fc9dc50fc26231247e9a76`.
+- Staging includes `0461027 Guard customer voice draft field fill`.
+- `git ls-remote --heads origin staging` confirmed `046102707b95408c25fc9dc50fc26231247e9a76` after push.
+- A non-fatal local tracking-ref warning prevented updating local `refs/remotes/origin/staging` during push, so direct `git ls-remote` is the remote hash source of truth.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Safe GET response title was `Prestige Limo Ops`.
+- Safe GET response included expected admin tab text: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Safe GET response included `Save Booking`, but it was not clicked.
+- No browser clicks were performed.
+- No forms were submitted.
+- No POST/write/send action was attempted.
+- Screenshot captured: false.
+- Field-fill was not implemented.
+- Parser behavior was not changed.
+- `/api/ai-parse` was not used or changed.
+- The existing compact Speak helper remains input-helper-only.
+- Future Customer Voice Booking Draft Field-Fill implementation still requires separate explicit owner approval.
+- The staged commit remains docs/test-only guard work and does not approve UI/runtime/parser/API/env/DB/provider/audio storage/Save Booking/`/api/admin-saved-bookings`/payment/pricing/payout/PDF/dispatch/auth/location/photo/calendar/shim changes.
+
 ### Staging Deploy Smoke for Customer Voice Booking Speak Helper
 
 - `origin/staging` points to `888d957344d01a1218b727131b8872af18bf8f19` (`888d957 Add customer voice booking speak helper`), verified directly with `git ls-remote`.

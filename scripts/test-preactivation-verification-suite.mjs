@@ -587,6 +587,10 @@ const guardChecks = [
     script: "scripts/test-admin-monthly-invoice-manual-payment-reconciliation-approval-packet.mjs",
   },
   {
+    label: "admin monthly payout accounting finance export approval packet guard",
+    script: "scripts/test-admin-monthly-payout-accounting-export-approval-packet.mjs",
+  },
+  {
     label: "customer amendment no-live guard",
     script: "scripts/test-customer-amendment-no-live-guard.mjs",
   },

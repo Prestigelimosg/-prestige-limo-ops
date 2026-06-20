@@ -1,18 +1,18 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this Customer Voice Booking Speak helper staging smoke record:
-888d957 Add customer voice booking speak helper
+Latest verified clean checkpoint before this Customer Voice Booking Draft Field-Fill helper staging smoke record:
+36b5fac Add customer voice draft field fill helper
 
 Latest staging-smoked app checkpoint:
-888d957 Add customer voice booking speak helper
+36b5fac Add customer voice draft field fill helper
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this Customer Voice Booking Speak helper staging smoke record: `888d957 Add customer voice booking speak helper`.
-- Latest staging-smoked app checkpoint to preserve: `888d957 Add customer voice booking speak helper`; `origin/staging` points to `888d957344d01a1218b727131b8872af18bf8f19`.
+- Last verified repo checkpoint before this Customer Voice Booking Draft Field-Fill helper staging smoke record: `36b5fac Add customer voice draft field fill helper`.
+- Latest staging-smoked app checkpoint to preserve: `36b5fac Add customer voice draft field fill helper`; `origin/staging` points to `36b5fac46a1e38f33509fa0dff3fb2d75e96ca25`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this source-of-truth alignment: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Current business-grade forward direction is now sequence-locked: Confirmed Booking To Dispatch Release is complete, confirmed-only eligibility is implemented and guarded, staging smoke is recorded, and the existing Dispatch Release workflow was reused without duplicate UI sector/button/card/route/helper/shim; do not repeat it. Admin Driver Acknowledgement Dispatch Release sequencing is complete, staging-smoked, and guarded; do not repeat it. Any next runtime lane requires a fresh no-edit readiness audit plus explicit owner approval naming the lane; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
@@ -1350,6 +1350,35 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Admin review remains required after submission; speaking alone and field-fill alone do not create, confirm, dispatch, or release a booking.
 - No parser changes, `/api/ai-parse` usage, admin parser reuse, Save Booking changes, `/api/admin-saved-bookings` changes, provider sends, env changes, DB read/write, production deploy, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, audio storage, backend speech-to-text, or new shims are approved.
 - This implementation is guarded by `docs/customer-voice-booking-draft-field-fill-contract.md`, `scripts/test-customer-voice-booking-draft-field-fill-contract.mjs`, `scripts/test-customer-voice-booking-draft-field-fill-ui-guard.mjs`, `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging Smoke for Customer Voice Booking Draft Field-Fill Helper
+- `origin/staging` points to `36b5fac46a1e38f33509fa0dff3fb2d75e96ca25` (`36b5fac Add customer voice draft field fill helper`), verified directly with `git ls-remote`.
+- Remote staging before promotion was `20e3503ee2200e1482ceab1113e14bcf55575cf1`.
+- The push to `origin/staging` succeeded; local remote-tracking ref update reported a non-fatal lock warning, so direct `git ls-remote` is the remote source of truth.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/book` returned HTTP 200 by safe GET.
+- Passive no-click Chrome/CDP staging smoke rendered document title `Prestige Limo Ops`.
+- Expected admin tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- `/book` rendered the existing customer booking page and form.
+- `/book` rendered the existing Portal link pointing to `/my-bookings`.
+- `/book` rendered exactly one compact Speak button.
+- The Speak button rendered as `type="button"` with visible text `Speak`.
+- Speak was not clicked during smoke.
+- No microphone permission prompt was triggered.
+- Submit Booking Request / BOOK was not clicked.
+- Save Booking was not clicked.
+- No forms were submitted.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Browser request audit observed 54 staging requests, all GET-only.
+- Browser request audit observed 54 staging GET responses, 0 non-GET requests, 0 POST/write/send requests, 0 non-200 responses, and 0 missing responses.
+- Browser request audit observed one browser-canceled GET-only load event (`net::ERR_ABORTED`, canceled true); it was not a POST/write/send request.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot captured: false.
+- A first local Chrome/CDP launch attempt aborted before DevTools became ready; the direct passive Chrome/CDP rerun passed and did not require any app/runtime changes.
+- Field-fill remains local-only browser transcript state/ref behavior, fills only empty approved fields, keeps manual customer review required, and keeps existing manual submit semantics.
+- No parser, `/api/ai-parse`, backend STT, provider, DB, route, Save Booking, `/api/admin-saved-bookings`, billing/payment, pricing, payout, PDF, dispatch, auth/location/photo/calendar, or shim wiring was added.
 
 ### Staging Deploy Smoke for Customer Voice Booking Speak Helper
 

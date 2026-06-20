@@ -1290,6 +1290,29 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/api/ai-parse` cannot be exposed or reused for customer voice without separate owner approval.
 - This lock is guarded by `docs/customer-voice-booking-draft-input-contract.md`, `scripts/test-customer-voice-booking-draft-input-contract.mjs`, `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Voice Booking Draft Field-Fill Contract Lock
+- This is a docs/test-only lock for a future Customer Voice Booking Draft Field-Fill lane; it does not approve field-fill implementation, parser changes, `/api/ai-parse` usage, UI changes, new buttons, submit behavior changes, Save Booking changes, `/api/admin-saved-bookings` changes, new customer booking routes, audio storage, backend speech-to-text/provider integration, provider sends, env changes, DB read/write, production deploy, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, or new shims.
+- Customer Voice Booking Draft Field-Fill is separate from the existing compact Speak button lane.
+- The existing compact Speak button remains input-helper-only until field-fill is separately approved.
+- Current Speak behavior remains compact local transcript helper only: transcript is local React state, does not fill form fields, does not submit transcript/audio, and does not call parser/API/STT/provider routes.
+- Future field-fill must never auto-submit, auto-confirm, auto-dispatch, trigger Dispatch Release, or trigger Driver Acknowledgement.
+- Customer must manually review/edit fields and manually press Submit Booking Request / BOOK.
+- Admin review remains required after submission.
+- Existing `/book` submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
+- Future field-fill may target only existing submitted customer request fields: `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
+- `specialRequest` exists in `/book` UI state but is not forwarded by the adapter, is not allowed in customer booking request persistence, and remains local-only and excluded from submitted field-fill scope until separately approved.
+- Transcript/audio must not be submitted or stored unless separately approved.
+- `/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.
+- Admin parser/draft-fill cannot be reused directly for public customer voice.
+- Existing `/api/ai-parse` remains admin/parser-shaped and includes `customerPriceOverride`; existing WhatsApp transcript parsing and admin dispatcher intake draft-fill are not Customer Voice Booking Draft Field-Fill.
+- If parsing is uncertain, leave fields unchanged and show the transcript for manual review; do not guess unsafe fields.
+- Future field-fill must exclude pricing, payout, payment/PDF, billing, dispatch release, driver acknowledgement, admin internal status, provider send fields, auth/location/photo/calendar, `customer_rates`, `driver_payout_rules`, internal/debug/secrets, transcript/audio persistence, and `specialRequest` submission unless separately approved.
+- Future implementation must include browser/mobile coverage proving Speak remains `type="button"`, field-fill does not submit, manual Submit Booking Request / BOOK remains required, customer review/edit remains required, mobile layout does not overflow, Portal remains unchanged, and the submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
+- No duplicate booking page, workflow, sector, card, route, helper, button, or shim is approved.
+- Example future phrase: "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road."
+- Safe future mapping example after separate implementation approval: `passengerName` Stanley, `pickupDate` 2 June, `pickupTime` 1000, `pickupLocation` 123 Orchard Road, `dropoffLocation` airport, and `flightNumber` SQ123.
+- This lock is guarded by `docs/customer-voice-booking-draft-field-fill-contract.md`, `scripts/test-customer-voice-booking-draft-field-fill-contract.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging Deploy Smoke for Customer Voice Booking Speak Helper
 
 - `origin/staging` points to `888d957344d01a1218b727131b8872af18bf8f19` (`888d957 Add customer voice booking speak helper`), verified directly with `git ls-remote`.

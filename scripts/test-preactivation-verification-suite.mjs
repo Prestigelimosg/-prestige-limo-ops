@@ -326,6 +326,10 @@ const guardChecks = [
     script: "scripts/test-flightaware-aeroapi-live-lookup-no-scheduler-guard.mjs",
   },
   {
+    label: "FlightAware AeroAPI commercial activation constraint guard",
+    script: "scripts/test-flightaware-aeroapi-commercial-activation-constraint-guard.mjs",
+  },
+  {
     label: "public customer driver-details link surface guard",
     script: "scripts/test-public-customer-driver-details-link-surface-guard.mjs",
   },

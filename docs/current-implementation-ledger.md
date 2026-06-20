@@ -4641,3 +4641,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The contract allows max one provider request per invocation, uses a strict timeout, and has no scheduler, cron, queue, polling loop, server retry, provider send, notification send, DB persistence, UI sector/button/card, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/payout/payment/PDF/billing change, auth/location/photo/calendar/OTS activation, or shim change.
 - Guards added: `scripts/test-admin-flightaware-aeroapi-live-lookup-action-api-contract.mjs` and `scripts/test-flightaware-aeroapi-live-lookup-no-scheduler-guard.mjs`.
 - This contract remains not-live until a separate owner-approved staging evidence pass names the staging target, opens the gate for one bounded live lookup window, records rollback/closed-gate proof, and confirms no forbidden surfaces were activated.
+
+## FlightAware/AeroAPI Commercial Activation Constraint Lock
+
+- Owner has not approved the FlightAware company contract.
+- Owner prefers usage/GET-style cost only and does not approve monthly/business service activation at this time.
+- FlightAware AeroAPI business use may require Standard terms/monthly minimum, so the app must remain not-live until owner separately approves the company contract and cost model.
+- Keep the internal app route as `POST /api/admin-flightaware-aeroapi-live-lookup-action`, not GET, because it is an admin action with authorization and request payload.
+- The route must remain closed behind `PRESTIGE_FLIGHTAWARE_AEROAPI_LIVE_LOOKUP_ENABLED`.
+- Future live evidence requires separate owner approval after company contract and cost approval.
+- No live FlightAware/AeroAPI request, env change, token setup, provider credential read while the gate is closed, external request while the gate is closed, scheduler, polling, retry loop, customer-visible auto-refresh, monthly/business activation, deploy, DB write, provider send, Email/WhatsApp/SMS/Telegram, parser, Save Booking, `/api/admin-saved-bookings`, pricing/rates/payout/payment/PDF/billing, auth/location/photo/calendar/OTS, UI, or shim change is approved by this lock.
+- This lock is guarded by `scripts/test-flightaware-aeroapi-commercial-activation-constraint-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.

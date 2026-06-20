@@ -6,13 +6,17 @@ a682e97 Implement Load Bookings typed primary display source
 Latest staging-smoked app checkpoint:
 a682e97 Implement Load Bookings typed primary display source
 
+Latest remote staging branch head:
+4798066 Record staging smoke for Load Bookings typed display
+
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
 - Last verified repo checkpoint before this Load Bookings typed primary display source staging smoke record: `a682e97 Implement Load Bookings typed primary display source`.
-- Latest staging-smoked app checkpoint to preserve: `a682e97 Implement Load Bookings typed primary display source`; `origin/staging` points to `a682e974cf977a15602b13e3e7d8d1f1f4c99a30`.
+- Latest staging-smoked app checkpoint to preserve: `a682e97 Implement Load Bookings typed primary display source`.
+- Latest `origin/staging` branch head to preserve: `47980662d5bebfcc2dadd151055604ab19026a8f` (`4798066 Record staging smoke for Load Bookings typed display`), docs-only smoke record for `a682e97 Implement Load Bookings typed primary display source`, verified directly with `git ls-remote`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this source-of-truth alignment: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Current business-grade forward direction is now sequence-locked: Confirmed Booking To Dispatch Release is complete, confirmed-only eligibility is implemented and guarded, staging smoke is recorded, and the existing Dispatch Release workflow was reused without duplicate UI sector/button/card/route/helper/shim; do not repeat it. Admin Driver Acknowledgement Dispatch Release sequencing is complete, staging-smoked, and guarded; do not repeat it. Any next runtime lane requires a fresh no-edit readiness audit plus explicit owner approval naming the lane; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
@@ -865,7 +869,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, deployment, DB read/write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, unrelated UI sector/button/card addition, or new shim is included.
 
 ### Staging No-Click Smoke for Load Bookings Typed Primary Display Source
-- `origin/staging` points to `a682e974cf977a15602b13e3e7d8d1f1f4c99a30` (`a682e97 Implement Load Bookings typed primary display source`), verified directly with `git ls-remote`.
+- At smoke time, `origin/staging` pointed to `a682e974cf977a15602b13e3e7d8d1f1f4c99a30` (`a682e97 Implement Load Bookings typed primary display source`), verified directly with `git ls-remote`.
+- After the docs-only smoke record was committed and pushed, `origin/staging` points to `47980662d5bebfcc2dadd151055604ab19026a8f` (`4798066 Record staging smoke for Load Bookings typed display`), while the staging-smoked app checkpoint remains `a682e97 Implement Load Bookings typed primary display source`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
 - Passive no-click Chrome/CDP staging smoke rendered the main admin UI with document title `Prestige Limo Ops`.
 - Expected tabs rendered: `Dispatch`, `Dashboard`, `Bookings`, `Drivers`, `Completed`, and `Rates`.
@@ -2310,7 +2315,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - Checkpoint state must be recorded by commit hash and task name, not counters.
 - The top latest staging-smoked app checkpoint must match the Next GPT Lock staging-smoked or implementation checkpoint line.
-- The latest staging smoke section for the top checkpoint must name the same short hash and the full 40-character `origin/staging` hash.
+- The latest staging smoke section for the top app checkpoint must name the same app short hash and the current full 40-character `origin/staging` branch-head hash, including docs-only smoke records pushed after the app smoke.
 - No inconsistent checkpoint counters are approved.
 - This lock adds `scripts/test-ledger-checkpoint-source-of-truth-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 

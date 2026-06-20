@@ -35,10 +35,6 @@ function sectionsForHeadings(source, headingPattern, nextHeadingPattern = /\n###
   return sections;
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 const [ledger, preactivationSuite] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
@@ -69,20 +65,46 @@ assert.ok(
   "Top latest verified clean checkpoint must be a short git hash plus task name.",
 );
 
+const topRemoteStagingMatch = ledger.match(
+  /^Latest remote staging branch head:\n([0-9a-f]{7,12}) (.+)$/m,
+);
+assert.ok(
+  topRemoteStagingMatch,
+  "Top latest remote staging branch head must be a short git hash plus task name.",
+);
+const [, topRemoteShortHash, topRemoteTaskName] = topRemoteStagingMatch;
+assert.ok(topRemoteTaskName.trim().length > 0, "Top remote staging branch-head task name must be present.");
+
 const nextGptLock = sectionBetween(
   ledger,
   "## Next GPT Lock / Uncompleted Backlog",
   /\n## /g,
 );
-const nextCheckpointMatch = nextGptLock.match(
-  /- Latest (?:implementation|staging-smoked app) checkpoint to preserve: `([0-9a-f]{7,12}) ([^`]+)`; `origin\/staging` points to `([0-9a-f]{40})`\./,
+const nextAppCheckpointMatch = nextGptLock.match(
+  /- Latest (?:implementation|staging-smoked app) checkpoint to preserve: `([0-9a-f]{7,12}) ([^`]+)`\./,
 );
 assert.ok(
-  nextCheckpointMatch,
-  "Next GPT Lock must name the preserved checkpoint and the full origin/staging hash.",
+  nextAppCheckpointMatch,
+  "Next GPT Lock must name the preserved app checkpoint.",
 );
 
-const [, nextShortHash, nextTaskName, originStagingHash] = nextCheckpointMatch;
+const nextRemoteCheckpointMatch = nextGptLock.match(
+  /- Latest `origin\/staging` branch head to preserve: `([0-9a-f]{40})` \(`([0-9a-f]{7,12}) ([^`]+)`\), docs-only smoke record for `([0-9a-f]{7,12}) ([^`]+)`, verified directly with `git ls-remote`\./,
+);
+assert.ok(
+  nextRemoteCheckpointMatch,
+  "Next GPT Lock must name the current full origin/staging branch-head hash and the app checkpoint it records.",
+);
+
+const [
+  ,
+  originStagingHash,
+  nextRemoteShortHash,
+  nextRemoteTaskName,
+  recordedAppShortHash,
+  recordedAppTaskName,
+] = nextRemoteCheckpointMatch;
+const [, nextShortHash, nextTaskName] = nextAppCheckpointMatch;
 
 assert.equal(
   `${nextShortHash} ${nextTaskName}`,
@@ -90,33 +112,40 @@ assert.equal(
   "Top latest staging-smoked app checkpoint must match the Next GPT Lock preserved checkpoint.",
 );
 assert.equal(
-  originStagingHash.startsWith(topShortHash),
+  `${recordedAppShortHash} ${recordedAppTaskName}`,
+  `${topShortHash} ${topTaskName}`,
+  "Latest origin/staging branch head must identify the same staging-smoked app checkpoint it records.",
+);
+assert.equal(
+  `${nextRemoteShortHash} ${nextRemoteTaskName}`,
+  `${topRemoteShortHash} ${topRemoteTaskName}`,
+  "Top remote staging branch head must match the Next GPT Lock branch-head checkpoint.",
+);
+assert.equal(
+  originStagingHash.startsWith(nextRemoteShortHash),
   true,
-  "Full origin/staging hash must start with the top checkpoint short hash.",
+  "Full origin/staging branch-head hash must start with the remote branch-head short hash.",
 );
 
-const checkpointLabelPattern = new RegExp(
-  `\\(\\\`?${escapeRegExp(topShortHash)} ${escapeRegExp(topTaskName)}\\\`?\\)`,
-);
 const stagingSmokeSections = sectionsForHeadings(ledger, /^### Staging[^\n]*$/m);
 const latestSmokeSection = stagingSmokeSections.find(
-  (section) => section.includes(`\`${originStagingHash}\``) && checkpointLabelPattern.test(section),
+  (section) => section.includes(`\`${originStagingHash}\``) && section.includes(`${topShortHash} ${topTaskName}`),
 );
 
 assert.ok(
   latestSmokeSection,
-  "Ledger must keep a staging smoke section for the top checkpoint and origin/staging hash.",
+  "Ledger must keep a staging smoke section for the top app checkpoint and current origin/staging branch-head hash.",
 );
 
 assertIncludes(
   latestSmokeSection,
   `origin/staging\` points to \`${originStagingHash}\``,
-  "Latest staging smoke origin/staging full hash",
+  "Latest staging smoke current origin/staging branch-head full hash",
 );
 assert.equal(
-  checkpointLabelPattern.test(latestSmokeSection),
+  latestSmokeSection.includes(`${topShortHash} ${topTaskName}`),
   true,
-  "Latest staging smoke must name the same short hash and task name.",
+  "Latest staging smoke must name the same staging-smoked app short hash and task name.",
 );
 
 for (const phrase of [
@@ -139,7 +168,7 @@ for (const phrase of [
   "This is a docs/test-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "Checkpoint state must be recorded by commit hash and task name, not counters.",
   "The top latest staging-smoked app checkpoint must match the Next GPT Lock staging-smoked or implementation checkpoint line.",
-  "The latest staging smoke section for the top checkpoint must name the same short hash and the full 40-character `origin/staging` hash.",
+  "The latest staging smoke section for the top app checkpoint must name the same app short hash and the current full 40-character `origin/staging` branch-head hash, including docs-only smoke records pushed after the app smoke.",
   "No inconsistent checkpoint counters are approved.",
   "This lock adds `scripts/test-ledger-checkpoint-source-of-truth-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {

@@ -835,6 +835,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, deployment, DB write, migration, provider/send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card addition, or new shim is approved by this lock.
 - This lock adds `scripts/test-load-bookings-endpoint-migration-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Load Bookings Primary List Source Boundary Guard Lock
+- Load Bookings primary-list-source boundary is guarded before any future runtime implementation.
+- This is a docs/test-only guard; it does not approve runtime implementation, endpoint migration, env changes, deployment, DB read/write, provider sends, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card additions, or new shims.
+- For the next bounded runtime lane, `runtime read wiring` means typed read safe operational data may become the primary list/display source only.
+- `runtime read wiring` does not mean opening the DB-read gate, changing env, activating live DB reads, migrating detail/form fallback, or replacing legacy action/form source.
+- Existing `GET /api/admin-load-bookings-typed-read` must be reused for typed safe operational list/display data.
+- Existing `GET /api/admin-saved-bookings` must remain the booking/form/detail fallback source unless a separate owner-approved detail/form migration guard is added later.
+- `loadSelectedBooking` and `bookingRecordToForm` must continue to consume legacy `BookingRecord` records, not typed `safe_card` or `safe_dto` output.
+- Typed safe-card data must not feed Save Booking + CRM, `bookingRecordToForm`, driver dispatch payout copy, driver assignment payout controls, billing readiness, pricing, payout, payment/PDF, provider send, parser, auth/location/photo/calendar, or internal/admin/debug fields.
+- Typed read failure, closed gate, blocked admin boundary, or malformed response must fall back safely without replacing the legacy booking/form source.
+- No duplicate Load Bookings UI sector/button/card/route/helper/shim is approved.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- This lock adds `scripts/test-load-bookings-primary-list-source-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging Visual Smoke for Load Bookings Endpoint Migration Readiness Guard
 - `origin/staging` points to `75ec5e3ff8d67f4265a9a6466a0894fcbb48d531` (`75ec5e3 Guard Load Bookings endpoint migration readiness`).
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.

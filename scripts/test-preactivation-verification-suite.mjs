@@ -186,6 +186,10 @@ const guardChecks = [
     script: "scripts/test-load-bookings-endpoint-migration-readiness-guard.mjs",
   },
   {
+    label: "Load Bookings primary-list source boundary guard",
+    script: "scripts/test-load-bookings-primary-list-source-boundary-guard.mjs",
+  },
+  {
     label: "Load Bookings typed-read admin boundary order guard",
     script: "scripts/test-load-bookings-typed-read-admin-boundary-order-guard.mjs",
   },

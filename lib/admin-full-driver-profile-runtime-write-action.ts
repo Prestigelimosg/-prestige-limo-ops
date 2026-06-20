@@ -36,7 +36,6 @@ export type AdminFullDriverProfileRuntimeFields = {
 
 export type AdminFullDriverProfileRuntimeRecord = AdminFullDriverProfileRuntimeFields & {
   id: number;
-  updated_at: string | null;
 };
 
 export type AdminFullDriverProfileRuntimeWriteActionResult = {
@@ -73,11 +72,11 @@ const safeBlockedError =
 const safeConfigError = "Full driver profile write is not configured on this server.";
 const safeWriteError = "Full driver profile write failed safely.";
 const fullDriverProfileWriteSelect =
-  "id, driver_name, contact_number, vehicle_type, plate_number, availability_status, updated_at";
+  "id, driver_name, contact_number, vehicle_type, plate_number, availability_status";
 const placeholderConfigPattern =
   /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
 const forbiddenFieldPattern =
-  /payout_preferences|driver_payout_rules|driver_payout|customer_rate|customer_price|customer_rates|pricing|price|payout|payment|billing|invoice|pdf|provider|send_state|send_log|auth|location|live_location|photo|calendar|internal|admin_notes|notes|preferred_areas|airport_permit_notes|parser_debug|debug|secret|api_key|access_token|raw_token|paynow|pay_now|mock_archive|mock_qa/i;
+  /payout_preferences|driver_payout_rules|driver_payout|customer_rate|customer_price|customer_rates|pricing|price|payout|payment|billing|invoice|pdf|provider|send_state|send_log|auth|location|live_location|photo|calendar|internal|admin_notes|notes|preferred_areas|airport_permit_notes|parser_debug|debug|secret|api_key|access_token|raw_token|updated_at|paynow|pay_now|mock_archive|mock_qa/i;
 const forbiddenValuePattern =
   /admin finance|admin note|billing|debug|driver payout|internal admin|internal note|invoice|parser|payment|paynow|payout|pricing|secret|service role|token/i;
 
@@ -500,14 +499,19 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor) {
 }
 
 function writePayload(fields: AdminFullDriverProfileRuntimeFields) {
-  return {
+  const payload = {
     availability_status: fields.availability_status ?? "available",
     contact_number: fields.contact_number,
     driver_name: fields.driver_name,
     plate_number: fields.plate_number,
-    updated_at: new Date().toISOString(),
     vehicle_type: fields.vehicle_type,
   };
+
+  for (const excludedField of ["updated_at"]) {
+    delete (payload as Record<string, unknown>)[excludedField];
+  }
+
+  return payload;
 }
 
 function toRuntimeRecord(value: unknown): AdminFullDriverProfileRuntimeRecord | null {
@@ -524,7 +528,6 @@ function toRuntimeRecord(value: unknown): AdminFullDriverProfileRuntimeRecord | 
     driver_name: safeText(source.driver_name, 220),
     id,
     plate_number: safeText(source.plate_number, 80),
-    updated_at: safeText(source.updated_at, 80),
     vehicle_type: safeText(source.vehicle_type, 120),
   };
 }

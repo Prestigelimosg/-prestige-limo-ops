@@ -4291,6 +4291,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No env change, deployment, DB read/write/delete execution, migration, provider/send, Save Booking + CRM change, `/api/admin-saved-bookings` change, parser change, UI sector/button/card, new shim, `payout_preferences`, `driver_payout_rules`, pricing, payout, notes, preferred areas, airport permit notes, payment/PDF/billing, auth, location/photo/calendar activation, internal/admin notes, debug, secrets, PayNow, or mock QA/dev archive change is approved by this lock.
 - This lock adds `scripts/test-full-driver-profile-runtime-activation-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Full Driver Profile Five-Field Runtime Scope Fix
+- Full Driver Profile staging write gate evidence was blocked because `updated_at` was present in the runtime write/select evidence path even though the approved activation scope is five safe operational fields only.
+- The runtime write/select evidence path is tightened to `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, and `availability_status`, with `id` used only as the existing driver record identifier.
+- `updated_at` is not app-written, not selected for the runtime evidence response, and is defensively stripped from the helper write payload before return.
+- The activation readiness guard now treats `updated_at` as forbidden evidence scope and enforces the five-field write/select boundary.
+- Full Driver Profile staging write gate evidence remains blocked until a fresh no-edit readiness audit reruns the guard suite and confirms this five-field boundary.
+- This fix does not open `PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED`, run a DB write/delete/read evidence window, change env, deploy, touch provider/send, parser, Save Booking + CRM, `/api/admin-saved-bookings`, pricing, customer rates, driver payout rules, payout execution, payment/PDF/billing, auth/location/photo/calendar, UI sectors/cards/buttons, or shims.
+
 ### Staging Visual Smoke for Full Driver Profile Activation Readiness Guard
 - `origin/staging` points to `566fdba7e34a88d189761d8fbd215446394c90ed` (`566fdba Add full driver profile activation readiness guard`).
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.

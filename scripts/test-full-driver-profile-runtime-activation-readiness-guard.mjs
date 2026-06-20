@@ -17,11 +17,10 @@ const allowedSafeFields = [
   "availability_status",
   "contact_number",
   "driver_name",
-  "id",
   "plate_number",
-  "updated_at",
   "vehicle_type",
 ];
+const allowedRecordIdentityFields = ["id"];
 const forbiddenActivationFields = [
   "payout_preferences",
   "driver_payout_rules",
@@ -55,6 +54,7 @@ const forbiddenActivationFields = [
   "api_key",
   "access_token",
   "raw_token",
+  "updated_at",
   "paynow",
   "pay_now",
   "mock_archive",
@@ -221,7 +221,7 @@ assertIncludes(helperSource, "const allowedActorRoles = new Set([\"admin\", \"di
 assertIncludes(helperSource, "const allowedAvailabilityStatuses = new Set([\"available\", \"busy\", \"inactive\", \"off\"]);", "Full driver profile allowed availability statuses");
 assertIncludes(
   helperSource,
-  "const fullDriverProfileWriteSelect =\n  \"id, driver_name, contact_number, vehicle_type, plate_number, availability_status, updated_at\";",
+  "const fullDriverProfileWriteSelect =\n  \"id, driver_name, contact_number, vehicle_type, plate_number, availability_status\";",
   "Full driver profile safe select",
 );
 assertIncludes(helperSource, "writeGateOpen()", "Full driver profile runtime gate helper");
@@ -257,17 +257,31 @@ for (const field of [
   "contact_number",
   "driver_name",
   "plate_number",
-  "updated_at",
   "vehicle_type",
 ]) {
   assertIncludes(writePayload, field, `Full driver profile write payload field ${field}`);
 }
-for (const forbiddenField of forbiddenActivationFields) {
+assertIncludes(
+  writePayload,
+  'for (const excludedField of ["updated_at"])',
+  "Full driver profile write payload strips updated_at metadata",
+);
+assertIncludes(
+  writePayload,
+  "delete (payload as Record<string, unknown>)[excludedField];",
+  "Full driver profile write payload deletes excluded metadata before return",
+);
+assertExcludes(
+  writePayload,
+  /updated_at:\s*(new Date|fields\.|payload\.|safeText|source\.)/,
+  "Full driver profile write payload app-written updated_at",
+);
+for (const forbiddenField of forbiddenActivationFields.filter((field) => field !== "updated_at")) {
   assertExcludes(writePayload, forbiddenField, `Full driver profile write payload forbidden field ${forbiddenField}`);
 }
 
 const selectLine = helperSource.match(/const fullDriverProfileWriteSelect =\n\s+"([^"]+)";/)?.[1] || "";
-for (const field of allowedSafeFields) {
+for (const field of [...allowedRecordIdentityFields, ...allowedSafeFields]) {
   assertIncludes(selectLine, field, `Full driver profile select field ${field}`);
 }
 for (const forbiddenField of forbiddenActivationFields) {
@@ -280,6 +294,7 @@ for (const forbiddenField of [
   "preferred_areas",
   "airport_permit_notes",
   "notes",
+  "updated_at",
   "paynow",
   "mock_archive",
   "mock_qa",

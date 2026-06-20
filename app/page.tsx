@@ -703,9 +703,12 @@ type LoadBookingsOperationalDisplayCard = Record<
   string | null
 >;
 
+type LoadBookingsOperationalDisplayItemSource = "legacy-fallback" | "typed-read";
+
 type LoadBookingsOperationalDisplayItem = {
   bookingRecord: BookingRecord;
   operationalCard: LoadBookingsOperationalDisplayCard;
+  primaryListSource: LoadBookingsOperationalDisplayItemSource;
 };
 
 type LoadBookingsTypedOperationalDisplayResult = {
@@ -10719,6 +10722,13 @@ export default function Home() {
 
     return mergeLoadBookingsOperationalDisplayCard(fallbackCard, typedCard);
   }
+  function getLoadBookingsOperationalDisplayItemSource(
+    bookingRecord: BookingRecord,
+  ): LoadBookingsOperationalDisplayItemSource {
+    const typedCard = loadBookingsTypedOperationalCardsById[String(bookingRecord.id)];
+
+    return typedCard ? "typed-read" : "legacy-fallback";
+  }
   function buildLoadBookingsOperationalDisplayItems(
     sectionBookings: BookingRecord[],
     options?: { useTypedOperationalOrder?: boolean },
@@ -10726,9 +10736,13 @@ export default function Home() {
     const displayItems = sectionBookings.map((bookingRecord) => ({
       bookingRecord,
       operationalCard: getLoadBookingsOperationalDisplayCard(bookingRecord),
+      primaryListSource: getLoadBookingsOperationalDisplayItemSource(bookingRecord),
     }));
 
-    if (!options?.useTypedOperationalOrder) {
+    const shouldUseTypedOperationalOrder =
+      options?.useTypedOperationalOrder ?? loadBookingsTypedOperationalCardOrder.length > 0;
+
+    if (!shouldUseTypedOperationalOrder) {
       return displayItems;
     }
 

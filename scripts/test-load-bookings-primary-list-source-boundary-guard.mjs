@@ -69,11 +69,15 @@ const ledgerSection = sectionBetween(
   ledger,
   "### Load Bookings Primary List Source Boundary Guard Lock",
 );
+const implementationSection = sectionBetween(
+  ledger,
+  "### Load Bookings Primary List Source Runtime Implementation Lock",
+);
 
 for (const phrase of [
-  "Load Bookings primary-list-source boundary is guarded before any future runtime implementation.",
-  "This is a docs/test-only guard; it does not approve runtime implementation, endpoint migration, env changes, deployment, DB read/write, provider sends, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card additions, or new shims.",
-  "For the next bounded runtime lane, `runtime read wiring` means typed read safe operational data may become the primary list/display source only.",
+  "Load Bookings primary-list-source boundary was guarded before bounded runtime implementation.",
+  "This guard did not approve runtime implementation by itself; runtime work still requires owner approval and remains bounded to list/display source only.",
+  "For the bounded runtime lane, `runtime read wiring` means typed read safe operational data may become the primary list/display source only.",
   "`runtime read wiring` does not mean opening the DB-read gate, changing env, activating live DB reads, migrating detail/form fallback, or replacing legacy action/form source.",
   "Existing `GET /api/admin-load-bookings-typed-read` must be reused for typed safe operational list/display data.",
   "Existing `GET /api/admin-saved-bookings` must remain the booking/form/detail fallback source unless a separate owner-approved detail/form migration guard is added later.",
@@ -87,6 +91,26 @@ for (const phrase of [
   "This lock adds `scripts/test-load-bookings-primary-list-source-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Primary-list boundary ledger phrase ${phrase}`);
+}
+
+for (const phrase of [
+  "Owner-approved bounded runtime implementation for Load Bookings primary list/display source is recorded.",
+  "`GET /api/admin-load-bookings-typed-read` safe operational cards and ordered IDs are now the primary display/list ordering source when present.",
+  "Legacy `GET /api/admin-saved-bookings` remains the `BookingRecord` fallback for booking/form/detail/actions.",
+  'Typed safe cards mark display items with `primaryListSource: "typed-read"` only; they do not feed `bookingRecordToForm`, `loadSelectedBooking`, Save Booking + CRM, pricing, payout, payment/PDF, provider send, parser, auth/location/photo/calendar, or internal/admin/debug fields.',
+  "Typed-card IDs without a matching legacy `BookingRecord` are not made actionable by this implementation.",
+  "Typed read failure, closed gate, blocked admin boundary, malformed response, or missing typed data falls back safely to legacy display ordering without replacing the legacy booking/form source.",
+  "No duplicate Load Bookings UI sector/button/card/route/helper/shim was added.",
+  "Save Booking + CRM remains on `POST /api/admin-bookings`.",
+  "`/api/admin-saved-bookings` remains separate and unchanged.",
+  "Parser behavior and `/api/ai-parse` remain unchanged.",
+  "No env change, deployment, DB read/write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, unrelated UI sector/button/card addition, or new shim is included.",
+]) {
+  assertIncludes(
+    implementationSection,
+    phrase,
+    `Primary-list implementation ledger phrase ${phrase}`,
+  );
 }
 
 for (const forbiddenPhrase of [
@@ -105,6 +129,16 @@ for (const forbiddenPhrase of [
 
 assertIncludes(appPage, `const adminLoadBookingsTypedReadApiPath = "${typedReadPath}"`, "typed read path");
 assertIncludes(appPage, `const adminSavedBookingsApiPath = "${legacySavedBookingsPath}"`, "legacy saved-bookings path");
+assertIncludes(
+  appPage,
+  'type LoadBookingsOperationalDisplayItemSource = "legacy-fallback" | "typed-read";',
+  "typed primary display source marker",
+);
+assertIncludes(
+  appPage,
+  "primaryListSource: LoadBookingsOperationalDisplayItemSource;",
+  "display item source field",
+);
 
 const typedDisplayBridgeBlock = sliceBetween(
   appPage,
@@ -122,6 +156,11 @@ const operationalDisplayItemBlock = sliceBetween(
   appPage,
   "function buildLoadBookingsOperationalDisplayItems",
   "const dashboardDriverCandidates",
+);
+const operationalDisplayItemSourceBlock = sliceBetween(
+  appPage,
+  "function getLoadBookingsOperationalDisplayItemSource",
+  "function buildLoadBookingsOperationalDisplayItems",
 );
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 
@@ -181,12 +220,32 @@ for (const forbiddenLoadFragment of [
 for (const fragment of [
   "bookingRecord,",
   "operationalCard: getLoadBookingsOperationalDisplayCard(bookingRecord)",
+  "primaryListSource: getLoadBookingsOperationalDisplayItemSource(bookingRecord)",
+  "const shouldUseTypedOperationalOrder =",
+  "options?.useTypedOperationalOrder ?? loadBookingsTypedOperationalCardOrder.length > 0",
+  "if (!shouldUseTypedOperationalOrder)",
   "typedOrder: loadBookingsTypedOperationalCardOrderIndex.get(String(displayItem.bookingRecord.id))",
 ]) {
   assertIncludes(operationalDisplayItemBlock, fragment, `operational display item boundary ${fragment}`);
 }
 assertExcludes(operationalDisplayItemBlock, "setBooking", "operational display items must not own selected booking state");
 assertExcludes(operationalDisplayItemBlock, "bookingRecordToForm", "operational display items must not own form mapping");
+
+assertIncludes(
+  operationalDisplayItemSourceBlock,
+  'return typedCard ? "typed-read" : "legacy-fallback";',
+  "typed primary source marker source",
+);
+assertExcludes(
+  operationalDisplayItemSourceBlock,
+  "bookingRecordToForm",
+  "typed primary source marker form separation",
+);
+assertExcludes(
+  operationalDisplayItemSourceBlock,
+  "setBooking",
+  "typed primary source marker selected booking separation",
+);
 
 assertIncludes(loadSelectedBookingBlock, "bookingRecordToForm(bookingRecord)", "selected booking legacy form source");
 assertIncludes(loadSelectedBookingBlock, "setLoadedBookingId(String(bookingRecord.id))", "selected booking legacy id source");

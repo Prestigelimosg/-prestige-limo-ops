@@ -836,9 +836,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-load-bookings-endpoint-migration-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Load Bookings Primary List Source Boundary Guard Lock
-- Load Bookings primary-list-source boundary is guarded before any future runtime implementation.
-- This is a docs/test-only guard; it does not approve runtime implementation, endpoint migration, env changes, deployment, DB read/write, provider sends, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card additions, or new shims.
-- For the next bounded runtime lane, `runtime read wiring` means typed read safe operational data may become the primary list/display source only.
+- Load Bookings primary-list-source boundary was guarded before bounded runtime implementation.
+- This guard did not approve runtime implementation by itself; runtime work still requires owner approval and remains bounded to list/display source only.
+- For the bounded runtime lane, `runtime read wiring` means typed read safe operational data may become the primary list/display source only.
 - `runtime read wiring` does not mean opening the DB-read gate, changing env, activating live DB reads, migrating detail/form fallback, or replacing legacy action/form source.
 - Existing `GET /api/admin-load-bookings-typed-read` must be reused for typed safe operational list/display data.
 - Existing `GET /api/admin-saved-bookings` must remain the booking/form/detail fallback source unless a separate owner-approved detail/form migration guard is added later.
@@ -850,6 +850,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/api/admin-saved-bookings` remains separate and unchanged.
 - Parser behavior and `/api/ai-parse` remain unchanged.
 - This lock adds `scripts/test-load-bookings-primary-list-source-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Load Bookings Primary List Source Runtime Implementation Lock
+- Owner-approved bounded runtime implementation for Load Bookings primary list/display source is recorded.
+- `GET /api/admin-load-bookings-typed-read` safe operational cards and ordered IDs are now the primary display/list ordering source when present.
+- Legacy `GET /api/admin-saved-bookings` remains the `BookingRecord` fallback for booking/form/detail/actions.
+- Typed safe cards mark display items with `primaryListSource: "typed-read"` only; they do not feed `bookingRecordToForm`, `loadSelectedBooking`, Save Booking + CRM, pricing, payout, payment/PDF, provider send, parser, auth/location/photo/calendar, or internal/admin/debug fields.
+- Typed-card IDs without a matching legacy `BookingRecord` are not made actionable by this implementation.
+- Typed read failure, closed gate, blocked admin boundary, malformed response, or missing typed data falls back safely to legacy display ordering without replacing the legacy booking/form source.
+- No duplicate Load Bookings UI sector/button/card/route/helper/shim was added.
+- Save Booking + CRM remains on `POST /api/admin-bookings`.
+- `/api/admin-saved-bookings` remains separate and unchanged.
+- Parser behavior and `/api/ai-parse` remain unchanged.
+- No env change, deployment, DB read/write, provider send, payment/PDF/pricing/payout/auth/location/photo/calendar activation, unrelated UI sector/button/card addition, or new shim is included.
 
 ### Staging Visual Smoke for Load Bookings Endpoint Migration Readiness Guard
 - `origin/staging` points to `75ec5e3ff8d67f4265a9a6466a0894fcbb48d531` (`75ec5e3 Guard Load Bookings endpoint migration readiness`).

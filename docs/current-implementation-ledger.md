@@ -1288,6 +1288,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/api/ai-parse` cannot be exposed or reused for customer voice without separate owner approval.
 - This lock adds `docs/customer-voice-booking-draft-input-contract.md`, adds `scripts/test-customer-voice-booking-draft-input-contract.mjs`, and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Staging Safe GET for Customer Voice Booking Draft Input Contract Guard
+
+- `origin/staging` was promoted from `61d11d1dcbb929f23ccfb5a9260b4ab05e7a21f8` to `4adb2ed6d69560ff0e3401ca270f0231b6a071f4`.
+- Staging includes `4adb2ed Guard customer voice booking draft input`.
+- `git ls-remote --heads origin staging` confirmed `4adb2ed6d69560ff0e3401ca270f0231b6a071f4` after push.
+- A non-fatal local tracking-ref warning prevented updating local `refs/remotes/origin/staging` during push, so the remote hash source of truth for this record is `git ls-remote`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET.
+- Safe GET response title was `Prestige Limo Ops`.
+- Safe GET response included expected admin tab text: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Safe GET response included `Save Booking + CRM`, but it was not clicked.
+- No browser clicks were performed.
+- No forms were submitted.
+- No POST/write/send action was attempted.
+- Screenshot captured: false.
+- Speak button was not implemented.
+- Voice booking remains contract-only.
+- Future Customer Voice Booking Draft Input implementation still requires separate explicit owner approval.
+- The staged commit remains docs/test-only guard work and does not approve UI implementation, runtime implementation, parser changes, `/api/ai-parse` changes, Save Booking route changes, `/api/admin-saved-bookings` changes, new customer booking routes, audio recording/storage, speech-to-text provider integration, provider sends, env changes, DB read/write, production deploy, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, UI sector/button/card additions, or new shims.
+
 ### Staging No-Screenshot Request Smoke for Public Customer Form Surface Boundary Guard
 - `origin/staging` points to `a2818ad3a1726369599f3076407791bfb7f9fc18` (`a2818ad Guard public customer form surface boundary`), verified directly with `git ls-remote`.
 - Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.

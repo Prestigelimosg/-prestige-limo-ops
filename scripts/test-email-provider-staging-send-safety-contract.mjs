@@ -72,7 +72,8 @@ for (const phrase of [
   "Future staging Email send scope must be exactly one message only; batch send, resend automation, scheduler, polling, retry loop, customer-visible auto-refresh, and background sends remain forbidden.",
   "Future staging Email send evidence requires explicit owner approval naming the staging target, provider, env-name handling, allowlisted recipient, content fixture, one-message boundary, rollback/disable proof, and checks.",
   "Rollback/disable proof is required after any future send evidence; the provider gate must be closed again and disabled/no-op behavior must be verified.",
-  "Email must not be used for live location. Live location remains Telegram/WhatsApp only and requires a separate owner-approved lane.",
+  "Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.",
+  "Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.",
   "No provider activation or provider send is approved by this guard.",
 ]) {
   assertIncludes(safetySection, phrase, `Email staging-send safety phrase: ${phrase}`);
@@ -83,7 +84,9 @@ for (const forbidden of [
   "provider credentials may be configured now",
   "live Email send is approved",
   "batch send is approved",
-  "live location email is approved",
+  "auto-send live location email is approved",
+  "native live location email is approved",
+  "streaming live location email is approved",
   "env values may be printed",
 ]) {
   assertExcludes(safetySection, forbidden, `forbidden Email staging-send approval phrase`);

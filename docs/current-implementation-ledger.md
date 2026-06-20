@@ -4491,23 +4491,29 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future staging Email send scope must be exactly one message only; batch send, resend automation, scheduler, polling, retry loop, customer-visible auto-refresh, and background sends remain forbidden.
 - Future staging Email send evidence requires explicit owner approval naming the staging target, provider, env-name handling, allowlisted recipient, content fixture, one-message boundary, rollback/disable proof, and checks.
 - Rollback/disable proof is required after any future send evidence; the provider gate must be closed again and disabled/no-op behavior must be verified.
-- Email must not be used for live location. Live location remains Telegram/WhatsApp only and requires a separate owner-approved lane.
+- Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.
+- Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.
 - No provider activation or provider send is approved by this guard.
 
 ### Customer Notification Channel Matrix Lock
 - This is a docs/test-only guard for future customer notification channel selection; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, UI, API, route, helper, scheduler, fallback, or blast behavior.
-- Telegram may be used for live location and driver details only after the specific channel/action gate is separately approved.
-- WhatsApp may be used for live location and driver details only after the specific channel/action gate is separately approved.
-- Email may be used for driver details only and must not be used for live location.
+- Telegram may be used for true live location and driver details only after the specific channel/action gate is separately approved.
+- Telegram is the first future live-location channel and the only future channel allowed to auto-send true live location after separate owner approval.
+- Future Telegram auto-send and POB plus 5 minute auto-stop are requirements for a later lane only; this lock does not implement or activate them.
+- Email may be used for driver details only after the specific channel/action gate is separately approved.
+- Email may send an admin-selected secure tracking-link live-location email only after the exact channel/action gate is separately approved.
+- Email must not auto-send live location and must not send native/streaming live location.
+- WhatsApp is later-phase only for driver details and live location and must remain unactivated.
 - SMS is not approved for driver details or live location unless separately approved later.
-- Admin must explicitly choose exactly one channel/action for each future send.
+- Admin must explicitly choose exactly one channel/action for each future send, except for the future separately approved Telegram auto-send lane.
 - No automatic fallback is approved.
 - No automatic multi-channel blast is approved.
 - No provider send is approved unless that specific channel/action gate is separately approved.
-- Future admin choices remain separated: Send driver details by Email; Send driver details by Telegram; Send driver details by WhatsApp; Send live location by Telegram; Send live location by WhatsApp.
-- Customer-facing provider messages must exclude driver payout details, payout preferences, `driver_payout_rules`, `customer_rates`, pricing breakdown unless separately approved, payment/PDF/billing unless separately approved, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, auth/location/photo/calendar/OTS data unless the selected lane explicitly allows it, Save Booking internals, and `/api/admin-saved-bookings` internals.
-- Driver details messages must stay separate from payout, pricing, payment, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, and `/api/admin-saved-bookings` internals.
-- Live location remains separated from Email and SMS; live location may only use Telegram or WhatsApp after separate owner approval for that channel/action gate.
+- Future admin choices remain separated: Send driver details by Email; Send driver details by Telegram; Send driver details by WhatsApp; Send true live location by Telegram; Send secure tracking-link live location by Email; later-phase Send live location by WhatsApp.
+- Telegram live location means future true live-location send, Email live location means future admin-selected secure tracking link only, and WhatsApp live location means future later phase only.
+- Allowed driver-detail payload fields are driver name, driver contact, car plate, and car type.
+- Customer-facing provider messages must exclude pricing, payout, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, and auth/location/photo/calendar/OTS data outside the selected approved lane.
+- Driver details messages must stay separate from payout, payout preferences, `driver_payout_rules`, `customer_rates`, pricing, payment/PDF/billing, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, and `/api/admin-saved-bookings` internals.
 
 ### WhatsApp Provider No-Send Approval Packet Lock
 - Approval status: pending future WhatsApp staging test approval.

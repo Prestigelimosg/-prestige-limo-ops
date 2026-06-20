@@ -1333,6 +1333,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future Customer Voice Booking Draft Field-Fill implementation still requires separate explicit owner approval.
 - The staged commit remains docs/test-only guard work and does not approve UI/runtime/parser/API/env/DB/provider/audio storage/Save Booking/`/api/admin-saved-bookings`/payment/pricing/payout/PDF/dispatch/auth/location/photo/calendar/shim changes.
 
+### Customer Voice Booking Draft Field-Fill Local Helper Implementation Lock
+- This is the bounded owner-approved Customer Voice Booking Draft Field-Fill implementation for the existing `/book` customer booking page/form only.
+- The existing compact Speak button remains the only Speak control, remains `type="button"`, and remains beside the existing Portal link in the same `/book` header action group.
+- No new booking page, customer workflow, UI sector, card, route, helper button, backend route, or shim is introduced.
+- The Speak transcript remains browser-local React state/ref only; no transcript or audio is submitted, stored, recorded, sent to a provider, or written to DB.
+- Local field-fill runs only from the existing browser `SpeechRecognition` transcript after local capture ends.
+- Field-fill only fills empty approved fields and does not overwrite customer-entered values.
+- Approved local field-fill targets are `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, and `dropoffLocation`.
+- The broader customer request submit allowlist remains `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
+- `specialRequest` remains local-only/excluded from submitted field-fill scope and remains excluded from customer booking request persistence.
+- Date field-fill is conservative: explicit year dates may fill `pickupDate`; no-year phrases such as `2 June` remain unchanged for manual review.
+- Example local mapping: "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road." may fill `passengerName` Stanley, `pickupTime` 10:00, `pickupLocation` 123 Orchard Road, `dropoffLocation` airport, and `flightNumber` SQ123, while leaving `pickupDate` unchanged because no year is present.
+- Customer must manually review/edit fields and manually press Submit Booking Request / BOOK.
+- Existing `/book` submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
+- Admin review remains required after submission; speaking alone and field-fill alone do not create, confirm, dispatch, or release a booking.
+- No parser changes, `/api/ai-parse` usage, admin parser reuse, Save Booking changes, `/api/admin-saved-bookings` changes, provider sends, env changes, DB read/write, production deploy, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, audio storage, backend speech-to-text, or new shims are approved.
+- This implementation is guarded by `docs/customer-voice-booking-draft-field-fill-contract.md`, `scripts/test-customer-voice-booking-draft-field-fill-contract.mjs`, `scripts/test-customer-voice-booking-draft-field-fill-ui-guard.mjs`, `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Staging Deploy Smoke for Customer Voice Booking Speak Helper
 
 - `origin/staging` points to `888d957344d01a1218b727131b8872af18bf8f19` (`888d957 Add customer voice booking speak helper`), verified directly with `git ls-remote`.

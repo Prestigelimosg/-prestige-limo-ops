@@ -5,16 +5,24 @@ const contractPath = "docs/customer-voice-booking-draft-field-fill-contract.md";
 const docsIndexPath = "docs/test-and-safety-docs-index.md";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
-const guardScript = "scripts/test-customer-voice-booking-draft-field-fill-contract.mjs";
+const contractGuardScript = "scripts/test-customer-voice-booking-draft-field-fill-contract.mjs";
+const uiGuardScript = "scripts/test-customer-voice-booking-draft-field-fill-ui-guard.mjs";
 
 const bookPagePath = "app/book/page.tsx";
 const customerRequestAdapterPath = "lib/customer-booking-request-adapter.ts";
-const customerRequestRoutePath = "app/api/customer-booking-requests/route.ts";
 const adminBookingPersistencePath = "lib/admin-booking-persistence.ts";
-const adminPagePath = "app/page.tsx";
 const aiParseRoutePath = "app/api/ai-parse/route.ts";
 const aiParserSchemaPath = "lib/ai-parser-schema.ts";
 const bookingParserPath = "lib/booking-parser.ts";
+
+const approvedFieldFillTargets = [
+  "passengerName",
+  "pickupDate",
+  "pickupTime",
+  "flightNumber",
+  "pickupLocation",
+  "dropoffLocation",
+];
 
 const safeSubmittedFieldFillTargets = [
   "companyName",
@@ -33,8 +41,6 @@ const safeSubmittedFieldFillTargets = [
   "extraStops",
 ];
 
-const fullBookFormFields = [...safeSubmittedFieldFillTargets, "specialRequest"];
-
 const excludedFieldFillFragments = [
   "pricing",
   "payout",
@@ -48,6 +54,8 @@ const excludedFieldFillFragments = [
   "`customer_rates`",
   "`driver_payout_rules`",
   "internal/debug/secrets",
+  "transcript/audio persistence",
+  "`specialRequest` submission unless separately approved",
 ];
 
 const forbiddenRuntimeFragments = [
@@ -83,15 +91,11 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
-function firstBlock(source, pattern, label) {
-  const match = source.match(pattern);
-  assert.ok(match, `Missing ${label}.`);
+function extractConstArrayItems(source, constName) {
+  const match = source.match(new RegExp(`const\\s+${constName}[^=]*=\\s*\\[([\\s\\S]*?)\\]\\s*as\\s+const;`));
+  assert.ok(match, `Expected const array ${constName}.`);
 
-  return match[0];
-}
-
-function countMatches(source, fragment) {
-  return source.split(fragment).length - 1;
+  return [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]);
 }
 
 function extractNewSetItems(source, constName) {
@@ -99,24 +103,6 @@ function extractNewSetItems(source, constName) {
   assert.ok(match, `Expected new Set ${constName}.`);
 
   return [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]);
-}
-
-function extractTypeKeys(source, typeName) {
-  const match = source.match(new RegExp(`type\\s+${typeName}\\s*=\\s*\\{([\\s\\S]*?)\\n\\};`));
-  assert.ok(match, `Expected type ${typeName}.`);
-
-  return [...match[1].matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\??:\s/gm)].map((item) => item[1]);
-}
-
-function extractObjectKeys(source, constName) {
-  const match = source.match(new RegExp(`const\\s+${constName}\\s*:\\s*BookingRequestForm\\s*=\\s*\\{([\\s\\S]*?)\\n\\};`));
-  assert.ok(match, `Expected object ${constName}.`);
-
-  return [...match[1].matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*):/gm)].map((item) => item[1]);
-}
-
-function extractCustomerBookingFieldMarkers(source) {
-  return [...source.matchAll(/data-customer-booking-field="([^"]+)"/g)].map((item) => item[1]);
 }
 
 function assertSameList(actual, expected, label) {
@@ -130,9 +116,7 @@ const [
   preactivationSuite,
   bookPage,
   customerRequestAdapter,
-  customerRequestRoute,
   adminBookingPersistence,
-  adminPage,
   aiParseRoute,
   aiParserSchema,
   bookingParser,
@@ -144,9 +128,7 @@ const [
     preactivationSuitePath,
     bookPagePath,
     customerRequestAdapterPath,
-    customerRequestRoutePath,
     adminBookingPersistencePath,
-    adminPagePath,
     aiParseRoutePath,
     aiParserSchemaPath,
     bookingParserPath,
@@ -154,25 +136,31 @@ const [
 );
 
 const ledgerSection = sectionBetween(ledger, "### Customer Voice Booking Draft Field-Fill Contract Lock");
+const ledgerImplementationSection = sectionBetween(
+  ledger,
+  "### Customer Voice Booking Draft Field-Fill Local Helper Implementation Lock",
+);
 
 for (const fragment of [
   "# Customer Voice Booking Draft Field-Fill Contract",
-  "docs/test-only contract for a future Customer Voice Booking Draft Field-Fill lane",
+  "approved bounded Customer Voice Booking Draft Field-Fill implementation contract",
+  "browser-local input-helper field fill from the existing Speak transcript into existing `/book` fields",
   "Existing customer booking page/form: `app/book/page.tsx`.",
   "Existing compact Speak helper: one `type=\"button\"` control beside the existing Portal link in the `/book` header action group.",
   "Existing customer booking adapter: `lib/customer-booking-request-adapter.ts`.",
   "Existing customer booking submit route: `POST /api/customer-booking-requests`.",
   "Existing `/book` submit call: `submitCustomerBookingRequest(form)`.",
-  "Current Speak behavior is compact local transcript helper only.",
-  "Current transcript is stored in local React state only.",
-  "Current Speak behavior does not fill form fields.",
-  "Current Speak behavior does not submit transcript or audio.",
-  "Current Speak behavior does not call parser, API, speech-to-text, or provider routes.",
+  "Current Speak behavior is compact local transcript helper with local draft field-fill.",
+  "Current transcript is stored in local React state/ref only.",
+  "Current field-fill uses only the browser-local transcript and fills only empty safe fields.",
+  "Current field-fill does not overwrite customer-entered fields.",
+  "Current field-fill does not submit transcript or audio.",
+  "Current field-fill does not call parser, API, speech-to-text, or provider routes.",
   "`specialRequest` exists in `/book` UI state but is not forwarded by the adapter and is not allowed in customer booking request persistence.",
   "`/api/ai-parse` remains admin/parser-shaped and includes fields such as `customerPriceOverride`",
   "Existing WhatsApp transcript parsing and admin dispatcher intake draft-fill are not Customer Voice Booking Draft Field-Fill.",
-  "Customer Voice Booking Draft Field-Fill is a separate future lane from the existing Speak button.",
-  "The existing compact Speak button remains input-helper-only until field-fill is separately approved.",
+  "Customer Voice Booking Draft Field-Fill is local input-helper-only inside the existing `/book` customer booking page/form.",
+  "The existing compact Speak button remains the only Speak control and remains beside the existing Portal link.",
   "Field-fill must never auto-submit.",
   "Field-fill must never auto-confirm.",
   "Field-fill must never auto-dispatch.",
@@ -181,7 +169,7 @@ for (const fragment of [
   "Admin review remains required after submission.",
   "Existing submit path must remain `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.",
   "No transcript or audio may be submitted or stored unless separately approved.",
-  "`specialRequest` remains local-only and excluded from submitted field-fill scope until separately approved.",
+  "`specialRequest` remains local-only and excluded from submitted field-fill scope unless separately approved.",
   "`/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.",
   "Admin parser/draft-fill cannot be reused directly for public customer voice.",
   "If parsing is uncertain, leave fields unchanged and show the transcript for manual review.",
@@ -189,23 +177,24 @@ for (const fragment of [
   "No duplicate booking page, workflow, sector, card, route, helper, button, or shim may be introduced.",
   "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road.",
   "`passengerName`: Stanley",
-  "`pickupDate`: 2 June",
-  "`pickupTime`: 1000",
+  "`pickupDate`: unchanged because 2 June has no year",
+  "`pickupTime`: 10:00",
   "`pickupLocation`: 123 Orchard Road",
   "`dropoffLocation`: airport",
   "`flightNumber`: SQ123",
-  "Any future implementation must include browser/mobile coverage proving",
-  "Speak button remains `type=\"button\"`.",
-  "Field-fill does not submit.",
-  "Manual Submit Booking Request / BOOK remains required.",
-  "Mobile layout does not overflow.",
-  "This contract is guarded by `scripts/test-customer-voice-booking-draft-field-fill-contract.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.",
+  "Field-fill fills only empty safe fields and does not overwrite customer-entered fields.",
+  "No `/api/ai-parse`, admin parser, backend speech-to-text, provider send, audio storage, Save Booking, `/api/admin-saved-bookings`, payment/PDF, pricing, payout, dispatch, auth/location/photo/calendar, or shim behavior is activated.",
+  "This contract is guarded by `scripts/test-customer-voice-booking-draft-field-fill-contract.mjs`, `scripts/test-customer-voice-booking-draft-field-fill-ui-guard.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(contract, fragment, `field-fill contract phrase ${fragment}`);
 }
 
+for (const field of approvedFieldFillTargets) {
+  assertIncludes(contract, `- \`${field}\``, `approved local field-fill target ${field}`);
+}
+
 for (const field of safeSubmittedFieldFillTargets) {
-  assertIncludes(contract, `- \`${field}\``, `safe future field-fill target ${field}`);
+  assertIncludes(contract, `- \`${field}\``, `safe submitted field-fill target ${field}`);
 }
 
 for (const fragment of excludedFieldFillFragments) {
@@ -240,16 +229,44 @@ for (const fragment of excludedFieldFillFragments) {
 }
 
 for (const fragment of [
+  "bounded owner-approved Customer Voice Booking Draft Field-Fill implementation",
+  "existing `/book` customer booking page/form only",
+  "The existing compact Speak button remains the only Speak control",
+  "remains `type=\"button\"`",
+  "beside the existing Portal link",
+  "No new booking page, customer workflow, UI sector, card, route, helper button, backend route, or shim is introduced.",
+  "browser-local React state/ref only",
+  "no transcript or audio is submitted, stored, recorded, sent to a provider, or written to DB",
+  "Local field-fill runs only from the existing browser `SpeechRecognition` transcript after local capture ends.",
+  "Field-fill only fills empty approved fields and does not overwrite customer-entered values.",
+  "Approved local field-fill targets are `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, and `dropoffLocation`.",
+  "`specialRequest` remains local-only/excluded from submitted field-fill scope",
+  "Date field-fill is conservative",
+  "no-year phrases such as `2 June` remain unchanged",
+  "`pickupTime` 10:00",
+  "leaving `pickupDate` unchanged because no year is present",
+  "Customer must manually review/edit fields and manually press Submit Booking Request / BOOK.",
+  "Existing `/book` submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.",
+  "do not create, confirm, dispatch, or release a booking",
+  "No parser changes, `/api/ai-parse` usage, admin parser reuse, Save Booking changes, `/api/admin-saved-bookings` changes, provider sends, env changes, DB read/write, production deploy, pricing/payout/payment/PDF activation, dispatch activation, auth/location/photo/calendar activation, audio storage, backend speech-to-text, or new shims are approved.",
+  "scripts/test-customer-voice-booking-draft-field-fill-ui-guard.mjs",
+]) {
+  assertIncludes(ledgerImplementationSection, fragment, `ledger implementation field-fill fragment ${fragment}`);
+}
+
+for (const fragment of [
   "[Customer Voice Booking Draft Field-Fill Contract](customer-voice-booking-draft-field-fill-contract.md)",
-  "future customer voice field-fill lane",
-  "safe existing customer request fields only",
+  "approved local customer voice field-fill lane",
+  "browser-local transcript helper",
+  "empty safe existing customer request fields only",
   "`specialRequest` local-only/excluded",
   "no `/api/ai-parse`, parser, audio storage, provider, DB, Save Booking, admin-saved-bookings, payment/pricing/payout/PDF, dispatch, auth/location/photo/calendar, or shim activation",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index field-fill fragment ${fragment}`);
 }
 
-assertIncludes(preactivationSuite, guardScript, "preactivation suite field-fill contract registration");
+assertIncludes(preactivationSuite, contractGuardScript, "preactivation suite field-fill contract registration");
+assertIncludes(preactivationSuite, uiGuardScript, "preactivation suite field-fill UI guard registration");
 assertIncludes(
   preactivationSuite,
   "scripts/test-customer-voice-booking-draft-input-contract.mjs",
@@ -261,12 +278,15 @@ assertIncludes(
   "preactivation suite Speak button UI guard registration",
 );
 
-assertSameList(extractTypeKeys(bookPage, "BookingRequestForm"), fullBookFormFields, "/book BookingRequestForm fields");
-assertSameList(extractObjectKeys(bookPage, "initialForm"), fullBookFormFields, "/book initial form fields");
 assertSameList(
-  extractCustomerBookingFieldMarkers(bookPage),
-  fullBookFormFields,
-  "/book customer booking field markers",
+  extractConstArrayItems(bookPage, "localVoiceDraftSupportedFields"),
+  approvedFieldFillTargets,
+  "/book local field-fill targets",
+);
+assertSameList(
+  extractConstArrayItems(bookPage, "localVoiceDraftApprovedFields"),
+  safeSubmittedFieldFillTargets,
+  "/book local field-fill approved submitted fields",
 );
 assertSameList(
   extractNewSetItems(adminBookingPersistence, "customerBookingRequestFields"),
@@ -274,82 +294,26 @@ assertSameList(
   "customer booking request accepted persistence fields",
 );
 
-assert.equal(
-  countMatches(bookPage, 'data-customer-voice-booking-speak-button="true"'),
-  1,
-  "/book must contain exactly one compact Speak button.",
-);
-const speakButtonBlock = firstBlock(
-  bookPage,
-  /<button[\s\S]*?data-customer-voice-booking-speak-button="true"[\s\S]*?<\/button>/,
-  "approved Speak button block",
-);
-
 for (const fragment of [
-  'type="button"',
+  'data-customer-voice-booking-speak-button="true"',
   'data-customer-voice-booking-mode="local-transcript-helper"',
-  "onClick={handleSpeakDraft}",
-]) {
-  assertIncludes(speakButtonBlock, fragment, `Speak button fragment ${fragment}`);
-}
-
-const handleSpeakDraftBlock = firstBlock(
-  bookPage,
-  /function handleSpeakDraft\(\) \{[\s\S]*?\n  \}/,
-  "current Speak draft handler",
-);
-
-for (const fragment of [
-  "setVoiceTranscript(transcript)",
-  "setVoiceHelperText(\"Voice draft captured locally. Review it, then type or edit the trip fields yourself.\")",
-  "setVoiceTranscript(\"\")",
-]) {
-  assertIncludes(handleSpeakDraftBlock, fragment, `local Speak handler fragment ${fragment}`);
-}
-
-for (const forbidden of [
-  "setForm(",
-  "submitCustomerBookingRequest",
-  "fetch(",
-  "/api/ai-parse",
-  "FormData",
-  "MediaRecorder",
-  "navigator.mediaDevices",
-]) {
-  assertExcludes(handleSpeakDraftBlock, forbidden, `current Speak handler ${forbidden}`);
-}
-
-for (const fragment of [
+  'data-customer-voice-booking-local-only="true"',
+  'data-customer-voice-booking-transcript="true"',
+  'data-customer-voice-booking-draft-fill="local-only"',
+  "voiceTranscriptRef",
+  "applyLocalVoiceDraftFieldFillToForm",
   "submitCustomerBookingRequest(form)",
-  'data-customer-booking-submit="true"',
-  'type="submit"',
-  "This is a booking request only, not a confirmed booking yet.",
-  "Our team will review and confirm availability before your booking is confirmed.",
 ]) {
-  assertIncludes(bookPage, fragment, `/book submit/review evidence ${fragment}`);
+  assertIncludes(bookPage, fragment, `/book field-fill evidence ${fragment}`);
 }
 
 for (const forbidden of [
-  "data-customer-voice-booking-field-fill",
-  "voiceFieldFill",
-  "applyVoiceFieldFill",
-  "parseVoiceDraftFields",
-  "fillFieldsFromVoice",
+  ...forbiddenRuntimeFragments,
   "autoSubmit",
   "autoConfirm",
   "autoDispatch",
-  "dispatch release",
-  ...forbiddenRuntimeFragments,
 ]) {
   assertExcludes(bookPage, forbidden, `/book field-fill runtime boundary ${forbidden}`);
-}
-
-for (const fragment of [
-  'export const customerBookingRequestApiPath = "/api/customer-booking-requests";',
-  '"x-prestige-customer-purpose": "customer-booking-request"',
-  'method: "POST"',
-]) {
-  assertIncludes(customerRequestAdapter, fragment, `customer request adapter evidence ${fragment}`);
 }
 
 const adapterBodyBlock =
@@ -365,38 +329,6 @@ for (const field of safeSubmittedFieldFillTargets) {
 for (const forbidden of ["specialRequest", "voiceTranscript", "voice_transcript", "transcript", "audio", "speech", "stt"]) {
   assertExcludes(adapterBodyBlock, forbidden, `customer request adapter body ${forbidden}`);
   assertExcludes(persistenceFieldBlock, forbidden, `customer booking persistence allowlist ${forbidden}`);
-}
-
-for (const fragment of [
-  "export async function POST(request: Request)",
-  'refererUrl.pathname === "/book"',
-  "parseCustomerBookingRequestPayload",
-  "createAdminBooking",
-  'source_route: "/book"',
-  'action: "customer_booking_request_create"',
-]) {
-  assertIncludes(customerRequestRoute, fragment, `customer request route evidence ${fragment}`);
-}
-
-for (const fragment of [
-  'source_channel: "customer-booking-request"',
-  'customer_facing_status: "Request Received"',
-  "admin_internal_status: adminReviewRequiredStatus",
-  "short_notice_review_status",
-  "parseAdminBookingOperationalPayload",
-]) {
-  assertIncludes(adminBookingPersistence, fragment, `customer request persistence evidence ${fragment}`);
-}
-
-for (const fragment of [
-  'data-dispatch-workflow-step="booking-input-parser"',
-  "Paste Booking Message",
-  "AI Assist Parse (Mock)",
-  "Create Job Card",
-  'fetch("/api/ai-parse"',
-  "applyParsedBookingMessage",
-]) {
-  assertIncludes(adminPage, fragment, `admin parser evidence ${fragment}`);
 }
 
 for (const fragment of [

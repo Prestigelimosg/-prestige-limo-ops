@@ -4482,6 +4482,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep Email on the setup-only disabled-send/preflight routes until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed provider tokens, and restore the disabled/no-op route surface unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Email Provider Staging Send Safety Contract Lock
+- This is a docs/test-only guard for a future separately approved one-message staging Email send evidence pass.
+- This lock does not activate Email sending, provider credentials, provider SDKs, SMTP/API calls, env changes, deployment, DB read/write, or live send behavior.
+- Future Email provider handling must list env names only; env values, secrets, API keys, SMTP passwords, access tokens, provider tokens, and connection strings must never be printed, logged, committed, echoed, or surfaced.
+- A recipient allowlist is required before any future staging Email send evidence pass.
+- Future Email send content must exclude pricing, payout, payment/PDF/billing, auth/location/photo/calendar/OTS, parser/internal debug, internal notes, secrets/tokens, `customer_rates`, and `driver_payout_rules`.
+- Future staging Email send scope must be exactly one message only; batch send, resend automation, scheduler, polling, retry loop, customer-visible auto-refresh, and background sends remain forbidden.
+- Future staging Email send evidence requires explicit owner approval naming the staging target, provider, env-name handling, allowlisted recipient, content fixture, one-message boundary, rollback/disable proof, and checks.
+- Rollback/disable proof is required after any future send evidence; the provider gate must be closed again and disabled/no-op behavior must be verified.
+- Email must not be used for live location. Live location remains Telegram/WhatsApp only and requires a separate owner-approved lane.
+- No provider activation or provider send is approved by this guard.
+
 ### WhatsApp Provider No-Send Approval Packet Lock
 - Approval status: pending future WhatsApp staging test approval.
 - This is a docs/test-only no-send approval packet guarded by `scripts/test-whatsapp-provider-no-send-approval-packet.mjs`.

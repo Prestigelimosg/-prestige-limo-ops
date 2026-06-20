@@ -1,0 +1,125 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const ledgerPath = "docs/current-implementation-ledger.md";
+const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+const emailNotificationSetupPath = "lib/admin-email-notification-setup-foundation.ts";
+const guardScript = "scripts/test-email-provider-staging-send-safety-contract.mjs";
+
+const setupRouteFiles = [
+  "app/api/admin-customer-driver-details-email-preview-readiness-setup/route.ts",
+  "app/api/admin-customer-driver-details-email-review-item-setup/route.ts",
+  "app/api/admin-customer-driver-details-email-send-disabled-setup/route.ts",
+  "app/api/admin-email-activation-preflight-setup/route.ts",
+  "app/api/admin-email-provider-readiness-setup/route.ts",
+  "app/api/admin-email-provider-selection-setup/route.ts",
+];
+
+const setupHelperFiles = [
+  "lib/admin-email-notification-setup-foundation.ts",
+  "lib/admin-email-provider-readiness-setup-foundation.ts",
+  "lib/admin-email-provider-selection-setup-foundation.ts",
+  "lib/admin-email-recipient-safety-setup-foundation.ts",
+  "lib/admin-email-send-disabled-adapter.ts",
+  "lib/admin-email-send-policy-setup-foundation.ts",
+  "lib/admin-email-sender-selection-setup-foundation.ts",
+  "lib/customer-driver-details-email-readiness-setup-foundation.ts",
+  "lib/customer-driver-details-email-send-audit-payload-setup-foundation.ts",
+  "lib/customer-driver-details-email-setup-foundation.ts",
+  "lib/driver-ack-customer-message-handoff-setup-foundation.ts",
+];
+
+function assertIncludes(source, fragment, label = fragment) {
+  assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
+}
+
+function assertExcludes(source, fragmentOrPattern, label) {
+  const matches =
+    fragmentOrPattern instanceof RegExp
+      ? fragmentOrPattern.test(source)
+      : source.includes(fragmentOrPattern);
+
+  assert.equal(matches, false, `${label} must not include ${fragmentOrPattern}.`);
+}
+
+function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
+  const start = source.indexOf(startHeading);
+  assert.notEqual(start, -1, `Missing section heading: ${startHeading}`);
+  const next = source.indexOf(nextHeadingPrefix, start + startHeading.length);
+
+  return next === -1 ? source.slice(start) : source.slice(start, next);
+}
+
+const [ledger, preactivationSuite, emailNotificationSetup, ...setupSources] =
+  await Promise.all([
+    readFile(ledgerPath, "utf8"),
+    readFile(preactivationSuitePath, "utf8"),
+    readFile(emailNotificationSetupPath, "utf8"),
+    ...[...setupRouteFiles, ...setupHelperFiles].map((file) => readFile(file, "utf8")),
+  ]);
+
+const safetySection = sectionBetween(
+  ledger,
+  "### Email Provider Staging Send Safety Contract Lock",
+);
+
+for (const phrase of [
+  "This is a docs/test-only guard for a future separately approved one-message staging Email send evidence pass.",
+  "This lock does not activate Email sending, provider credentials, provider SDKs, SMTP/API calls, env changes, deployment, DB read/write, or live send behavior.",
+  "Future Email provider handling must list env names only; env values, secrets, API keys, SMTP passwords, access tokens, provider tokens, and connection strings must never be printed, logged, committed, echoed, or surfaced.",
+  "A recipient allowlist is required before any future staging Email send evidence pass.",
+  "Future Email send content must exclude pricing, payout, payment/PDF/billing, auth/location/photo/calendar/OTS, parser/internal debug, internal notes, secrets/tokens, `customer_rates`, and `driver_payout_rules`.",
+  "Future staging Email send scope must be exactly one message only; batch send, resend automation, scheduler, polling, retry loop, customer-visible auto-refresh, and background sends remain forbidden.",
+  "Future staging Email send evidence requires explicit owner approval naming the staging target, provider, env-name handling, allowlisted recipient, content fixture, one-message boundary, rollback/disable proof, and checks.",
+  "Rollback/disable proof is required after any future send evidence; the provider gate must be closed again and disabled/no-op behavior must be verified.",
+  "Email must not be used for live location. Live location remains Telegram/WhatsApp only and requires a separate owner-approved lane.",
+  "No provider activation or provider send is approved by this guard.",
+]) {
+  assertIncludes(safetySection, phrase, `Email staging-send safety phrase: ${phrase}`);
+}
+
+for (const forbidden of [
+  "Email sending is approved now",
+  "provider credentials may be configured now",
+  "live Email send is approved",
+  "batch send is approved",
+  "live location email is approved",
+  "env values may be printed",
+]) {
+  assertExcludes(safetySection, forbidden, `forbidden Email staging-send approval phrase`);
+}
+
+assertIncludes(
+  preactivationSuite,
+  guardScript,
+  "Preactivation suite Email staging-send safety registration",
+);
+
+assertIncludes(emailNotificationSetup, '"live_location"', "Email content blocked live_location field");
+
+const setupCombined = setupSources.join("\n");
+
+for (const fragment of [
+  "external_send: false",
+  "sendingEnabled: false",
+  "liveSendingEnabled: false",
+  "providerConfigured: false",
+]) {
+  assertIncludes(setupCombined, fragment, `current Email setup-only flag ${fragment}`);
+}
+
+for (const forbiddenPattern of [
+  /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/,
+  /^\s*import\s+.*from\s+["'](?:@aws-sdk\/client-ses|@sendgrid\/client|@sendgrid\/mail|aws-sdk|mailgun-js|mailgun\.js|nodemailer|postmark|resend)["']/im,
+  /require\(\s*["'](?:@aws-sdk\/client-ses|@sendgrid\/client|@sendgrid\/mail|aws-sdk|mailgun-js|mailgun\.js|nodemailer|postmark|resend)["']\s*\)/i,
+  /\b(?:SESClient|SendEmailCommand)\b/,
+  /\bprocess\.env\b|\bSMTP_[A-Z_]*\b|\bSENDGRID_[A-Z_]*\b|\bMAILGUN_[A-Z_]*\b|\bRESEND_[A-Z_]*\b|\bAPI_KEY\b|\bACCESS_TOKEN\b|\bSECRET_KEY\b/i,
+  /\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|createTransport|smtpTransport|sendMail\s*\(|messages\.send|transporter\.sendMail/i,
+  /external_send\s*[:=]\s*true|sendingEnabled\s*[:=]\s*true|liveSendingEnabled\s*[:=]\s*true|providerConfigured\s*[:=]\s*true/i,
+  /setInterval|setTimeout|cron|scheduler|polling|retryLoop|retry_loop|queueMicrotask|new Worker/i,
+  /createClient|@supabase\/supabase-js|\.from\(|\.insert\(|\.upsert\(|\.update\(|\.delete\(/i,
+]) {
+  assertExcludes(setupCombined, forbiddenPattern, "Email staging-send setup surface");
+}
+
+console.log("Email provider staging send safety contract guard passed");

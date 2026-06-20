@@ -547,6 +547,10 @@ const guardChecks = [
     script: "scripts/test-email-provider-no-send-approval-packet.mjs",
   },
   {
+    label: "Email provider staging send safety contract guard",
+    script: "scripts/test-email-provider-staging-send-safety-contract.mjs",
+  },
+  {
     label: "WhatsApp no-live guard",
     script: "scripts/test-whatsapp-customer-driver-details-no-live-guard.mjs",
   },

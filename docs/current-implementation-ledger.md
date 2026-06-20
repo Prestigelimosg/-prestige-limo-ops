@@ -1,18 +1,18 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean checkpoint before this Driver Acknowledgement staging smoke record:
-7b13575 Guard driver acknowledgement dispatch release boundary
+Latest verified clean checkpoint before this Customer Voice Booking Speak helper staging smoke record:
+888d957 Add customer voice booking speak helper
 
 Latest staging-smoked app checkpoint:
-7b13575 Guard driver acknowledgement dispatch release boundary
+888d957 Add customer voice booking speak helper
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
 ## Next GPT Lock / Uncompleted Backlog
 
-- Last verified repo checkpoint before this Driver Acknowledgement staging smoke record: `7b13575 Guard driver acknowledgement dispatch release boundary`.
-- Latest staging-smoked app checkpoint to preserve: `7b13575 Guard driver acknowledgement dispatch release boundary`; `origin/staging` points to `7b13575320b878190a9c983d72e0eb1a6ce2b016`.
+- Last verified repo checkpoint before this Customer Voice Booking Speak helper staging smoke record: `888d957 Add customer voice booking speak helper`.
+- Latest staging-smoked app checkpoint to preserve: `888d957 Add customer voice booking speak helper`; `origin/staging` points to `888d957344d01a1218b727131b8872af18bf8f19`.
 - Recent forward activation-readiness locks already completed and smoked; do not repeat them: rate settings scalar activation readiness `331f854` plus smoke record `f1d6b07`, customer rates activation readiness `d4d22e3` plus smoke record `c6619c7`, driver payout rules activation readiness `49039b9` plus smoke record `59e69c6`, full driver profile activation readiness `566fdba` plus smoke record `98cb731`, company/traveler CRM runtime write activation readiness `dea22b3` plus smoke record `d070ad6`, public customer/driver auth surface guard `52af3d6` plus smoke record `f93d5f9`, public billing/payment surface guard `df51173` plus smoke record `f892af7`, public live location surface guard `bfa61e5` plus smoke record `8e8fc73`, and public OTS photo proof surface guard `168f710`.
 - Next forward lane after this source-of-truth alignment: choose the next bounded docs/test-only/read-only preactivation hardening guard after reading the ledger and current code; do not perform endpoint migration, env change, DB write, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector addition, or new shim without separate approval.
 - Current business-grade forward direction is now sequence-locked: Confirmed Booking To Dispatch Release is complete, confirmed-only eligibility is implemented and guarded, staging smoke is recorded, and the existing Dispatch Release workflow was reused without duplicate UI sector/button/card/route/helper/shim; do not repeat it. Admin Driver Acknowledgement Dispatch Release sequencing is complete, staging-smoked, and guarded; do not repeat it. Any next runtime lane requires a fresh no-edit readiness audit plus explicit owner approval naming the lane; without new approval, stay on read-only audit, local tests/smokes, docs clarification, docs/test-only guard hardening, already-approved bug fixes, review, and commit.
@@ -1289,6 +1289,38 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Existing WhatsApp transcript parsing and admin dispatcher intake parser/draft-fill are not Customer Voice Booking Draft Input and must not be treated as already-approved customer voice behavior.
 - `/api/ai-parse` cannot be exposed or reused for customer voice without separate owner approval.
 - This lock is guarded by `docs/customer-voice-booking-draft-input-contract.md`, `scripts/test-customer-voice-booking-draft-input-contract.mjs`, `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, and `scripts/test-preactivation-verification-suite.mjs`.
+
+### Staging Deploy Smoke for Customer Voice Booking Speak Helper
+
+- `origin/staging` points to `888d957344d01a1218b727131b8872af18bf8f19` (`888d957 Add customer voice booking speak helper`), verified directly with `git ls-remote`.
+- Remote staging before promotion was `20a64cdd2f6f7dd347585c27b8dba0939cfd06b2`.
+- The push to `origin/staging` succeeded; local remote-tracking ref update was blocked by the sandbox lock-file permission, so direct `git ls-remote` is the remote source of truth.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/` returned HTTP 200 by safe GET with document title `Prestige Limo Ops`.
+- Staging URL `https://prestige-limo-ops-staging.vercel.app/book` returned HTTP 200 by safe GET and included the Speak helper and Portal link markers.
+- Passive no-click Chrome/CDP staging smoke rendered the main admin UI with title `Prestige Limo Ops`.
+- Expected tabs rendered: Dispatch, Dashboard, Bookings, Drivers, Completed, and Rates.
+- Save Booking + CRM was visible but was not clicked.
+- `/book` rendered the existing customer booking page and form.
+- `/book` rendered exactly one compact Speak button beside the existing Portal link in the same header action group.
+- The Speak button rendered as `type="button"` with visible text `Speak`; observed button size was 71px by 42px.
+- Speak helper remains input-helper-only.
+- Speak was not clicked during smoke.
+- No microphone permission prompt was triggered.
+- Portal link remained present, unchanged, and pointed to `/my-bookings`.
+- Customer still manually submits the booking through the existing Submit Booking Request / BOOK flow.
+- Submit Booking Request / BOOK was not clicked.
+- No forms were submitted.
+- No transcript or audio was submitted or stored.
+- No POST/write/send action was attempted by the smoke; observed staging browser requests were GET-only.
+- Browser request audit observed 54 GET requests, 54 staging GET responses, 0 non-GET requests, 0 POST/write/send requests, 0 non-200 responses, and 0 missing responses.
+- Browser-canceled staging request count after observed response: 1 GET-only RSC prefetch load-completion event for `/driver-job/mock-driver-job-valid-a` after HTTP 200; this was not a POST/write/send request.
+- Browser console error logs: 0.
+- Browser runtime exceptions: 0.
+- Browser dialogs/security prompts: 0.
+- Screenshot captured: false.
+- A first local Chrome/CDP launch attempt failed because the sandbox blocked Chrome Crashpad settings access; the unsandboxed passive rerun passed and did not require any app/runtime changes.
+- No parser, `/api/ai-parse`, backend STT, provider, DB, route, Save Booking, `/api/admin-saved-bookings`, billing/payment, pricing, payout, PDF, dispatch, auth/location/photo/calendar, or shim wiring was added.
+- Billing/payment is not touched or wired by this customer voice helper.
 
 ### Staging Safe GET for Customer Voice Booking Draft Input Contract Guard
 

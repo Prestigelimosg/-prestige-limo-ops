@@ -551,6 +551,10 @@ const guardChecks = [
     script: "scripts/test-email-provider-staging-send-safety-contract.mjs",
   },
   {
+    label: "Customer notification channel matrix guard",
+    script: "scripts/test-customer-notification-channel-matrix-guard.mjs",
+  },
+  {
     label: "WhatsApp no-live guard",
     script: "scripts/test-whatsapp-customer-driver-details-no-live-guard.mjs",
   },

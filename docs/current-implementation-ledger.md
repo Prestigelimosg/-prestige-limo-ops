@@ -4494,6 +4494,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email must not be used for live location. Live location remains Telegram/WhatsApp only and requires a separate owner-approved lane.
 - No provider activation or provider send is approved by this guard.
 
+### Customer Notification Channel Matrix Lock
+- This is a docs/test-only guard for future customer notification channel selection; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, UI, API, route, helper, scheduler, fallback, or blast behavior.
+- Telegram may be used for live location and driver details only after the specific channel/action gate is separately approved.
+- WhatsApp may be used for live location and driver details only after the specific channel/action gate is separately approved.
+- Email may be used for driver details only and must not be used for live location.
+- SMS is not approved for driver details or live location unless separately approved later.
+- Admin must explicitly choose exactly one channel/action for each future send.
+- No automatic fallback is approved.
+- No automatic multi-channel blast is approved.
+- No provider send is approved unless that specific channel/action gate is separately approved.
+- Future admin choices remain separated: Send driver details by Email; Send driver details by Telegram; Send driver details by WhatsApp; Send live location by Telegram; Send live location by WhatsApp.
+- Customer-facing provider messages must exclude driver payout details, payout preferences, `driver_payout_rules`, `customer_rates`, pricing breakdown unless separately approved, payment/PDF/billing unless separately approved, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, auth/location/photo/calendar/OTS data unless the selected lane explicitly allows it, Save Booking internals, and `/api/admin-saved-bookings` internals.
+- Driver details messages must stay separate from payout, pricing, payment, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, and `/api/admin-saved-bookings` internals.
+- Live location remains separated from Email and SMS; live location may only use Telegram or WhatsApp after separate owner approval for that channel/action gate.
+
 ### WhatsApp Provider No-Send Approval Packet Lock
 - Approval status: pending future WhatsApp staging test approval.
 - This is a docs/test-only no-send approval packet guarded by `scripts/test-whatsapp-provider-no-send-approval-packet.mjs`.

@@ -318,6 +318,14 @@ const guardChecks = [
     script: "scripts/test-public-driver-flight-eta-setup-surface-guard.mjs",
   },
   {
+    label: "admin FlightAware AeroAPI live lookup action guard",
+    script: "scripts/test-admin-flightaware-aeroapi-live-lookup-action-api-contract.mjs",
+  },
+  {
+    label: "FlightAware AeroAPI live lookup no-scheduler guard",
+    script: "scripts/test-flightaware-aeroapi-live-lookup-no-scheduler-guard.mjs",
+  },
+  {
     label: "public customer driver-details link surface guard",
     script: "scripts/test-public-customer-driver-details-link-surface-guard.mjs",
   },

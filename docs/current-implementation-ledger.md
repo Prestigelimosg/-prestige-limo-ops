@@ -4584,6 +4584,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver flight ETA live readiness setup foundation.
 - Flight ETA result normalization setup foundation.
 - Flight ETA comparison/update setup foundation.
+- FlightAware/AeroAPI gated live lookup contract route/helper added:
+  `POST /api/admin-flightaware-aeroapi-live-lookup-action` and
+  `lib/admin-flightaware-aeroapi-live-lookup-action.ts`.
+- FlightAware/AeroAPI live lookup gate remains closed by default:
+  `PRESTIGE_FLIGHTAWARE_AEROAPI_LIVE_LOOKUP_ENABLED`.
+- FlightAware/AeroAPI contract guards are registered in the preactivation suite and do not approve or run live lookup evidence.
 
 ## Not Live / Not Implemented
 
@@ -4619,3 +4625,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - If driver does not acknowledge, resend later.
 - After 2 no-ack attempts, alert admin to get replacement driver.
 - Current state is setup-only; no live sending or external API.
+
+## FlightAware/AeroAPI Gated Live Lookup Contract Lock
+
+- Approved contract route: `POST /api/admin-flightaware-aeroapi-live-lookup-action`.
+- Approved server-only helper: `lib/admin-flightaware-aeroapi-live-lookup-action.ts`.
+- Approved gate: `PRESTIGE_FLIGHTAWARE_AEROAPI_LIVE_LOOKUP_ENABLED`.
+- Required env names are names-only and values must not be printed: `PRESTIGE_FLIGHTAWARE_AEROAPI_LIVE_LOOKUP_ENABLED`, `FLIGHTAWARE_AEROAPI_API_KEY`, and `FLIGHTAWARE_AEROAPI_BASE_URL`.
+- The gate is closed by default. Closed gate returns safe HTTP 503 with `flight_lookup_gate_closed`, zero provider requests, no provider token read, no DB client, no scheduler, no retry, and no persistence.
+- Missing provider token/base URL returns safe HTTP 503 with no provider request and no env value exposure.
+- Invalid input returns safe HTTP 400. The allowed service scope is MNG/Arrival only.
+- Success is allowed only after separate gate-opening approval and returns normalized fields only: provider, flight number, status, scheduled arrival ISO, estimated arrival ISO, source updated ISO, and `customerVisible: false`.
+- Provider failure returns safe HTTP 502 or 504 with sanitized error code only; raw provider body, headers, token, debug/internal fields, mock archive, customer price, billing, payout, notes, and secrets remain excluded.
+- The contract is manual admin/dispatcher-only. Public customer/driver routes and pages cannot trigger the lookup.
+- The contract allows max one provider request per invocation, uses a strict timeout, and has no scheduler, cron, queue, polling loop, server retry, provider send, notification send, DB persistence, UI sector/button/card, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/payout/payment/PDF/billing change, auth/location/photo/calendar/OTS activation, or shim change.
+- Guards added: `scripts/test-admin-flightaware-aeroapi-live-lookup-action-api-contract.mjs` and `scripts/test-flightaware-aeroapi-live-lookup-no-scheduler-guard.mjs`.
+- This contract remains not-live until a separate owner-approved staging evidence pass names the staging target, opens the gate for one bounded live lookup window, records rollback/closed-gate proof, and confirms no forbidden surfaces were activated.

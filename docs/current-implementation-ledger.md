@@ -4499,10 +4499,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only guard for future owner-domain outbound Email setup before any SMTP/API/provider activation or one-message staging send evidence.
 - This lock does not activate Email sending, provider credentials, provider SDKs, SMTP/API calls, IMAP login/test, DNS changes, env changes, deployment, DB read/write, runtime API behavior, UI, route/helper changes, or live send behavior.
 - Future app Email must use owner-domain email addresses.
+- Owner domain for the first Driver Details Email lane is `prestigelimo.sg`.
 - Selected first Driver Details Email provider is Resend.
 - Future outbound Driver Details Email uses the Resend API later only after separate owner approval, staging recipient allowlist proof, one-message evidence approval, and rollback/disable proof.
-- Future Driver Details Email sender is dispatch@<owner-domain>.
-- Future Driver Details Email reply-to is dispatch@<owner-domain> or a dedicated cPanel reply inbox on the owner domain.
+- Selected Driver Details Email From is `Prestige Limo Dispatch <info@prestigelimo.sg>`.
+- Selected Driver Details Email Reply-To is `info@prestigelimo.sg`.
+- Existing `info@prestigelimo.sg` remains usable for normal business email and cPanel inbox/replies through IMAP/webmail.
+- No `dispatch@prestigelimo.sg` mailbox is required for this first Driver Details Email lane.
 - Future Invoice Email sender is billing@<owner-domain>, but invoice email remains a separate billing lane.
 - Outbound app Email must use an approved Email API or separately approved SMTP lane; the first Driver Details Email lane selects Resend API.
 - IMAP is receive-only and must never be treated as a send mechanism.

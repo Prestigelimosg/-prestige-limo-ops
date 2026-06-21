@@ -4777,6 +4777,28 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Current live-location surfaces remain setup-only/disabled with no driver browser GPS capture, no customer map link, no admin live map, no external map tracking, and no database read/write.
 - This guard adds `scripts/test-driver-location-pob-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
+
+- Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.
+- Staging target commit: `a6cd226 Guard driver location POB evidence contract`.
+- A bounded OneMap admin map/search/route estimate staging evidence pass was attempted once through the existing `scripts/run-admin-onemap-read-only-verification-phase3.mjs` runner.
+- The evidence attempt used safe public-landmark scope only.
+- Location search used safe public-landmark scope and returned safe provider failure HTTP 502.
+- Route estimate used public landmarks only: RAFFLES HOTEL SINGAPORE to CHANGI AIRPORT TERMINAL 2, and returned safe provider failure HTTP 502.
+- The runner returned `onemap_read_only_verification_failed_safely`.
+- Closed-gate/local route contracts passed before and after the attempt.
+- Boundary probes returned blocked HTTP 403 for anonymous, customer, and wrong-token paths.
+- No unsafe evidence was produced.
+- No DB write occurred.
+- No real customer coordinates were used.
+- No provider sends occurred.
+- No OneMap token, endpoint value, env value, API key, DB URL, cookie, password, or secret was printed or recorded.
+- No production deploy or production activation occurred.
+- No repo files changed during the evidence attempt.
+- No second OneMap call or retry was run.
+- Blocker: OneMap provider/token/endpoint readiness must be owner-verified before any future retry.
+- OneMap remains admin map/search/route estimate only and is still not the driver GPS source, Telegram/live-location source, provider-send surface, DB persistence surface, billing/payment/PDF surface, parser surface, Save Booking surface, `/api/admin-saved-bookings` surface, shim cleanup lane, UI expansion, or production activation.
+
 ### Live location
 - Live location setup foundation.
 - Live location window policy setup foundation.

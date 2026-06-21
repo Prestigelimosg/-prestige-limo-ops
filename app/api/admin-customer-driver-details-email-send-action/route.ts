@@ -1,5 +1,7 @@
 import {
+  adminCustomerDriverDetailsEmailClosedGateResult,
   adminCustomerDriverDetailsEmailSendActionEnvGateName,
+  adminCustomerDriverDetailsEmailSendGateOpen,
   executeAdminCustomerDriverDetailsEmailSendAction,
 } from "../../../lib/admin-customer-driver-details-email-send-action";
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
@@ -31,6 +33,33 @@ function blockedResponse(error: string) {
     },
     { status: 403 },
   );
+}
+
+function hasSameOriginAdminDashboardReferer(request: Request) {
+  const requestUrl = new URL(request.url);
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const purpose = request.headers.get("x-prestige-admin-purpose");
+
+  if (purpose !== adminBookingPersistencePurpose || !referer) {
+    return false;
+  }
+
+  if (origin && origin !== requestUrl.origin) {
+    return false;
+  }
+
+  try {
+    const refererUrl = new URL(referer);
+
+    return refererUrl.origin === requestUrl.origin && refererUrl.pathname === "/";
+  } catch {
+    return false;
+  }
+}
+
+function closedGateResponse() {
+  return Response.json(adminCustomerDriverDetailsEmailClosedGateResult(), { status: 503 });
 }
 
 type AdminDispatcherBoundaryCheck =
@@ -97,6 +126,13 @@ function safeFailureResponse() {
 
 export async function POST(request: Request) {
   try {
+    if (
+      !adminCustomerDriverDetailsEmailSendGateOpen() &&
+      hasSameOriginAdminDashboardReferer(request)
+    ) {
+      return closedGateResponse();
+    }
+
     const boundary = requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {

@@ -4537,7 +4537,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future env names only for this lane are `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER`, `PRESTIGE_DRIVER_DETAILS_EMAIL_FROM`, `PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO`, `PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`.
 - Env values, API keys, SMTP passwords, IMAP passwords, DNS secrets, provider tokens, raw provider payloads, and debug/internal fields must never be printed, logged, committed, echoed, or surfaced.
 - Closed-gate behavior returns safe 503/no-op, does not read `RESEND_API_KEY`, does not read provider credentials, does not instantiate a Resend SDK/client, and does not make an external Resend request.
-- Admin/dispatcher server-session boundary remains required; public/customer/driver surfaces cannot trigger this route.
+- Closed-gate same-origin admin-surface probes may return the safe 503/no-op before session-token handling so staging can prove the gate is closed without asking the owner to paste cookies, passwords, session tokens, API keys, or secrets.
+- Public/missing-boundary requests remain safe 403/no-op, and the admin/dispatcher server-session boundary remains required for every gate-open send path before provider config, allowlist, API key read, or Resend call.
 - Missing provider configuration returns safe 503/no-op without exposing secrets or values.
 - Invalid or forbidden payload fields return safe 400/no-op.
 - Recipient allowlist is required before any future staging evidence; non-allowlisted recipients return safe 403/no-op.
@@ -4555,8 +4556,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback/disable proof after any future evidence must close the gate and verify disabled/no-op behavior with no follow-up send.
 - Staging public boundary no-send smoke for `6e80fba Guard customer name and channel split in driver details email contract` is recorded: staging root GET returned HTTP 200 with title `Prestige Limo Ops`; public/dummy POST to `POST /api/admin-customer-driver-details-email-send-action` returned HTTP 403 safe no-op with `email_send_enabled: false`, `external_send: false`, `no_op: true`, and `ok: false`.
 - Public boundary proof passed for the Resend Driver Details Email route; no Email was sent, no Resend call was made, no env/API key was used, and no credentials were exposed.
-- Authenticated closed-gate HTTP 503 proof remains pending because Codex does not have a safe authenticated admin/dispatcher staging context and must not ask the owner to paste passwords, cookies, session tokens, API keys, or secrets.
-- One-message Resend staging evidence remains blocked until the authenticated closed-gate HTTP 503 no-op proof is completed with the send gate still closed and no provider credentials activated.
+- Same-origin admin-surface closed-gate HTTP 503 proof replaces the prior token-handling blocker: Codex must not ask the owner to paste passwords, cookies, session tokens, API keys, or secrets just to prove the gate is closed.
+- One-message Resend staging evidence remains blocked until the same-origin admin-surface closed-gate HTTP 503 no-op proof is completed on staging with the send gate still closed and no provider credentials activated; any gate-open send evidence still requires separate owner approval and the normal admin/dispatcher server-session boundary.
 - Contract guards: `scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs`; exact POST-route exception registered in `scripts/test-global-preactivation-no-live-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Notification Channel Matrix Lock
@@ -4605,7 +4606,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Telegram and WhatsApp remain generate/copy/manual-send only; no Telegram API send, WhatsApp API send, automatic fallback, automatic multi-channel blast, provider credentials, provider activation, or provider send is included.
 - Email remains separate through the gated Resend route and is not activated by this preview.
 - The preview excludes pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, invoice content, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/location/photo/calendar/OTS data, live-location text, route extras, and child-seat/internal service extras.
-- The authenticated closed-gate 503 proof for the Resend send route remains pending, and one-message Resend evidence remains blocked.
+- The Resend send route now uses a same-origin admin-surface closed-gate 503 proof path so the no-send gate can be verified without secret-token handling; one-message Resend evidence remains blocked until that staging proof is completed and separately approved send evidence is requested.
 - Guard: `scripts/test-customer-booking-driver-details-copy-preview-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### WhatsApp Provider No-Send Approval Packet Lock

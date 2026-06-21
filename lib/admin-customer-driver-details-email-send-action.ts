@@ -238,8 +238,12 @@ function isPlaceholderConfigValue(value: string) {
   );
 }
 
-function sendGateOpen() {
+export function adminCustomerDriverDetailsEmailSendGateOpen() {
   return process.env[adminCustomerDriverDetailsEmailSendActionEnvGateName] === "true";
+}
+
+function sendGateOpen() {
+  return adminCustomerDriverDetailsEmailSendGateOpen();
 }
 
 function actorCanSend(actor: AdminBookingPersistenceAdapterActor) {
@@ -387,6 +391,14 @@ function safeResult(
   };
 }
 
+export function adminCustomerDriverDetailsEmailClosedGateResult() {
+  return safeResult({
+    error: "Driver Details Email send gate is closed.",
+    reason: "email_send_gate_closed",
+    status: "blocked",
+  });
+}
+
 function safeTimeoutMs(value: number | undefined) {
   return Number.isFinite(value) && value && value >= 1000 && value <= 10000 ? value : 5000;
 }
@@ -461,11 +473,7 @@ export async function executeAdminCustomerDriverDetailsEmailSendAction(
   options?: AdminCustomerDriverDetailsEmailSendOptions,
 ): Promise<AdminCustomerDriverDetailsEmailSendResult> {
   if (!sendGateOpen()) {
-    return safeResult({
-      error: "Driver Details Email send gate is closed.",
-      reason: "email_send_gate_closed",
-      status: "blocked",
-    });
+    return adminCustomerDriverDetailsEmailClosedGateResult();
   }
 
   if (!actorCanSend(actor)) {

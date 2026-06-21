@@ -137,7 +137,7 @@ for (const phrase of [
   "Telegram and WhatsApp remain generate/copy/manual-send only; no Telegram API send, WhatsApp API send, automatic fallback, automatic multi-channel blast, provider credentials, provider activation, or provider send is included.",
   "Email remains separate through the gated Resend route and is not activated by this preview.",
   "The preview excludes pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, invoice content, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/location/photo/calendar/OTS data, live-location text, route extras, and child-seat/internal service extras.",
-  "The authenticated closed-gate 503 proof for the Resend send route remains pending, and one-message Resend evidence remains blocked.",
+  "The Resend send route now uses a same-origin admin-surface closed-gate 503 proof path so the no-send gate can be verified without secret-token handling; one-message Resend evidence remains blocked until that staging proof is completed and separately approved send evidence is requested.",
 ]) {
   assertIncludes(copyPreviewSection, phrase, `copy preview ledger phrase ${phrase}`);
 }

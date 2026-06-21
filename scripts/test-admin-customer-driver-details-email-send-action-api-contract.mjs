@@ -281,6 +281,8 @@ assertIncludes(routeSource, "export async function POST", "Driver Details Email 
 assertIncludes(routeSource, "resolveAdminDispatcherBoundary", "Driver Details Email send route");
 assertIncludes(routeSource, "adminBookingPersistencePurpose", "Driver Details Email send route");
 assertIncludes(routeSource, "adminDispatcherBoundaryToPersistenceAdapterActor", "Driver Details Email send route");
+assertIncludes(routeSource, "adminCustomerDriverDetailsEmailClosedGateResult", "Driver Details Email send route");
+assertIncludes(routeSource, "adminCustomerDriverDetailsEmailSendGateOpen", "Driver Details Email send route");
 assertIncludes(routeSource, "executeAdminCustomerDriverDetailsEmailSendAction", "Driver Details Email send route");
 assertExcludes(routeSource, "export async function GET", "Driver Details Email send route");
 assertExcludes(routeSource, "export async function PATCH", "Driver Details Email send route");
@@ -416,6 +418,36 @@ try {
   assert.equal(closedResponse.status, 503, "Closed Driver Details Email route must return 503.");
   assertClosed(closed, "closed Driver Details Email route");
   assert.equal(providerRequests, 0, "Closed gate must not make provider requests.");
+
+  setEnv({
+    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Harness dispatcher",
+    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: "resend-test-admin-token",
+    RESEND_API_KEY: "test-resend-secret-key",
+    [gateEnvName]: undefined,
+  });
+
+  const serverSessionClosedResponse = await route.POST(
+    new Request(routeUrl(), {
+      body: JSON.stringify(validPayload()),
+      headers: adminHeaders(),
+      method: "POST",
+    }),
+  );
+  const serverSessionClosed = await responseJson(serverSessionClosedResponse);
+
+  assert.equal(
+    serverSessionClosedResponse.status,
+    503,
+    "Closed Driver Details Email route must return 503 for same-origin admin surface before session-token handling.",
+  );
+  assertClosed(serverSessionClosed, "server-session closed Driver Details Email route");
+  assert.equal(
+    providerRequests,
+    0,
+    "Server-session closed gate must not make provider requests.",
+  );
 
   const publicResponse = await route.POST(
     new Request(routeUrl(), {

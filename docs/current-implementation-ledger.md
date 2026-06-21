@@ -4701,6 +4701,45 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Rollback note: keep Telegram on the setup-only disabled-send route until a separate staging test is approved, guarded, and verified; if any future provider test fails, close the provider gate/env, redeploy if env changed, rotate exposed bot tokens, and restore the disabled/no-op route surface unchanged.
 - No runtime implementation, UI/API/helper behavior change, env change, deployment, DB read/write, migration, provider activation, live send, parser change, Save Booking + CRM change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector/button/card, or new shim is approved by this packet.
 
+### Telegram True Live Location Evidence Contract Guard Lock
+- This is a docs/test-only guard for a future separately approved Telegram True Live Location evidence pass.
+- This lock does not activate Telegram provider setup, Telegram credentials, Telegram Bot API calls, Telegram sends, bot token creation/use, env changes, DB read/write, driver GPS capture, live-location routes/helpers, scheduler/timer/polling/retry behavior, customer map, admin live map, auth activation, session/token/cookie creation, deployment, UI expansion, or production activation.
+- Future Telegram true live-location activation requires explicit owner approval.
+- Future Telegram provider/bot setup requires explicit owner approval.
+- Future staging chat/recipient allowlist requires explicit owner approval.
+- Future live-location start action requires explicit owner approval.
+- Future POB plus 5 minute auto-stop behavior requires explicit owner approval.
+- Future driver location source requires explicit owner approval.
+- Future DB persistence or RLS/policy changes require explicit owner approval if introduced.
+- Future rollback/disable plan requires explicit owner approval.
+- Future env/provider proof must be names-only and must not print tokens, chat IDs, cookies, passwords, API keys, env values, database URLs, or secrets.
+- Future gate/env names are names-only: `PRESTIGE_TELEGRAM_LIVE_LOCATION_ENABLED`, `PRESTIGE_TELEGRAM_LIVE_LOCATION_STAGING_CHAT_ALLOWLIST`, `PRESTIGE_TELEGRAM_LIVE_LOCATION_AUTO_STOP_AFTER_POB_MINUTES`, and `TELEGRAM_BOT_TOKEN`.
+- Future Telegram gate must be closed by default.
+- Closed gate must not read `TELEGRAM_BOT_TOKEN`.
+- Closed gate must not call Telegram.
+- Public, customer, and driver unauthorized routes must not trigger Telegram sends.
+- Admin/dispatcher boundary is required for any future start/send action.
+- Staging chat/recipient allowlist proof is required.
+- Future evidence is limited to exactly one bounded staging live-location evidence action unless separately approved.
+- Batch send is forbidden.
+- Retry loop is forbidden unless separately approved and bounded.
+- Polling loop is forbidden unless separately approved and bounded.
+- Scheduler/background worker is forbidden unless separately approved and bounded.
+- Fallback to WhatsApp, SMS, or Email is forbidden.
+- Automatic multi-channel blast is forbidden.
+- POB status source proof is required from the guarded driver status workflow `driver_otw -> ots -> pob -> completed`.
+- Auto-stop 5 minutes after POB proof is required.
+- Rollback/disable proof is required after any future evidence pass.
+- No token, chat ID, env value, raw provider payload, finance/internal/admin/provider/debug data, or secret may be exposed.
+- No DB persistence is approved unless separately approved with table/RLS proof.
+- Customer-facing Telegram live-location evidence must not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, invoice content, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, or OTS photo/storage data unless separately approved.
+- Telegram live location must remain separate from Customer/Driver Auth activation, OTS photo/storage, calendar, billing/payment/PDF, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, Email/WhatsApp/SMS sends, FlightAware live lookup, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.
+- Current Telegram surfaces remain setup-only/no-live and current live-location surfaces remain setup-only/disabled.
+- No true live-location route/helper exists and no driver GPS source exists for true live location in this lane.
+- WhatsApp remains a later phase.
+- Email remains driver-details and admin-selected secure tracking link only; Email must not do native/streaming live location.
+- This guard adds `scripts/test-telegram-live-location-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live location
 - Live location setup foundation.
 - Live location window policy setup foundation.

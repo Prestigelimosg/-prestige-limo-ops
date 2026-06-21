@@ -599,6 +599,10 @@ const guardChecks = [
     script: "scripts/test-telegram-provider-no-send-approval-packet.mjs",
   },
   {
+    label: "Telegram True Live Location evidence contract guard",
+    script: "scripts/test-telegram-live-location-evidence-contract-guard.mjs",
+  },
+  {
     label: "customer driver-details link no-live guard",
     script: "scripts/test-customer-driver-details-link-no-live-guard.mjs",
   },

@@ -4553,6 +4553,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lane does not add a Resend SDK/package dependency and uses no SMTP, IMAP, Telegram, WhatsApp, SMS, FlightAware, live location, billing/payment/PDF, payout, pricing/rates/customer_rates, driver_payout_rules, parser, Save Booking, `/api/admin-saved-bookings`, auth/location/photo/calendar/OTS, UI sector/card/button, or shim activation.
 - Future live evidence remains blocked until separate owner approval names the staging target, provider, recipient allowlist, env-name handling, content fixture, one-message boundary, and rollback/disable proof.
 - Rollback/disable proof after any future evidence must close the gate and verify disabled/no-op behavior with no follow-up send.
+- Staging public boundary no-send smoke for `6e80fba Guard customer name and channel split in driver details email contract` is recorded: staging root GET returned HTTP 200 with title `Prestige Limo Ops`; public/dummy POST to `POST /api/admin-customer-driver-details-email-send-action` returned HTTP 403 safe no-op with `email_send_enabled: false`, `external_send: false`, `no_op: true`, and `ok: false`.
+- Public boundary proof passed for the Resend Driver Details Email route; no Email was sent, no Resend call was made, no env/API key was used, and no credentials were exposed.
+- Authenticated closed-gate HTTP 503 proof remains pending because Codex does not have a safe authenticated admin/dispatcher staging context and must not ask the owner to paste passwords, cookies, session tokens, API keys, or secrets.
+- One-message Resend staging evidence remains blocked until the authenticated closed-gate HTTP 503 no-op proof is completed with the send gate still closed and no provider credentials activated.
 - Contract guards: `scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs`; exact POST-route exception registered in `scripts/test-global-preactivation-no-live-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Notification Channel Matrix Lock

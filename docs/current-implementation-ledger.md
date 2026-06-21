@@ -4596,6 +4596,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer-facing provider payloads must exclude pricing, payout, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, and auth/location/photo/calendar/OTS data unless the selected lane explicitly approves it later.
 - This lock does not implement live location, Telegram auto-send, POB trigger, POB plus 5 minute auto-stop, provider activation, provider credentials, Telegram provider send, WhatsApp provider send, SMS send, runtime app/API behavior, UI, DB writes, or deploys.
 
+### Customer Booking + Driver Details Copyable Message Preview Lock
+- This is a bounded runtime implementation in the existing Customer Copy section.
+- It reuses `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-preview="customerCopy"`, `data-copy-copy-button="customerCopy"`, and `data-copy-edit-button="customerCopy"`.
+- The generated plain-text preview has only `CUSTOMER BOOKING DETAILS` and `DRIVER DETAILS` sections.
+- Allowed customer booking fields are customer/passenger/traveler name when available, booking reference when available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number only if available.
+- Allowed driver fields are driver name, driver contact, car plate, and car type from assigned driver profile data only.
+- Telegram and WhatsApp remain generate/copy/manual-send only; no Telegram API send, WhatsApp API send, automatic fallback, automatic multi-channel blast, provider credentials, provider activation, or provider send is included.
+- Email remains separate through the gated Resend route and is not activated by this preview.
+- The preview excludes pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, invoice content, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/location/photo/calendar/OTS data, live-location text, route extras, and child-seat/internal service extras.
+- The authenticated closed-gate 503 proof for the Resend send route remains pending, and one-message Resend evidence remains blocked.
+- Guard: `scripts/test-customer-booking-driver-details-copy-preview-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### WhatsApp Provider No-Send Approval Packet Lock
 - Approval status: pending future WhatsApp staging test approval.
 - This is a docs/test-only no-send approval packet guarded by `scripts/test-whatsapp-provider-no-send-approval-packet.mjs`.

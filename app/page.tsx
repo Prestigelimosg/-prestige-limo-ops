@@ -10875,57 +10875,41 @@ export default function Home() {
 
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
-    const childSeatLine =
-      clean(booking.childSeatRequired) === "yes"
-        ? formatChildSeatNote(booking.childSeatCount, booking.childSeatType)
-        : "";
+    const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
     const flightLine = clean(booking.flight) ? `Flight: ${clean(booking.flight)}` : "";
-    const pickupLocation = clean(booking.pickup);
-    const dropoffLocation = clean(booking.dropoff);
-    const pickupLine = pickupLocation ? `Pickup: ${pickupLocation}` : "";
-    const dropoffLine = dropoffLocation ? `Drop-off: ${dropoffLocation}` : "";
-    const routeLines = isDspItinerary
-      ? [
-          flightLine,
-          pickupLine,
-          dropoffLine,
-          "",
-          "Itinerary:",
-          ...itineraryDisplayStops.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
-        ]
-      : [
-          flightLine,
-          pickupLine,
-          dropoffLine,
-          `Route: ${route}`,
-        ];
+    const carType = clean(assignedDriverRecord?.vehicle_type);
     const driverLines = [
       clean(booking.driverName) ? `Driver: ${clean(booking.driverName)}` : "",
       clean(booking.driverContact) ? `Driver contact: ${clean(booking.driverContact)}` : "",
       assignedDriverPlate ? `Car plate: ${assignedDriverPlate}` : "",
+      carType ? `Car type: ${carType}` : "",
     ];
     const sections = [
-      ["CUSTOMER BOOKING DETAILS"],
       [
+        "CUSTOMER BOOKING DETAILS",
         clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "",
+        bookingReference ? `Booking reference: ${bookingReference}` : "",
         serviceType ? `Service: ${serviceType}` : "",
-        formatPickupDateTime(booking.date, booking.time),
-      ],
-      routeLines,
-      driverLines,
-      [customerLiveLocation.copyLine],
-      [
+        `Pickup date: ${formatDate(booking.date)}`,
+        `Pickup time: ${formatPickupTime(booking.time)}`,
+        clean(booking.pickup) ? `Pickup location: ${clean(booking.pickup)}` : "",
+        clean(booking.dropoff) ? `Drop-off location: ${clean(booking.dropoff)}` : "",
         `Pax: ${Number(clean(booking.pax)) || 1}`,
-        childSeatLine,
+        flightLine,
       ],
-      ["Thank you for choosing Prestige Limo SG."],
+      ["DRIVER DETAILS", ...driverLines],
     ];
 
     return sections
       .filter((section) => section.some((line) => clean(line)))
       .map((section) => section.join("\n").trim())
       .join("\n\n");
-  }, [assignedDriverPlate, booking, customerLiveLocation.copyLine, isDspItinerary, itineraryDisplayStops, route]);
+  }, [
+    assignedDriverPlate,
+    assignedDriverRecord?.vehicle_type,
+    booking,
+    dispatchReleaseWorkflowBookingReference,
+  ]);
 
   const draftDriverDispatchCard = useMemo(() => {
     const bookingDriverId = clean(booking.driverId);

@@ -603,6 +603,10 @@ const guardChecks = [
     script: "scripts/test-telegram-live-location-evidence-contract-guard.mjs",
   },
   {
+    label: "Driver Location Source + POB Status evidence contract guard",
+    script: "scripts/test-driver-location-pob-evidence-contract-guard.mjs",
+  },
+  {
     label: "customer driver-details link no-live guard",
     script: "scripts/test-customer-driver-details-link-no-live-guard.mjs",
   },

@@ -4740,6 +4740,43 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email remains driver-details and admin-selected secure tracking link only; Email must not do native/streaming live location.
 - This guard adds `scripts/test-telegram-live-location-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Location Source + POB Status Evidence Contract Guard Lock
+- This is a docs/test-only guard for a future separately approved Driver Location Source + POB Status evidence pass before Telegram True Live Location activation.
+- This lock does not activate driver GPS/location capture, driver location source implementation, Telegram live-location routes/helpers, Telegram Bot API calls, Telegram sends, bot token creation/use, env changes, DB read/write, coordinate persistence, scheduler/timer/polling/retry behavior, customer map, admin live map, OneMap provider calls, auth/session/cookie creation, OTS photo/storage, calendar, deployment, UI expansion, shims, or production activation.
+- Future driver location source requires explicit owner approval.
+- Future driver GPS/location capture requires explicit owner approval.
+- Future Telegram live-location integration requires explicit owner approval.
+- Future POB-driven auto-stop requires explicit owner approval.
+- Future bounded timer/scheduler/polling requires explicit owner approval if needed.
+- Future DB persistence/table/RLS proof requires explicit owner approval if coordinates are stored.
+- Future rollback/disable plan requires explicit owner approval.
+- Future gate/env proof must be names-only and must not print tokens, chat IDs, cookies, passwords, API keys, env values, database URLs, coordinates from real users, or secrets.
+- Future gate/env names are names-only: `PRESTIGE_DRIVER_LOCATION_SOURCE_ENABLED`, `PRESTIGE_DRIVER_LOCATION_CAPTURE_ENABLED`, `PRESTIGE_TELEGRAM_LIVE_LOCATION_ENABLED`, `PRESTIGE_TELEGRAM_LIVE_LOCATION_STAGING_CHAT_ALLOWLIST`, `PRESTIGE_TELEGRAM_LIVE_LOCATION_AUTO_STOP_AFTER_POB_MINUTES`, `TELEGRAM_BOT_TOKEN`, and `PRESTIGE_ONEMAP_LOOKUP_ENABLED` only if OneMap is later approved for map/geocode/routing support.
+- POB source proof must use persisted `driver_job_status_events`.
+- POB sequence proof must use `driver_otw -> ots -> pob -> completed`.
+- Auto-stop proof must use a persisted `pob` event plus 5 minutes.
+- Auto-stop must not rely on local UI state, demo state, or mock-only state.
+- Driver location source proof is required before any Telegram live-location evidence.
+- Location capture must be closed/disabled by default.
+- Closed location gate must not capture GPS.
+- Closed Telegram gate must not read `TELEGRAM_BOT_TOKEN`.
+- Closed Telegram gate must not call Telegram.
+- No OneMap call is approved in this lane.
+- OneMap must remain map/search/route estimate only, not the driver GPS source.
+- Admin/dispatcher boundary is required for any future start, stop, or live-location action.
+- Staging chat allowlist proof is required before any future Telegram evidence.
+- No public, customer, or driver route may trigger Telegram sends unless separately approved and guarded.
+- Rollback/disable proof must verify no GPS capture, no Telegram call, and no live-location send after gate close.
+- No timer/scheduler/polling/retry/background worker may be introduced in this lane.
+- Future auto-stop mechanism must be separately approved and bounded.
+- Future timer/scheduler/polling proof must show one bounded live-location session only, no indefinite loop, no retry storm, no fallback send, no multi-channel blast, clean stop after POB plus 5 minutes, and rollback disables the mechanism.
+- Future driver/live-location evidence must not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, invoice content, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, OTS photo/storage data unless separately approved, or calendar data unless separately approved.
+- Driver location source + POB must remain separate from Save Booking, parser, `/api/admin-saved-bookings`, pricing/rates/customer_rates, `driver_payout_rules`, payout/payment/PDF/billing/invoice, auth/session/cookie, OTS/photo/storage, calendar, UI sector/card/button expansion, shims, Email/WhatsApp/SMS sends, FlightAware live lookup, and production activation.
+- Current POB source candidate is the production driver job status path: `PATCH /api/driver-job/[token]/status` writing `pob` into `driver_job_status_events` through the guarded `driver_otw -> ots -> pob -> completed` workflow.
+- Current driver location source is absent: no current GPS capture, Telegram live-location source, or live driver coordinate stream exists.
+- Current live-location surfaces remain setup-only/disabled with no driver browser GPS capture, no customer map link, no admin live map, no external map tracking, and no database read/write.
+- This guard adds `scripts/test-driver-location-pob-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Live location
 - Live location setup foundation.
 - Live location window policy setup foundation.

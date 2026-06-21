@@ -4525,6 +4525,33 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No provider activation, provider send, Email send, SMTP login/test, IMAP login/test, DNS change, env change, DB read/write, deploy, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/customer_rates change, driver_payout_rules change, payout/payment/PDF/billing change, auth/location/photo/calendar/OTS change, UI sector/card/button change, or shim change is approved by this lock.
 - This lock adds `scripts/test-owner-domain-email-provider-setup-safety-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Resend Driver Details Email Gated Send Contract Lock
+- This is a bounded closed-gate route/helper contract for a future separately approved one-message staging Driver Details Email evidence pass; it does not activate Email sending, provider credentials, env changes, DNS changes, deployment, DB reads/writes, UI, or live send behavior.
+- Approved route is `POST /api/admin-customer-driver-details-email-send-action`.
+- Approved server-only helper is `lib/admin-customer-driver-details-email-send-action.ts`.
+- Gate is `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED`, closed by default.
+- Selected provider is Resend.
+- Selected Driver Details Email From is `Prestige Limo Dispatch <info@prestigelimo.sg>`.
+- Selected Driver Details Email Reply-To is `info@prestigelimo.sg`.
+- Future env names only for this lane are `PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED`, `PRESTIGE_EMAIL_PROVIDER`, `PRESTIGE_DRIVER_DETAILS_EMAIL_FROM`, `PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO`, `PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST`, and `RESEND_API_KEY`.
+- Env values, API keys, SMTP passwords, IMAP passwords, DNS secrets, provider tokens, raw provider payloads, and debug/internal fields must never be printed, logged, committed, echoed, or surfaced.
+- Closed-gate behavior returns safe 503/no-op, does not read `RESEND_API_KEY`, does not read provider credentials, does not instantiate a Resend SDK/client, and does not make an external Resend request.
+- Admin/dispatcher server-session boundary remains required; public/customer/driver surfaces cannot trigger this route.
+- Missing provider configuration returns safe 503/no-op without exposing secrets or values.
+- Invalid or forbidden payload fields return safe 400/no-op.
+- Recipient allowlist is required before any future staging evidence; non-allowlisted recipients return safe 403/no-op.
+- Future send scope is one-message-only; batch send, automatic fallback, automatic multi-channel blast, scheduler, cron, queue, polling loop, server retry loop, resend automation, and customer-visible auto-refresh remain forbidden.
+- Payload is limited to CUSTOMER BOOKING DETAILS and DRIVER DETAILS sections only.
+- Allowed customer booking detail fields are booking reference, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number.
+- Allowed driver-detail fields are driver name, driver contact, car plate, and car type.
+- Customer-facing payloads must exclude pricing, payout, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing/invoice details, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/location/photo/calendar/OTS data, and mock/dev archive fields.
+- Successful future send response must be normalized and may expose only safe status, selected provider, safe message id, one-provider-request count, and no raw provider response, headers, secrets, debug/internal fields, customer price, billing, payout, notes, or mock archive fields.
+- Provider failure/timeout responses must be sanitized 502/504-style failures with no raw provider payload, token, header, stack, secret, customer price, billing, payout, note, or debug exposure.
+- This lane does not add a Resend SDK/package dependency and uses no SMTP, IMAP, Telegram, WhatsApp, SMS, FlightAware, live location, billing/payment/PDF, payout, pricing/rates/customer_rates, driver_payout_rules, parser, Save Booking, `/api/admin-saved-bookings`, auth/location/photo/calendar/OTS, UI sector/card/button, or shim activation.
+- Future live evidence remains blocked until separate owner approval names the staging target, provider, recipient allowlist, env-name handling, content fixture, one-message boundary, and rollback/disable proof.
+- Rollback/disable proof after any future evidence must close the gate and verify disabled/no-op behavior with no follow-up send.
+- Contract guards: `scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs`; exact POST-route exception registered in `scripts/test-global-preactivation-no-live-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Notification Channel Matrix Lock
 - This is a docs/test-only guard for future customer notification channel selection; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, UI, API, route, helper, scheduler, fallback, or blast behavior.
 - Telegram may be used for true live location and driver details only after the specific channel/action gate is separately approved.

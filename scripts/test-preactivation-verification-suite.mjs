@@ -555,6 +555,10 @@ const guardChecks = [
     script: "scripts/test-owner-domain-email-provider-setup-safety-guard.mjs",
   },
   {
+    label: "admin customer driver-details Email send action contract guard",
+    script: "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs",
+  },
+  {
     label: "Customer notification channel matrix guard",
     script: "scripts/test-customer-notification-channel-matrix-guard.mjs",
   },

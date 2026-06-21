@@ -40,6 +40,12 @@ const setupRouteNameFragments = [
   "admin-telegram-internal-admin-alert",
   "admin-whatsapp-customer-driver-details",
 ];
+const separatelyGuardedPostRouteFiles = new Map([
+  [
+    "app/api/admin-customer-driver-details-email-send-action/route.ts",
+    "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs",
+  ],
+]);
 const requiredMasterModules = [
   "Customer Copy Email/WhatsApp/SMS driver-details messaging",
   "secure customer driver-details link",
@@ -166,6 +172,22 @@ assert.ok(routeFiles.length > 0, "Global guard must find completed setup route f
 
 for (const routeFile of routeFiles) {
   const source = await readFile(routeFile, "utf8");
+
+  if (separatelyGuardedPostRouteFiles.has(routeFile)) {
+    assert.match(source, /export async function POST/, `${routeFile} must expose its guarded POST action.`);
+    assert.equal(
+      /export async function (GET|PUT|PATCH|DELETE)/.test(source),
+      false,
+      `${routeFile} must not expose extra live activation verbs.`,
+    );
+    assert.equal(
+      directLiveActivationPattern.test(source),
+      false,
+      `${routeFile} must not contain direct live activation calls.`,
+    );
+    await fileExists(separatelyGuardedPostRouteFiles.get(routeFile));
+    continue;
+  }
 
   assert.match(source, /export async function GET/, `${routeFile} must remain GET-only setup surface.`);
   assert.equal(

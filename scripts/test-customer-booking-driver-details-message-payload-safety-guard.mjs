@@ -41,7 +41,7 @@ for (const phrase of [
   "This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.",
   "Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.",
   "Driver details must not be sent without the relevant customer booking context.",
-  "Allowed customer booking detail fields are customer/passenger/traveler name when available, booking reference if available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and flight number only if already customer-facing.",
+  "Allowed customer booking detail fields are customer/passenger/traveler name when available with customer-facing label `Passenger name:`, booking reference if available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and flight number only if already customer-facing.",
   "Allowed driver-detail fields are driver name, driver contact, car plate, and car type.",
   "No extra customer booking fields or extra driver fields are approved by this lock.",
   "Future Email may app-send customer booking plus driver details through Resend only after admin explicitly clicks the Email action and the exact Email driver-details channel/action gate is separately approved/opened.",

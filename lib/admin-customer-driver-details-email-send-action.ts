@@ -407,7 +407,7 @@ function buildEmailText(payload: CustomerDriverDetailsEmailPayload) {
   const customerName = payload.customer_booking_details.customer_passenger_traveler_name;
   const greetingLines = customerName ? [`Hi ${customerName},`, ""] : [];
   const customerNameLine = customerName
-    ? [`Customer/passenger/traveler name: ${customerName}`]
+    ? [`Passenger name: ${customerName}`]
     : [];
   const flightLine = payload.customer_booking_details.customer_facing_flight_number
     ? [`Customer-facing flight number: ${payload.customer_booking_details.customer_facing_flight_number}`]

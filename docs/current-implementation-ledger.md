@@ -4548,9 +4548,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email send remains an explicit admin-selected Email action only; it must not auto-send, fallback, batch, blast, or trigger Telegram/WhatsApp/SMS provider sends.
 - Future send scope is one-message-only; batch send, automatic fallback, automatic multi-channel blast, scheduler, cron, queue, polling loop, server retry loop, resend automation, and customer-visible auto-refresh remain forbidden.
 - Payload is limited to CUSTOMER BOOKING DETAILS and DRIVER DETAILS sections only.
-- Allowed customer booking detail fields are customer/passenger/traveler name when available, booking reference, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number.
+- Allowed customer booking detail source fields include customer/passenger/traveler name when available, but the customer-facing label `Passenger name:` must be used; other allowed fields are booking reference, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number.
 - Allowed driver-detail fields are driver name, driver contact, car plate, and car type.
-- The canonical route/helper payload field for customer/passenger/traveler name is `customer_passenger_traveler_name`; when present, it is used in the greeting and CUSTOMER BOOKING DETAILS only.
+- The canonical route/helper payload field for customer/passenger/traveler name is `customer_passenger_traveler_name`; when present, it is used in the greeting and CUSTOMER BOOKING DETAILS only, with customer-facing label `Passenger name:`.
+- Copy polish after `9b5c8d3 Record driver details email staging send evidence`: future generated Driver Details Email body and Customer Copy preview output use customer-facing label `Passenger name:`. This is copy polish only; it does not run another staging Email evidence send, does not activate a provider, and does not change the Resend send gate.
 - Customer-facing payloads must exclude pricing, payout, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing/invoice details, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/location/photo/calendar/OTS data, and mock/dev archive fields.
 - Successful future send response must be normalized and may expose only safe status, selected provider, safe message id, one-provider-request count, and no raw provider response, headers, secrets, debug/internal fields, customer price, billing, payout, notes, or mock archive fields.
 - Provider failure/timeout responses must be sanitized 502/504-style failures with no raw provider payload, token, header, stack, secret, customer price, billing, payout, note, or debug exposure.
@@ -4590,7 +4591,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.
 - Driver details must not be sent without the relevant customer booking context.
-- Allowed customer booking detail fields are customer/passenger/traveler name when available, booking reference if available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and flight number only if already customer-facing.
+- Allowed customer booking detail fields are customer/passenger/traveler name when available with customer-facing label `Passenger name:`, booking reference if available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and flight number only if already customer-facing.
 - Allowed driver-detail fields are driver name, driver contact, car plate, and car type.
 - No extra customer booking fields or extra driver fields are approved by this lock.
 - Future Email may app-send customer booking plus driver details through Resend only after admin explicitly clicks the Email action and the exact Email driver-details channel/action gate is separately approved/opened.
@@ -4607,7 +4608,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a bounded runtime implementation in the existing Customer Copy section.
 - It reuses `data-dispatch-workflow-step="customer-whatsapp-copy"`, `data-copy-preview="customerCopy"`, `data-copy-copy-button="customerCopy"`, and `data-copy-edit-button="customerCopy"`.
 - The generated plain-text preview has only `CUSTOMER BOOKING DETAILS` and `DRIVER DETAILS` sections.
-- Allowed customer booking fields are customer/passenger/traveler name when available, booking reference when available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number only if available.
+- Allowed customer booking fields are customer/passenger/traveler name when available with customer-facing label `Passenger name:`, booking reference when available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number only if available.
 - Allowed driver fields are driver name, driver contact, car plate, and car type from assigned driver profile data only.
 - Telegram and WhatsApp remain generate/copy/manual-send only; no Telegram API send, WhatsApp API send, automatic fallback, automatic multi-channel blast, provider credentials, provider activation, or provider send is included.
 - Email remains separate through the gated Resend route and is not activated by this preview.

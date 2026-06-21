@@ -10887,7 +10887,7 @@ export default function Home() {
     const sections = [
       [
         "CUSTOMER BOOKING DETAILS",
-        clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "",
+        clean(booking.name) ? `Passenger name: ${clean(booking.name)}` : "",
         bookingReference ? `Booking reference: ${bookingReference}` : "",
         serviceType ? `Service: ${serviceType}` : "",
         `Pickup date: ${formatDate(booking.date)}`,

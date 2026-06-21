@@ -303,7 +303,7 @@ for (const fragment of [
   "provider_failure",
   "send_succeeded",
   "customer_passenger_traveler_name",
-  "Customer/passenger/traveler name",
+  "Passenger name",
   "CUSTOMER BOOKING DETAILS",
   "DRIVER DETAILS",
   "provider_request_count: 0",
@@ -322,6 +322,12 @@ for (const fragment of [
 ]) {
   assertIncludes(helperSource, fragment, `Driver Details Email helper ${fragment}`);
 }
+
+assertExcludes(
+  helperSource,
+  "Customer/passenger/traveler name:",
+  "Driver Details Email customer-facing passenger label",
+);
 
 for (const fragment of [
   "createClient",
@@ -385,6 +391,11 @@ assertIncludes(
   ledger,
   "customer/passenger/traveler name",
   "Ledger Resend send customer/passenger/traveler name field",
+);
+assertIncludes(
+  ledger,
+  "customer-facing label `Passenger name:`",
+  "Ledger Resend send passenger name customer-facing label",
 );
 
 const harness = await loadHarness();
@@ -553,7 +564,8 @@ try {
         assert.equal(providerBody.reply_to, selectedReplyTo);
         assert.match(providerBody.text, /Hi Ms Lim Traveler,/);
         assert.match(providerBody.text, /CUSTOMER BOOKING DETAILS/);
-        assert.match(providerBody.text, /Customer\/passenger\/traveler name: Ms Lim Traveler/);
+        assert.match(providerBody.text, /Passenger name: Ms Lim Traveler/);
+        assert.doesNotMatch(providerBody.text, /Customer\/passenger\/traveler name:/);
         assert.match(providerBody.text, /DRIVER DETAILS/);
         assert.doesNotMatch(JSON.stringify(providerBody).toLowerCase(), /payout|paynow|pricing|invoice|debug|token/);
 

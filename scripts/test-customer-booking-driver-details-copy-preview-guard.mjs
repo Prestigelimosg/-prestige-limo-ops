@@ -66,7 +66,7 @@ for (const fragment of [
 for (const fragment of [
   '"CUSTOMER BOOKING DETAILS"',
   '"DRIVER DETAILS"',
-  "`Passenger: ${clean(booking.name)}`",
+  "`Passenger name: ${clean(booking.name)}`",
   "`Booking reference: ${bookingReference}`",
   "`Service: ${serviceType}`",
   "`Pickup date: ${formatDate(booking.date)}`",
@@ -107,6 +107,8 @@ for (const forbidden of [
   "fetch(",
   "RESEND_API_KEY",
   "Resend",
+  "`Passenger: ${clean(booking.name)}`",
+  "Customer/passenger/traveler name:",
 ]) {
   assertExcludes(customerCopyGenerator, forbidden, "Customer Copy generator forbidden content");
 }
@@ -132,7 +134,7 @@ for (const phrase of [
   "This is a bounded runtime implementation in the existing Customer Copy section.",
   "It reuses `data-dispatch-workflow-step=\"customer-whatsapp-copy\"`, `data-copy-preview=\"customerCopy\"`, `data-copy-copy-button=\"customerCopy\"`, and `data-copy-edit-button=\"customerCopy\"`.",
   "The generated plain-text preview has only `CUSTOMER BOOKING DETAILS` and `DRIVER DETAILS` sections.",
-  "Allowed customer booking fields are customer/passenger/traveler name when available, booking reference when available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number only if available.",
+  "Allowed customer booking fields are customer/passenger/traveler name when available with customer-facing label `Passenger name:`, booking reference when available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number only if available.",
   "Allowed driver fields are driver name, driver contact, car plate, and car type from assigned driver profile data only.",
   "Telegram and WhatsApp remain generate/copy/manual-send only; no Telegram API send, WhatsApp API send, automatic fallback, automatic multi-channel blast, provider credentials, provider activation, or provider send is included.",
   "Email remains separate through the gated Resend route and is not activated by this preview.",

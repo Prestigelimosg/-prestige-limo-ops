@@ -71,6 +71,7 @@ for (const phrase of [
   "Future Email send content must exclude pricing, payout, payment/PDF/billing, auth/location/photo/calendar/OTS, parser/internal debug, internal notes, secrets/tokens, `customer_rates`, and `driver_payout_rules`.",
   "Future staging Email send scope must be exactly one message only; batch send, resend automation, scheduler, polling, retry loop, customer-visible auto-refresh, and background sends remain forbidden.",
   "Future staging Email send evidence requires explicit owner approval naming the staging target, provider, env-name handling, allowlisted recipient, content fixture, one-message boundary, rollback/disable proof, and checks.",
+  "Future Driver Details Email may be app-sent through Resend only when admin explicitly clicks the Email action, the exact Email driver-details gate is approved/opened, and staging recipient allowlist proof passes; this does not approve Telegram/WhatsApp provider sends.",
   "Rollback/disable proof is required after any future send evidence; the provider gate must be closed again and disabled/no-op behavior must be verified.",
   "Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.",
   "Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.",

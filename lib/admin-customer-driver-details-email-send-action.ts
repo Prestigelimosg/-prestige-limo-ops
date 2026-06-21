@@ -37,6 +37,7 @@ export type CustomerDriverDetailsEmailSendInput = {
 export type CustomerDriverDetailsEmailPayload = {
   customer_booking_details: {
     booking_reference: string;
+    customer_passenger_traveler_name: string | null;
     customer_facing_flight_number: string | null;
     drop_off_location: string;
     passenger_count: string;
@@ -126,6 +127,7 @@ const allowedTopLevelKeys = new Set([
 ]);
 const allowedCustomerBookingKeys = new Set([
   "booking_reference",
+  "customer_passenger_traveler_name",
   "customer_facing_flight_number",
   "drop_off_location",
   "passenger_count",
@@ -293,6 +295,10 @@ function normalizePayload(input: CustomerDriverDetailsEmailSendInput) {
   const payload: CustomerDriverDetailsEmailPayload = {
     customer_booking_details: {
       booking_reference: safeText(customerBooking.booking_reference, 120) || "",
+      customer_passenger_traveler_name: safeText(
+        customerBooking.customer_passenger_traveler_name,
+        120,
+      ),
       customer_facing_flight_number: safeText(
         customerBooking.customer_facing_flight_number,
         60,
@@ -386,12 +392,19 @@ function safeTimeoutMs(value: number | undefined) {
 }
 
 function buildEmailText(payload: CustomerDriverDetailsEmailPayload) {
+  const customerName = payload.customer_booking_details.customer_passenger_traveler_name;
+  const greetingLines = customerName ? [`Hi ${customerName},`, ""] : [];
+  const customerNameLine = customerName
+    ? [`Customer/passenger/traveler name: ${customerName}`]
+    : [];
   const flightLine = payload.customer_booking_details.customer_facing_flight_number
     ? [`Customer-facing flight number: ${payload.customer_booking_details.customer_facing_flight_number}`]
     : [];
 
   return [
+    ...greetingLines,
     "CUSTOMER BOOKING DETAILS",
+    ...customerNameLine,
     `Booking reference: ${payload.customer_booking_details.booking_reference}`,
     `Service type: ${payload.customer_booking_details.service_type}`,
     `Pickup date: ${payload.customer_booking_details.pickup_date}`,

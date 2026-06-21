@@ -4490,6 +4490,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future Email send content must exclude pricing, payout, payment/PDF/billing, auth/location/photo/calendar/OTS, parser/internal debug, internal notes, secrets/tokens, `customer_rates`, and `driver_payout_rules`.
 - Future staging Email send scope must be exactly one message only; batch send, resend automation, scheduler, polling, retry loop, customer-visible auto-refresh, and background sends remain forbidden.
 - Future staging Email send evidence requires explicit owner approval naming the staging target, provider, env-name handling, allowlisted recipient, content fixture, one-message boundary, rollback/disable proof, and checks.
+- Future Driver Details Email may be app-sent through Resend only when admin explicitly clicks the Email action, the exact Email driver-details gate is approved/opened, and staging recipient allowlist proof passes; this does not approve Telegram/WhatsApp provider sends.
 - Rollback/disable proof is required after any future send evidence; the provider gate must be closed again and disabled/no-op behavior must be verified.
 - Future Email may include an admin-selected secure tracking-link live-location email only after separate owner approval for that exact channel/action gate.
 - Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.
@@ -4540,10 +4541,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Missing provider configuration returns safe 503/no-op without exposing secrets or values.
 - Invalid or forbidden payload fields return safe 400/no-op.
 - Recipient allowlist is required before any future staging evidence; non-allowlisted recipients return safe 403/no-op.
+- Email send remains an explicit admin-selected Email action only; it must not auto-send, fallback, batch, blast, or trigger Telegram/WhatsApp/SMS provider sends.
 - Future send scope is one-message-only; batch send, automatic fallback, automatic multi-channel blast, scheduler, cron, queue, polling loop, server retry loop, resend automation, and customer-visible auto-refresh remain forbidden.
 - Payload is limited to CUSTOMER BOOKING DETAILS and DRIVER DETAILS sections only.
-- Allowed customer booking detail fields are booking reference, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number.
+- Allowed customer booking detail fields are customer/passenger/traveler name when available, booking reference, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and customer-facing flight number.
 - Allowed driver-detail fields are driver name, driver contact, car plate, and car type.
+- The canonical route/helper payload field for customer/passenger/traveler name is `customer_passenger_traveler_name`; when present, it is used in the greeting and CUSTOMER BOOKING DETAILS only.
 - Customer-facing payloads must exclude pricing, payout, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing/invoice details, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/location/photo/calendar/OTS data, and mock/dev archive fields.
 - Successful future send response must be normalized and may expose only safe status, selected provider, safe message id, one-provider-request count, and no raw provider response, headers, secrets, debug/internal fields, customer price, billing, payout, notes, or mock archive fields.
 - Provider failure/timeout responses must be sanitized 502/504-style failures with no raw provider payload, token, header, stack, secret, customer price, billing, payout, note, or debug exposure.
@@ -4554,20 +4557,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Customer Notification Channel Matrix Lock
 - This is a docs/test-only guard for future customer notification channel selection; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, UI, API, route, helper, scheduler, fallback, or blast behavior.
-- Telegram may be used for true live location and driver details only after the specific channel/action gate is separately approved.
+- Telegram may be used for true live location only after the specific channel/action gate is separately approved, and may use generated/copied driver details for manual admin send outside the app for now.
 - Telegram is the first future live-location channel and the only future channel allowed to auto-send true live location after separate owner approval.
 - Future Telegram auto-send and POB plus 5 minute auto-stop are requirements for a later lane only; this lock does not implement or activate them.
-- Email may be used for driver details only after the specific channel/action gate is separately approved.
+- Email may be used for app-sent driver details through Resend only after admin explicitly clicks the Email action and the specific Email driver-details gate is separately approved/opened.
 - Email may send an admin-selected secure tracking-link live-location email only after the exact channel/action gate is separately approved.
 - Email must not auto-send live location and must not send native/streaming live location.
-- WhatsApp is later-phase only for driver details and live location and must remain unactivated.
+- WhatsApp may use generated/copied driver details for manual admin send outside the app for now; WhatsApp provider/API sending and WhatsApp live location remain later-phase only and must remain unactivated.
 - SMS is not approved for driver details or live location unless separately approved later.
 - Admin must explicitly choose exactly one channel/action for each future send, except for the future separately approved Telegram auto-send lane.
 - No automatic fallback is approved.
 - No automatic multi-channel blast is approved.
 - No provider send is approved unless that specific channel/action gate is separately approved.
-- Future admin choices remain separated: Send driver details by Email; Send driver details by Telegram; Send driver details by WhatsApp; Send true live location by Telegram; Send secure tracking-link live location by Email; later-phase Send live location by WhatsApp.
-- Telegram live location means future true live-location send, Email live location means future admin-selected secure tracking link only, and WhatsApp live location means future later phase only.
+- Future admin choices remain separated: Send driver details by Email through the gated Resend action; Generate/copy driver details for Telegram manual send; Generate/copy driver details for WhatsApp manual send; Send true live location by Telegram; Send secure tracking-link live location by Email; later-phase Send live location by WhatsApp.
+- Telegram driver-details and WhatsApp driver-details currently mean generated/copied/manual-send only; Telegram live location means future true live-location send, Email live location means future admin-selected secure tracking link only, and WhatsApp live location means future later phase only.
 - Allowed driver-detail payload fields are driver name, driver contact, car plate, and car type.
 - Customer-facing provider messages must exclude pricing, payout, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, and auth/location/photo/calendar/OTS data outside the selected approved lane.
 - Driver details messages must stay separate from payout, payout preferences, `driver_payout_rules`, `customer_rates`, pricing, payment/PDF/billing, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, and `/api/admin-saved-bookings` internals.
@@ -4576,18 +4579,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.
 - Driver details must not be sent without the relevant customer booking context.
-- Allowed customer booking detail fields are booking reference if available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and flight number only if already customer-facing.
+- Allowed customer booking detail fields are customer/passenger/traveler name when available, booking reference if available, service type, pickup date, pickup time, pickup location, drop-off location, passenger count, and flight number only if already customer-facing.
 - Allowed driver-detail fields are driver name, driver contact, car plate, and car type.
 - No extra customer booking fields or extra driver fields are approved by this lock.
-- Future Email may send customer booking plus driver details only after the exact Email driver-details channel/action gate is separately approved.
-- Future Telegram may send customer booking plus driver details only after the exact Telegram driver-details channel/action gate is separately approved.
-- Future WhatsApp may send customer booking plus driver details only in a later phase after separate owner approval and must remain unactivated by this lock.
+- Future Email may app-send customer booking plus driver details through Resend only after admin explicitly clicks the Email action and the exact Email driver-details channel/action gate is separately approved/opened.
+- Future Telegram may generate/copy customer booking plus driver details for manual admin send outside the app only; Telegram provider/API driver-details sending is not approved by this lock.
+- Future WhatsApp may generate/copy customer booking plus driver details for manual admin send outside the app only; WhatsApp provider/API driver-details sending is not approved by this lock.
 - Telegram may later send true live location as the first-priority live-location channel; POB trigger and POB plus 5 minute auto-stop require separate readiness, guard coverage, and owner-approved activation and are not active here.
 - Email may later send secure tracking-link live location only when admin explicitly chooses that exact channel/action; Email must not auto-send live location and must not send native/streaming live location.
 - SMS remains unapproved unless separately approved later.
 - Admin must explicitly choose exactly one channel/action for each future send; no automatic fallback, no automatic multi-channel blast, and no provider send is approved without that specific channel/action gate approval.
 - Customer-facing provider payloads must exclude pricing, payout, payout preferences, `driver_payout_rules`, `customer_rates`, payment/PDF/billing, internal/admin notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, and auth/location/photo/calendar/OTS data unless the selected lane explicitly approves it later.
-- This lock does not implement live location, Telegram auto-send, POB trigger, POB plus 5 minute auto-stop, provider activation, provider credentials, Email send, Telegram send, WhatsApp send, SMS send, runtime app/API behavior, UI, DB writes, or deploys.
+- This lock does not implement live location, Telegram auto-send, POB trigger, POB plus 5 minute auto-stop, provider activation, provider credentials, Telegram provider send, WhatsApp provider send, SMS send, runtime app/API behavior, UI, DB writes, or deploys.
 
 ### WhatsApp Provider No-Send Approval Packet Lock
 - Approval status: pending future WhatsApp staging test approval.

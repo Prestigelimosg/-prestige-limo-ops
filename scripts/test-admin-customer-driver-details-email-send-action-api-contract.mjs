@@ -118,6 +118,7 @@ function validPayload(overrides = {}) {
   return {
     customer_booking_details: {
       booking_reference: "PLO-EMAIL-001",
+      customer_passenger_traveler_name: "Ms Lim Traveler",
       customer_facing_flight_number: "SQ318",
       drop_off_location: "Changi Airport Terminal 3",
       passenger_count: "2",
@@ -299,6 +300,8 @@ for (const fragment of [
   "provider_timeout",
   "provider_failure",
   "send_succeeded",
+  "customer_passenger_traveler_name",
+  "Customer/passenger/traveler name",
   "CUSTOMER BOOKING DETAILS",
   "DRIVER DETAILS",
   "provider_request_count: 0",
@@ -376,6 +379,11 @@ assertIncludes(preactivationSuite, guardScript, "Preactivation suite Driver Deta
 assertIncludes(ledger, "Resend Driver Details Email Gated Send Contract Lock", "Ledger Resend send contract lock");
 assertIncludes(ledger, routePathFragment, "Ledger Resend send route");
 assertIncludes(ledger, gateEnvName, "Ledger Resend send gate");
+assertIncludes(
+  ledger,
+  "customer/passenger/traveler name",
+  "Ledger Resend send customer/passenger/traveler name field",
+);
 
 const harness = await loadHarness();
 const originalFetch = globalThis.fetch;
@@ -511,7 +519,9 @@ try {
         assert.deepEqual(providerBody.to, ["allowlisted@example.com"]);
         assert.equal(providerBody.from, selectedFrom);
         assert.equal(providerBody.reply_to, selectedReplyTo);
+        assert.match(providerBody.text, /Hi Ms Lim Traveler,/);
         assert.match(providerBody.text, /CUSTOMER BOOKING DETAILS/);
+        assert.match(providerBody.text, /Customer\/passenger\/traveler name: Ms Lim Traveler/);
         assert.match(providerBody.text, /DRIVER DETAILS/);
         assert.doesNotMatch(JSON.stringify(providerBody).toLowerCase(), /payout|paynow|pricing|invoice|debug|token/);
 

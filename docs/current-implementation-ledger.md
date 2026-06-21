@@ -4495,6 +4495,30 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email must not auto-send live location, must not send native/streaming live location, and must not be the future automatic live-location channel.
 - No provider activation or provider send is approved by this guard.
 
+### Owner Domain Email Provider Setup Safety Contract Lock
+- This is a docs/test-only guard for future owner-domain outbound Email setup before any SMTP/API/provider activation or one-message staging send evidence.
+- This lock does not activate Email sending, provider credentials, provider SDKs, SMTP/API calls, IMAP login/test, DNS changes, env changes, deployment, DB read/write, runtime API behavior, UI, route/helper changes, or live send behavior.
+- Future app Email must use owner-domain email addresses.
+- Future Driver Details Email sender is dispatch@<owner-domain>.
+- Future Driver Details Email reply-to is dispatch@<owner-domain> or a dedicated cPanel reply inbox on the owner domain.
+- Future Invoice Email sender is billing@<owner-domain>, but invoice email remains a separate billing lane.
+- Outbound app Email must use SMTP or an approved Email API.
+- IMAP is receive-only and must never be treated as a send mechanism.
+- A cPanel mailbox may be used only for inbox/replies unless cPanel SMTP is separately approved as the outbound provider.
+- Future outbound provider options are names only: resend, aws_ses, sendgrid, mailgun, cpanel_smtp.
+- Future env names are names only and no env values, secrets, API keys, SMTP passwords, IMAP passwords, provider tokens, DNS secret values, or connection strings may be printed, logged, committed, echoed, or surfaced.
+- Future env names only: PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED, PRESTIGE_EMAIL_PROVIDER, PRESTIGE_DRIVER_DETAILS_EMAIL_FROM, PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO, PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST, PRESTIGE_SMTP_HOST, PRESTIGE_SMTP_PORT, PRESTIGE_SMTP_USER, PRESTIGE_SMTP_PASSWORD, PRESTIGE_SMTP_SECURE, RESEND_API_KEY, AWS_SES_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, SENDGRID_API_KEY, MAILGUN_API_KEY, MAILGUN_DOMAIN.
+- Future DNS/auth proof requires SPF, DKIM, DMARC, provider/domain alignment, owner-domain sender proof, and reply inbox proof, with names only and no secret values.
+- A staging recipient allowlist is required before any future one-message staging Driver Details Email send evidence.
+- Future Driver Details Email staging evidence must be one-message-only.
+- Future rollback/disable proof must close the send gate, verify the disabled/no-op route, prove no follow-up send, and keep provider credentials non-live unless separately approved.
+- Driver-details Email must not imply invoice/PDF/payment/billing activation.
+- Invoice Email remains a separate billing lane, and billing@<owner-domain> may be used later only after separate billing/invoice approval.
+- Email may later send admin-selected secure tracking-link live location only; Email must not auto-send live location and must not send native/streaming live location.
+- Telegram remains the first future true live-location channel; Telegram POB plus 5 minute auto-stop remains future-only and is not implemented by this lock.
+- No provider activation, provider send, Email send, SMTP login/test, IMAP login/test, DNS change, env change, DB read/write, deploy, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/customer_rates change, driver_payout_rules change, payout/payment/PDF/billing change, auth/location/photo/calendar/OTS change, UI sector/card/button change, or shim change is approved by this lock.
+- This lock adds `scripts/test-owner-domain-email-provider-setup-safety-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Notification Channel Matrix Lock
 - This is a docs/test-only guard for future customer notification channel selection; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, UI, API, route, helper, scheduler, fallback, or blast behavior.
 - Telegram may be used for true live location and driver details only after the specific channel/action gate is separately approved.

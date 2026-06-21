@@ -551,6 +551,10 @@ const guardChecks = [
     script: "scripts/test-email-provider-staging-send-safety-contract.mjs",
   },
   {
+    label: "owner-domain email provider setup safety guard",
+    script: "scripts/test-owner-domain-email-provider-setup-safety-guard.mjs",
+  },
+  {
     label: "Customer notification channel matrix guard",
     script: "scripts/test-customer-notification-channel-matrix-guard.mjs",
   },

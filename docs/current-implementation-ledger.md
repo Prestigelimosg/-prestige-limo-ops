@@ -4499,16 +4499,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a docs/test-only guard for future owner-domain outbound Email setup before any SMTP/API/provider activation or one-message staging send evidence.
 - This lock does not activate Email sending, provider credentials, provider SDKs, SMTP/API calls, IMAP login/test, DNS changes, env changes, deployment, DB read/write, runtime API behavior, UI, route/helper changes, or live send behavior.
 - Future app Email must use owner-domain email addresses.
+- Selected first Driver Details Email provider is Resend.
+- Future outbound Driver Details Email uses the Resend API later only after separate owner approval, staging recipient allowlist proof, one-message evidence approval, and rollback/disable proof.
 - Future Driver Details Email sender is dispatch@<owner-domain>.
 - Future Driver Details Email reply-to is dispatch@<owner-domain> or a dedicated cPanel reply inbox on the owner domain.
 - Future Invoice Email sender is billing@<owner-domain>, but invoice email remains a separate billing lane.
-- Outbound app Email must use SMTP or an approved Email API.
+- Outbound app Email must use an approved Email API or separately approved SMTP lane; the first Driver Details Email lane selects Resend API.
 - IMAP is receive-only and must never be treated as a send mechanism.
-- A cPanel mailbox may be used only for inbox/replies unless cPanel SMTP is separately approved as the outbound provider.
-- Future outbound provider options are names only: resend, aws_ses, sendgrid, mailgun, cpanel_smtp.
+- cPanel may remain the inbox/reply mailbox system through IMAP or webmail only.
+- cPanel SMTP is not the selected first Driver Details Email provider.
+- SES, SendGrid, Mailgun, and cPanel SMTP require separate future owner approval before any use.
 - Future env names are names only and no env values, secrets, API keys, SMTP passwords, IMAP passwords, provider tokens, DNS secret values, or connection strings may be printed, logged, committed, echoed, or surfaced.
-- Future env names only: PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED, PRESTIGE_EMAIL_PROVIDER, PRESTIGE_DRIVER_DETAILS_EMAIL_FROM, PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO, PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST, PRESTIGE_SMTP_HOST, PRESTIGE_SMTP_PORT, PRESTIGE_SMTP_USER, PRESTIGE_SMTP_PASSWORD, PRESTIGE_SMTP_SECURE, RESEND_API_KEY, AWS_SES_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, SENDGRID_API_KEY, MAILGUN_API_KEY, MAILGUN_DOMAIN.
-- Future DNS/auth proof requires SPF, DKIM, DMARC, provider/domain alignment, owner-domain sender proof, and reply inbox proof, with names only and no secret values.
+- Future env names only for the first Resend Driver Details Email lane: PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED, PRESTIGE_EMAIL_PROVIDER, PRESTIGE_DRIVER_DETAILS_EMAIL_FROM, PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO, PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST, RESEND_API_KEY.
+- Future DNS/auth proof requires owner-domain verification, SPF, DKIM, DMARC, Resend/domain alignment, sender address proof, and reply inbox proof, with names only and no secret values.
 - A staging recipient allowlist is required before any future one-message staging Driver Details Email send evidence.
 - Future Driver Details Email staging evidence must be one-message-only.
 - Future rollback/disable proof must close the send gate, verify the disabled/no-op route, prove no follow-up send, and keep provider credentials non-live unless separately approved.

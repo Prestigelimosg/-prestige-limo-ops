@@ -338,6 +338,10 @@ const guardChecks = [
     script: "scripts/test-public-customer-driver-auth-surface-guard.mjs",
   },
   {
+    label: "Customer/Driver Auth activation evidence contract guard",
+    script: "scripts/test-customer-driver-auth-evidence-contract-guard.mjs",
+  },
+  {
     label: "public billing/payment surface guard",
     script: "scripts/test-public-billing-payment-surface-guard.mjs",
   },

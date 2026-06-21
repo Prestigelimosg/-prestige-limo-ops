@@ -2694,6 +2694,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/driver auth no-live guard is done.
 - Customer auth, driver auth, Supabase Auth, session creation, token issuing, saved booking access, driver-only job visibility, and DB/write remain blocked until explicit approval.
 
+### Customer/Driver Auth Activation Evidence Contract Guard Lock
+
+- This is a docs/test-only guard for a future separately approved Customer/Driver Auth activation evidence pass.
+- This lock does not activate customer auth, driver auth, Supabase Auth, customer portal access, driver portal access, live sessions, session creation, cookie creation, token creation, password reset, magic-link, OTP, env changes, DB read/write, RLS/policy changes, deployment, provider sends, parser behavior, Save Booking, `/api/admin-saved-bookings`, UI expansion, shims, or production activation.
+- Future auth evidence requires explicit owner approval for customer auth activation.
+- Future auth evidence requires explicit owner approval for driver auth activation.
+- Future auth evidence requires explicit owner approval for the auth provider.
+- Future auth evidence requires explicit owner approval for live sessions.
+- Future auth evidence requires explicit owner approval for access policies.
+- Future Supabase Auth provider/config proof must use names only and must not print passwords, cookies, session tokens, API keys, env values, database URLs, JWT secrets, OAuth secrets, service-role keys, or credentials.
+- Future customer access proof must include table/RLS policy proof for customer row isolation on `customer_access_accounts` and any customer-safe booking projection used by the portal.
+- Future driver access proof must include table/RLS policy proof for driver row isolation on `driver_access_accounts` and any driver-safe job projection used by the driver portal.
+- Future audit proof must account for `customer_driver_access_audit_events` without exposing raw tokens, cookies, secrets, provider payloads, finance, payout, parser/debug, or mock archive fields.
+- Future session/cookie issuance proof must show HttpOnly Secure SameSite cookie behavior or equivalent server-session protection, and response bodies/logs must not expose token values, cookie values, raw JWTs, magic links, OTPs, password reset links, or session secrets.
+- Customer-safe projection proof must block payout, PayNow payout, `driver_payout_rules`, internal/admin notes, parser/debug fields, finance, mock archive, secrets/tokens, raw provider payloads, Save Booking internals, and `/api/admin-saved-bookings` internals.
+- Driver-safe projection proof must block customer price, `customer_rates`, billing, invoice/payment, payout comparisons, finance/admin notes, parser/debug fields, mock archive, secrets/tokens, raw provider payloads, Save Booking internals, and `/api/admin-saved-bookings` internals.
+- Future rollback/disable proof must close the auth/session/access gates, verify setup-only/blocked/no-op behavior again, and preserve fail-closed public customer and driver surfaces.
+- Customer/Driver Auth activation evidence must remain separate from live location, OTS photo/storage, calendar, payment/PDF/billing, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, provider sends, Email/Telegram/WhatsApp/SMS sending, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.
+- Existing auth setup surfaces remain GET-only, admin/dispatcher gated, blocked/no-op, token-free, cookie-free, and not live until a separate owner-approved activation evidence pass.
+- This guard adds `scripts/test-customer-driver-auth-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ## Billing/Payment Pre-Activation Completion Audit Lock
 
 - Billing/payment is complete up to the activation stop.

@@ -611,6 +611,10 @@ const guardChecks = [
     script: "scripts/test-driver-location-pob-evidence-contract-guard.mjs",
   },
   {
+    label: "Google Maps admin map evidence contract guard",
+    script: "scripts/test-google-maps-admin-map-evidence-contract-guard.mjs",
+  },
+  {
     label: "customer driver-details link no-live guard",
     script: "scripts/test-customer-driver-details-link-no-live-guard.mjs",
   },

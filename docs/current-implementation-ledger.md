@@ -4755,6 +4755,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A future evidence pass still requires separate owner approval for staging env/gate/deploy window, runner execution, rollback/disable proof, docs evidence recording, and staging promotion.
 - This guard adds `scripts/test-customer-portal-saved-bookings-staging-read-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Portal Saved-Bookings Staging Read Evidence Record
+- Evidence reference: `CUSTOMER-PORTAL-SAVED-BOOKINGS-STAGING-20260622152544`.
+- Evidence was run once on staging through `scripts/run-customer-portal-saved-bookings-staging-read-evidence.mjs`.
+- The evidence used one staging-safe fake customer account/reference and one matching fake staging saved booking only.
+- No real customer data was used.
+- Pre-window closed proof passed with staging root HTTP 200/title `Prestige Limo Ops`, anonymous blocked HTTP 403, and wrong-referer blocked HTTP 403.
+- Temporary staging read-window env/gate names were opened only for the bounded evidence window: `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_MODE`, and `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_TOKEN`.
+- The evidence route read used the guarded customer portal session and `GET /api/customer-saved-bookings` path.
+- Boundary proof during the read window returned HTTP 403 for anonymous, cross-origin, missing-session, and wrong-session paths.
+- Correct customer read proof returned HTTP 200 with exactly one saved-booking row.
+- Safe projection proof passed with `safe_fields_only: true` and field count `10`.
+- Row isolation proof passed: unmatched booking reference rows `0`, wrong-auth-user active account rows `0`.
+- Audit proof passed with one safe audit event written for the evidence and then cleaned up.
+- Cleanup proof passed: evidence booking, audit, access-account, and customer rows were deleted and zero matching rows remained afterward.
+- Rollback proof passed after closing the gates and redeploying staging closed: staging root HTTP 200/title `Prestige Limo Ops`, anonymous blocked HTTP 403, and wrong-referer blocked HTTP 403.
+- Temporary staging env/gate names were removed after the evidence window and verified absent.
+- Local temporary evidence env files were removed after the evidence window.
+- No notification row write, customer in-app runtime/button, provider send, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, parser, Save Booking, `/api/admin-saved-bookings`, shim, production activation, or production deploy occurred.
+- No secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data were printed or recorded.
+- Customer portal saved-bookings evidence is complete for the bounded staging-safe read lane, but broader customer portal runtime, customer in-app notification runtime/button, production activation, and real customer data access remain blocked until separately approved.
+
 ### Customer Booking + Driver Details Message Payload Safety Contract Lock
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.

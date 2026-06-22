@@ -579,6 +579,10 @@ const guardChecks = [
     script: "scripts/test-driver-in-app-notification-admin-button-guard.mjs",
   },
   {
+    label: "Customer In-App Notification read prerequisite contract guard",
+    script: "scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs",
+  },
+  {
     label: "customer booking driver-details message payload safety guard",
     script: "scripts/test-customer-booking-driver-details-message-payload-safety-guard.mjs",
   },

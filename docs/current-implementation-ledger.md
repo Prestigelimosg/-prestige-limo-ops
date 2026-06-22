@@ -4697,6 +4697,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver-visible in-app content remains forbidden from exposing customer price, pricing, billing, invoice/payment, payment/PDF, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, internal/admin/finance notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, live location, and OTS photo/storage unless separately approved.
 - Guard: `scripts/test-driver-in-app-notification-admin-button-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer In-App Notification Read Prerequisite Contract Guard Lock
+- This is a docs/test-only guard for the prerequisites required before Customer In-App Notification runtime, customer read, or a customer in-app button can be considered.
+- Customer In-App Notification read/runtime remains blocked.
+- `GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` until secure customer auth/portal proof is separately approved.
+- The customer route must not parse request bodies, read env, create Supabase clients, set cookies, create sessions, create tokens, read notification rows, write notification rows, or expose notification records while this lock is active.
+- A customer in-app button must not be added before customer read proof.
+- Customer notification writes for `customer_app` must not be enabled before customer read/isolation proof.
+- Future proof must include customer auth/session proof, customer portal/read path proof, `customer_driver_app_notification_outbox` table/RLS proof, customer row isolation proof, customer-safe booking projection proof, `customer_access_accounts` and audit proof if applicable, and rollback/disable proof.
+- Customer-visible in-app payloads must remain limited to safe customer-facing notification title/message/context and safe booking context approved by a later customer-read lane.
+- Customer-visible in-app payloads must exclude pricing, billing, invoice/payment/PDF, payout, PayNow, payout preferences/comparisons, `driver_payout_rules`, `customer_rates`, internal/admin/finance notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, live location unless separately approved, and OTS/photo/storage unless separately approved.
+- Driver in-app completion and the Driver Dispatch `Send Driver In-App` button do not unlock customer in-app runtime or customer in-app reads.
+- Provider sends remain separate from in-app notifications; this lock does not approve Email, Resend, Telegram, WhatsApp, SMS, SMTP, IMAP, push, fallback, blast, scheduler, polling, or retry behavior.
+- Google Maps evidence completion does not unlock customer in-app runtime, customer in-app reads, customer in-app writes, or customer in-app buttons.
+- OneMap remains parked after safe provider failure and must not be retried by this lane.
+- This lane does not activate auth, portal behavior, DB reads/writes, notification row writes, provider sends, UI, env changes, deploy, or production.
+- This guard adds `scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking + Driver Details Message Payload Safety Contract Lock
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.

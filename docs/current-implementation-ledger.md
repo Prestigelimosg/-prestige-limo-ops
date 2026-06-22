@@ -4714,6 +4714,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lane does not activate auth, portal behavior, DB reads/writes, notification row writes, provider sends, UI, env changes, deploy, or production.
 - This guard adds `scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock
+- This is a docs/test-only guard for a future separately approved bounded Customer Portal saved-bookings authenticated read evidence pass using one staging-safe customer account/reference.
+- This lock does not activate customer auth, customer portal live read, session creation, cookie creation, token creation, env changes, DB reads/writes, notification row writes, customer in-app runtime/buttons, provider sends, Google Maps/OneMap/FlightAware calls, deploy, or production activation.
+- `/my-bookings` remains shell/guarded until approved evidence.
+- `/api/customer-saved-bookings` remains gated and must not become a broad read.
+- `/api/customer-portal-sessions` remains default-off and must not expose session values.
+- `/api/customer-app-notifications` remains fail-closed/auth-required 403.
+- Future evidence requires exactly one staging-safe customer account/reference and one bounded authenticated read window.
+- Future table/RLS proof must cover `customer_access_accounts`, `customer_driver_access_audit_events` or equivalent, and the customer-safe booking projection.
+- Future row isolation proof must show customer A only sees customer A saved-booking rows and cannot see another customer account's rows.
+- Future boundary proof must show anonymous, missing-session, wrong-session/token, wrong-customer/account, cross-origin, and wrong-referer paths blocked.
+- Future audit proof must use `customer_driver_access_audit_events` or equivalent without recording raw tokens, cookies, JWTs, secrets, finance, payout, parser/debug, provider payloads, or real customer data.
+- Future rollback/disable proof must close customer saved-bookings/session gates and verify blocked/no-read behavior again.
+- Customer-safe saved-booking fields remain limited to booking reference, customer-facing status, service type, pickup date/time, pickup location, drop-off location, passenger name, and safe created/updated/month grouping fields.
+- Passenger count and customer-facing flight number require separate contract alignment before becoming customer portal read evidence fields.
+- Customer portal saved-bookings evidence must exclude pricing, payout, PayNow, `customer_rates`, `driver_payout_rules`, billing/payment/PDF/invoice, internal/admin notes, parser/debug, secrets/tokens/cookies/JWTs, raw provider payloads, live-location/photo/OTS data, provider sends, Save Booking internals, and `/api/admin-saved-bookings` internals.
+- Driver in-app evidence/runtime, Google Maps evidence/runtime, and OneMap retirement do not unlock customer portal read or customer in-app notification runtime.
+- This guard adds `scripts/test-customer-portal-saved-bookings-read-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking + Driver Details Message Payload Safety Contract Lock
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.

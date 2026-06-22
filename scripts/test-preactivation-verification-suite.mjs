@@ -274,6 +274,10 @@ const guardChecks = [
     script: "scripts/test-public-customer-portal-saved-booking-surface-guard.mjs",
   },
   {
+    label: "Customer Portal saved-bookings authenticated read evidence contract guard",
+    script: "scripts/test-customer-portal-saved-bookings-read-evidence-contract-guard.mjs",
+  },
+  {
     label: "public driver job action surface guard",
     script: "scripts/test-public-driver-job-action-surface-guard.mjs",
   },

@@ -47,7 +47,7 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
 function safeFailureResponse() {
   return Response.json(
     {
-      error: "Admin OneMap location search request failed safely.",
+      error: "Admin map location search request failed safely.",
       ok: false,
     },
     { status: 500 },

@@ -6142,7 +6142,7 @@ function adminAppNotificationTimeLabel(value: string | null | undefined) {
   ).padStart(2, "0")} UTC`;
 }
 
-function adminMapRouteAssistFailureMessage(rawError: unknown, label = "OneMap route assist") {
+function adminMapRouteAssistFailureMessage(rawError: unknown, label = "Map route assist") {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
 
@@ -6154,7 +6154,7 @@ function adminMapRouteAssistFailureMessage(rawError: unknown, label = "OneMap ro
     return `${label} is available only from the internal admin dashboard.`;
   }
 
-  if (/missing|required|malformed|invalid|unknown|no onemap match/.test(normalizedError)) {
+  if (/missing|required|malformed|invalid|unknown|no onemap match|no map match/.test(normalizedError)) {
     return `${label} details need review.`;
   }
 
@@ -6194,7 +6194,7 @@ function formatAdminMapDuration(durationSeconds: number | null | undefined) {
 }
 
 function adminMapLocationLabel(location: AdminMapLocationSearchResultItem | null) {
-  return clean(location?.label) || clean(location?.address) || "No OneMap match selected";
+  return clean(location?.label) || clean(location?.address) || "No map match selected";
 }
 
 async function loadAdminBookingWorkflowStatusRecord(
@@ -6379,7 +6379,7 @@ async function loadAdminMapLocationSearchFirstMatch(query: string) {
   const cleanedQuery = clean(query);
 
   if (!cleanedQuery) {
-    throw new Error("OneMap location search requires a pickup or drop-off value.");
+    throw new Error("Map location search requires a pickup or drop-off value.");
   }
 
   const params = new URLSearchParams({
@@ -6396,7 +6396,7 @@ async function loadAdminMapLocationSearchFirstMatch(query: string) {
   const result = await response.json().catch(() => null);
 
   if (!response.ok || !result?.ok) {
-    throw new Error(result?.error || "OneMap location search failed.");
+    throw new Error(result?.error || "Map location search failed.");
   }
 
   const results = Array.isArray(result.location_search?.results)
@@ -6409,7 +6409,7 @@ async function loadAdminMapLocationSearchFirstMatch(query: string) {
   );
 
   if (!firstMatch) {
-    throw new Error("No OneMap match found.");
+    throw new Error("No map match found.");
   }
 
   return {
@@ -6452,7 +6452,7 @@ async function loadAdminMapRouteEstimate({
   const result = await response.json().catch(() => null);
 
   if (!response.ok || !result?.ok) {
-    throw new Error(result?.error || "OneMap route estimate failed.");
+    throw new Error(result?.error || "Map route estimate failed.");
   }
 
   return result.route_estimate as AdminMapRouteEstimateResult;
@@ -11302,7 +11302,7 @@ export default function Home() {
       setAdminMapRouteAssistAction(action);
       setAdminMapRouteAssistMessage({
         tone: "info",
-        text: `Searching OneMap for ${label.toLowerCase()}...`,
+        text: `Searching map provider for ${label.toLowerCase()}...`,
       });
     }
 
@@ -11318,7 +11318,7 @@ export default function Home() {
       if (!options?.silent) {
         setAdminMapRouteAssistMessage({
           tone: "success",
-          text: `${label} matched in OneMap: ${adminMapLocationLabel(match)}.`,
+          text: `${label} matched in map provider: ${adminMapLocationLabel(match)}.`,
         });
       }
 
@@ -11327,7 +11327,7 @@ export default function Home() {
       if (!options?.silent) {
         setAdminMapRouteAssistMessage({
           tone: "error",
-          text: adminMapRouteAssistFailureMessage(error, `${label} OneMap search`),
+          text: adminMapRouteAssistFailureMessage(error, `${label} map search`),
         });
       }
 
@@ -11343,7 +11343,7 @@ export default function Home() {
     if (!clean(booking.pickup) || !clean(booking.dropoff)) {
       setAdminMapRouteAssistMessage({
         tone: "error",
-        text: "OneMap route estimate needs pickup and drop-off values.",
+        text: "Map route estimate needs pickup and drop-off values.",
       });
       return;
     }
@@ -11351,7 +11351,7 @@ export default function Home() {
     setAdminMapRouteAssistAction("estimate-route");
     setAdminMapRouteAssistMessage({
       tone: "info",
-      text: "Resolving pickup/drop-off and estimating route with OneMap...",
+      text: "Resolving pickup/drop-off and estimating route with the map provider...",
     });
 
     try {
@@ -11367,7 +11367,7 @@ export default function Home() {
       setAdminMapRouteEstimate(estimate);
       setAdminMapRouteAssistMessage({
         tone: "success",
-        text: `OneMap route estimate loaded: ${formatAdminMapDistance(
+        text: `Map route estimate loaded: ${formatAdminMapDistance(
           estimate.distance_meters,
         )}, ${formatAdminMapDuration(estimate.duration_seconds)}.`,
       });
@@ -27480,7 +27480,7 @@ export default function Home() {
             </section>
 
             <section
-              aria-label="OneMap Route Assist"
+              aria-label="Map Route Assist"
               className="order-[79] rounded-md border border-cyan-200 bg-cyan-50/70 p-3"
               data-dispatch-workflow-step="onemap-route-assist"
               data-admin-onemap-route-assist="true"
@@ -27488,7 +27488,7 @@ export default function Home() {
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
                   <h3 className="text-base font-semibold text-cyan-950">
-                    OneMap Route Assist
+                    Map Route Assist
                   </h3>
                   <p className="mt-1 text-xs font-semibold leading-5 text-cyan-900">
                     Admin-only route planning from the existing pickup and drop-off fields.
@@ -27562,7 +27562,7 @@ export default function Home() {
                     >
                       {item.location
                         ? adminMapLocationLabel(item.location)
-                        : "No OneMap coordinate selected"}
+                        : "No map coordinate selected"}
                     </p>
                     {item.location ? (
                       <p
@@ -27591,7 +27591,7 @@ export default function Home() {
                   </p>
                   <p className="min-w-0 break-words">
                     <span className="block font-semibold uppercase text-cyan-700">Provider</span>
-                    <span>{clean(adminMapRouteEstimate.provider) || "OneMap"}</span>
+                    <span>{clean(adminMapRouteEstimate.provider) || "Map provider"}</span>
                   </p>
                 </div>
               ) : null}
@@ -27609,7 +27609,7 @@ export default function Home() {
                 className="mt-2 border-t border-cyan-200 pt-2 text-[11px] leading-4 text-cyan-900"
                 data-admin-onemap-boundary="true"
               >
-                Uses guarded admin OneMap APIs only. No booking save, Supabase write, customer message, driver
+                Uses guarded admin map APIs only. No booking save, Supabase write, customer message, driver
                 notification, live location activation, invoice, PDF, payment, payout, or parser-learning behavior.
               </p>
             </section>

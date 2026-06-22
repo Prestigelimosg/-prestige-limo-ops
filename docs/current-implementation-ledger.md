@@ -4889,49 +4889,41 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 ### Google Maps Admin Map Evidence Contract Guard Lock
 
-- This is a docs/test-only guard for a future separately approved Google Maps admin map/search/route estimate evidence pass.
 - Google Maps is selected as the replacement direction for admin map/search/route estimate.
 - OneMap is parked after the safe HTTP 502 provider failure record.
 - No OneMap retry is approved without separate owner approval.
-- Future Google Maps scope is admin location search and admin route estimates only.
-- Future Google Maps replacement should reuse the existing provider-neutral admin map routes where possible: `GET /api/admin-map-location-search` and `POST /api/admin-map-route-estimates`.
-- Future implementation should reuse the existing admin route-assist UI section without adding a new UI sector, card, or button.
-- Future Google Maps services to evaluate are names-only: Places Text Search or Geocoding for location search, Routes API or equivalent route estimate service for distance/duration, and Maps JavaScript only if map display is separately needed and approved.
-- Required future gate/env names are names-only: `PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED`, `PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER`, `PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED`, `PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER`, `PRESTIGE_GOOGLE_MAPS_API_KEY`, `PRESTIGE_GOOGLE_MAPS_SEARCH_ENDPOINT` if needed, `PRESTIGE_GOOGLE_MAPS_ROUTE_ENDPOINT` if needed, and `PRESTIGE_ADMIN_GOOGLE_MAPS_READ_ONLY_VERIFICATION_APPROVED`.
-- Future Google Maps provider replacement requires explicit owner approval.
-- Future Google Cloud billing readiness requires explicit owner approval.
-- Future Google Maps API key setup requires explicit owner approval.
-- Future staging-only key use requires explicit owner approval.
-- Future API key restriction proof requires explicit owner approval.
-- Future one bounded staging evidence pass requires explicit owner approval.
+- Current Google Maps scope is admin location search and admin route estimates only.
+- Google Maps replacement reuses the existing provider-neutral admin map routes: `GET /api/admin-map-location-search` and `POST /api/admin-map-route-estimates`.
+- Google Maps runtime provider support is gated by `PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED`, `PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER=google_maps_geocoding`, `PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED`, and `PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER=google_maps_routes`.
+- Google Maps key usage is server-side only through `PRESTIGE_GOOGLE_MAPS_API_KEY`; the key value must never be printed, logged, committed, or exposed to the browser.
+- Google Maps services used by the runtime provider are Geocoding API for location search and Routes API for route estimates.
+- The implementation reuses the existing admin route-assist UI section and does not add a new UI sector, card, or button.
 - Closed-gate proof is required before evidence.
 - Closed gate must not read `PRESTIGE_GOOGLE_MAPS_API_KEY`.
 - Closed gate must not call Google Maps.
 - Missing-config proof must return a safe disabled or missing-config response with no key, env value, billing detail, token, cookie, password, endpoint value, DB URL, or secret exposure.
 - Admin/dispatcher boundary proof is required.
 - Public, customer, and driver boundary proof is required.
-- Future evidence is limited to one safe public-landmark location search and one safe public-landmark route estimate.
-- Future evidence must not use real customer coordinates.
-- Future evidence must not write to the database.
-- No DB persistence is required for this lane unless separately introduced and approved later.
+- Evidence is limited to one safe public-landmark location search and one safe public-landmark route estimate.
+- Evidence must not use real customer coordinates.
+- Evidence must not write to the database.
+- No DB persistence is required for this lane.
 - No scheduler, retry loop, polling loop, queue, cron, timer, or background worker is approved.
 - Timeout, rate-limit, and safe provider failure contracts are required.
 - Rollback/disable proof is required after evidence.
-- Google Cloud billing readiness proof must be names-only and must not include billing details.
-- Staging-only API key setup proof is required.
-- Server-side key usage proof is required if server routes call Google.
-- Browser key introduction is forbidden unless separately approved.
-- API restrictions must be limited to the required Google Maps APIs.
+- API restrictions are limited to Google Geocoding API and Routes API.
 - No API key values or env values may be printed.
 - No raw Google response, headers, keys, tokens, or debug payloads may be exposed.
-- Future normalized Google Maps responses may expose only provider, search label, address fragments, postal if available, latitude/longitude for safe public-landmark evidence only, distance, duration, and route type.
-- Future Google Maps responses must not expose raw Google payloads, headers, API keys, tokens, debug/internal fields, pricing, payout, PayNow, payment/PDF/billing, `customer_rates`, `driver_payout_rules`, internal/admin notes, parser/debug fields, Save Booking internals, `/api/admin-saved-bookings` internals, customer/private contact data, or real customer coordinates in evidence.
+- Normalized Google Maps responses may expose only provider, search label, address fragments, postal if available, latitude/longitude for safe public-landmark evidence only, distance, duration, and route type.
+- Google Maps responses must not expose raw Google payloads, headers, API keys, tokens, debug/internal fields, pricing, payout, PayNow, payment/PDF/billing, `customer_rates`, `driver_payout_rules`, internal/admin notes, parser/debug fields, Save Booking internals, `/api/admin-saved-bookings` internals, customer/private contact data, or real customer coordinates in evidence.
 - Google Maps is not the driver GPS source.
 - Google Maps is not Telegram live location.
 - Google Maps is not customer live tracking.
-- Google Maps admin map/search/route estimate must remain separate from driver GPS, Telegram live location, driver location source, POB auto-stop, customer/driver auth activation, in-app notifications, OTS photo/storage, billing/payment/PDF, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, provider sends, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.
-- This lock does not approve Google Maps API calls, API key creation/use, Google Cloud billing changes, env changes, DB reads/writes, OneMap retry, driver GPS capture, live-location implementation, provider sends, auth activation, notification row writes, in-app notification runtime, OTS photo/storage activation, calendar activation, scheduler/timer/polling/retry implementation, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, pricing/rates/customer_rates changes, `driver_payout_rules` changes, payout/payment/PDF/billing/invoice activation, UI sector/card/button changes, shim changes, deploy, or production activation.
-- This guard adds `scripts/test-google-maps-admin-map-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- Google Maps admin map/search/route estimate remains separate from driver GPS, Telegram live location, driver location source, POB auto-stop, customer/driver auth activation, in-app notifications, OTS photo/storage, billing/payment/PDF, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, provider sends, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.
+- This lock does not approve DB reads/writes, OneMap retry, driver GPS capture, live-location implementation, provider sends, auth activation, notification row writes, in-app notification runtime, OTS photo/storage activation, calendar activation, scheduler/timer/polling/retry implementation, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, pricing/rates/customer_rates changes, `driver_payout_rules` changes, payout/payment/PDF/billing/invoice activation, UI sector/card/button changes, shim changes, or production activation.
+- This guard updates `scripts/test-google-maps-admin-map-evidence-contract-guard.mjs` and keeps it registered in `scripts/test-preactivation-verification-suite.mjs`.
+- Bounded read-only staging evidence runner: `scripts/run-admin-google-maps-read-only-verification.mjs`.
+- The runner requires `PRESTIGE_ADMIN_GOOGLE_MAPS_READ_ONLY_VERIFICATION_APPROVED=google-maps-admin-map-staging-read-only-approved`, a staging admin/dispatcher session token, open staging map gates, and public-landmark-only inputs before it can call Google Maps through the app routes.
 
 ### Live location
 - Live location setup foundation.

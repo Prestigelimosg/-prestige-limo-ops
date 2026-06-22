@@ -3,13 +3,15 @@ import "server-only";
 import type { AdminBookingResult } from "./admin-booking-persistence";
 import type { AdminDispatcherBoundaryContext } from "./admin-dispatcher-auth-boundary";
 
-export const adminMapLocationSearchVersion = "stage-admin-onemap-location-search-v1";
+export const adminMapLocationSearchVersion = "stage-admin-map-location-search-v2";
+
+export type AdminMapLocationSearchProvider = "google_maps_geocoding" | "onemap_search";
 
 export type AdminMapLocationSearchInput = {
   page: number;
   query: string;
   safe_route_context: {
-    source: "admin_onemap_location_search";
+    source: "admin_map_location_search";
   };
 };
 
@@ -27,7 +29,7 @@ export type AdminMapLocationSearchResultItem = {
 export type AdminMapLocationSearchResult = {
   found: number;
   page: number;
-  provider: "onemap_search";
+  provider: AdminMapLocationSearchProvider;
   query: string;
   results: AdminMapLocationSearchResultItem[];
   safe_route_context: AdminMapLocationSearchInput["safe_route_context"] & {
@@ -40,6 +42,7 @@ export type AdminMapLocationSearchResult = {
 type UnknownRecord = Record<string, unknown>;
 
 const oneMapSearchEndpoint = "https://www.onemap.gov.sg/api/common/elastic/search";
+const googleMapsGeocodingEndpoint = "https://maps.googleapis.com/maps/api/geocode/json";
 const maxLocationSearchQueryLength = 160;
 const maxLocationSearchResultTextLength = 260;
 const maxOneMapSearchResponseBytes = 120000;
@@ -50,13 +53,13 @@ const singaporeLatitudeMax = 1.5;
 const singaporeLongitudeMin = 103.5;
 const singaporeLongitudeMax = 104.2;
 const safeMapLocationSearchDisabledError =
-  "Admin OneMap location search is not enabled on this server.";
+  "Admin map location search is not enabled on this server.";
 const safeMapLocationSearchConfigError =
-  "Admin OneMap location search configuration is not ready.";
+  "Admin map location search configuration is not ready.";
 const safeMapLocationSearchActorError =
-  "Admin OneMap location search requires a verified admin or dispatcher server session.";
+  "Admin map location search requires a verified admin or dispatcher server session.";
 const safeMapLocationSearchProviderError =
-  "Admin OneMap location search provider failed safely.";
+  "Admin map location search provider failed safely.";
 const forbiddenMapLocationSearchFragments = [
   "amount_due",
   "auth_link",
@@ -237,6 +240,18 @@ function readOneMapToken() {
   );
 }
 
+function readGoogleMapsApiKey() {
+  return configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_API_KEY);
+}
+
+function selectedLocationSearchProvider(): AdminMapLocationSearchProvider | null {
+  const provider = configValueOrNull(process.env.PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER);
+
+  return provider === "onemap_search" || provider === "google_maps_geocoding"
+    ? provider
+    : null;
+}
+
 function readParamsValue(params: URLSearchParams, key: string) {
   const value = params.get(key);
 
@@ -288,7 +303,7 @@ export function parseAdminMapLocationSearchParams(
 
   if (!query || (rawQuery && !query)) {
     return {
-      error: "Admin OneMap location search query is malformed.",
+      error: "Admin map location search query is malformed.",
       ok: false,
       status: 400,
     };
@@ -302,7 +317,7 @@ export function parseAdminMapLocationSearchParams(
     )
   ) {
     return {
-      error: "Admin OneMap location search page is malformed.",
+      error: "Admin map location search page is malformed.",
       ok: false,
       status: 400,
     };
@@ -313,8 +328,81 @@ export function parseAdminMapLocationSearchParams(
       page,
       query,
       safe_route_context: {
-        source: "admin_onemap_location_search",
+        source: "admin_map_location_search",
       },
+    },
+    ok: true,
+  };
+}
+
+function normalizeGooglePostalCode(components: unknown) {
+  for (const component of asArray(components)) {
+    const record = asRecord(component);
+    const types = asArray(record.types).map((type) => String(type));
+
+    if (types.includes("postal_code")) {
+      return safePostal(record.long_name ?? record.short_name);
+    }
+  }
+
+  return null;
+}
+
+function normalizeGoogleLocationSearchItem(
+  value: unknown,
+): AdminMapLocationSearchResultItem | null {
+  const record = asRecord(value);
+  const geometry = asRecord(record.geometry);
+  const location = asRecord(geometry.location);
+  const latitude = validLatitude(location.lat);
+  const longitude = validLongitude(location.lng);
+  const address = optionalSafeProviderText(record.formatted_address, maxLocationSearchResultTextLength);
+
+  if (latitude === null || longitude === null || !address) {
+    return null;
+  }
+
+  return {
+    address,
+    block_no: null,
+    building: null,
+    label: address,
+    latitude,
+    longitude,
+    postal: normalizeGooglePostalCode(record.address_components),
+    road_name: null,
+  };
+}
+
+function normalizeGoogleLocationSearch(
+  input: AdminMapLocationSearchInput,
+  value: unknown,
+): AdminBookingResult<AdminMapLocationSearchResult> {
+  const record = asRecord(value);
+
+  if (record.status && record.status !== "OK" && record.status !== "ZERO_RESULTS") {
+    return providerResponseFailure();
+  }
+
+  const rawResults = asArray(record.results);
+  const results = rawResults
+    .map(normalizeGoogleLocationSearchItem)
+    .filter((result): result is AdminMapLocationSearchResultItem => Boolean(result))
+    .slice(0, maxSearchResults);
+
+  return {
+    data: {
+      found: results.length,
+      page: input.page,
+      provider: "google_maps_geocoding",
+      query: input.query,
+      results,
+      safe_route_context: {
+        ...input.safe_route_context,
+        search_status: "loaded",
+      },
+      total_pages: results.length ? 1 : 0,
+      version: adminMapLocationSearchVersion,
     },
     ok: true,
   };
@@ -418,12 +506,56 @@ export async function searchAdminMapLocations(
     };
   }
 
-  if (process.env.PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER !== "onemap_search") {
+  const provider = selectedLocationSearchProvider();
+
+  if (!provider) {
     return {
       error: safeMapLocationSearchConfigError,
       ok: false,
       status: 503,
     };
+  }
+
+  if (provider === "google_maps_geocoding") {
+    const googleMapsApiKey = readGoogleMapsApiKey();
+
+    if (!googleMapsApiKey) {
+      return {
+        error: safeMapLocationSearchConfigError,
+        ok: false,
+        status: 503,
+      };
+    }
+
+    try {
+      const url = new URL(
+        configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_SEARCH_ENDPOINT) ||
+          googleMapsGeocodingEndpoint,
+      );
+
+      url.searchParams.set("address", input.query);
+      url.searchParams.set("components", "country:SG");
+      url.searchParams.set("region", "sg");
+      url.searchParams.set("key", googleMapsApiKey);
+
+      const response = await fetch(url, {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        return providerResponseFailure();
+      }
+
+      const providerJson = await readProviderJson(response);
+
+      if (!providerJson) {
+        return providerResponseFailure();
+      }
+
+      return normalizeGoogleLocationSearch(input, providerJson);
+    } catch {
+      return providerResponseFailure();
+    }
   }
 
   const oneMapToken = readOneMapToken();

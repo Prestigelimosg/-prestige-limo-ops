@@ -13378,7 +13378,7 @@ async function runChromeTest() {
           };
         })()`);
 
-        return candidateState?.feedback?.includes("OneMap route estimate loaded") &&
+        return candidateState?.feedback?.includes("Map route estimate loaded") &&
           candidateState?.locationRequests?.length === 2 &&
           candidateState?.routeRequests?.length === 1
           ? candidateState

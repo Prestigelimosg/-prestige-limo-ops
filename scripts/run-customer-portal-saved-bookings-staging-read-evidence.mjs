@@ -32,24 +32,21 @@ const safeSavedBookingFields = new Set([
   "updated_at",
 ]);
 const forbiddenPayloadPattern =
-  /pricing|customer_price|quoted_price|fare_amount|rate_amount|payout|paynow|pay_now|driver_payout|driver_payout_rules|customer_rates|billing|payment|invoice|pdf|internal|admin_note|finance|parser|debug|secret|token|cookie|jwt|raw_provider|raw_google|provider_payload|live_location|photo|ots|saved-bookings|admin-saved-bookings/i;
+  /pricing|customer_price|quoted_price|fare_amount|rate_amount|payout|paynow|pay_now|driver_payout|driver_payout_rules|customer_rates|billing|payment|invoice|pdf|internal|admin_note|finance|parser|debug|secret|token|cookie|jwt|raw_provider|raw_google|provider_payload|live_location|photo|ots|admin-saved-bookings/i;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
+
+class EvidenceFailure extends Error {
+  constructor(reason, details = {}) {
+    super(reason);
+    this.details = details;
+    this.reason = reason;
+  }
+}
 
 function fail(reason, details = {}) {
-  console.log(
-    JSON.stringify(
-      {
-        details,
-        ok: false,
-        reason,
-        result: "customer_portal_saved_bookings_staging_read_evidence_blocked",
-      },
-      null,
-      2,
-    ),
-  );
-  process.exit(1);
+  throw new EvidenceFailure(reason, details);
 }
 
 function pass(payload) {
@@ -166,6 +163,30 @@ function assertNoUnsafePayload(value, label) {
   if (forbiddenPayloadPattern.test(text)) {
     fail("unsafe_customer_portal_saved_bookings_payload", { label });
   }
+}
+
+function safeCustomerReferenceValue(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const cleaned = value.trim();
+
+  if (!safeReferencePattern.test(cleaned) || forbiddenPayloadPattern.test(cleaned)) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function safeCustomerAccountReference(value) {
+  const safeValue = safeCustomerReferenceValue(value);
+
+  return safeValue === null ? null : String(safeValue);
 }
 
 function assertStatus(actual, expected, label) {
@@ -373,18 +394,15 @@ async function verifyCleanup(client, fixture) {
   };
 }
 
-async function createEvidenceFixture(client, evidenceReference) {
+async function createEvidenceFixture(client, evidenceReference, fixture) {
   const authUserId = envValue("PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID");
   const wrongAuthUserId = randomUUID();
   const pickupAt = "2026-07-02T09:30:00.000Z";
   const customerDisplayName = "Staging Portal Evidence Customer";
   const passengerName = "Staging Portal Passenger";
-  const fixture = {
-    authUserId,
-    bookingReference: evidenceReference,
-    customerAccountReference: "",
-    customerId: "",
-  };
+
+  fixture.authUserId = authUserId;
+  fixture.bookingReference = evidenceReference;
 
   const wrongAccountCount = await countRows(
     client
@@ -414,11 +432,11 @@ async function createEvidenceFixture(client, evidenceReference) {
 
   assertNoDbError(customerInsert.error, "create staging customer");
 
-  fixture.customerId = customerInsert.data?.id || "";
-  fixture.customerAccountReference = fixture.customerId;
+  fixture.customerId = safeCustomerReferenceValue(customerInsert.data?.id);
+  fixture.customerAccountReference = safeCustomerAccountReference(customerInsert.data?.id);
 
-  if (!uuidPattern.test(fixture.customerId)) {
-    fail("created_staging_customer_id_invalid_safely");
+  if (!fixture.customerId || !fixture.customerAccountReference) {
+    fail("created_staging_customer_reference_invalid_safely");
   }
 
   const accessInsert = await client.from("customer_access_accounts").insert({
@@ -615,11 +633,12 @@ async function runReadWindowEvidence(baseUrl) {
     assertStatus(crossOriginResponse.status, 403, "cross-origin customer boundary");
     assertNoUnsafePayload(crossOriginBody, "cross-origin customer boundary");
 
-    const setup = await createEvidenceFixture(client, evidenceReference);
+    fixtureCreated = true;
+
+    const setup = await createEvidenceFixture(client, evidenceReference, created);
 
     created.customerId = setup.fixture.customerId;
     created.customerAccountReference = setup.fixture.customerAccountReference;
-    fixtureCreated = true;
 
     const cookiePair = await issueCustomerPortalSessionCookie(baseUrl);
     const readResponse = await fetch(
@@ -715,11 +734,37 @@ async function runReadWindowEvidence(baseUrl) {
   }
 }
 
-const phase = requireApprovalAndPhase();
-const baseUrl = validateStagingTarget(envValue(targetUrlEnvName));
+async function main() {
+  const phase = requireApprovalAndPhase();
+  const baseUrl = validateStagingTarget(envValue(targetUrlEnvName));
 
-if (phase === "read-window") {
-  await runReadWindowEvidence(baseUrl);
-} else {
-  await runBlockedProof(baseUrl, phase);
+  if (phase === "read-window") {
+    await runReadWindowEvidence(baseUrl);
+  } else {
+    await runBlockedProof(baseUrl, phase);
+  }
+}
+
+try {
+  await main();
+} catch (error) {
+  const reason =
+    error instanceof EvidenceFailure
+      ? error.reason
+      : "customer_portal_saved_bookings_staging_read_evidence_failed_safely";
+  const details = error instanceof EvidenceFailure ? error.details : {};
+
+  console.log(
+    JSON.stringify(
+      {
+        details,
+        ok: false,
+        reason,
+        result: "customer_portal_saved_bookings_staging_read_evidence_blocked",
+      },
+      null,
+      2,
+    ),
+  );
+  process.exitCode = 1;
 }

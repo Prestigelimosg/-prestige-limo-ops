@@ -54,6 +54,8 @@ for (const phrase of [
   "The `read-window` phase reads the saved booking through the guarded customer portal session and `/api/customer-saved-bookings` route.",
   "The `read-window` phase verifies anonymous, missing-session, wrong-session, cross-origin, unmatched-reference, safe-projection, wrong-auth-user no-account, and audit proof.",
   "The runner cleans up the exact staging evidence customer, access account, booking, and audit event, then verifies zero matching rows remain.",
+  "The runner treats the staging `customers.id` as an opaque safe customer account reference, so UUID-shaped and non-UUID staging identifiers are supported without printing row IDs.",
+  "The runner uses a thrown safe failure path so partial fixture cleanup can run before reporting a blocked evidence result.",
   "The runner must not use real customer data, notification row writes, customer in-app runtime/buttons, provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, parser, Save Booking, `/api/admin-saved-bookings`, shims, or production activation.",
   "The runner output is normalized and must not print secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data.",
   "A future evidence pass still requires separate owner approval for staging env/gate/deploy window, runner execution, rollback/disable proof, docs evidence recording, and staging promotion.",
@@ -95,6 +97,10 @@ for (const fragment of [
   ".delete()",
   "verifyCleanup",
   "zero_matching_rows",
+  "safeCustomerReferenceValue",
+  "safeCustomerAccountReference",
+  "EvidenceFailure",
+  "created_staging_customer_reference_invalid_safely",
   "wrong_auth_user_active_account_rows",
   "unmatched_booking_reference_rows",
   "booking_reference",
@@ -135,6 +141,7 @@ for (const forbiddenPattern of [
   /customer_driver_app_notification_outbox/i,
   /NEXT_PUBLIC|production deploy|manual deploy/i,
   /row_id|customer_id.*console|auth_user_id.*console/i,
+  /created_staging_customer_id_invalid_safely/i,
 ]) {
   assertExcludes(runner, forbiddenPattern, "runner forbidden surface");
 }

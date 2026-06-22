@@ -8401,7 +8401,9 @@ async function runChromeTest() {
     );
     assert.equal(customerCopyTextareaState.hasCancel, true);
     assert.equal(customerCopyTextareaState.hasSave, true);
-    assert.match(customerCopyTextareaState.value, /Thank you for choosing Prestige Limo SG\./);
+    assert.match(customerCopyTextareaState.value, /CUSTOMER BOOKING DETAILS/);
+    assert.match(customerCopyTextareaState.value, /DRIVER DETAILS/);
+    assert.match(customerCopyTextareaState.value, /Passenger name: DASHBOARD DRIVER TEST TRAVELER/);
 
     await setInputValue(
       "[data-copy-edit-textarea='customerCopy']",
@@ -8443,13 +8445,12 @@ async function runChromeTest() {
       "Customer Copy cancel restored generated text",
     );
     assert.deepEqual(cancelledCustomerCopyState.globalCopyMessages, []);
-    assert.match(cancelledCustomerCopyState.previewText, /Thank you for choosing Prestige Limo SG\./);
+    assert.match(cancelledCustomerCopyState.previewText, /CUSTOMER BOOKING DETAILS/);
+    assert.match(cancelledCustomerCopyState.previewText, /DRIVER DETAILS/);
+    assert.match(cancelledCustomerCopyState.previewText, /Passenger name: DASHBOARD DRIVER TEST TRAVELER/);
 
     const customerCopyManualNote = "Customer note: Please meet driver at the arrival area.";
-    const editedLoadedCustomerCopyText = manualPayoutLoadedPricingState.customerCopy.replace(
-      "\n\nThank you for choosing Prestige Limo SG.",
-      `\n\n${customerCopyManualNote}\n\nThank you for choosing Prestige Limo SG.`,
-    );
+    const editedLoadedCustomerCopyText = `${manualPayoutLoadedPricingState.customerCopy}\n\n${customerCopyManualNote}`;
     const clickedCustomerCopyEditForSave = await evaluate(`(() => {
       const editButton = document.querySelector("[data-copy-edit-button='customerCopy']");
 
@@ -8618,25 +8619,24 @@ async function runChromeTest() {
         loadedCustomerCopyState.distanceFromButton <= 80,
       `Expected Customer Copy feedback near its button, got ${loadedCustomerCopyState.distanceFromButton}px`,
     );
-    assert.match(loadedCustomerCopyState.copiedText, /Passenger: DASHBOARD DRIVER TEST TRAVELER/);
+    assert.match(loadedCustomerCopyState.copiedText, /CUSTOMER BOOKING DETAILS/);
+    assert.match(loadedCustomerCopyState.copiedText, /DRIVER DETAILS/);
+    assert.match(loadedCustomerCopyState.copiedText, /Passenger name: DASHBOARD DRIVER TEST TRAVELER/);
     assert.match(loadedCustomerCopyState.copiedText, /Service: Arrival/);
-    assert.match(loadedCustomerCopyState.copiedText, /29 May 2026, 1115hrs/);
+    assert.match(loadedCustomerCopyState.copiedText, /Pickup date: 29 May 2026/);
+    assert.match(loadedCustomerCopyState.copiedText, /Pickup time: 1115hrs/);
     assert.match(loadedCustomerCopyState.copiedText, /Flight: SQ777/);
-    assert.match(loadedCustomerCopyState.copiedText, /Pickup: Changi Airport/);
-    assert.match(loadedCustomerCopyState.copiedText, /Drop-off: The Fullerton Hotel Singapore/);
-    assert.match(
+    assert.match(loadedCustomerCopyState.copiedText, /Pickup location: Changi Airport/);
+    assert.match(loadedCustomerCopyState.copiedText, /Drop-off location: The Fullerton Hotel Singapore/);
+    assert.doesNotMatch(
       loadedCustomerCopyState.copiedText,
       /Route: Changi Airport\s*>\s*Marina Bay Sands\s*>\s*The Fullerton Hotel Singapore/,
-      "Expected Customer Copy to include the full route with extra stop",
+      "Expected Customer Copy to exclude route extras",
     );
     assert.match(loadedCustomerCopyState.copiedText, /Driver: DASHBOARD TEST DRIVER/);
     assert.match(loadedCustomerCopyState.copiedText, /Driver contact: \+65 8555 7777/);
     assert.match(loadedCustomerCopyState.copiedText, /Car plate: SLC777D/);
     assert.match(loadedCustomerCopyState.copiedText, /Customer note: Please meet driver at the arrival area\./);
-    assert.ok(
-      loadedCustomerCopyState.copiedText.trim().endsWith("Thank you for choosing Prestige Limo SG."),
-      "Expected Customer Copy to end with the Prestige Limo SG thank-you line",
-    );
     assert.doesNotMatch(
       loadedCustomerCopyState.copiedText,
       /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|MNG)\b|Payout|driver payout|internal payout|override reason|Dashboard assignment test|Meet at arrival belt|\$82/i,
@@ -9824,10 +9824,22 @@ async function runChromeTest() {
     assert.match(markedCompletedLoadedDispatchState.customerCopy, /Driver: COMPLETION ACTION DRIVER/);
     assert.match(markedCompletedLoadedDispatchState.customerCopy, /Driver contact: \+65 8111 7799/);
     assert.match(markedCompletedLoadedDispatchState.customerCopy, /Car plate: SLC779C/);
+    assert.match(markedCompletedLoadedDispatchState.customerCopy, /Pickup location: Changi Airport T3/);
+    assert.match(markedCompletedLoadedDispatchState.customerCopy, /Drop-off location: Capella Singapore/);
     assert.match(
       markedCompletedLoadedDispatchState.customerCopy,
+      /CUSTOMER BOOKING DETAILS/,
+      "Expected completed booking Customer Copy to keep customer booking section after load",
+    );
+    assert.match(
+      markedCompletedLoadedDispatchState.customerCopy,
+      /DRIVER DETAILS/,
+      "Expected completed booking Customer Copy to keep driver details section after load",
+    );
+    assert.doesNotMatch(
+      markedCompletedLoadedDispatchState.customerCopy,
       /Route: Changi Airport T3\s*>\s*Marina Bay Sands\s*>\s*Capella Singapore/,
-      "Expected completed booking Customer Copy to preserve the full route after load",
+      "Expected completed booking Customer Copy to exclude route extras after load",
     );
     assert.doesNotMatch(
       markedCompletedLoadedDispatchState.customerCopy,
@@ -20550,16 +20562,19 @@ async function runChromeTest() {
         async () => {
           const candidateState = await evaluate(extractStateScript);
           const liveState = await readCustomerLiveLocationState();
-          const expectedRoute = `Route: Live Pickup ${suffix} > Live Waypoint ${suffix} > Live Dropoff ${suffix}`;
+          const expectedPickup = `Pickup location: Live Pickup ${suffix}`;
+          const expectedDropoff = `Drop-off location: Live Dropoff ${suffix}`;
 
           return candidateState?.fields?.bookingType === bookingType &&
             candidateState?.fields?.pickupDate === pickup.date &&
-            liveState.customerCopy.includes(`Passenger: Live Passenger ${suffix}`) &&
-            liveState.customerCopy.includes(expectedRoute)
+            liveState.customerCopy.includes(`Passenger name: Live Passenger ${suffix}`) &&
+            liveState.customerCopy.includes(expectedPickup) &&
+            liveState.customerCopy.includes(expectedDropoff)
             ? {
                 ...liveState,
                 pickup,
-                routeText: expectedRoute,
+                dropoffText: expectedDropoff,
+                pickupText: expectedPickup,
                 serviceLabel: candidateState.customerCopy.match(/Service: ([^\n]+)/)?.[1] || "",
               }
             : false;
@@ -20589,10 +20604,7 @@ async function runChromeTest() {
       "Expected MNG / Arrival Customer Copy never to include a live location link",
     );
     assert.match(mngLiveLocationState.customerCopy, /Live Waypoint Arrival inside/);
-    assert.ok(
-      mngLiveLocationState.customerCopy.trim().endsWith("Thank you for choosing Prestige Limo SG."),
-      "Expected Arrival Customer Copy to keep the thank-you line",
-    );
+    assert.match(mngLiveLocationState.customerCopy, /Passenger name: Live Passenger Arrival inside/);
 
     for (const bookingType of ["DEP", "TRF", "DSP"]) {
       const beforeWindowState = await setLiveLocationScenarioBooking({
@@ -20613,12 +20625,13 @@ async function runChromeTest() {
       );
       assert.match(
         beforeWindowState.customerCopy,
-        new RegExp(beforeWindowState.routeText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `Expected ${bookingType} before-window Customer Copy to keep full route and waypoint`,
+        new RegExp(beforeWindowState.pickupText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `Expected ${bookingType} before-window Customer Copy to keep pickup location`,
       );
-      assert.ok(
-        beforeWindowState.customerCopy.trim().endsWith("Thank you for choosing Prestige Limo SG."),
-        `Expected ${bookingType} before-window Customer Copy to keep the thank-you line`,
+      assert.match(
+        beforeWindowState.customerCopy,
+        new RegExp(beforeWindowState.dropoffText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `Expected ${bookingType} before-window Customer Copy to keep drop-off location`,
       );
     }
 
@@ -20641,17 +20654,18 @@ async function runChromeTest() {
       );
       assert.match(
         insideWindowState.customerCopy,
-        new RegExp(insideWindowState.routeText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-        `Expected ${bookingType} inside-window Customer Copy to keep full route and waypoint`,
+        new RegExp(insideWindowState.pickupText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `Expected ${bookingType} inside-window Customer Copy to keep pickup location`,
+      );
+      assert.match(
+        insideWindowState.customerCopy,
+        new RegExp(insideWindowState.dropoffText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        `Expected ${bookingType} inside-window Customer Copy to keep drop-off location`,
       );
       assert.doesNotMatch(
         insideWindowState.customerCopy,
         customerCopyInternalPattern,
         `Expected ${bookingType} inside-window Customer Copy to exclude vehicle, payout, and internal text`,
-      );
-      assert.ok(
-        insideWindowState.customerCopy.trim().endsWith("Thank you for choosing Prestige Limo SG."),
-        `Expected ${bookingType} inside-window Customer Copy to keep the thank-you line`,
       );
     }
 

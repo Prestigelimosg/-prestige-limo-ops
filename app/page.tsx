@@ -65,6 +65,8 @@ const adminSmsCustomerDriverDetailsSendDisabledApiPath =
   "/api/admin-sms-customer-driver-details-send-disabled-setup";
 const adminEmailActivationPreflightApiPath =
   "/api/admin-email-activation-preflight-setup";
+const adminCustomerDriverAppNotificationsApiPath =
+  "/api/admin-customer-driver-app-notifications";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
@@ -933,6 +935,17 @@ type AdminCustomerDriverDetailsDisabledSendActionState = {
 type AdminCustomerDriverDetailsEmailDisabledSendActionState =
   AdminCustomerDriverDetailsDisabledSendActionState;
 
+type AdminCustomerDriverDetailsDriverInAppActionState = {
+  actionStatus: "idle" | "loading" | "loaded" | "error";
+  deliverySurface: "driver_app";
+  external_send: false;
+  loadedReference: string;
+  message: string;
+  noProviderSend: true;
+  notificationStatus: "queued" | "blocked";
+  notificationType: "trip_update";
+};
+
 function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDriverDetailsEmailReviewItem {
   return {
     actionLabel: "Review email to customer",
@@ -984,6 +997,21 @@ function adminCustomerDriverDetailsEmailDisabledSendFallbackState(
   message = "Disabled email send is setup-only.",
 ): AdminCustomerDriverDetailsEmailDisabledSendActionState {
   return adminCustomerDriverDetailsDisabledSendFallbackState(message);
+}
+
+function adminCustomerDriverDetailsDriverInAppFallbackState(
+  message = "Load a saved booking with an active driver job link before sending Driver In-App.",
+): AdminCustomerDriverDetailsDriverInAppActionState {
+  return {
+    actionStatus: "idle",
+    deliverySurface: "driver_app",
+    external_send: false,
+    loadedReference: "",
+    message,
+    noProviderSend: true,
+    notificationStatus: "blocked",
+    notificationType: "trip_update",
+  };
 }
 
 function adminCustomerDriverDetailsDisabledSendStatusText(
@@ -8994,6 +9022,12 @@ export default function Home() {
   ] = useState<AdminCustomerDriverDetailsDisabledSendActionState>(() =>
     adminCustomerDriverDetailsDisabledSendFallbackState("Disabled SMS send is setup-only."),
   );
+  const [
+    adminCustomerDriverDetailsDriverInAppActionState,
+    setAdminCustomerDriverDetailsDriverInAppActionState,
+  ] = useState<AdminCustomerDriverDetailsDriverInAppActionState>(() =>
+    adminCustomerDriverDetailsDriverInAppFallbackState(),
+  );
   const [driverAcknowledgementFollowUpStatus, setDriverAcknowledgementFollowUpStatus] =
     useState<DriverAcknowledgementFollowUpStatus>("pending");
   const [driverAcknowledgementFollowUpNote, setDriverAcknowledgementFollowUpNote] = useState("");
@@ -16838,6 +16872,85 @@ export default function Home() {
     }
   }
 
+  async function sendAdminCustomerDriverDetailsDriverInAppNotification() {
+    const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
+    const driverJobLinkId = clean(activeAdminDriverJobLink?.id);
+
+    if (!bookingReference || !driverJobLinkId) {
+      setAdminCustomerDriverDetailsDriverInAppActionState({
+        ...adminCustomerDriverDetailsDriverInAppFallbackState(
+          "Load a saved booking with an active driver job link before sending Driver In-App.",
+        ),
+        actionStatus: "error",
+        loadedReference: bookingReference,
+      });
+      return;
+    }
+
+    setAdminCustomerDriverDetailsDriverInAppActionState({
+      ...adminCustomerDriverDetailsDriverInAppFallbackState(
+        `Sending one Driver In-App update for ${bookingReference}...`,
+      ),
+      actionStatus: "loading",
+      loadedReference: bookingReference,
+      notificationStatus: "queued",
+    });
+
+    try {
+      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+        body: JSON.stringify({
+          booking_reference: bookingReference,
+          delivery_surface: "driver_app",
+          driver_job_link_id: driverJobLinkId,
+          notification_status: "queued",
+          notification_type: "trip_update",
+          priority: "normal",
+          safe_context: {
+            action: "admin_selected",
+            message_template: "review_assigned_trip",
+            provider_send: false,
+            source: "customer_copy_compact_row",
+          },
+          safe_message: "Please review this assigned trip in your Driver Job page.",
+          safe_title: "Dispatch update",
+          workflow_area: "driver_app_updates",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(result?.error || "Driver In-App update failed safely.");
+      }
+
+      setAdminCustomerDriverDetailsDriverInAppActionState({
+        actionStatus: "loaded",
+        deliverySurface: "driver_app",
+        external_send: false,
+        loadedReference: bookingReference,
+        message: `Driver In-App update queued for ${bookingReference}.`,
+        noProviderSend: true,
+        notificationStatus: "queued",
+        notificationType: "trip_update",
+      });
+    } catch (error) {
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : "Driver In-App update failed safely.";
+
+      setAdminCustomerDriverDetailsDriverInAppActionState({
+        ...adminCustomerDriverDetailsDriverInAppFallbackState(errorText),
+        actionStatus: "error",
+        loadedReference: bookingReference,
+      });
+    }
+  }
+
   const adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference =
     adminCustomerDriverDetailsEmailDisabledSendActionState.loadedReference ===
     adminCustomerDriverDetailsEmailReviewBookingReference;
@@ -16899,12 +17012,38 @@ export default function Home() {
       adminCustomerDriverDetailsSmsDisabledSendDisplayState,
       "Setup-only / send disabled, sendingEnabled false, external_send false",
     );
+  const adminCustomerDriverDetailsDriverInAppStateMatchesReference =
+    adminCustomerDriverDetailsDriverInAppActionState.loadedReference ===
+    adminCustomerDriverDetailsEmailReviewBookingReference;
+  const adminCustomerDriverDetailsDriverInAppDisplayState =
+    adminCustomerDriverDetailsDriverInAppStateMatchesReference
+      ? adminCustomerDriverDetailsDriverInAppActionState
+      : adminCustomerDriverDetailsDriverInAppFallbackState();
+  const adminCustomerDriverDetailsDriverInAppCanSend =
+    Boolean(adminCustomerDriverDetailsEmailReviewBookingReference) &&
+    Boolean(activeAdminDriverJobLink?.id) &&
+    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus !== "loading";
+  const adminCustomerDriverDetailsDriverInAppActionLabel =
+    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
+      ? "Sending Driver In-App"
+      : "Send Driver In-App";
+  const adminCustomerDriverDetailsDriverInAppStatusText =
+    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
+      ? "Driver In-App sending"
+      : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loaded"
+        ? "Driver In-App queued"
+        : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "error"
+          ? "Driver In-App blocked"
+          : activeAdminDriverJobLink
+            ? "Driver In-App ready"
+            : "Driver In-App needs link";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusText =
     "Setup-only / send disabled, sendingEnabled false, external_send false";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusTitle = [
     `Email: ${adminCustomerDriverDetailsEmailDisabledSendStatusText}`,
     `WhatsApp: ${adminCustomerDriverDetailsWhatsAppDisabledSendStatusText}`,
     `SMS: ${adminCustomerDriverDetailsSmsDisabledSendStatusText}`,
+    `Driver In-App: ${adminCustomerDriverDetailsDriverInAppStatusText}`,
   ].join(" | ");
   const adminEmailActivationPreflightStateMatchesReference =
     adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
@@ -31320,6 +31459,33 @@ export default function Home() {
                           ? "Checking SMS"
                           : "Review SMS"}
                       </button>
+                      <button
+                        aria-label="Send Driver In-App update to the assigned driver"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        data-admin-customer-driver-details-driver-in-app-send-action="true"
+                        data-admin-customer-driver-details-driver-in-app-send-action-state={
+                          adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus
+                        }
+                        data-admin-customer-driver-details-driver-in-app-send-delivery-surface={
+                          adminCustomerDriverDetailsDriverInAppDisplayState.deliverySurface
+                        }
+                        data-admin-customer-driver-details-driver-in-app-send-external-send="false"
+                        data-admin-customer-driver-details-driver-in-app-send-loaded-reference={
+                          adminCustomerDriverDetailsDriverInAppDisplayState.loadedReference
+                        }
+                        data-admin-customer-driver-details-driver-in-app-send-no-provider-send="true"
+                        data-admin-customer-driver-details-driver-in-app-send-notification-status={
+                          adminCustomerDriverDetailsDriverInAppDisplayState.notificationStatus
+                        }
+                        disabled={!adminCustomerDriverDetailsDriverInAppCanSend}
+                        onClick={sendAdminCustomerDriverDetailsDriverInAppNotification}
+                        title={adminCustomerDriverDetailsDriverInAppActionLabel}
+                        type="button"
+                      >
+                        {adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
+                          ? "Sending In-App"
+                          : "Send Driver In-App"}
+                      </button>
                     </div>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:max-w-sm sm:justify-end">
@@ -31344,6 +31510,13 @@ export default function Home() {
                       title={adminCustomerDriverDetailsMultiChannelDisabledStatusTitle}
                     >
                       {adminCustomerDriverDetailsMultiChannelDisabledStatusText}
+                    </span>
+                    <span
+                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
+                      data-admin-customer-driver-details-driver-in-app-send-status="true"
+                      title={adminCustomerDriverDetailsDriverInAppDisplayState.message}
+                    >
+                      {adminCustomerDriverDetailsDriverInAppStatusText}
                     </span>
                     <span
                       className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"

@@ -4678,6 +4678,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer in-app read activation remains blocked until secure customer auth/portal proof is separately approved.
 - Provider sends remain separate and not live.
 
+### Driver In-App Notification Compact Admin Button Lock
+- This is a bounded runtime implementation in the existing Customer Copy section.
+- It reuses the existing compact Customer Copy action row and does not add a new UI sector, card, provider-send panel, route, helper, or shim.
+- The compact button label is `Send Driver In-App`.
+- The button is placed beside the existing Customer Copy review actions for Email, WhatsApp, and SMS.
+- The button is admin-selected only and sends no automatic fallback, no automatic multi-channel blast, and no provider message.
+- The button requires a loaded saved booking reference and an active saved driver job link for that booking.
+- The driver target is the currently selected booking's active driver job link; no free-form driver selection is introduced.
+- The first message template is fixed: safe title `Dispatch update` and safe message `Please review this assigned trip in your Driver Job page.`
+- The created notification uses `delivery_surface: "driver_app"`, `notification_type: "trip_update"`, `notification_status: "queued"`, `priority: "normal"`, and `workflow_area: "driver_app_updates"`.
+- The click action uses the existing `POST /api/admin-customer-driver-app-notifications` route and existing `lib/customer-driver-app-notification-persistence.ts` boundary.
+- The route remains behind the existing admin/dispatcher boundary and admin persistence gate.
+- Customer in-app notification write/read remains blocked until customer auth/portal proof is separately approved.
+- No free-text message body, template menu, batch send, retry, polling, scheduler, fallback, or blast is introduced.
+- No Email, Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, provider-send, or external-call path is introduced.
+- No env change, deploy, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/customer_rates change, `driver_payout_rules` change, payout/payment/PDF/billing/invoice change, auth/session/cookie activation, OTS/photo/storage change, calendar change, UI sector/card expansion, or shim change is included.
+- Driver-visible in-app content remains forbidden from exposing customer price, pricing, billing, invoice/payment, payment/PDF, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, internal/admin/finance notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, live location, and OTS photo/storage unless separately approved.
+- Guard: `scripts/test-driver-in-app-notification-admin-button-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking + Driver Details Message Payload Safety Contract Lock
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.

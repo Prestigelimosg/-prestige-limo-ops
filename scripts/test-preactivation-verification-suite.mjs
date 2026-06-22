@@ -575,6 +575,10 @@ const guardChecks = [
     script: "scripts/test-driver-in-app-notification-staging-evidence-contract-guard.mjs",
   },
   {
+    label: "Driver In-App Notification admin button guard",
+    script: "scripts/test-driver-in-app-notification-admin-button-guard.mjs",
+  },
+  {
     label: "customer booking driver-details message payload safety guard",
     script: "scripts/test-customer-booking-driver-details-message-payload-safety-guard.mjs",
   },

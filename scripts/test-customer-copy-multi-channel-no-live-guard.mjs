@@ -232,7 +232,7 @@ const emailHandlerSource = extractBetween(
 const messageHandlerSource = extractBetween(
   appSource,
   "async function checkAdminCustomerDriverDetailsMessageDisabledSend",
-  "const adminCustomerDriverDetailsEmailDisabledSendStateMatchesReference",
+  "async function sendAdminCustomerDriverDetailsDriverInAppNotification",
   "Customer Copy WhatsApp/SMS disabled-send handler",
 );
 

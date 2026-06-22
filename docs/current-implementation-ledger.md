@@ -4655,6 +4655,29 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver In-App Notification staging evidence must remain separate from customer in-app read activation, customer auth/portal activation, Email, Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live location, driver GPS, OTS/photo/storage, calendar, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.
 - This guard adds `scripts/test-driver-in-app-notification-staging-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver In-App Notification One-Row Staging Evidence Record
+- Evidence reference: `DRIVER-INAPP-STAGING-20260622075329`.
+- Staging target commit: `bf688cf Guard driver in-app notification evidence contract`.
+- A bounded Driver In-App Notification staging evidence pass completed once through the existing admin notification and driver job token read paths.
+- The evidence used a staging-safe synthetic booking reference and a temporary staging driver job link; no real customer data was used.
+- Exactly one safe `driver_app` notification row was written with queued status and trip-update type.
+- The Driver App Updates read path was verified through `GET /api/driver-job/[token]/notifications`.
+- The evidence row appeared through the driver token-scoped read path only.
+- The evidence row was cleaned up by exact evidence reference and staging booking reference.
+- Post-cleanup proof showed zero matching notification rows remained.
+- The temporary driver job link was cleaned up after the read proof.
+- Post-cleanup proof showed zero matching temporary driver job links remained.
+- Admin/dispatcher boundary proof returned blocked HTTP 403 for anonymous access.
+- Customer notification read boundary proof returned blocked HTTP 403.
+- Unsafe payload proof returned blocked HTTP 400.
+- No provider sends occurred: Email, Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, and FlightAware were not called.
+- No persistent env change occurred.
+- No production deploy or production activation occurred.
+- No parser, Save Booking, `/api/admin-saved-bookings`, pricing/rates/customer_rates, `driver_payout_rules`, payout/payment/PDF/billing/invoice, auth/session/cookie, live-location, OTS/photo/storage, calendar, UI sector/card/button, or shim change occurred.
+- No secrets, tokens, row IDs, env values, API keys, DB URLs, real customer data, or provider payloads were printed or recorded.
+- Customer in-app read activation remains blocked until secure customer auth/portal proof is separately approved.
+- Provider sends remain separate and not live.
+
 ### Customer Booking + Driver Details Message Payload Safety Contract Lock
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.

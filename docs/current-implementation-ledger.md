@@ -4733,6 +4733,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver in-app evidence/runtime, Google Maps evidence/runtime, and OneMap retirement do not unlock customer portal read or customer in-app notification runtime.
 - This guard adds `scripts/test-customer-portal-saved-bookings-read-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Portal Saved-Bookings Staging Evidence Runner Guard Lock
+- This is a docs/test-only guard plus a manual future runner for a separately approved Customer Portal saved-bookings staging evidence pass.
+- The runner is `scripts/run-customer-portal-saved-bookings-staging-read-evidence.mjs`.
+- The runner is not executed by this commit, and customer portal saved-bookings evidence remains not run.
+- The runner requires `PRESTIGE_CUSTOMER_PORTAL_SAVED_BOOKINGS_READ_EVIDENCE_APPROVED=customer-portal-saved-bookings-staging-read-approved` before any phase runs.
+- The runner requires `PRESTIGE_CUSTOMER_PORTAL_SAVED_BOOKINGS_READ_EVIDENCE_PHASE` to be one of `pre-window`, `read-window`, or `post-rollback`.
+- The runner is staging-only and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_CUSTOMER_PORTAL_SAVED_BOOKINGS_STAGING_TARGET_URL` or its default.
+- The runner does not open gates, close gates, edit Vercel env, deploy, or print env values.
+- The `read-window` phase requires the existing customer saved-bookings and customer portal session gates to already be open in staging.
+- The `read-window` phase requires env names only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_MODE`, and `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_TOKEN`.
+- The `pre-window` and `post-rollback` phases perform blocked/no-read route proof only and do not write to the database.
+- The `read-window` phase creates exactly one staging-safe fake customer, one matching customer access account, one matching saved booking, and one safe audit event.
+- The `read-window` phase reads the saved booking through the guarded customer portal session and `/api/customer-saved-bookings` route.
+- The `read-window` phase verifies anonymous, missing-session, wrong-session, cross-origin, unmatched-reference, safe-projection, wrong-auth-user no-account, and audit proof.
+- The runner cleans up the exact staging evidence customer, access account, booking, and audit event, then verifies zero matching rows remain.
+- The runner must not use real customer data, notification row writes, customer in-app runtime/buttons, provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, parser, Save Booking, `/api/admin-saved-bookings`, shims, or production activation.
+- The runner output is normalized and must not print secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data.
+- A future evidence pass still requires separate owner approval for staging env/gate/deploy window, runner execution, rollback/disable proof, docs evidence recording, and staging promotion.
+- This guard adds `scripts/test-customer-portal-saved-bookings-staging-read-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking + Driver Details Message Payload Safety Contract Lock
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.

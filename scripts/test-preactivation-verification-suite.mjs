@@ -278,6 +278,10 @@ const guardChecks = [
     script: "scripts/test-customer-portal-saved-bookings-read-evidence-contract-guard.mjs",
   },
   {
+    label: "Customer Portal saved-bookings staging read evidence runner guard",
+    script: "scripts/test-customer-portal-saved-bookings-staging-read-evidence-runner-guard.mjs",
+  },
+  {
     label: "public driver job action surface guard",
     script: "scripts/test-public-driver-job-action-surface-guard.mjs",
   },

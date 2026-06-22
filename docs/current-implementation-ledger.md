@@ -4714,6 +4714,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lane does not activate auth, portal behavior, DB reads/writes, notification row writes, provider sends, UI, env changes, deploy, or production.
 - This guard adds `scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer In-App Notification Read Table/RLS Evidence Contract Guard Lock
+- This is a docs/test-only guard for a future separately approved Customer In-App Notification read/table-RLS evidence pass.
+- Customer In-App Notification runtime/read and customer in-app button remain blocked.
+- `GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` until the owner approves the bounded evidence window.
+- Future evidence requires table/RLS proof for `public.customer_driver_app_notification_outbox` before any customer-visible notification read can be considered.
+- Future evidence may create exactly one fake staging `customer_app` notification row and must clean it up.
+- Future evidence must prove anonymous, missing-session, wrong-session, wrong-customer, cross-origin, and wrong-referer paths are blocked.
+- Future evidence must prove customer row isolation so the fake customer sees only the fake `customer_app` notification row and cannot see another customer/account row.
+- Future evidence must prove safe audit/access logging without printing row IDs, auth user IDs, customer IDs, cookies, session tokens, JWTs, API keys, DB URLs, env values, or secrets.
+- Future evidence must prove cleanup/zero-row rollback and closed-gate/no-read behavior after the evidence window.
+- Customer-safe notification payload fields remain limited to delivery surface, notification type/status, priority, safe title, safe message, safe context, workflow area, safe booking reference/context, and created/updated timestamps.
+- Customer-visible in-app notification payloads must exclude pricing, payout, PayNow, payout preferences/comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/driver GPS unless separately approved, and OTS/photo/storage unless separately approved.
+- Customer Portal saved-bookings evidence completion does not unlock customer in-app notification runtime, `customer_app` notification writes, or a customer in-app button.
+- Driver in-app notification evidence/runtime and the Driver Dispatch `Send Driver In-App` button do not unlock customer in-app notification runtime, `customer_app` notification writes, or a customer in-app button.
+- No provider sends, Email/Resend, Telegram, WhatsApp, SMS, push, Google Maps, OneMap, FlightAware, live location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, parser, Save Booking, `/api/admin-saved-bookings`, shim, env change, deploy, production activation, or UI button is approved by this lock.
+- This guard adds `scripts/test-customer-in-app-notification-read-table-rls-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved bounded Customer Portal saved-bookings authenticated read evidence pass using one staging-safe customer account/reference.
 - This lock does not activate customer auth, customer portal live read, session creation, cookie creation, token creation, env changes, DB reads/writes, notification row writes, customer in-app runtime/buttons, provider sends, Google Maps/OneMap/FlightAware calls, deploy, or production activation.

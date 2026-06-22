@@ -3290,7 +3290,7 @@ async function runChromeTest() {
         "customer-whatsapp-copy",
         "driver-assignment",
         "driver-dispatch-copy",
-        "onemap-route-assist",
+        "map-route-assist",
         "driver-status-day-of-trip",
         "admin-lower-persistence",
       ];
@@ -3317,7 +3317,7 @@ async function runChromeTest() {
         "customer-whatsapp-copy",
         "driver-assignment",
         "driver-dispatch-copy",
-        "onemap-route-assist",
+        "map-route-assist",
         "driver-status-day-of-trip",
         "admin-lower-persistence",
       ],
@@ -13226,7 +13226,7 @@ async function runChromeTest() {
     assert.equal(dispatchDraftAfterDashboardAssignment.fields.flight, "SQ333");
     assert.equal(dispatchDraftAfterDashboardAssignment.fields.driverName, "TEST DRIVER CRM 20260516");
 
-    reporter.step("checking OneMap route assist API calls");
+    reporter.step("checking map route assist API calls");
 
     await evaluate(`(() => {
       const previousFetch = window.fetch.bind(window);
@@ -13285,7 +13285,7 @@ async function runChromeTest() {
               location_search: {
                 found: 1,
                 page: 1,
-                provider: "onemap_search",
+                provider: "google_maps_geocoding",
                 query,
                 results: [result],
                 total_pages: 1,
@@ -13319,7 +13319,7 @@ async function runChromeTest() {
               route_estimate: {
                 distance_meters: 22750,
                 duration_seconds: 2150,
-                provider: "onemap_routing",
+                provider: "google_maps_routes",
                 route_type: "drive",
               },
             }),
@@ -13331,11 +13331,11 @@ async function runChromeTest() {
       };
     })()`);
 
-    await setFieldValueByLabel("Pickup", "Raffles Hotel Singapore", "OneMap pickup field");
-    await setFieldValueByLabel("Drop-off", "Changi Airport T2", "OneMap drop-off field");
+    await setFieldValueByLabel("Pickup", "Raffles Hotel Singapore", "map pickup field");
+    await setFieldValueByLabel("Drop-off", "Changi Airport T2", "map drop-off field");
 
-    const clickedOneMapRouteEstimate = await evaluate(`(() => {
-      const button = document.querySelector("[data-admin-onemap-estimate-route='true']");
+    const clickedMapRouteEstimate = await evaluate(`(() => {
+      const button = document.querySelector("[data-admin-map-estimate-route='true']");
 
       if (!button || button.disabled) {
         return false;
@@ -13344,32 +13344,32 @@ async function runChromeTest() {
       button.click();
       return true;
     })()`);
-    assert.equal(clickedOneMapRouteEstimate, true, "Expected OneMap route estimate button to be clickable");
+    assert.equal(clickedMapRouteEstimate, true, "Expected map route estimate button to be clickable");
 
-    const oneMapRouteAssistState = await waitForCondition(
+    const mapRouteAssistState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
-          const section = document.querySelector("[data-admin-onemap-route-assist='true']");
+          const section = document.querySelector("[data-admin-map-route-assist='true']");
 
           return {
             boundary:
-              section?.querySelector("[data-admin-onemap-boundary='true']")
+              section?.querySelector("[data-admin-map-boundary='true']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             feedback:
-              section?.querySelector("[data-admin-onemap-feedback='true']")
+              section?.querySelector("[data-admin-map-feedback='true']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             pickupResult:
-              section?.querySelector("[data-admin-onemap-location-result='pickup']")
+              section?.querySelector("[data-admin-map-location-result='pickup']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             dropoffResult:
-              section?.querySelector("[data-admin-onemap-location-result='dropoff']")
+              section?.querySelector("[data-admin-map-location-result='dropoff']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             routeResult:
-              section?.querySelector("[data-admin-onemap-route-result='true']")
+              section?.querySelector("[data-admin-map-route-result='true']")
                 ?.textContent.replace(/\\s+/g, " ")
                 .trim() || "",
             locationRequests: window.__prestigeMapLocationSearchRequests || [],
@@ -13385,16 +13385,16 @@ async function runChromeTest() {
           : false;
       },
       10000,
-      "OneMap route assist estimate",
+      "map route assist estimate",
     );
 
-    assert.equal(oneMapRouteAssistState.pickupResult, "RAFFLES HOTEL SINGAPORE");
-    assert.equal(oneMapRouteAssistState.dropoffResult, "CHANGI AIRPORT TERMINAL 2");
-    assert.match(oneMapRouteAssistState.routeResult, /22\.8 km/);
-    assert.match(oneMapRouteAssistState.routeResult, /36 min/);
-    assert.match(oneMapRouteAssistState.routeResult, /onemap_routing/);
+    assert.equal(mapRouteAssistState.pickupResult, "RAFFLES HOTEL SINGAPORE");
+    assert.equal(mapRouteAssistState.dropoffResult, "CHANGI AIRPORT TERMINAL 2");
+    assert.match(mapRouteAssistState.routeResult, /22\.8 km/);
+    assert.match(mapRouteAssistState.routeResult, /36 min/);
+    assert.match(mapRouteAssistState.routeResult, /google_maps_routes/);
     assert.deepEqual(
-      oneMapRouteAssistState.locationRequests.map((request) => ({
+      mapRouteAssistState.locationRequests.map((request) => ({
         hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
         method: request.method,
         purpose: request.headers["x-prestige-admin-purpose"] || "",
@@ -13420,20 +13420,20 @@ async function runChromeTest() {
           },
         },
       ],
-      "Expected OneMap location search to use guarded admin GETs for pickup and drop-off",
+      "Expected map location search to use guarded admin GETs for pickup and drop-off",
     );
     assert.deepEqual(
       {
         body: {
-          destination: oneMapRouteAssistState.routeRequests[0].body.destination,
-          origin: oneMapRouteAssistState.routeRequests[0].body.origin,
-          route_type: oneMapRouteAssistState.routeRequests[0].body.route_type,
+          destination: mapRouteAssistState.routeRequests[0].body.destination,
+          origin: mapRouteAssistState.routeRequests[0].body.origin,
+          route_type: mapRouteAssistState.routeRequests[0].body.route_type,
         },
         hasSessionTokenHeader: Boolean(
-          oneMapRouteAssistState.routeRequests[0].headers["x-prestige-admin-session-token"],
+          mapRouteAssistState.routeRequests[0].headers["x-prestige-admin-session-token"],
         ),
-        method: oneMapRouteAssistState.routeRequests[0].method,
-        purpose: oneMapRouteAssistState.routeRequests[0].headers["x-prestige-admin-purpose"] || "",
+        method: mapRouteAssistState.routeRequests[0].method,
+        purpose: mapRouteAssistState.routeRequests[0].headers["x-prestige-admin-purpose"] || "",
       },
       {
         body: {
@@ -13453,21 +13453,21 @@ async function runChromeTest() {
         method: "POST",
         purpose: "admin-booking-persistence",
       },
-      "Expected OneMap route estimate to POST safe coordinates through the guarded admin route",
+      "Expected map route estimate to POST safe coordinates through the guarded admin route",
     );
     assert.equal(
       /customer_price|billing|invoice|payment|paynow|driver_payout|payout|notification|parser|service_role|secret|token/i.test(
-        JSON.stringify(oneMapRouteAssistState.routeRequests.map((request) => request.body)),
+        JSON.stringify(mapRouteAssistState.routeRequests.map((request) => request.body)),
       ),
       false,
-      "Expected OneMap route estimate body to avoid private finance, notification, parser, and secret fields",
+      "Expected map route estimate body to avoid private finance, notification, parser, and secret fields",
     );
     assert.equal(
-      oneMapRouteAssistState.boundary.includes("No booking save") &&
-        oneMapRouteAssistState.boundary.includes("Supabase write") &&
-        oneMapRouteAssistState.boundary.includes("driver notification"),
+      mapRouteAssistState.boundary.includes("No booking save") &&
+        mapRouteAssistState.boundary.includes("Supabase write") &&
+        mapRouteAssistState.boundary.includes("driver notification"),
       true,
-      "Expected OneMap route assist boundary to state that route planning does not save bookings, write to Supabase, or notify drivers",
+      "Expected map route assist boundary to state that route planning does not save bookings, write to Supabase, or notify drivers",
     );
 
     await clickTab("Dashboard", "Operations Dashboard");
@@ -20026,9 +20026,13 @@ async function runChromeTest() {
       "Expected final Ritz-Carlton to appear once in the driver itinerary",
     );
     assert.match(dspState.customerCopy, /Service: Hourly/);
-    assert.match(dspState.customerCopy, /Pickup: Grand Hyatt/);
-    assert.match(dspState.customerCopy, /Itinerary:/);
-    assert.match(dspState.customerCopy, /1330hrs - Temasek Office, The Atrium@Orchard/);
+    assert.match(dspState.customerCopy, /Pickup location: Grand Hyatt/);
+    assert.match(dspState.customerCopy, /Drop-off location: Ritz-Carlton/);
+    assert.doesNotMatch(
+      dspState.customerCopy,
+      /Itinerary:|Temasek Office|Asia Square|60B Orchard|#37-01|018960/,
+      "Expected Customer Copy to omit route extras and internal itinerary details",
+    );
     assert.doesNotMatch(
       dspState.customerCopy,
       /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|DSP)\b/i,
@@ -20603,7 +20607,11 @@ async function runChromeTest() {
       liveLocationNoLinkPattern,
       "Expected MNG / Arrival Customer Copy never to include a live location link",
     );
-    assert.match(mngLiveLocationState.customerCopy, /Live Waypoint Arrival inside/);
+    assert.doesNotMatch(
+      mngLiveLocationState.customerCopy,
+      /Live Waypoint Arrival inside/,
+      "Expected Arrival Customer Copy to omit route extras",
+    );
     assert.match(mngLiveLocationState.customerCopy, /Passenger name: Live Passenger Arrival inside/);
 
     for (const bookingType of ["DEP", "TRF", "DSP"]) {

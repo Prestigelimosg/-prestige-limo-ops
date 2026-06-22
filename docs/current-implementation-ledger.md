@@ -4867,7 +4867,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Closed Telegram gate must not read `TELEGRAM_BOT_TOKEN`.
 - Closed Telegram gate must not call Telegram.
 - No OneMap call is approved in this lane.
-- OneMap must remain map/search/route estimate only, not the driver GPS source.
+- OneMap active admin map/search/route runtime is retired; any future OneMap reintroduction must remain separate from driver GPS and requires separate owner approval.
 - Admin/dispatcher boundary is required for any future start, stop, or live-location action.
 - Staging chat allowlist proof is required before any future Telegram evidence.
 - No public, customer, or driver route may trigger Telegram sends unless separately approved and guarded.
@@ -4886,7 +4886,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.
 - Staging target commit: `a6cd226 Guard driver location POB evidence contract`.
-- A bounded OneMap admin map/search/route estimate staging evidence pass was attempted once through the existing `scripts/run-admin-onemap-read-only-verification-phase3.mjs` runner.
+- A bounded OneMap admin map/search/route estimate staging evidence pass was attempted once through the then-existing `scripts/run-admin-onemap-read-only-verification-phase3.mjs` runner, which is now retired.
 - The evidence attempt used safe public-landmark scope only.
 - Location search used safe public-landmark scope and returned safe provider failure HTTP 502.
 - Route estimate used public landmarks only: RAFFLES HOTEL SINGAPORE to CHANGI AIRPORT TERMINAL 2, and returned safe provider failure HTTP 502.
@@ -4902,7 +4902,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No repo files changed during the evidence attempt.
 - No second OneMap call or retry was run.
 - Blocker: OneMap provider/token/endpoint readiness must be owner-verified before any future retry.
-- OneMap remains admin map/search/route estimate only and is still not the driver GPS source, Telegram/live-location source, provider-send surface, DB persistence surface, billing/payment/PDF surface, parser surface, Save Booking surface, `/api/admin-saved-bookings` surface, shim cleanup lane, UI expansion, or production activation.
+- OneMap was scoped to admin map/search/route estimate only during the blocked evidence attempt; after Google Maps evidence completion, active OneMap admin map runtime is retired and remains not the driver GPS source, Telegram/live-location source, provider-send surface, DB persistence surface, billing/payment/PDF surface, parser surface, Save Booking surface, `/api/admin-saved-bookings` surface, shim cleanup lane, UI expansion, or production activation.
 
 ### Google Maps Admin Map Evidence Contract Guard Lock
 
@@ -4967,6 +4967,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Final post-evidence staging deployment was run without a temporary session-token override so staging returned to the saved project environment with the map gates closed.
 - No database read/write, OneMap retry, driver GPS capture, live-location implementation, provider sends, Email/Resend/Telegram/WhatsApp/SMS sends, FlightAware call, auth activation, notification row write, OTS/photo/storage activation, calendar activation, scheduler/timer/polling/retry implementation, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/customer_rates change, `driver_payout_rules` change, payout/payment/PDF/billing/invoice activation, UI sector/card/button change, shim change, production deploy, or production activation occurred.
 - Customer in-app notification send button remains not implemented and blocked separately pending customer auth/portal read path plus table/RLS proof; this Google Maps evidence did not change customer in-app notification runtime.
+
+### OneMap Active Runtime Retirement Lock
+
+- OneMap active runtime/provider paths are retired after Google Maps staging evidence completion.
+- OneMap was parked after the safe HTTP 502 provider failure record.
+- OneMap is no longer the active or fallback admin map provider.
+- Google Maps remains the selected admin map/search/route provider.
+- Current admin map routes must not call OneMap under any gate or provider configuration.
+- `onemap_search` and `onemap_routing` provider values must fail closed as missing configuration with no provider call.
+- The obsolete OneMap read-only evidence runner is removed so OneMap evidence cannot be retried accidentally from the repo.
+- Admin map route-assist UI data attributes are provider-neutral `data-admin-map-*`; no new UI sector, card, or button is approved by this retirement lane.
+- No OneMap retry, OneMap call, OneMap token setup, OneMap endpoint setup, env change, deploy, DB read/write, provider send, auth activation, billing activation, production activation, or customer data use is approved by this retirement lane.
+- No Google Maps call was made in this retirement lane.
+- No customer data, real customer coordinates, DB write, provider send, Email/Resend/Telegram/WhatsApp/SMS send, auth/session/cookie work, billing/payment/PDF/payout activation, parser change, Save Booking change, `/api/admin-saved-bookings` change, customer in-app runtime activation, shim change, env change, manual deploy, or production activation occurred.
+- Future OneMap reintroduction requires separate owner approval, provider/token/endpoint readiness, a fresh contract guard, bounded staging evidence, and no secret exposure.
 
 ### Live location
 - Live location setup foundation.

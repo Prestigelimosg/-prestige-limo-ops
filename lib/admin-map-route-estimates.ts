@@ -6,7 +6,7 @@ import type { AdminDispatcherBoundaryContext } from "./admin-dispatcher-auth-bou
 export const adminMapRouteEstimateVersion = "stage-admin-map-route-estimate-v2";
 
 export type AdminMapRouteType = "cycle" | "drive" | "walk";
-export type AdminMapRouteEstimateProvider = "google_maps_routes" | "onemap_routing";
+export type AdminMapRouteEstimateProvider = "google_maps_routes";
 
 export type AdminMapRouteCoordinate = {
   label: string | null;
@@ -38,11 +38,10 @@ export type AdminMapRouteEstimateResult = {
 
 type UnknownRecord = Record<string, unknown>;
 
-const oneMapRoutingEndpoint = "https://www.onemap.gov.sg/api/public/routingsvc/route";
 const googleMapsRoutesEndpoint = "https://routes.googleapis.com/directions/v2:computeRoutes";
 const maxLocationLabelLength = 240;
 const maxBookingReferenceLength = 120;
-const maxOneMapResponseBytes = 120000;
+const maxMapProviderRouteResponseBytes = 120000;
 const singaporeLatitudeMin = 1.1;
 const singaporeLatitudeMax = 1.5;
 const singaporeLongitudeMin = 103.5;
@@ -170,13 +169,6 @@ function configValueOrNull(value: string | undefined) {
   return trimmed ? trimmed : null;
 }
 
-function readOneMapToken() {
-  return (
-    configValueOrNull(process.env.PRESTIGE_ONEMAP_ACCESS_TOKEN) ||
-    configValueOrNull(process.env.ONEMAP_ACCESS_TOKEN)
-  );
-}
-
 function readGoogleMapsApiKey() {
   return configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_API_KEY);
 }
@@ -184,7 +176,7 @@ function readGoogleMapsApiKey() {
 function selectedRouteEstimateProvider(): AdminMapRouteEstimateProvider | null {
   const provider = configValueOrNull(process.env.PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER);
 
-  return provider === "onemap_routing" || provider === "google_maps_routes" ? provider : null;
+  return provider === "google_maps_routes" ? provider : null;
 }
 
 function safeNonNegativeInteger(value: unknown) {
@@ -317,10 +309,6 @@ export function parseAdminMapRouteEstimatePayload(
   };
 }
 
-function formatCoordinate(coordinate: AdminMapRouteCoordinate) {
-  return `${coordinate.latitude},${coordinate.longitude}`;
-}
-
 function parseGoogleDurationSeconds(value: unknown) {
   if (typeof value === "number") {
     return safeNonNegativeInteger(value);
@@ -375,40 +363,10 @@ function normalizeGoogleRouteEstimate(
   };
 }
 
-function normalizeOneMapRouteEstimate(
-  input: AdminMapRouteEstimateInput,
-  value: unknown,
-): AdminBookingResult<AdminMapRouteEstimateResult> {
-  const record = asRecord(value);
-  const summary = asRecord(record.route_summary);
-  const distanceMeters = safeNonNegativeInteger(summary.total_distance);
-  const durationSeconds = safeNonNegativeInteger(summary.total_time);
-
-  if (distanceMeters === null || durationSeconds === null) {
-    return providerResponseFailure();
-  }
-
-  return {
-    data: {
-      distance_meters: distanceMeters,
-      duration_seconds: durationSeconds,
-      encoded_geometry: optionalSafeText(record.route_geometry, 50000),
-      provider: "onemap_routing",
-      route_type: input.route_type,
-      safe_route_context: {
-        ...input.safe_route_context,
-        route_status: "estimated",
-      },
-      version: adminMapRouteEstimateVersion,
-    },
-    ok: true,
-  };
-}
-
 async function readProviderJson(response: Response) {
   const text = await response.text();
 
-  if (text.length > maxOneMapResponseBytes) {
+  if (text.length > maxMapProviderRouteResponseBytes) {
     return null;
   }
 
@@ -447,72 +405,9 @@ export async function estimateAdminMapRoute(
     };
   }
 
-  if (provider === "google_maps_routes") {
-    const googleMapsApiKey = readGoogleMapsApiKey();
+  const googleMapsApiKey = readGoogleMapsApiKey();
 
-    if (!googleMapsApiKey) {
-      return {
-        error: safeMapRouteEstimateConfigError,
-        ok: false,
-        status: 503,
-      };
-    }
-
-    try {
-      const url =
-        configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_ROUTE_ENDPOINT) ||
-        googleMapsRoutesEndpoint;
-      const response = await fetch(url, {
-        body: JSON.stringify({
-          computeAlternativeRoutes: false,
-          destination: {
-            location: {
-              latLng: {
-                latitude: input.destination.latitude,
-                longitude: input.destination.longitude,
-              },
-            },
-          },
-          origin: {
-            location: {
-              latLng: {
-                latitude: input.origin.latitude,
-                longitude: input.origin.longitude,
-              },
-            },
-          },
-          routingPreference: "TRAFFIC_UNAWARE",
-          travelMode: googleTravelMode(input.route_type),
-          units: "METRIC",
-        }),
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": googleMapsApiKey,
-          "x-goog-fieldmask":
-            "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
-        },
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        return providerResponseFailure();
-      }
-
-      const providerJson = await readProviderJson(response);
-
-      if (!providerJson) {
-        return providerResponseFailure();
-      }
-
-      return normalizeGoogleRouteEstimate(input, providerJson);
-    } catch {
-      return providerResponseFailure();
-    }
-  }
-
-  const oneMapToken = readOneMapToken();
-
-  if (!oneMapToken) {
+  if (!googleMapsApiKey) {
     return {
       error: safeMapRouteEstimateConfigError,
       ok: false,
@@ -521,20 +416,39 @@ export async function estimateAdminMapRoute(
   }
 
   try {
-    const url = new URL(
-      configValueOrNull(process.env.PRESTIGE_ONEMAP_ROUTING_ENDPOINT) ||
-        oneMapRoutingEndpoint,
-    );
-
-    url.searchParams.set("start", formatCoordinate(input.origin));
-    url.searchParams.set("end", formatCoordinate(input.destination));
-    url.searchParams.set("routeType", input.route_type);
-
+    const url =
+      configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_ROUTE_ENDPOINT) ||
+      googleMapsRoutesEndpoint;
     const response = await fetch(url, {
+      body: JSON.stringify({
+        computeAlternativeRoutes: false,
+        destination: {
+          location: {
+            latLng: {
+              latitude: input.destination.latitude,
+              longitude: input.destination.longitude,
+            },
+          },
+        },
+        origin: {
+          location: {
+            latLng: {
+              latitude: input.origin.latitude,
+              longitude: input.origin.longitude,
+            },
+          },
+        },
+        routingPreference: "TRAFFIC_UNAWARE",
+        travelMode: googleTravelMode(input.route_type),
+        units: "METRIC",
+      }),
       headers: {
-        Authorization: oneMapToken,
+        "content-type": "application/json",
+        "x-goog-api-key": googleMapsApiKey,
+        "x-goog-fieldmask":
+          "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline",
       },
-      method: "GET",
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -547,7 +461,7 @@ export async function estimateAdminMapRoute(
       return providerResponseFailure();
     }
 
-    return normalizeOneMapRouteEstimate(input, providerJson);
+    return normalizeGoogleRouteEstimate(input, providerJson);
   } catch {
     return providerResponseFailure();
   }

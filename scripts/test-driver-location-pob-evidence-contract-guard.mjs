@@ -12,8 +12,8 @@ const driverStatusPersistenceContractPath =
   "scripts/test-driver-job-status-persistence-api-contract.mjs";
 const liveLocationSetupPath = "lib/admin-live-location-setup-foundation.ts";
 const liveLocationWindowPolicyPath = "lib/live-location-window-policy-setup-foundation.ts";
-const oneMapLocationSearchPath = "lib/admin-map-location-search.ts";
-const oneMapRouteEstimatePath = "lib/admin-map-route-estimates.ts";
+const mapLocationSearchPath = "lib/admin-map-location-search.ts";
+const mapRouteEstimatePath = "lib/admin-map-route-estimates.ts";
 
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
@@ -45,8 +45,8 @@ const [
   driverStatusPersistenceContract,
   liveLocationSetup,
   liveLocationWindowPolicy,
-  oneMapLocationSearch,
-  oneMapRouteEstimate,
+  mapLocationSearch,
+  mapRouteEstimate,
 ] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
@@ -56,8 +56,8 @@ const [
   readFile(driverStatusPersistenceContractPath, "utf8"),
   readFile(liveLocationSetupPath, "utf8"),
   readFile(liveLocationWindowPolicyPath, "utf8"),
-  readFile(oneMapLocationSearchPath, "utf8"),
-  readFile(oneMapRouteEstimatePath, "utf8"),
+  readFile(mapLocationSearchPath, "utf8"),
+  readFile(mapRouteEstimatePath, "utf8"),
 ]);
 
 const evidenceSection = sectionBetween(
@@ -93,7 +93,7 @@ for (const phrase of [
   "Closed Telegram gate must not read `TELEGRAM_BOT_TOKEN`.",
   "Closed Telegram gate must not call Telegram.",
   "No OneMap call is approved in this lane.",
-  "OneMap must remain map/search/route estimate only, not the driver GPS source.",
+  "OneMap active admin map/search/route runtime is retired; any future OneMap reintroduction must remain separate from driver GPS and requires separate owner approval.",
   "Admin/dispatcher boundary is required for any future start, stop, or live-location action.",
   "Staging chat allowlist proof is required before any future Telegram evidence.",
   "No public, customer, or driver route may trigger Telegram sends unless separately approved and guarded.",
@@ -229,17 +229,33 @@ for (const forbiddenPattern of [
 for (const fragment of [
   "PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED",
   "PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER",
-  "onemap_search",
+  "google_maps_geocoding",
 ]) {
-  assertIncludes(oneMapLocationSearch, fragment, `OneMap location search fragment ${fragment}`);
+  assertIncludes(mapLocationSearch, fragment, `map location search fragment ${fragment}`);
 }
 
 for (const fragment of [
   "PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED",
   "PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER",
-  "onemap_routing",
+  "google_maps_routes",
 ]) {
-  assertIncludes(oneMapRouteEstimate, fragment, `OneMap route estimate fragment ${fragment}`);
+  assertIncludes(mapRouteEstimate, fragment, `map route estimate fragment ${fragment}`);
+}
+
+for (const retiredFragment of [
+  "onemap_search",
+  "onemap_routing",
+  "PRESTIGE_ONEMAP_ACCESS_TOKEN",
+  "ONEMAP_ACCESS_TOKEN",
+  "PRESTIGE_ONEMAP_SEARCH_ENDPOINT",
+  "PRESTIGE_ONEMAP_ROUTING_ENDPOINT",
+  "onemap.gov",
+]) {
+  assertExcludes(
+    `${mapLocationSearch}\n${mapRouteEstimate}`,
+    retiredFragment,
+    `retired OneMap map helper fragment ${retiredFragment}`,
+  );
 }
 
 console.log("Driver Location Source + POB Status evidence contract guard passed");

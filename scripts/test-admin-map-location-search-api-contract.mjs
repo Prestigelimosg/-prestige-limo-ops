@@ -9,11 +9,12 @@ const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const disabledLocationSearchError =
   "Admin map location search is not enabled on this server.";
-const serverSessionToken = "mock-admin-onemap-location-search-session-token";
+const configLocationSearchError =
+  "Admin map location search configuration is not ready.";
+const serverSessionToken = "mock-admin-map-location-search-session-token";
 const googleMapsKeySentinel = "GOOGLE_MAPS_LOCATION_SEARCH_SENTINEL";
-const oneMapTokenSentinel = "ONEMAP_ACCESS_TOKEN_LOCATION_SEARCH_SENTINEL";
 const safeApiLeakPattern =
-  /ONEMAP_ACCESS_TOKEN_LOCATION_SEARCH_SENTINEL|mock-admin-onemap-location-search-session-token|service_role|server-only|server_only|stack|sql|secret|key|createClient/i;
+  /GOOGLE_MAPS_LOCATION_SEARCH_SENTINEL|mock-admin-map-location-search-session-token|service_role|server-only|server_only|stack|sql|secret|key|createClient/i;
 const unsafeLocationSearchLeakPattern =
   /contact_phone|contact_email|passenger|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
@@ -23,7 +24,6 @@ const sourceFiles = [
   "app/api/admin-map-location-search/route.ts",
 ];
 const originalEnv = {
-  ONEMAP_ACCESS_TOKEN: process.env.ONEMAP_ACCESS_TOKEN,
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED,
   PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL:
@@ -41,8 +41,6 @@ const originalEnv = {
   PRESTIGE_GOOGLE_MAPS_API_KEY: process.env.PRESTIGE_GOOGLE_MAPS_API_KEY,
   PRESTIGE_GOOGLE_MAPS_SEARCH_ENDPOINT:
     process.env.PRESTIGE_GOOGLE_MAPS_SEARCH_ENDPOINT,
-  PRESTIGE_ONEMAP_ACCESS_TOKEN: process.env.PRESTIGE_ONEMAP_ACCESS_TOKEN,
-  PRESTIGE_ONEMAP_SEARCH_ENDPOINT: process.env.PRESTIGE_ONEMAP_SEARCH_ENDPOINT,
 };
 const originalFetch = globalThis.fetch;
 
@@ -96,7 +94,7 @@ async function writeMockModules(tempDir) {
 }
 
 async function loadHarness() {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-onemap-location-search-"));
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-map-location-search-"));
 
   await writeMockModules(tempDir);
 
@@ -115,22 +113,6 @@ async function loadHarness() {
 
 function enabledEnv(overrides = {}) {
   return {
-    ONEMAP_ACCESS_TOKEN: oneMapTokenSentinel,
-    PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
-    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "OneMap Location Search Test Admin",
-    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
-    PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
-    PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
-    PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED: "true",
-    PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER: "onemap_search",
-    PRESTIGE_ONEMAP_SEARCH_ENDPOINT:
-      "https://onemap-location-search-contract.test/elastic/search",
-    ...overrides,
-  };
-}
-
-function googleEnabledEnv(overrides = {}) {
-  return {
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
     PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Google Maps Location Search Test Admin",
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
@@ -147,14 +129,13 @@ function googleEnabledEnv(overrides = {}) {
 
 function disabledEnv() {
   return {
-    ONEMAP_ACCESS_TOKEN: oneMapTokenSentinel,
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
-    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "OneMap Location Search Test Admin",
+    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Google Maps Location Search Test Admin",
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
     PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED: undefined,
-    PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER: "onemap_search",
+    PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER: "google_maps_geocoding",
   };
 }
 
@@ -189,21 +170,25 @@ function assertNoLeaks(value, label) {
 
 function installFetchMock({
   payload = {
-    found: 1,
-    pageNum: 1,
     results: [
       {
-        ADDRESS: "640 ROWELL ROAD SINGAPORE 200640",
-        BLK_NO: "640",
-        BUILDING: "NIL",
-        LATITUDE: "1.30743547948389",
-        LONGITUDE: "103.854713903431",
-        POSTAL: "200640",
-        ROAD_NAME: "ROWELL ROAD",
-        SEARCHVAL: "640 ROWELL ROAD SINGAPORE 200640",
+        address_components: [
+          {
+            long_name: "189673",
+            short_name: "189673",
+            types: ["postal_code"],
+          },
+        ],
+        formatted_address: "1 Beach Road, Singapore 189673",
+        geometry: {
+          location: {
+            lat: 1.295526,
+            lng: 103.854331,
+          },
+        },
       },
     ],
-    totalNumPages: 1,
+    status: "OK",
   },
   status = 200,
 } = {}) {
@@ -241,30 +226,30 @@ try {
     "stage-admin-map-location-search-v2",
   );
 
-  assert.deepEqual(
-    locations.parseAdminMapLocationSearchParams(
-      new URLSearchParams("query=200640&page=2"),
-    ),
-    {
-      data: {
-        page: 2,
-        query: "200640",
-        safe_route_context: {
-          source: "admin_map_location_search",
-        },
-      },
-      ok: true,
-    },
-  );
+  const locationHelperSource = await readFile("lib/admin-map-location-search.ts", "utf8");
+
+  for (const retiredFragment of [
+    "onemap_search",
+    "PRESTIGE_ONEMAP_ACCESS_TOKEN",
+    "ONEMAP_ACCESS_TOKEN",
+    "PRESTIGE_ONEMAP_SEARCH_ENDPOINT",
+    "onemap.gov",
+  ]) {
+    assert.equal(
+      locationHelperSource.includes(retiredFragment),
+      false,
+      `location helper must not keep retired OneMap fragment ${retiredFragment}`,
+    );
+  }
 
   assert.deepEqual(
     locations.parseAdminMapLocationSearchParams(
-      new URLSearchParams("searchVal=Revenue%20House&pageNum=01"),
+      new URLSearchParams("query=Raffles%20Hotel%20Singapore&page=1"),
     ),
     {
       data: {
         page: 1,
-        query: "Revenue House",
+        query: "Raffles Hotel Singapore",
         safe_route_context: {
           source: "admin_map_location_search",
         },
@@ -290,7 +275,7 @@ try {
       "query=91234567",
       "Admin map location search query is malformed.",
     ],
-    ["bad page", "query=200640&page=0", "Admin map location search page is malformed."],
+    ["bad page", "query=Raffles%20Hotel&page=0", "Admin map location search page is malformed."],
   ]) {
     const parsed = locations.parseAdminMapLocationSearchParams(new URLSearchParams(params));
 
@@ -305,7 +290,7 @@ try {
   const disabledFetchCalls = installFetchMock();
   const disabledResult = await readRouteResponse(
     await route.GET(
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: sessionHeaders(),
       }),
     ),
@@ -316,13 +301,13 @@ try {
     error: disabledLocationSearchError,
     ok: false,
   });
-  assert.equal(disabledFetchCalls.length, 0, "disabled route should not call OneMap");
+  assert.equal(disabledFetchCalls.length, 0, "disabled route should not call Google Maps");
   assertNoLeaks(disabledResult, "disabled response should stay safe");
 
   for (const [label, request] of [
     [
       "missing admin purpose",
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: {
           referer: "http://localhost/",
           "x-prestige-admin-session-token": serverSessionToken,
@@ -331,7 +316,7 @@ try {
     ],
     [
       "customer page referer",
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: sessionHeaders({
           referer: "http://localhost/my-bookings",
         }),
@@ -339,7 +324,7 @@ try {
     ],
     [
       "driver page referer",
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: sessionHeaders({
           referer: "http://localhost/driver-job-demo",
         }),
@@ -347,13 +332,13 @@ try {
     ],
     [
       "missing session token",
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: adminHeaders(),
       }),
     ],
     [
       "wrong session token",
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: sessionHeaders({
           "x-prestige-admin-session-token": "wrong-token",
         }),
@@ -369,7 +354,7 @@ try {
       error: routeBlockedMessage,
       ok: false,
     });
-    assert.equal(blockedFetchCalls.length, 0, `${label}: expected no OneMap call`);
+    assert.equal(blockedFetchCalls.length, 0, `${label}: expected no Google Maps call`);
     assertNoLeaks(result, `${label}: response should stay safe`);
   }
 
@@ -378,7 +363,7 @@ try {
   const driverRoleFetchCalls = installFetchMock();
   const driverRoleResult = await readRouteResponse(
     await route.GET(
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: sessionHeaders(),
       }),
     ),
@@ -389,133 +374,65 @@ try {
     error: routeBlockedMessage,
     ok: false,
   });
-  assert.equal(driverRoleFetchCalls.length, 0, "driver role should not call OneMap");
+  assert.equal(driverRoleFetchCalls.length, 0, "driver role should not call Google Maps");
   assertNoLeaks(driverRoleResult, "driver role response should stay safe");
 
-  setEnv(enabledEnv());
+  setEnv(enabledEnv({ PRESTIGE_GOOGLE_MAPS_API_KEY: undefined }));
 
-  const fetchCalls = installFetchMock();
-  const searchResult = await readRouteResponse(
+  const missingGoogleKeyFetchCalls = installFetchMock();
+  const missingGoogleKeyResult = await readRouteResponse(
     await route.GET(
-      new Request("http://localhost/api/admin-map-location-search?query=200640&page=1", {
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: sessionHeaders(),
       }),
     ),
   );
 
-  assert.equal(searchResult.status, 200);
-  assert.deepEqual(searchResult.body, {
-    location_search: {
-      found: 1,
-      page: 1,
-      provider: "onemap_search",
-      query: "200640",
-      results: [
-        {
-          address: "640 ROWELL ROAD SINGAPORE 200640",
-          block_no: "640",
-          building: null,
-          label: "640 ROWELL ROAD SINGAPORE 200640",
-          latitude: 1.30743547948389,
-          longitude: 103.854713903431,
-          postal: "200640",
-          road_name: "ROWELL ROAD",
-        },
-      ],
-      safe_route_context: {
-        search_status: "loaded",
-        source: "admin_map_location_search",
-      },
-      total_pages: 1,
-      version: "stage-admin-map-location-search-v2",
-    },
-    ok: true,
-  });
-  assert.equal(fetchCalls.length, 1);
-  assert.equal(
-    fetchCalls[0].url,
-    "https://onemap-location-search-contract.test/elastic/search",
-  );
-  assert.equal(fetchCalls[0].method, "GET");
-  assert.deepEqual(fetchCalls[0].searchParams, {
-    getAddrDetails: "Y",
-    pageNum: "1",
-    returnGeom: "Y",
-    searchVal: "200640",
-  });
-  assert.equal(fetchCalls[0].headers.authorization, oneMapTokenSentinel);
-  assertNoLeaks(searchResult, "OneMap location search response should stay safe");
-
-  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
-
-  const dispatcherFetchCalls = installFetchMock({
-    payload: {
-      found: 0,
-      pageNum: 2,
-      results: [],
-      totalNumPages: 0,
-    },
-  });
-  const dispatcherResult = await readRouteResponse(
-    await route.GET(
-      new Request("http://localhost/api/admin-map-location-search?q=No%20matching%20address&page=2", {
-        headers: sessionHeaders(),
-      }),
-    ),
-  );
-
-  assert.equal(dispatcherResult.status, 200);
-  assert.deepEqual(dispatcherResult.body.location_search, {
-    found: 0,
-    page: 2,
-    provider: "onemap_search",
-    query: "No matching address",
-    results: [],
-    safe_route_context: {
-      search_status: "loaded",
-      source: "admin_map_location_search",
-    },
-    total_pages: 0,
-    version: "stage-admin-map-location-search-v2",
-  });
-  assert.equal(dispatcherFetchCalls.length, 1);
-  assert.deepEqual(dispatcherFetchCalls[0].searchParams, {
-    getAddrDetails: "Y",
-    pageNum: "2",
-    returnGeom: "Y",
-    searchVal: "No matching address",
-  });
-  assertNoLeaks(dispatcherResult, "dispatcher OneMap location search response should stay safe");
-
-  setEnv(enabledEnv({ ONEMAP_ACCESS_TOKEN: undefined, PRESTIGE_ONEMAP_ACCESS_TOKEN: undefined }));
-
-  const missingTokenFetchCalls = installFetchMock();
-  const missingTokenResult = await readRouteResponse(
-    await route.GET(
-      new Request("http://localhost/api/admin-map-location-search?query=200640", {
-        headers: sessionHeaders(),
-      }),
-    ),
-  );
-
-  assert.equal(missingTokenResult.status, 503);
-  assert.deepEqual(missingTokenResult.body, {
-    error: "Admin map location search configuration is not ready.",
+  assert.equal(missingGoogleKeyResult.status, 503);
+  assert.deepEqual(missingGoogleKeyResult.body, {
+    error: configLocationSearchError,
     ok: false,
   });
-  assert.equal(missingTokenFetchCalls.length, 0, "missing token should not call OneMap");
-  assertNoLeaks(missingTokenResult, "missing token response should stay safe");
+  assert.equal(
+    missingGoogleKeyFetchCalls.length,
+    0,
+    "missing Google key should not call Google Maps",
+  );
+  assertNoLeaks(missingGoogleKeyResult, "missing Google key response should stay safe");
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER: "onemap_search" }));
+
+  const retiredProviderFetchCalls = installFetchMock();
+  const retiredProviderResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(retiredProviderResult.status, 503);
+  assert.deepEqual(retiredProviderResult.body, {
+    error: configLocationSearchError,
+    ok: false,
+  });
+  assert.equal(
+    retiredProviderFetchCalls.length,
+    0,
+    "retired OneMap provider config should not call a provider",
+  );
+  assertNoLeaks(retiredProviderResult, "retired OneMap provider response should stay safe");
 
   setEnv(enabledEnv());
 
   for (const [label, mockOptions] of [
-    ["provider error body", { payload: { error: "Authentication token missing.", results: [] } }],
+    ["provider error body", { payload: { results: [], status: "REQUEST_DENIED" } }],
     ["bad provider status", { payload: {}, status: 429 }],
   ]) {
     const badProviderFetchCalls = installFetchMock(mockOptions);
     const badProviderResult = await readRouteResponse(
       await route.GET(
-        new Request("http://localhost/api/admin-map-location-search?query=200640", {
+        new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
           headers: sessionHeaders(),
         }),
       ),
@@ -530,31 +447,9 @@ try {
     assertNoLeaks(badProviderResult, `${label}: provider failure response should stay safe`);
   }
 
-  setEnv(googleEnabledEnv());
+  setEnv(enabledEnv());
 
-  const googleFetchCalls = installFetchMock({
-    payload: {
-      results: [
-        {
-          address_components: [
-            {
-              long_name: "189673",
-              short_name: "189673",
-              types: ["postal_code"],
-            },
-          ],
-          formatted_address: "1 Beach Road, Singapore 189673",
-          geometry: {
-            location: {
-              lat: 1.295526,
-              lng: 103.854331,
-            },
-          },
-        },
-      ],
-      status: "OK",
-    },
-  });
+  const googleFetchCalls = installFetchMock();
   const googleSearchResult = await readRouteResponse(
     await route.GET(
       new Request(
@@ -612,29 +507,6 @@ try {
     "Google geocoding request should not send token headers",
   );
   assertNoLeaks(googleSearchResult, "Google Maps location search response should stay safe");
-
-  setEnv(googleEnabledEnv({ PRESTIGE_GOOGLE_MAPS_API_KEY: undefined }));
-
-  const missingGoogleKeyFetchCalls = installFetchMock();
-  const missingGoogleKeyResult = await readRouteResponse(
-    await route.GET(
-      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
-        headers: sessionHeaders(),
-      }),
-    ),
-  );
-
-  assert.equal(missingGoogleKeyResult.status, 503);
-  assert.deepEqual(missingGoogleKeyResult.body, {
-    error: "Admin map location search configuration is not ready.",
-    ok: false,
-  });
-  assert.equal(
-    missingGoogleKeyFetchCalls.length,
-    0,
-    "missing Google key should not call Google Maps",
-  );
-  assertNoLeaks(missingGoogleKeyResult, "missing Google key response should stay safe");
 } finally {
   restoreEnv();
   globalThis.fetch = originalFetch;

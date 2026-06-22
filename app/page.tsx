@@ -1662,7 +1662,7 @@ type AdminMapLocationSearchResultItem = {
 type AdminMapRouteEstimateResult = {
   distance_meters?: number | null;
   duration_seconds?: number | null;
-  provider?: "onemap_routing" | string | null;
+  provider?: "google_maps_routes" | string | null;
   route_type?: "cycle" | "drive" | "walk" | string | null;
 };
 
@@ -6154,7 +6154,7 @@ function adminMapRouteAssistFailureMessage(rawError: unknown, label = "Map route
     return `${label} is available only from the internal admin dashboard.`;
   }
 
-  if (/missing|required|malformed|invalid|unknown|no onemap match|no map match/.test(normalizedError)) {
+  if (/missing|required|malformed|invalid|unknown|no map match/.test(normalizedError)) {
     return `${label} details need review.`;
   }
 
@@ -27482,8 +27482,8 @@ export default function Home() {
             <section
               aria-label="Map Route Assist"
               className="order-[79] rounded-md border border-cyan-200 bg-cyan-50/70 p-3"
-              data-dispatch-workflow-step="onemap-route-assist"
-              data-admin-onemap-route-assist="true"
+              data-dispatch-workflow-step="map-route-assist"
+              data-admin-map-route-assist="true"
             >
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
@@ -27496,7 +27496,7 @@ export default function Home() {
                 </div>
                 <button
                   className="min-h-10 rounded-md border border-cyan-300 bg-white px-3 py-2 text-left text-sm font-semibold text-cyan-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                  data-admin-onemap-estimate-route="true"
+                  data-admin-map-estimate-route="true"
                   disabled={
                     adminMapRouteAssistAction !== null ||
                     !clean(booking.pickup) ||
@@ -27531,7 +27531,7 @@ export default function Home() {
                 ]).map((item) => (
                   <div
                     className="min-w-0 rounded-md border border-cyan-200 bg-white p-3 text-xs text-cyan-950"
-                    data-admin-onemap-location-card={item.field}
+                    data-admin-map-location-card={item.field}
                     key={item.field}
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -27539,14 +27539,14 @@ export default function Home() {
                         <p className="font-semibold">{item.label}</p>
                         <p
                           className="mt-1 break-words text-cyan-900"
-                          data-admin-onemap-location-query={item.field}
+                          data-admin-map-location-query={item.field}
                         >
                           {clean(item.value) || `${item.label} TBC`}
                         </p>
                       </div>
                       <button
                         className="min-h-9 rounded-md border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-left text-xs font-semibold text-cyan-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-admin-onemap-location-search={item.buttonData}
+                        data-admin-map-location-search={item.buttonData}
                         disabled={adminMapRouteAssistAction !== null || !clean(item.value)}
                         onClick={() => void resolveAdminMapLocation(item.field)}
                         type="button"
@@ -27558,7 +27558,7 @@ export default function Home() {
                     </div>
                     <p
                       className="mt-2 break-words font-semibold text-cyan-950"
-                      data-admin-onemap-location-result={item.field}
+                      data-admin-map-location-result={item.field}
                     >
                       {item.location
                         ? adminMapLocationLabel(item.location)
@@ -27567,7 +27567,7 @@ export default function Home() {
                     {item.location ? (
                       <p
                         className="mt-1 break-words text-cyan-900"
-                        data-admin-onemap-location-coordinate={item.field}
+                        data-admin-map-location-coordinate={item.field}
                       >
                         {Number(item.location.latitude).toFixed(6)},{" "}
                         {Number(item.location.longitude).toFixed(6)}
@@ -27579,7 +27579,7 @@ export default function Home() {
               {adminMapRouteEstimate ? (
                 <div
                   className="mt-3 grid gap-2 rounded-md border border-cyan-200 bg-white p-3 text-xs text-cyan-950 sm:grid-cols-3"
-                  data-admin-onemap-route-result="true"
+                  data-admin-map-route-result="true"
                 >
                   <p className="min-w-0 break-words">
                     <span className="block font-semibold uppercase text-cyan-700">Distance</span>
@@ -27600,14 +27600,14 @@ export default function Home() {
                   className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${statusClass(
                     adminMapRouteAssistMessage.tone,
                   )}`}
-                  data-admin-onemap-feedback="true"
+                  data-admin-map-feedback="true"
                 >
                   {adminMapRouteAssistMessage.text}
                 </p>
               ) : null}
               <p
                 className="mt-2 border-t border-cyan-200 pt-2 text-[11px] leading-4 text-cyan-900"
-                data-admin-onemap-boundary="true"
+                data-admin-map-boundary="true"
               >
                 Uses guarded admin map APIs only. No booking save, Supabase write, customer message, driver
                 notification, live location activation, invoice, PDF, payment, payout, or parser-learning behavior.

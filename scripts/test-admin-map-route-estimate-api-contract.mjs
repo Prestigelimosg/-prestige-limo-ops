@@ -9,11 +9,12 @@ const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const disabledMapRouteEstimateError =
   "Admin map route estimate is not enabled on this server.";
-const serverSessionToken = "mock-admin-onemap-route-estimate-session-token";
+const configMapRouteEstimateError =
+  "Admin map route estimate configuration is not ready.";
+const serverSessionToken = "mock-admin-map-route-estimate-session-token";
 const googleMapsKeySentinel = "GOOGLE_MAPS_ROUTE_ESTIMATE_SENTINEL";
-const oneMapTokenSentinel = "ONEMAP_ACCESS_TOKEN_ROUTE_ESTIMATE_SENTINEL";
 const safeApiLeakPattern =
-  /ONEMAP_ACCESS_TOKEN_ROUTE_ESTIMATE_SENTINEL|mock-admin-onemap-route-estimate-session-token|service_role|server-only|server_only|stack|sql|secret|key|createClient/i;
+  /GOOGLE_MAPS_ROUTE_ESTIMATE_SENTINEL|mock-admin-map-route-estimate-session-token|service_role|server-only|server_only|stack|sql|secret|key|createClient/i;
 const unsafeMapRouteEstimateLeakPattern =
   /contact_phone|contact_email|passenger|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
@@ -23,7 +24,6 @@ const sourceFiles = [
   "app/api/admin-map-route-estimates/route.ts",
 ];
 const originalEnv = {
-  ONEMAP_ACCESS_TOKEN: process.env.ONEMAP_ACCESS_TOKEN,
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED,
   PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL:
@@ -41,8 +41,6 @@ const originalEnv = {
   PRESTIGE_GOOGLE_MAPS_API_KEY: process.env.PRESTIGE_GOOGLE_MAPS_API_KEY,
   PRESTIGE_GOOGLE_MAPS_ROUTE_ENDPOINT:
     process.env.PRESTIGE_GOOGLE_MAPS_ROUTE_ENDPOINT,
-  PRESTIGE_ONEMAP_ACCESS_TOKEN: process.env.PRESTIGE_ONEMAP_ACCESS_TOKEN,
-  PRESTIGE_ONEMAP_ROUTING_ENDPOINT: process.env.PRESTIGE_ONEMAP_ROUTING_ENDPOINT,
 };
 const originalFetch = globalThis.fetch;
 
@@ -96,7 +94,7 @@ async function writeMockModules(tempDir) {
 }
 
 async function loadHarness() {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-onemap-route-estimate-"));
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-map-route-estimate-"));
 
   await writeMockModules(tempDir);
 
@@ -115,22 +113,6 @@ async function loadHarness() {
 
 function enabledEnv(overrides = {}) {
   return {
-    ONEMAP_ACCESS_TOKEN: oneMapTokenSentinel,
-    PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
-    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "OneMap Route Estimate Test Admin",
-    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
-    PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
-    PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
-    PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED: "true",
-    PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER: "onemap_routing",
-    PRESTIGE_ONEMAP_ROUTING_ENDPOINT:
-      "https://onemap-route-estimate-contract.test/routingsvc/route",
-    ...overrides,
-  };
-}
-
-function googleEnabledEnv(overrides = {}) {
-  return {
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
     PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Google Maps Route Estimate Test Admin",
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
@@ -147,14 +129,13 @@ function googleEnabledEnv(overrides = {}) {
 
 function disabledEnv() {
   return {
-    ONEMAP_ACCESS_TOKEN: oneMapTokenSentinel,
     PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
-    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "OneMap Route Estimate Test Admin",
+    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Google Maps Route Estimate Test Admin",
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
     PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED: undefined,
-    PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER: "onemap_routing",
+    PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER: "google_maps_routes",
   };
 }
 
@@ -175,16 +156,16 @@ function sessionHeaders(overrides = {}) {
 
 function routePayload(overrides = {}) {
   return {
-    booking_reference: "ONEMAP-ROUTE-ESTIMATE-TEST-001",
+    booking_reference: "GOOGLE-MAPS-ROUTE-TEST-001",
     destination: {
-      label: "HarbourFront Centre",
-      latitude: 1.2739864,
-      longitude: 103.8012642,
+      label: "Changi Airport Terminal 2",
+      latitude: 1.3554,
+      longitude: 103.9896,
     },
     origin: {
-      label: "Little India pickup",
-      latitude: 1.3081592,
-      longitude: 103.8551479,
+      label: "Raffles Hotel Singapore",
+      latitude: 1.295526,
+      longitude: 103.854331,
     },
     route_type: "drive",
     ...overrides,
@@ -206,17 +187,16 @@ function assertNoLeaks(value, label) {
 }
 
 function installFetchMock({
-  ok = true,
   payload = {
-    route_geometry: "{u`GktxxR?G",
-    route_summary: {
-      end_point: "destination",
-      start_point: "origin",
-      total_distance: 22750,
-      total_time: 2150,
-    },
-    status: 0,
-    status_message: "Found route between points",
+    routes: [
+      {
+        distanceMeters: 19020,
+        duration: "1680s",
+        polyline: {
+          encodedPolyline: "googleRoutePolyline",
+        },
+      },
+    ],
   },
   status = 200,
 } = {}) {
@@ -239,7 +219,6 @@ function installFetchMock({
         "content-type": "application/json",
       },
       status,
-      statusText: ok ? "OK" : "Provider failed",
     });
   };
 
@@ -253,21 +232,37 @@ try {
 
   assert.equal(estimates.adminMapRouteEstimateVersion, "stage-admin-map-route-estimate-v2");
 
+  const routeHelperSource = await readFile("lib/admin-map-route-estimates.ts", "utf8");
+
+  for (const retiredFragment of [
+    "onemap_routing",
+    "PRESTIGE_ONEMAP_ACCESS_TOKEN",
+    "ONEMAP_ACCESS_TOKEN",
+    "PRESTIGE_ONEMAP_ROUTING_ENDPOINT",
+    "onemap.gov",
+  ]) {
+    assert.equal(
+      routeHelperSource.includes(retiredFragment),
+      false,
+      `route estimate helper must not keep retired OneMap fragment ${retiredFragment}`,
+    );
+  }
+
   assert.deepEqual(estimates.parseAdminMapRouteEstimatePayload(routePayload()), {
     data: {
       destination: {
-        label: "HarbourFront Centre",
-        latitude: 1.2739864,
-        longitude: 103.8012642,
+        label: "Changi Airport Terminal 2",
+        latitude: 1.3554,
+        longitude: 103.9896,
       },
       origin: {
-        label: "Little India pickup",
-        latitude: 1.3081592,
-        longitude: 103.8551479,
+        label: "Raffles Hotel Singapore",
+        latitude: 1.295526,
+        longitude: 103.854331,
       },
       route_type: "drive",
       safe_route_context: {
-        booking_reference: "ONEMAP-ROUTE-ESTIMATE-TEST-001",
+        booking_reference: "GOOGLE-MAPS-ROUTE-TEST-001",
         source: "admin_map_route_estimate",
       },
     },
@@ -311,8 +306,8 @@ try {
       routePayload({
         origin: {
           label: "customer_price route",
-          latitude: 1.3081592,
-          longitude: 103.8551479,
+          latitude: 1.295526,
+          longitude: 103.854331,
         },
       }),
     ],
@@ -323,7 +318,7 @@ try {
         origin: {
           label: "Johor pickup",
           latitude: 1.6,
-          longitude: 103.8551479,
+          longitude: 103.854331,
         },
       }),
     ],
@@ -360,7 +355,7 @@ try {
     error: disabledMapRouteEstimateError,
     ok: false,
   });
-  assert.equal(disabledFetchCalls.length, 0, "disabled route should not call OneMap");
+  assert.equal(disabledFetchCalls.length, 0, "disabled route should not call Google Maps");
   assertNoLeaks(disabledResult, "disabled response should stay safe");
 
   for (const [label, request] of [
@@ -406,14 +401,14 @@ try {
       error: routeBlockedMessage,
       ok: false,
     });
-    assert.equal(blockedFetchCalls.length, 0, `${label}: expected no OneMap call`);
+    assert.equal(blockedFetchCalls.length, 0, `${label}: expected no Google Maps call`);
     assertNoLeaks(result, `${label}: response should stay safe`);
   }
 
-  setEnv(enabledEnv());
+  setEnv(enabledEnv({ PRESTIGE_GOOGLE_MAPS_API_KEY: undefined }));
 
-  const fetchCalls = installFetchMock();
-  const readResult = await readRouteResponse(
+  const missingGoogleKeyFetchCalls = installFetchMock();
+  const missingGoogleKeyResult = await readRouteResponse(
     await route.POST(
       new Request("http://localhost/api/admin-map-route-estimates", {
         body: JSON.stringify(routePayload()),
@@ -423,119 +418,52 @@ try {
     ),
   );
 
-  assert.equal(readResult.status, 200);
-  assert.deepEqual(readResult.body, {
-    ok: true,
-    route_estimate: {
-      distance_meters: 22750,
-      duration_seconds: 2150,
-      encoded_geometry: "{u`GktxxR?G",
-      provider: "onemap_routing",
-      route_type: "drive",
-      safe_route_context: {
-        booking_reference: "ONEMAP-ROUTE-ESTIMATE-TEST-001",
-        route_status: "estimated",
-        source: "admin_map_route_estimate",
-      },
-      version: "stage-admin-map-route-estimate-v2",
-    },
-  });
-  assert.equal(fetchCalls.length, 1);
-  assert.equal(
-    fetchCalls[0].url,
-    "https://onemap-route-estimate-contract.test/routingsvc/route",
-  );
-  assert.equal(fetchCalls[0].method, "GET");
-  assert.deepEqual(fetchCalls[0].searchParams, {
-    end: "1.2739864,103.8012642",
-    routeType: "drive",
-    start: "1.3081592,103.8551479",
-  });
-  assert.equal(fetchCalls[0].headers.authorization, oneMapTokenSentinel);
-  assertNoLeaks(readResult, "OneMap route estimate response should stay safe");
-
-  setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
-
-  const dispatcherFetchCalls = installFetchMock({
-    payload: {
-      route_summary: {
-        total_distance: 8020,
-        total_time: 920,
-      },
-    },
-  });
-  const dispatcherResult = await readRouteResponse(
-    await route.POST(
-      new Request("http://localhost/api/admin-map-route-estimates", {
-        body: JSON.stringify(
-          routePayload({
-            booking_reference: "",
-            destination: {
-              latitude: 1.2895,
-              longitude: 103.8631,
-            },
-            origin: {
-              latitude: 1.2816,
-              longitude: 103.8636,
-            },
-            route_type: "cycle",
-          }),
-        ),
-        headers: sessionHeaders(),
-        method: "POST",
-      }),
-    ),
-  );
-
-  assert.equal(dispatcherResult.status, 200);
-  assert.deepEqual(dispatcherResult.body.route_estimate, {
-    distance_meters: 8020,
-    duration_seconds: 920,
-    encoded_geometry: null,
-    provider: "onemap_routing",
-    route_type: "cycle",
-    safe_route_context: {
-      route_status: "estimated",
-      source: "admin_map_route_estimate",
-    },
-    version: "stage-admin-map-route-estimate-v2",
-  });
-  assert.equal(dispatcherFetchCalls.length, 1);
-  assert.deepEqual(dispatcherFetchCalls[0].searchParams, {
-    end: "1.2895,103.8631",
-    routeType: "cycle",
-    start: "1.2816,103.8636",
-  });
-  assertNoLeaks(dispatcherResult, "dispatcher OneMap route estimate response should stay safe");
-
-  setEnv(enabledEnv({ ONEMAP_ACCESS_TOKEN: undefined, PRESTIGE_ONEMAP_ACCESS_TOKEN: undefined }));
-
-  const missingTokenFetchCalls = installFetchMock();
-  const missingTokenResult = await readRouteResponse(
-    await route.POST(
-      new Request("http://localhost/api/admin-map-route-estimates", {
-        body: JSON.stringify(routePayload()),
-        headers: sessionHeaders(),
-        method: "POST",
-      }),
-    ),
-  );
-
-  assert.equal(missingTokenResult.status, 503);
-  assert.deepEqual(missingTokenResult.body, {
-    error: "Admin map route estimate configuration is not ready.",
+  assert.equal(missingGoogleKeyResult.status, 503);
+  assert.deepEqual(missingGoogleKeyResult.body, {
+    error: configMapRouteEstimateError,
     ok: false,
   });
-  assert.equal(missingTokenFetchCalls.length, 0, "missing token should not call OneMap");
-  assertNoLeaks(missingTokenResult, "missing token response should stay safe");
+  assert.equal(
+    missingGoogleKeyFetchCalls.length,
+    0,
+    "missing Google key should not call Google Maps",
+  );
+  assertNoLeaks(missingGoogleKeyResult, "missing Google key response should stay safe");
+
+  setEnv(enabledEnv({ PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER: "onemap_routing" }));
+
+  const retiredProviderFetchCalls = installFetchMock();
+  const retiredProviderResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-map-route-estimates", {
+        body: JSON.stringify(routePayload()),
+        headers: sessionHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(retiredProviderResult.status, 503);
+  assert.deepEqual(retiredProviderResult.body, {
+    error: configMapRouteEstimateError,
+    ok: false,
+  });
+  assert.equal(
+    retiredProviderFetchCalls.length,
+    0,
+    "retired OneMap provider config should not call a provider",
+  );
+  assertNoLeaks(retiredProviderResult, "retired OneMap provider response should stay safe");
 
   setEnv(enabledEnv());
 
   const badProviderFetchCalls = installFetchMock({
     payload: {
-      route_summary: {
-        total_time: 920,
-      },
+      routes: [
+        {
+          duration: "920s",
+        },
+      ],
     },
   });
   const badProviderResult = await readRouteResponse(
@@ -556,40 +484,13 @@ try {
   assert.equal(badProviderFetchCalls.length, 1);
   assertNoLeaks(badProviderResult, "provider failure response should stay safe");
 
-  setEnv(googleEnabledEnv());
+  setEnv(enabledEnv());
 
-  const googleRouteFetchCalls = installFetchMock({
-    payload: {
-      routes: [
-        {
-          distanceMeters: 19020,
-          duration: "1680s",
-          polyline: {
-            encodedPolyline: "googleRoutePolyline",
-          },
-        },
-      ],
-    },
-  });
+  const googleRouteFetchCalls = installFetchMock();
   const googleRouteResult = await readRouteResponse(
     await route.POST(
       new Request("http://localhost/api/admin-map-route-estimates", {
-        body: JSON.stringify(
-          routePayload({
-            booking_reference: "GOOGLE-MAPS-ROUTE-TEST-001",
-            destination: {
-              label: "Changi Airport Terminal 2",
-              latitude: 1.3554,
-              longitude: 103.9896,
-            },
-            origin: {
-              label: "Raffles Hotel Singapore",
-              latitude: 1.295526,
-              longitude: 103.854331,
-            },
-            route_type: "drive",
-          }),
-        ),
+        body: JSON.stringify(routePayload()),
         headers: sessionHeaders(),
         method: "POST",
       }),
@@ -647,31 +548,6 @@ try {
     units: "METRIC",
   });
   assertNoLeaks(googleRouteResult, "Google Maps route estimate response should stay safe");
-
-  setEnv(googleEnabledEnv({ PRESTIGE_GOOGLE_MAPS_API_KEY: undefined }));
-
-  const missingGoogleKeyFetchCalls = installFetchMock();
-  const missingGoogleKeyResult = await readRouteResponse(
-    await route.POST(
-      new Request("http://localhost/api/admin-map-route-estimates", {
-        body: JSON.stringify(routePayload()),
-        headers: sessionHeaders(),
-        method: "POST",
-      }),
-    ),
-  );
-
-  assert.equal(missingGoogleKeyResult.status, 503);
-  assert.deepEqual(missingGoogleKeyResult.body, {
-    error: "Admin map route estimate configuration is not ready.",
-    ok: false,
-  });
-  assert.equal(
-    missingGoogleKeyFetchCalls.length,
-    0,
-    "missing Google key should not call Google Maps",
-  );
-  assertNoLeaks(missingGoogleKeyResult, "missing Google key response should stay safe");
 } finally {
   restoreEnv();
   globalThis.fetch = originalFetch;

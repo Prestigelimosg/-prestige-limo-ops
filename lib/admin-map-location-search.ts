@@ -5,7 +5,7 @@ import type { AdminDispatcherBoundaryContext } from "./admin-dispatcher-auth-bou
 
 export const adminMapLocationSearchVersion = "stage-admin-map-location-search-v2";
 
-export type AdminMapLocationSearchProvider = "google_maps_geocoding" | "onemap_search";
+export type AdminMapLocationSearchProvider = "google_maps_geocoding";
 
 export type AdminMapLocationSearchInput = {
   page: number;
@@ -41,11 +41,10 @@ export type AdminMapLocationSearchResult = {
 
 type UnknownRecord = Record<string, unknown>;
 
-const oneMapSearchEndpoint = "https://www.onemap.gov.sg/api/common/elastic/search";
 const googleMapsGeocodingEndpoint = "https://maps.googleapis.com/maps/api/geocode/json";
 const maxLocationSearchQueryLength = 160;
 const maxLocationSearchResultTextLength = 260;
-const maxOneMapSearchResponseBytes = 120000;
+const maxMapProviderSearchResponseBytes = 120000;
 const maxSearchResults = 8;
 const maxSearchPage = 50;
 const singaporeLatitudeMin = 1.1;
@@ -199,12 +198,6 @@ function safePositiveInteger(value: unknown, fallback: number) {
   return Number.isInteger(parsed) && parsed > 0 && parsed <= maxSearchPage ? parsed : fallback;
 }
 
-function safeNonNegativeInteger(value: unknown) {
-  const parsed = Number(value);
-
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
-}
-
 function safeFiniteCoordinate(value: unknown) {
   const parsed = Number(value);
 
@@ -233,13 +226,6 @@ function configValueOrNull(value: string | undefined) {
   return trimmed ? trimmed : null;
 }
 
-function readOneMapToken() {
-  return (
-    configValueOrNull(process.env.PRESTIGE_ONEMAP_ACCESS_TOKEN) ||
-    configValueOrNull(process.env.ONEMAP_ACCESS_TOKEN)
-  );
-}
-
 function readGoogleMapsApiKey() {
   return configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_API_KEY);
 }
@@ -247,9 +233,7 @@ function readGoogleMapsApiKey() {
 function selectedLocationSearchProvider(): AdminMapLocationSearchProvider | null {
   const provider = configValueOrNull(process.env.PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER);
 
-  return provider === "onemap_search" || provider === "google_maps_geocoding"
-    ? provider
-    : null;
+  return provider === "google_maps_geocoding" ? provider : null;
 }
 
 function readParamsValue(params: URLSearchParams, key: string) {
@@ -408,76 +392,10 @@ function normalizeGoogleLocationSearch(
   };
 }
 
-function normalizeOneMapLocationSearchItem(
-  value: unknown,
-): AdminMapLocationSearchResultItem | null {
-  const record = asRecord(value);
-  const latitude = validLatitude(record.LATITUDE ?? record.latitude);
-  const longitude = validLongitude(record.LONGITUDE ?? record.LONGTITUDE ?? record.longitude);
-  const address = optionalSafeProviderText(record.ADDRESS ?? record.address, maxLocationSearchResultTextLength);
-  const searchValue = optionalSafeProviderText(
-    record.SEARCHVAL ?? record.searchval,
-    maxLocationSearchResultTextLength,
-  );
-  const label = searchValue || address;
-
-  if (latitude === null || longitude === null || !label) {
-    return null;
-  }
-
-  return {
-    address,
-    block_no: optionalSafeProviderText(record.BLK_NO, 40),
-    building: optionalSafeProviderText(record.BUILDING, 120),
-    label,
-    latitude,
-    longitude,
-    postal: safePostal(record.POSTAL ?? record.postal),
-    road_name: optionalSafeProviderText(record.ROAD_NAME, 160),
-  };
-}
-
-function normalizeOneMapLocationSearch(
-  input: AdminMapLocationSearchInput,
-  value: unknown,
-): AdminBookingResult<AdminMapLocationSearchResult> {
-  const record = asRecord(value);
-
-  if (record.error) {
-    return providerResponseFailure();
-  }
-
-  const rawResults = asArray(record.results);
-  const found = safeNonNegativeInteger(record.found) ?? rawResults.length;
-  const page = safePositiveInteger(record.pageNum, input.page);
-  const totalPages = safeNonNegativeInteger(record.totalNumPages) ?? (rawResults.length ? page : 0);
-  const results = rawResults
-    .map(normalizeOneMapLocationSearchItem)
-    .filter((result): result is AdminMapLocationSearchResultItem => Boolean(result))
-    .slice(0, maxSearchResults);
-
-  return {
-    data: {
-      found,
-      page,
-      provider: "onemap_search",
-      query: input.query,
-      results,
-      safe_route_context: {
-        ...input.safe_route_context,
-        search_status: "loaded",
-      },
-      total_pages: totalPages,
-      version: adminMapLocationSearchVersion,
-    },
-    ok: true,
-  };
-}
-
 async function readProviderJson(response: Response) {
   const text = await response.text();
 
-  if (text.length > maxOneMapSearchResponseBytes) {
+  if (text.length > maxMapProviderSearchResponseBytes) {
     return null;
   }
 
@@ -516,51 +434,9 @@ export async function searchAdminMapLocations(
     };
   }
 
-  if (provider === "google_maps_geocoding") {
-    const googleMapsApiKey = readGoogleMapsApiKey();
+  const googleMapsApiKey = readGoogleMapsApiKey();
 
-    if (!googleMapsApiKey) {
-      return {
-        error: safeMapLocationSearchConfigError,
-        ok: false,
-        status: 503,
-      };
-    }
-
-    try {
-      const url = new URL(
-        configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_SEARCH_ENDPOINT) ||
-          googleMapsGeocodingEndpoint,
-      );
-
-      url.searchParams.set("address", input.query);
-      url.searchParams.set("components", "country:SG");
-      url.searchParams.set("region", "sg");
-      url.searchParams.set("key", googleMapsApiKey);
-
-      const response = await fetch(url, {
-        method: "GET",
-      });
-
-      if (!response.ok) {
-        return providerResponseFailure();
-      }
-
-      const providerJson = await readProviderJson(response);
-
-      if (!providerJson) {
-        return providerResponseFailure();
-      }
-
-      return normalizeGoogleLocationSearch(input, providerJson);
-    } catch {
-      return providerResponseFailure();
-    }
-  }
-
-  const oneMapToken = readOneMapToken();
-
-  if (!oneMapToken) {
+  if (!googleMapsApiKey) {
     return {
       error: safeMapLocationSearchConfigError,
       ok: false,
@@ -570,19 +446,16 @@ export async function searchAdminMapLocations(
 
   try {
     const url = new URL(
-      configValueOrNull(process.env.PRESTIGE_ONEMAP_SEARCH_ENDPOINT) ||
-        oneMapSearchEndpoint,
+      configValueOrNull(process.env.PRESTIGE_GOOGLE_MAPS_SEARCH_ENDPOINT) ||
+        googleMapsGeocodingEndpoint,
     );
 
-    url.searchParams.set("searchVal", input.query);
-    url.searchParams.set("returnGeom", "Y");
-    url.searchParams.set("getAddrDetails", "Y");
-    url.searchParams.set("pageNum", String(input.page));
+    url.searchParams.set("address", input.query);
+    url.searchParams.set("components", "country:SG");
+    url.searchParams.set("region", "sg");
+    url.searchParams.set("key", googleMapsApiKey);
 
     const response = await fetch(url, {
-      headers: {
-        Authorization: oneMapToken,
-      },
       method: "GET",
     });
 
@@ -596,7 +469,7 @@ export async function searchAdminMapLocations(
       return providerResponseFailure();
     }
 
-    return normalizeOneMapLocationSearch(input, providerJson);
+    return normalizeGoogleLocationSearch(input, providerJson);
   } catch {
     return providerResponseFailure();
   }

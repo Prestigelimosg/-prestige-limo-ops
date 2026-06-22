@@ -63,6 +63,10 @@ const evidenceSection = sectionBetween(
   ledger,
   "### Google Maps Admin Map Evidence Contract Guard Lock",
 );
+const retirementSection = sectionBetween(
+  ledger,
+  "### OneMap Active Runtime Retirement Lock",
+);
 const mapRuntimeSource = [
   locationRoute,
   routeEstimateRoute,
@@ -98,6 +102,22 @@ for (const phrase of [
   "Google Maps admin map/search/route estimate remains separate from driver GPS, Telegram live location, driver location source, POB auto-stop, customer/driver auth activation, in-app notifications, OTS photo/storage, billing/payment/PDF, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, provider sends, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.",
 ]) {
   assertIncludes(evidenceSection, phrase, `Google Maps evidence phrase: ${phrase}`);
+}
+
+for (const phrase of [
+  "OneMap active runtime/provider paths are retired after Google Maps staging evidence completion.",
+  "OneMap was parked after the safe HTTP 502 provider failure record.",
+  "OneMap is no longer the active or fallback admin map provider.",
+  "Google Maps remains the selected admin map/search/route provider.",
+  "Current admin map routes must not call OneMap under any gate or provider configuration.",
+  "`onemap_search` and `onemap_routing` provider values must fail closed as missing configuration with no provider call.",
+  "The obsolete OneMap read-only evidence runner is removed so OneMap evidence cannot be retried accidentally from the repo.",
+  "Admin map route-assist UI data attributes are provider-neutral `data-admin-map-*`; no new UI sector, card, or button is approved by this retirement lane.",
+  "No OneMap retry, OneMap call, OneMap token setup, OneMap endpoint setup, env change, deploy, DB read/write, provider send, auth activation, billing activation, production activation, or customer data use is approved by this retirement lane.",
+  "No Google Maps call was made in this retirement lane.",
+  "Future OneMap reintroduction requires separate owner approval, provider/token/endpoint readiness, a fresh contract guard, bounded staging evidence, and no secret exposure.",
+]) {
+  assertIncludes(retirementSection, phrase, `OneMap retirement phrase: ${phrase}`);
 }
 
 for (const forbidden of [
@@ -142,13 +162,31 @@ for (const fragment of [
   assertIncludes(mapRuntimeSource, fragment, `Google Maps runtime fragment ${fragment}`);
 }
 
+for (const retiredFragment of [
+  "onemap_search",
+  "onemap_routing",
+  "PRESTIGE_ONEMAP_ACCESS_TOKEN",
+  "ONEMAP_ACCESS_TOKEN",
+  "PRESTIGE_ONEMAP_SEARCH_ENDPOINT",
+  "PRESTIGE_ONEMAP_ROUTING_ENDPOINT",
+  "onemap.gov",
+]) {
+  assertExcludes(
+    mapRuntimeSource,
+    retiredFragment,
+    `retired OneMap runtime fragment ${retiredFragment}`,
+  );
+}
+
 for (const fragment of [
   "/api/admin-map-location-search",
   "/api/admin-map-route-estimates",
-  "data-admin-onemap-route-assist",
+  "data-admin-map-route-assist",
 ]) {
   assertIncludes(appPage, fragment, `current admin map UI fragment ${fragment}`);
 }
+
+assertExcludes(appPage, "data-admin-onemap", "retired OneMap-specific UI data attribute");
 
 assertOrder(
   locationHelper,

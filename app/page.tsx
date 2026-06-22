@@ -17043,7 +17043,6 @@ export default function Home() {
     `Email: ${adminCustomerDriverDetailsEmailDisabledSendStatusText}`,
     `WhatsApp: ${adminCustomerDriverDetailsWhatsAppDisabledSendStatusText}`,
     `SMS: ${adminCustomerDriverDetailsSmsDisabledSendStatusText}`,
-    `Driver In-App: ${adminCustomerDriverDetailsDriverInAppStatusText}`,
   ].join(" | ");
   const adminEmailActivationPreflightStateMatchesReference =
     adminEmailActivationPreflightReadState.loadedReference === adminEmailActivationPreflightReference;
@@ -31459,33 +31458,6 @@ export default function Home() {
                           ? "Checking SMS"
                           : "Review SMS"}
                       </button>
-                      <button
-                        aria-label="Send Driver In-App update to the assigned driver"
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
-                        data-admin-customer-driver-details-driver-in-app-send-action="true"
-                        data-admin-customer-driver-details-driver-in-app-send-action-state={
-                          adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus
-                        }
-                        data-admin-customer-driver-details-driver-in-app-send-delivery-surface={
-                          adminCustomerDriverDetailsDriverInAppDisplayState.deliverySurface
-                        }
-                        data-admin-customer-driver-details-driver-in-app-send-external-send="false"
-                        data-admin-customer-driver-details-driver-in-app-send-loaded-reference={
-                          adminCustomerDriverDetailsDriverInAppDisplayState.loadedReference
-                        }
-                        data-admin-customer-driver-details-driver-in-app-send-no-provider-send="true"
-                        data-admin-customer-driver-details-driver-in-app-send-notification-status={
-                          adminCustomerDriverDetailsDriverInAppDisplayState.notificationStatus
-                        }
-                        disabled={!adminCustomerDriverDetailsDriverInAppCanSend}
-                        onClick={sendAdminCustomerDriverDetailsDriverInAppNotification}
-                        title={adminCustomerDriverDetailsDriverInAppActionLabel}
-                        type="button"
-                      >
-                        {adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-                          ? "Sending In-App"
-                          : "Send Driver In-App"}
-                      </button>
                     </div>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:max-w-sm sm:justify-end">
@@ -31510,13 +31482,6 @@ export default function Home() {
                       title={adminCustomerDriverDetailsMultiChannelDisabledStatusTitle}
                     >
                       {adminCustomerDriverDetailsMultiChannelDisabledStatusText}
-                    </span>
-                    <span
-                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
-                      data-admin-customer-driver-details-driver-in-app-send-status="true"
-                      title={adminCustomerDriverDetailsDriverInAppDisplayState.message}
-                    >
-                      {adminCustomerDriverDetailsDriverInAppStatusText}
                     </span>
                     <span
                       className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
@@ -31594,6 +31559,33 @@ export default function Home() {
                     >
                       Copy
                     </button>
+                    <button
+                      aria-label="Send Driver In-App update to the assigned driver"
+                      className="min-h-9 rounded-md border border-sky-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
+                      data-admin-customer-driver-details-driver-in-app-send-action="true"
+                      data-admin-customer-driver-details-driver-in-app-send-action-state={
+                        adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus
+                      }
+                      data-admin-customer-driver-details-driver-in-app-send-delivery-surface={
+                        adminCustomerDriverDetailsDriverInAppDisplayState.deliverySurface
+                      }
+                      data-admin-customer-driver-details-driver-in-app-send-external-send="false"
+                      data-admin-customer-driver-details-driver-in-app-send-loaded-reference={
+                        adminCustomerDriverDetailsDriverInAppDisplayState.loadedReference
+                      }
+                      data-admin-customer-driver-details-driver-in-app-send-no-provider-send="true"
+                      data-admin-customer-driver-details-driver-in-app-send-notification-status={
+                        adminCustomerDriverDetailsDriverInAppDisplayState.notificationStatus
+                      }
+                      disabled={!adminCustomerDriverDetailsDriverInAppCanSend}
+                      onClick={sendAdminCustomerDriverDetailsDriverInAppNotification}
+                      title={adminCustomerDriverDetailsDriverInAppActionLabel}
+                      type="button"
+                    >
+                      {adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
+                        ? "Sending In-App"
+                        : "Send Driver In-App"}
+                    </button>
                   </div>
                   {copyFeedback?.target === "driverDispatch" ? (
                     <div
@@ -31603,6 +31595,13 @@ export default function Home() {
                       {copyFeedback.text}
                     </div>
                   ) : null}
+                  <div
+                    className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-950"
+                    data-admin-customer-driver-details-driver-in-app-send-status="true"
+                    title={adminCustomerDriverDetailsDriverInAppDisplayState.message}
+                  >
+                    {adminCustomerDriverDetailsDriverInAppStatusText}
+                  </div>
                 </div>
               </div>
               {driverDispatchCopyEditState.isEditing ? (

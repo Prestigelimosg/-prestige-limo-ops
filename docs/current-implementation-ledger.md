@@ -4679,10 +4679,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Provider sends remain separate and not live.
 
 ### Driver In-App Notification Compact Admin Button Lock
-- This is a bounded runtime implementation in the existing Customer Copy section.
-- It reuses the existing compact Customer Copy action row and does not add a new UI sector, card, provider-send panel, route, helper, or shim.
+- This is a bounded runtime implementation in the existing Driver Dispatch section.
+- It reuses the existing compact Driver Dispatch action row and does not add a new UI sector, card, provider-send panel, route, helper, or shim.
 - The compact button label is `Send Driver In-App`.
-- The button is placed beside the existing Customer Copy review actions for Email, WhatsApp, and SMS.
+- The button is placed beside the existing Driver Dispatch `Edit` and `Copy` controls.
 - The button is admin-selected only and sends no automatic fallback, no automatic multi-channel blast, and no provider message.
 - The button requires a loaded saved booking reference and an active saved driver job link for that booking.
 - The driver target is the currently selected booking's active driver job link; no free-form driver selection is introduced.

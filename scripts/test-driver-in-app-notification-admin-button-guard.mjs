@@ -51,6 +51,11 @@ const customerCopyUi = sectionBetween(
   'data-dispatch-workflow-step="customer-whatsapp-copy"',
   'data-dispatch-workflow-step="driver-dispatch-copy"',
 );
+const driverDispatchUi = sectionBetween(
+  appPage,
+  'data-dispatch-workflow-step="driver-dispatch-copy"',
+  'data-dispatch-workflow-step="driver-job-link"',
+);
 const driverInAppAction = blockBetween(
   appPage,
   "async function sendAdminCustomerDriverDetailsDriverInAppNotification()",
@@ -58,10 +63,10 @@ const driverInAppAction = blockBetween(
 );
 
 for (const phrase of [
-  "This is a bounded runtime implementation in the existing Customer Copy section.",
-  "It reuses the existing compact Customer Copy action row and does not add a new UI sector, card, provider-send panel, route, helper, or shim.",
+  "This is a bounded runtime implementation in the existing Driver Dispatch section.",
+  "It reuses the existing compact Driver Dispatch action row and does not add a new UI sector, card, provider-send panel, route, helper, or shim.",
   "The compact button label is `Send Driver In-App`.",
-  "The button is placed beside the existing Customer Copy review actions for Email, WhatsApp, and SMS.",
+  "The button is placed beside the existing Driver Dispatch `Edit` and `Copy` controls.",
   "The button is admin-selected only and sends no automatic fallback, no automatic multi-channel blast, and no provider message.",
   "The button requires a loaded saved booking reference and an active saved driver job link for that booking.",
   "The driver target is the currently selected booking's active driver job link; no free-form driver selection is introduced.",
@@ -101,11 +106,18 @@ for (const fragment of [
 }
 
 assert.equal(
-  customerCopyUi.indexOf("Review Email") < customerCopyUi.indexOf("Review WhatsApp") &&
-    customerCopyUi.indexOf("Review WhatsApp") < customerCopyUi.indexOf("Review SMS") &&
-    customerCopyUi.indexOf("Review SMS") < customerCopyUi.indexOf("Send Driver In-App"),
+  driverDispatchUi.indexOf('data-copy-edit-button="driverDispatch"') <
+    driverDispatchUi.indexOf('data-copy-copy-button="driverDispatch"') &&
+    driverDispatchUi.indexOf('data-copy-copy-button="driverDispatch"') <
+      driverDispatchUi.indexOf("Send Driver In-App"),
   true,
-  "Driver In-App button must stay in the existing compact Customer Copy review row after Email/WhatsApp/SMS.",
+  "Driver In-App button must stay in the existing compact Driver Dispatch action row after Edit/Copy.",
+);
+
+assertExcludes(
+  customerCopyUi,
+  "Send Driver In-App",
+  "Customer Copy UI must not contain the Driver In-App button",
 );
 
 for (const fragment of [
@@ -157,7 +169,7 @@ assertExcludes(
 );
 
 assertExcludes(
-  customerCopyUi,
+  driverDispatchUi,
   /<div[^>]*(?:giant|provider-send|duplicate)|template menu|textarea[^>]*driver-in-app/i,
   "driver in-app compact UI must not add a giant card, provider panel, free-text body, or template menu",
 );

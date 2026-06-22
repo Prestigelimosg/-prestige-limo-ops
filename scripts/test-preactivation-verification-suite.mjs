@@ -567,6 +567,10 @@ const guardChecks = [
     script: "scripts/test-customer-notification-channel-matrix-guard.mjs",
   },
   {
+    label: "Customer/Driver In-App Notification channel contract guard",
+    script: "scripts/test-customer-driver-in-app-notification-channel-contract-guard.mjs",
+  },
+  {
     label: "customer booking driver-details message payload safety guard",
     script: "scripts/test-customer-booking-driver-details-message-payload-safety-guard.mjs",
   },

@@ -4628,6 +4628,33 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock does not approve Google Maps, OneMap retry, live location, auth activation, provider sends, env changes, DB writes, Save Booking changes, `/api/admin-saved-bookings` changes, parser changes, pricing/rates/customer_rates changes, driver_payout_rules changes, payout/payment/PDF/billing changes, UI sector/card expansion, or new shims.
 - This lock adds `scripts/test-customer-driver-in-app-notification-channel-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver In-App Notification Staging Evidence Contract Guard Lock
+- This is a docs/test-only guard for a future separately approved Driver In-App Notification staging evidence pass.
+- This lock is distinct from the Customer/Driver In-App Notification Admin-Selected Channel Contract Lock; it locks the exact future one-row staging evidence window for driver notifications.
+- This lock does not activate runtime notification writes, DB reads/writes, auth, sessions, cookies, customer portal, driver portal changes beyond the existing token read path, provider sends, env changes, deployment, UI sectors/cards/buttons, shims, or production activation.
+- Future Driver In-App Notification staging evidence requires explicit owner approval.
+- Future evidence requires explicit owner approval for one safe driver notification row write.
+- Future evidence requires explicit owner approval for a staging target allowlist.
+- Future evidence requires explicit owner approval for a staging driver-job token or synthetic/staging booking reference.
+- Future evidence requires explicit owner approval for table/policy/RLS proof.
+- Future evidence requires explicit owner approval for rollback/cleanup proof.
+- Future gate/env names are names-only: `PRESTIGE_DRIVER_IN_APP_NOTIFICATIONS_STAGING_WRITE_ENABLED`, `PRESTIGE_DRIVER_IN_APP_NOTIFICATIONS_STAGING_READ_ENABLED`, `PRESTIGE_DRIVER_IN_APP_NOTIFICATIONS_STAGING_TARGET_ALLOWLIST`, and `PRESTIGE_ADMIN_IN_APP_NOTIFICATIONS_WRITE_ENABLED`.
+- Future evidence must prove the admin/dispatcher write boundary on `POST /api/admin-customer-driver-app-notifications`.
+- Future evidence must prove the driver token/read boundary on `GET /api/driver-job/[token]/notifications`.
+- Future evidence must prove exactly one driver notification row is written.
+- Future evidence must prove the driver page App Updates read path displays the safe notification.
+- Future read/unread or status transition proof is optional and requires separate owner approval.
+- Future evidence must prove no external provider send, no Email, no Resend, no Telegram, no WhatsApp, no SMS, no Google Maps call, no OneMap call, and no FlightAware call.
+- Customer in-app read activation remains blocked until secure customer auth/portal proof is separately approved.
+- Customer auth and customer portal activation are not part of this driver evidence lane.
+- Allowed future driver notification fields are booking reference, service type, pickup date, pickup time, pickup location, drop-off location, passenger count if safe for driver, customer-facing flight number if safe for driver, safe title/message/context, workflow area, and driver job status context if already driver-safe.
+- Forbidden driver notification fields are customer price, pricing, billing, invoice/payment, payment/PDF, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, internal/admin/finance notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, live location, and OTS photo/storage unless separately approved.
+- Rollback/cleanup proof must use exact cleanup of the one staging evidence row by safe event key or staging booking reference.
+- Rollback/cleanup proof must include post-cleanup zero-row proof, gate closed proof, no follow-up notification row writes, and no provider sends.
+- Driver-side evidence can proceed separately from customer-side auth/portal read because the existing driver read path is scoped through the verified driver job token route.
+- Driver In-App Notification staging evidence must remain separate from customer in-app read activation, customer auth/portal activation, Email, Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live location, driver GPS, OTS/photo/storage, calendar, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, UI sector/card/button expansion, shims, and production activation.
+- This guard adds `scripts/test-driver-in-app-notification-staging-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Booking + Driver Details Message Payload Safety Contract Lock
 - This is a docs/test-only guard for future customer-facing customer booking plus driver details message payloads; it does not activate provider sends, credentials, env changes, DB reads/writes, deployment, runtime API behavior, UI, route/helper changes, live location implementation, scheduler, fallback, or blast behavior.
 - Customer-facing driver-details messages must include both approved sections: CUSTOMER BOOKING DETAILS and DRIVER DETAILS.

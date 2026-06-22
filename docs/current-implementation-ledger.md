@@ -4925,6 +4925,32 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Bounded read-only staging evidence runner: `scripts/run-admin-google-maps-read-only-verification.mjs`.
 - The runner requires `PRESTIGE_ADMIN_GOOGLE_MAPS_READ_ONLY_VERIFICATION_APPROVED=google-maps-admin-map-staging-read-only-approved`, a staging admin/dispatcher session token, open staging map gates, and public-landmark-only inputs before it can call Google Maps through the app routes.
 
+### Google Maps Admin Map Staging Evidence Record
+
+- Evidence reference: `GOOGLE-MAPS-STAGING-20260622105932`.
+- Promoted implementation commit: `5ce71cd Add Google Maps admin map provider support`.
+- Previous staging head before promotion: `17d65ab Move driver in-app button to driver dispatch`.
+- New staging head after promotion: `5ce71cd Add Google Maps admin map provider support`.
+- Staging root proof after promotion and after final rollback deployment: HTTP 200, title `Prestige Limo Ops`, with the existing Map Route Assist surface present.
+- Google Maps evidence was run once through the guarded app routes only, using `scripts/run-admin-google-maps-read-only-verification.mjs`.
+- Evidence approval env name used by the runner: `PRESTIGE_ADMIN_GOOGLE_MAPS_READ_ONLY_VERIFICATION_APPROVED`; no approval value or secret was recorded.
+- Staging map gates were opened only for the bounded evidence window: `PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED=true`, `PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_PROVIDER=google_maps_geocoding`, `PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED=true`, and `PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_PROVIDER=google_maps_routes`.
+- `PRESTIGE_GOOGLE_MAPS_API_KEY` was used server-side by the deployed staging app only; the key value was never printed, logged, committed, or exposed to the browser.
+- A temporary admin/dispatcher session token was used only for the staging evidence deployments; the token value was never printed, logged, committed, or recorded, and the local temporary token files were deleted.
+- Location search evidence used safe public-landmark scope only: Raffles Hotel Singapore.
+- Location search returned normalized provider `google_maps_geocoding`, `found: 1`, and `result_count: 1`.
+- Route estimate evidence used public landmarks only: RAFFLES HOTEL SINGAPORE to CHANGI AIRPORT TERMINAL 2.
+- Route estimate returned normalized provider `google_maps_routes`, route type `drive`, distance `18890` meters, and duration `1211` seconds.
+- Runner result: `google_maps_read_only_verification_passed`.
+- Evidence proof: `customer_data_used: false`, `db_write: false`, `provider_send: false`, `raw_provider_payload_exposed: false`, `secrets_exposed: false`, and `google_maps_called_through_guarded_routes: true`.
+- No real customer coordinates, customer contact data, booking private data, driver GPS, live-location data, raw Google payload, headers, API keys, tokens, debug/internal fields, pricing, payout, PayNow, payment/PDF/billing, `customer_rates`, `driver_payout_rules`, parser/debug fields, Save Booking internals, or `/api/admin-saved-bookings` internals were used or exposed.
+- Rollback/disable proof after evidence: `PRESTIGE_ADMIN_MAP_LOCATION_SEARCH_ENABLED=false` and `PRESTIGE_ADMIN_MAP_ROUTE_ESTIMATES_ENABLED=false`, followed by a closed-gate staging deployment.
+- Authenticated closed-gate proof after rollback: `GET /api/admin-map-location-search` returned HTTP 503 with `Admin map location search is not enabled on this server.`
+- Authenticated closed-gate proof after rollback: `POST /api/admin-map-route-estimates` returned HTTP 503 with `Admin map route estimate is not enabled on this server.`
+- Final post-evidence staging deployment was run without a temporary session-token override so staging returned to the saved project environment with the map gates closed.
+- No database read/write, OneMap retry, driver GPS capture, live-location implementation, provider sends, Email/Resend/Telegram/WhatsApp/SMS sends, FlightAware call, auth activation, notification row write, OTS/photo/storage activation, calendar activation, scheduler/timer/polling/retry implementation, parser change, Save Booking change, `/api/admin-saved-bookings` change, pricing/rates/customer_rates change, `driver_payout_rules` change, payout/payment/PDF/billing/invoice activation, UI sector/card/button change, shim change, production deploy, or production activation occurred.
+- Customer in-app notification send button remains not implemented and blocked separately pending customer auth/portal read path plus table/RLS proof; this Google Maps evidence did not change customer in-app notification runtime.
+
 ### Live location
 - Live location setup foundation.
 - Live location window policy setup foundation.

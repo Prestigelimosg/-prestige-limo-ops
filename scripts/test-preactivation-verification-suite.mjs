@@ -595,6 +595,10 @@ const guardChecks = [
     script: "scripts/test-customer-in-app-notification-read-table-rls-evidence-contract-guard.mjs",
   },
   {
+    label: "Customer In-App Notification staging read evidence runner guard",
+    script: "scripts/test-customer-in-app-notification-staging-read-evidence-runner-guard.mjs",
+  },
+  {
     label: "customer booking driver-details message payload safety guard",
     script: "scripts/test-customer-booking-driver-details-message-payload-safety-guard.mjs",
   },

@@ -4795,6 +4795,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Production activation, real customer notification evidence, customer portal production activation, env changes, deploy, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, pricing/rates/customer_rates changes, `driver_payout_rules` changes, payout/payment/PDF/billing/invoice changes, auth/session/cookie changes, OTS/photo/storage changes, calendar changes, UI sector/card expansion, and shim changes remain separate lanes.
 - Guard: `scripts/test-customer-in-app-notification-admin-button-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer In-App Notification Admin Button One-Row Staging Evidence Record
+- Evidence reference: `CUSTOMER-IN-APP-ADMIN-BUTTON-STAGING-20260623`.
+- Staging target commit: `9a0a03b Add customer in-app notification admin button`.
+- The compact `Send In-App` button was visible on staging in the existing Customer Copy action row.
+- Staging root proof returned HTTP 200 with title `Prestige Limo Ops`.
+- Public `POST /api/admin-customer-driver-app-notifications` was blocked with HTTP 403.
+- Authenticated admin `POST /api/admin-customer-driver-app-notifications` succeeded during the approved bounded gate window.
+- Exactly one fake staging `customer_app` notification row was written.
+- The fake evidence row used the fixed safe customer-facing template only: title `Driver details ready` and message `Your Prestige Limo driver details are ready in your customer app.`
+- The fake evidence row used `delivery_surface: "customer_app"`, `notification_type: "trip_update"`, `notification_status: "queued"`, `priority: "normal"`, and no provider-send payload.
+- The fake evidence row was cleaned up after the write proof.
+- Cleanup proof passed with zero matching fake evidence rows remaining.
+- Rollback proof after the gate was closed and staging was redeployed closed: `/api/customer-app-notifications` GET remained blocked with HTTP 403.
+- Rollback proof after the gate was closed and staging was redeployed closed: `/api/customer-app-notifications` PATCH remained blocked with HTTP 403.
+- No real customer data was used.
+- No provider send occurred.
+- No Email, Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, shim, production activation, or production deploy occurred.
+- No secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data were printed or recorded.
+- Temporary local evidence files holding staging secret/env material were removed after the evidence window.
+- Customer In-App admin-button one-row staging evidence is complete for the bounded fake-row lane, but broader customer messaging templates, production activation, real customer notification sends/rows, customer auth/session/portal activation, and customer in-app production read/write remain separate lanes requiring explicit owner approval.
+
 ### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved bounded Customer Portal saved-bookings authenticated read evidence pass using one staging-safe customer account/reference.
 - This lock does not activate customer auth, customer portal live read, session creation, cookie creation, token creation, env changes, DB reads/writes, notification row writes, customer in-app runtime/buttons, provider sends, Google Maps/OneMap/FlightAware calls, deploy, or production activation.

@@ -595,6 +595,10 @@ const guardChecks = [
     script: "scripts/test-controlled-customer-runtime-activation-contract-guard.mjs",
   },
   {
+    label: "Controlled Ritz Carlton production customer runtime pilot runner guard",
+    script: "scripts/test-controlled-ritz-customer-runtime-production-pilot-runner-guard.mjs",
+  },
+  {
     label: "Customer In-App Notification read prerequisite contract guard",
     script: "scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs",
   },

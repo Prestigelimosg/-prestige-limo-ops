@@ -4844,6 +4844,20 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer In-App `customer_app` writes require the existing admin/dispatcher boundary, the approved fixed `Driver details ready` template, a safe booking reference, and the controlled customer in-app account allowlist before inserting a row.
 - `driver_app` notification writes remain separate from customer runtime activation and are not unlocked or blocked by the customer allowlist scaffold.
 
+### Controlled Ritz Carlton Production Customer Runtime Pilot Runner Guard Lock
+- This is a disabled-by-default production evidence runner guard for the separately approved Ritz Carlton controlled one-customer production pilot.
+- The runner is `scripts/run-controlled-ritz-customer-runtime-production-pilot.mjs`.
+- The runner requires `PRESTIGE_CONTROLLED_RITZ_PRODUCTION_PILOT_APPROVED=controlled-ritz-production-pilot-approved` before it can run.
+- The runner selects only the owner-approved target label `Ritz Carlton` and one latest active booking for that customer/account.
+- The runner uses production Supabase credentials only from existing local env files and validates the masked production project ref `kvv...atm`; no values are printed.
+- The runner opens runtime gates only in the local process harness and does not edit env files, Vercel env, or deploy.
+- The runner creates one temporary `customer_access_accounts` mapping and one temporary `customer_app` notification row, then deletes both and verifies zero matching rows remain.
+- The runner proves customer portal read, customer in-app read, admin `Send In-App`, blocked missing/wrong session, out-of-scope booking isolation, and post-rollback blocked behavior.
+- The runner is forbidden from provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, billing/payment/PDF/invoice, pricing, payout, `customer_rates`, `driver_payout_rules`, parser, Save Booking, `/api/admin-saved-bookings`, UI changes, deploy, or broad/all-customer runtime activation.
+- The runner output must not print secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, booking references, customer names, or private customer data.
+- The runner guard is `scripts/test-controlled-ritz-customer-runtime-production-pilot-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- This lock does not run the production pilot, open production Vercel gates, change env, deploy, write DB rows, create notification rows, or activate customer runtime by itself.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

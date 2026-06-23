@@ -5005,6 +5005,28 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock is not approval to run the exact-3 live window or keep production runtime live; the execution phase still requires separate owner approval immediately before use.
 - The guard is `scripts/test-exact-three-small-live-customer-runtime-production-window-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Exact-3 Small Live Customer Production Runtime Window Evidence Record
+- Evidence reference: `EXACT-3-SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW-20260623171652`.
+- Source-of-truth commit before the window: `b6a2905 Guard exact three customer runtime live window`.
+- Production target label: three hidden active production customers.
+- Booking scope: exactly three latest active hidden production customer bookings, one per selected customer.
+- The bounded exact-3 live-window runner completed successfully using the separately approved exact-3 profile.
+- The window opened only deployment-time gate overrides through the runner; it did not edit Vercel project env, local env files, source files, or persistent saved env values.
+- Gate/window proof: `opened_by_runner: true`, `closed_after: true`, `gate_overrides_only: true`, and `persistent_vercel_env_changed: false`.
+- Pre-window blocked proof passed: Customer Portal route HTTP 403 and Customer In-App route HTTP 403 before the temporary window opened.
+- Customer Portal live-window read proof passed for all three hidden allowlisted customers: HTTP 200 for all three, using safe saved-booking projection only.
+- Customer In-App live-window read proof passed for all three hidden allowlisted customers: HTTP 200 for all three, using safe `customer_app` notification projection only.
+- Admin `Send In-App` proof passed for all three hidden allowlisted customers: HTTP 200 for all three, fixed safe template only.
+- The approved fixed customer in-app template remained: title `Driver details ready`; message `Your Prestige Limo driver details are ready in your customer app.`
+- Wrong/anonymous/cross-customer and rollback proof passed through the runner's blocked-route checks; post-rollback Customer Portal and Customer In-App statuses were HTTP 403 for all three selected customer contexts.
+- Cleanup proof passed: selected customer count `3`, checked customer count `3`, temporary notification rows remaining `0`, total matching notification rows remaining `0`, and `all_zero_matching_rows: true`.
+- Production DB was touched only for the approved temporary evidence fixtures: one temporary `customer_app` notification row per allowlisted customer and cleanup of only matching temporary event-key rows.
+- No real customer rows were deleted.
+- No customer names, customer IDs, account references, booking references, auth user IDs, row IDs, phone/email/contact data, session tokens, cookies, API keys, DB URLs, env values, full project ref, or private customer data were printed.
+- No provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, billing/payment/PDF/invoice, pricing/rates/customer_rates, payout/PayNow/driver_payout_rules, parser/debug/internal/admin notes, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, live-location/driver GPS, OTS/photo/storage, free-form customer messages, fallback, blast, scheduler, retry, or broad/all-customer activation occurred.
+- The exact-3 small live production runtime window evidence is complete.
+- Production Customer Portal + Customer In-App broad/all-customer runtime remains blocked; keeping customer runtime live beyond the bounded evidence window, expanding the allowlist, adding free-form customer messages, or enabling provider/billing/payment/PDF/payout lanes requires separate owner approval and a fresh bounded lane.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

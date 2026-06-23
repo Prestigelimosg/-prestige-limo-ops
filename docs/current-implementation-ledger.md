@@ -4873,6 +4873,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The runner guard is `scripts/test-hidden-customer-runtime-production-pilot-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 - This lock does not run the production pilot, open production Vercel gates, change env, deploy, write DB rows, create notification rows, or activate customer runtime by itself.
 
+### Hidden Customer Controlled Customer Portal + Customer In-App Production Pilot Evidence Record
+- Evidence reference: `HIDDEN-CUSTOMER-PRODUCTION-PILOT-20260623121654`.
+- Production target proof used the masked Supabase project ref `kvv...atm`; no full project ref, API key, DB URL, env value, token, cookie, customer ID, auth user ID, booking reference, booking row ID, row ID, phone/email/contact, customer name, or private customer data was printed or recorded.
+- The owner-approved target was one hidden active production customer candidate selected internally and one latest active booking for that customer/account.
+- Runtime gates were opened only in the local process harness and were closed afterward; no Vercel env was changed, no env file was edited, and no deploy occurred.
+- Customer portal read proof passed through `GET /api/customer-saved-bookings` with HTTP 200 and exactly one safe saved-booking projection containing ten safe fields only.
+- Customer in-app read proof passed through `GET /api/customer-app-notifications` with HTTP 200 and exactly one safe `customer_app` notification projection containing eleven safe fields only.
+- Admin `Send In-App` proof passed through `POST /api/admin-customer-driver-app-notifications` with HTTP 200 using the approved fixed safe customer template only: title `Driver details ready` and message `Your Prestige Limo driver details are ready in your customer app.`
+- Out-of-scope booking isolation proof passed with zero out-of-scope portal rows.
+- Temporary DB write scope was limited to one `customer_access_accounts` mapping and one `customer_app` notification row for the evidence window.
+- Cleanup proof passed: access mapping rows remaining `0`, notification rows remaining `0`, and `zero_matching_rows: true`.
+- Safe field proof passed for customer portal and customer in-app projections; no pricing, payout, PayNow, `customer_rates`, `driver_payout_rules`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/driver GPS, OTS/photo/storage, or private customer/contact fields were exposed.
+- No provider send, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, shim, production deploy, all-customer activation, free-form customer message, fallback, blast, scheduler, or retry occurred.
+- The production pilot evidence is complete for one hidden active customer candidate only; broad/all-customer runtime activation, free-form customer messaging, provider sends, and finance/billing/payment/PDF/payout lanes remain blocked until separately approved.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

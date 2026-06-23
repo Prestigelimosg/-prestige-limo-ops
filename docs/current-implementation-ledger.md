@@ -1828,7 +1828,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Public Customer/Driver App Notification Surface Guard Lock
 - Public customer/driver app notification surfaces are guarded across `/api/customer-app-notifications`, `/api/driver-job/[token]/notifications`, `/api/admin-customer-driver-app-notifications`, `lib/customer-driver-app-notification-persistence.ts`, and public client pages.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.
-- `/api/customer-app-notifications` must remain blocked for GET and PATCH by the customer auth-required result until approved customer auth exists; it must not parse request bodies, read env, create Supabase clients, set cookies, or execute DB reads/writes.
+- `/api/customer-app-notifications` must remain blocked for GET and PATCH by the customer auth-required result by default; the only allowed customer GET read is the disabled-by-default staging evidence path after the customer in-app read gate, staging reference, same-origin customer portal headers, and existing saved-bookings session boundary pass.
+- `/api/customer-app-notifications` must not parse request bodies, directly read env, create Supabase clients in the route, set cookies, or execute DB writes; any future customer GET evidence DB read must stay isolated in the gated server helper after the route boundary passes.
 - `/api/driver-job/[token]/notifications` must remain limited to token-scoped GET and PATCH, with PATCH forced to `delivery_surface: "driver_app"` before persistence update.
 - Driver notification reads and updates must verify the hashed driver job token, reject revoked/expired/outside-window links, scope rows to `driver_app`, booking reference, queued status, and the matching driver job link id or booking-wide null link id, then return safe notification records only.
 - `/api/admin-customer-driver-app-notifications` must keep GET, POST, and PATCH behind the internal admin/dispatcher boundary, with create/read/update mediated by `lib/customer-driver-app-notification-persistence.ts`.
@@ -4700,8 +4701,10 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer In-App Notification Read Prerequisite Contract Guard Lock
 - This is a docs/test-only guard for the prerequisites required before Customer In-App Notification runtime, customer read, or a customer in-app button can be considered.
 - Customer In-App Notification read/runtime remains blocked.
-- `GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` until secure customer auth/portal proof is separately approved.
-- The customer route must not parse request bodies, read env, create Supabase clients, set cookies, create sessions, create tokens, read notification rows, write notification rows, or expose notification records while this lock is active.
+- `GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` by default.
+- `GET /api/customer-app-notifications` may only use the disabled-by-default staging evidence read path after `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED=true`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE=staging`, the approved staging reference, same-origin customer portal headers, and the existing saved-bookings customer session boundary all pass.
+- `PATCH /api/customer-app-notifications` remains fail-closed and must not read or write notification rows.
+- The customer route itself must not parse request bodies, directly read env, create Supabase clients, set cookies, create sessions, create tokens, or write notification rows; Supabase reads must remain isolated to the gated staging evidence helper after the gate and customer boundary pass.
 - A customer in-app button must not be added before customer read proof.
 - Customer notification writes for `customer_app` must not be enabled before customer read/isolation proof.
 - Future proof must include customer auth/session proof, customer portal/read path proof, `customer_driver_app_notification_outbox` table/RLS proof, customer row isolation proof, customer-safe booking projection proof, `customer_access_accounts` and audit proof if applicable, and rollback/disable proof.
@@ -4717,7 +4720,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customer In-App Notification Read Table/RLS Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved Customer In-App Notification read/table-RLS evidence pass.
 - Customer In-App Notification runtime/read and customer in-app button remain blocked.
-- `GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` until the owner approves the bounded evidence window.
+- `GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` by default.
+- The only allowed customer notification read path is the disabled-by-default staging evidence path behind `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE`, the existing saved-bookings customer session boundary, and server-side Supabase credentials read only after that gate passes.
+- `PATCH /api/customer-app-notifications` remains fail-closed and cannot read or write notification rows.
 - Future evidence requires table/RLS proof for `public.customer_driver_app_notification_outbox` before any customer-visible notification read can be considered.
 - Future evidence may create exactly one fake staging `customer_app` notification row and must clean it up.
 - Future evidence must prove anonymous, missing-session, wrong-session, wrong-customer, cross-origin, and wrong-referer paths are blocked.
@@ -4740,15 +4745,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The runner is staging-only and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_TARGET_URL` or its default.
 - The runner does not open gates, close gates, edit Vercel env, deploy, run evidence automatically, or print env values.
 - `pre-window` and `post-rollback` perform blocked/no-read route proof only and do not read/write the database.
-- The current `read-window` scaffold fails safely with `customer_in_app_notification_read_path_not_implemented_safely` until a separately approved gated customer notification read route/helper exists.
+- The `read-window` path is implemented as a disabled-by-default gated staging evidence path and must not run unless the explicit runner approval, phase, staging target, read gate, saved-bookings customer session boundary, Supabase env names, and staging reference are present.
 - Future `read-window` evidence requires env names only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE`, and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE`.
-- Future `read-window` evidence may create exactly one fake staging customer/account reference and exactly one fake staging `customer_app` notification row only.
+- Future `read-window` evidence may create exactly one fake staging `customer_app` notification row for the approved staging reference only, then must clean it up.
 - Future evidence must prove anonymous, missing-session, wrong-session, wrong-customer, cross-origin, wrong-referer, customer row isolation, safe payload projection, audit/access logging, cleanup/zero-row rollback, and closed-gate/no-read behavior after rollback.
 - Customer-safe notification fields remain limited to delivery surface, notification type/status, priority, safe title, safe message, safe context, workflow area, safe booking reference/context, and created/updated timestamps.
 - Customer-visible in-app notification payloads must exclude pricing, payout, PayNow, payout preferences/comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/driver GPS unless separately approved, and OTS/photo/storage unless separately approved.
-- The customer route remains fail-closed by default; this scaffold does not activate customer in-app runtime, customer auth/session, customer portal behavior, notification row writes, DB reads/writes, provider sends, maps, FlightAware, UI buttons, env changes, deploys, or production.
+- The customer route remains fail-closed by default; this gated evidence path does not activate customer in-app runtime, customer auth/session, customer portal behavior, notification row writes outside the one fake future evidence fixture, provider sends, maps, FlightAware, UI buttons, env changes, deploys, or production.
 - The runner output is normalized and must not print secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data.
-- A future evidence pass still requires separate owner approval for gated route/helper implementation if needed, staging env/gate/deploy window, runner execution, rollback/disable proof, docs evidence recording, and staging promotion.
+- A future evidence pass still requires separate owner approval for staging env/gate/deploy window, runner execution, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
 - This guard adds `scripts/test-customer-in-app-notification-staging-read-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock

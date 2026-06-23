@@ -1,4 +1,7 @@
-import { customerAppNotificationsRequireAuthResult } from "../../../lib/customer-driver-app-notification-persistence";
+import {
+  customerAppNotificationsRequireAuthResult,
+  readCustomerAppNotificationsForStagingEvidence,
+} from "../../../lib/customer-driver-app-notification-persistence";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +27,23 @@ function safeCustomerAuthRequiredResponse() {
   );
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  try {
+    const readResult = await readCustomerAppNotificationsForStagingEvidence(request);
+
+    if (readResult.handled) {
+      return Response.json(readResult.body, { status: readResult.status });
+    }
+  } catch {
+    return Response.json(
+      {
+        error: "Customer app notifications read failed safely.",
+        ok: false,
+      },
+      { status: 500 },
+    );
+  }
+
   return safeCustomerAuthRequiredResponse();
 }
 

@@ -22,6 +22,8 @@ import {
 
 export const customerDriverAppNotificationPersistenceVersion =
   "stage-customer-driver-app-notification-api-v1";
+export const customerInAppNotificationReadEvidenceVersion =
+  "stage-customer-in-app-notification-read-evidence-v1";
 
 export const customerDriverAppNotificationSurfaces = ["customer_app", "driver_app"] as const;
 export const customerDriverAppNotificationTypes = [
@@ -117,8 +119,33 @@ export type CustomerDriverAppNotificationLoadResult = {
   version: typeof customerDriverAppNotificationPersistenceVersion;
 };
 
+export type CustomerInAppNotificationReadEvidenceRecord = {
+  booking_reference: string | null;
+  created_at: string | null;
+  delivery_surface: "customer_app";
+  notification_status: CustomerDriverAppNotificationStatus;
+  notification_type: CustomerDriverAppNotificationType;
+  priority: CustomerDriverAppNotificationPriority;
+  safe_context: Record<string, unknown>;
+  safe_message: string;
+  safe_title: string;
+  updated_at: string | null;
+  workflow_area: string | null;
+};
+
+export type CustomerInAppNotificationReadEvidenceResult = {
+  handled: boolean;
+  body?: Record<string, unknown>;
+  status?: number;
+};
+
 type UnknownRecord = Record<string, unknown>;
 type NotificationClient = Pick<SupabaseClient, "from">;
+type CustomerSavedBookingsSessionTokenSource =
+  | "ambiguous-cookie"
+  | "missing"
+  | "request-cookie"
+  | "request-header";
 
 type DriverLinkScope = {
   booking_reference: string;
@@ -129,7 +156,11 @@ const notificationTable = "customer_driver_app_notification_outbox";
 const driverJobLinkSelect = "id, booking_reference, link_status, expires_at, revoked_at";
 const notificationSelect =
   "id, notification_type, notification_status, priority, delivery_surface, event_key, booking_reference, driver_job_link_id, workflow_area, safe_title, safe_message, safe_context, source_surface, actor_role, actor_label, created_at, updated_at";
+const customerInAppNotificationReadSelect =
+  "notification_type, notification_status, priority, delivery_surface, booking_reference, workflow_area, safe_title, safe_message, safe_context, created_at, updated_at";
 const defaultNotificationLimit = 25;
+const defaultCustomerInAppNotificationReadLimit = 5;
+const maxCustomerInAppNotificationReadLimit = 10;
 const maxNotificationLimit = 100;
 const maxNotificationPage = 1000;
 const maxReadRows = 500;
@@ -155,7 +186,15 @@ const safeNotificationServerSessionActorError =
   "Customer/driver app notification persistence requires a verified admin or dispatcher server session.";
 const safeNotificationCreateError = "Customer/driver app notification create failed safely.";
 const safeNotificationLoadError = "Customer/driver app notification load failed safely.";
+const safeCustomerInAppReadConfigError =
+  "Customer app notification read evidence configuration is not ready.";
+const safeCustomerInAppReadError =
+  "Customer app notification read failed safely.";
 const safeNotificationUpdateError = "Customer/driver app notification status update failed safely.";
+const customerSavedBookingsSessionCookieName =
+  "prestige_customer_saved_bookings_session";
+const customerSavedBookingsFallbackSessionCookieName =
+  "prestige_customer_session";
 const allowedSurfaces = new Set<string>(customerDriverAppNotificationSurfaces);
 const allowedTypes = new Set<string>(customerDriverAppNotificationTypes);
 const allowedStatuses = new Set<string>(customerDriverAppNotificationStatuses);
@@ -168,6 +207,11 @@ const allowedSourceSurfaces = new Set([
   "driver_api",
   "migration",
   "system",
+]);
+const allowedCustomerInAppNotificationReadQueryParams = new Set([
+  "booking_reference",
+  "limit",
+  "page",
 ]);
 const allowedCreateFields = new Set([
   "booking_reference",
@@ -476,6 +520,177 @@ function configValueOrNull(value: string | undefined) {
   return trimmed ? trimmed : null;
 }
 
+const placeholderConfigPattern =
+  /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
+const safeCookieNamePattern = /^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,79}$/;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isPlaceholderConfigValue(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    placeholderConfigPattern.test(normalized) ||
+    normalized.includes("placeholder") ||
+    normalized.includes("change_me") ||
+    normalized.includes("changeme") ||
+    normalized.includes("replace_me") ||
+    normalized.includes("your-") ||
+    normalized.includes("your_") ||
+    normalized.includes("<") ||
+    normalized.includes(">")
+  );
+}
+
+function validServerDatabaseUrl(value: string | null) {
+  if (!value || isPlaceholderConfigValue(value)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+
+    return (
+      url.protocol === "https:" &&
+      hostname.length > 0 &&
+      !hostname.includes("localhost") &&
+      !hostname.includes("example") &&
+      !hostname.includes("placeholder")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function validServerCredential(value: string | null) {
+  if (!value || isPlaceholderConfigValue(value)) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    value.trim().length >= 24 &&
+    normalized !== "anon" &&
+    normalized !== "public" &&
+    !normalized.includes("anon_key") &&
+    !normalized.includes("public_key") &&
+    !normalized.includes("next_public")
+  );
+}
+
+function safeCookieName(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  return cleaned &&
+    safeCookieNamePattern.test(cleaned) &&
+    !includesForbiddenFragment(cleaned)
+    ? cleaned
+    : null;
+}
+
+function decodeCookieValue(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseCookieHeader(value: string | null) {
+  const cookies = new Map<string, string[]>();
+
+  if (!value) {
+    return cookies;
+  }
+
+  for (const cookie of value.split(";")) {
+    const trimmed = cookie.trim();
+
+    if (!trimmed) {
+      continue;
+    }
+
+    const equalsIndex = trimmed.indexOf("=");
+    const rawName = equalsIndex >= 0 ? trimmed.slice(0, equalsIndex).trim() : trimmed;
+    const name = safeCookieName(rawName);
+
+    if (!name) {
+      continue;
+    }
+
+    const rawValue = equalsIndex >= 0 ? trimmed.slice(equalsIndex + 1) : "";
+    const decodedValue = decodeCookieValue(rawValue).trim();
+
+    if (!decodedValue) {
+      continue;
+    }
+
+    cookies.set(name, [...(cookies.get(name) || []), decodedValue]);
+  }
+
+  return cookies;
+}
+
+function customerSavedBookingsSessionCookieNames() {
+  const configuredValue = configValueOrNull(
+    process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME,
+  );
+  const configuredName = safeCookieName(configuredValue);
+
+  if (configuredValue && !configuredName) {
+    return [];
+  }
+
+  if (configuredName) {
+    return [configuredName];
+  }
+
+  return [
+    customerSavedBookingsSessionCookieName,
+    customerSavedBookingsFallbackSessionCookieName,
+  ];
+}
+
+function readCustomerSavedBookingsSessionToken(request: Request): {
+  source: CustomerSavedBookingsSessionTokenSource;
+  token: string;
+} {
+  const headerToken = request.headers.get("x-prestige-customer-session-token")?.trim();
+
+  if (headerToken) {
+    return {
+      source: "request-header",
+      token: headerToken,
+    };
+  }
+
+  const cookies = parseCookieHeader(request.headers.get("cookie"));
+  const cookieValues = customerSavedBookingsSessionCookieNames().flatMap(
+    (cookieName) => cookies.get(cookieName) || [],
+  );
+
+  if (cookieValues.length === 1) {
+    return {
+      source: "request-cookie",
+      token: cookieValues[0],
+    };
+  }
+
+  if (cookieValues.length > 1) {
+    return {
+      source: "ambiguous-cookie",
+      token: "",
+    };
+  }
+
+  return {
+    source: "missing",
+    token: "",
+  };
+}
+
 function getAdminNotificationClient(
   actor: AdminBookingPersistenceAdapterActor,
 ): AdminBookingResult<SupabaseClient> {
@@ -584,6 +799,317 @@ export function customerAppNotificationsRequireAuthResult(): AdminBookingResult<
     ok: false,
     status: 403,
   };
+}
+
+function customerInAppNotificationReadNotHandled(): CustomerInAppNotificationReadEvidenceResult {
+  return {
+    handled: false,
+  };
+}
+
+function customerInAppNotificationReadHandled(
+  status: number,
+  body: Record<string, unknown>,
+): Required<CustomerInAppNotificationReadEvidenceResult> {
+  return {
+    body,
+    handled: true,
+    status,
+  };
+}
+
+function customerInAppNotificationReadError(
+  error: string,
+  status = 403,
+): Required<CustomerInAppNotificationReadEvidenceResult> {
+  return customerInAppNotificationReadHandled(status, {
+    error,
+    ok: false,
+  });
+}
+
+function resolveCustomerInAppNotificationReadEvidenceGate(): AdminBookingResult<{
+  staging_reference: string;
+}> {
+  if (process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED !== "true") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE !== "staging") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const stagingReference = safeIdentifier(
+    process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE,
+    maxBookingReferenceLength,
+  );
+
+  if (!stagingReference) {
+    return {
+      error: safeCustomerInAppReadConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  return {
+    data: {
+      staging_reference: stagingReference,
+    },
+    ok: true,
+  };
+}
+
+function resolveCustomerInAppNotificationReadBoundary(
+  request: Request,
+  stagingReference: string,
+): AdminBookingResult<{
+  auth_user_id: string;
+  booking_reference: string;
+  mode: "server-session-cookie" | "server-session-token";
+}> {
+  const requestUrl = new URL(request.url);
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const purpose = request.headers.get("x-prestige-customer-purpose");
+
+  if (purpose !== "customer-in-app-notification-read") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (origin && origin !== requestUrl.origin) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (!referer) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  try {
+    const refererUrl = new URL(referer);
+
+    if (refererUrl.origin !== requestUrl.origin || refererUrl.pathname !== "/my-bookings") {
+      return customerAppNotificationsRequireAuthResult();
+    }
+  } catch {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const unsafeParams = [...requestUrl.searchParams.entries()].filter(
+    ([key, value]) =>
+      !allowedCustomerInAppNotificationReadQueryParams.has(key) ||
+      includesForbiddenFragment(key) ||
+      includesForbiddenFragment(value),
+  );
+
+  if (unsafeParams.length > 0) {
+    return {
+      error: "Customer app notification read includes fields outside the approved read scope.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const bookingReference = safeIdentifier(
+    requestUrl.searchParams.get("booking_reference"),
+    maxBookingReferenceLength,
+  );
+
+  if (!bookingReference || bookingReference !== stagingReference) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
+  const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
+  const authUserId = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
+
+  if (
+    mode !== "server-session-token" ||
+    !validServerCredential(expectedToken) ||
+    providedToken.token !== expectedToken ||
+    !authUserId ||
+    !uuidPattern.test(authUserId)
+  ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  return {
+    data: {
+      auth_user_id: authUserId,
+      booking_reference: bookingReference,
+      mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
+    },
+    ok: true,
+  };
+}
+
+function parseCustomerInAppNotificationReadLimit(value: string | null) {
+  const parsed = value === null || value === "" ? defaultCustomerInAppNotificationReadLimit : Number(value);
+
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= maxCustomerInAppNotificationReadLimit
+    ? parsed
+    : null;
+}
+
+function getCustomerInAppNotificationReadClient(): AdminBookingResult<NotificationClient> {
+  if (process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") {
+    return {
+      error: disabledNotificationPersistenceError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  const supabaseUrl = configValueOrNull(process.env.SUPABASE_URL);
+  const serviceRoleKey = configValueOrNull(process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  if (
+    !supabaseUrl ||
+    !serviceRoleKey ||
+    !validServerDatabaseUrl(supabaseUrl) ||
+    !validServerCredential(serviceRoleKey)
+  ) {
+    return {
+      error: safeCustomerInAppReadConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  try {
+    return {
+      data: createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          persistSession: false,
+        },
+      }),
+      ok: true,
+    };
+  } catch {
+    return {
+      error: safeCustomerInAppReadConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+}
+
+function toCustomerInAppNotificationReadEvidenceRecord(
+  value: unknown,
+): CustomerInAppNotificationReadEvidenceRecord | null {
+  const record = normalizeRecord(value);
+
+  if (record.delivery_surface !== "customer_app") {
+    return null;
+  }
+
+  return {
+    booking_reference: record.booking_reference,
+    created_at: record.created_at,
+    delivery_surface: "customer_app",
+    notification_status: record.notification_status,
+    notification_type: record.notification_type,
+    priority: record.priority,
+    safe_context: record.safe_context,
+    safe_message: record.safe_message,
+    safe_title: record.safe_title,
+    updated_at: record.updated_at,
+    workflow_area: record.workflow_area,
+  };
+}
+
+async function loadCustomerAppNotificationsForStagingReference(
+  request: Request,
+  stagingReference: string,
+): Promise<AdminBookingResult<{
+  notifications: CustomerInAppNotificationReadEvidenceRecord[];
+}>> {
+  const requestUrl = new URL(request.url);
+  const limit = parseCustomerInAppNotificationReadLimit(requestUrl.searchParams.get("limit"));
+
+  if (!limit) {
+    return {
+      error: "Malformed customer app notification read limit rejected.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const clientResult = getCustomerInAppNotificationReadClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const { data, error } = await clientResult.data
+    .from(notificationTable)
+    .select(customerInAppNotificationReadSelect)
+    .eq("delivery_surface", "customer_app")
+    .eq("booking_reference", stagingReference)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
+  }
+
+  return {
+    data: {
+      notifications: asArray(data)
+        .map(toCustomerInAppNotificationReadEvidenceRecord)
+        .filter(
+          (record): record is CustomerInAppNotificationReadEvidenceRecord => Boolean(record),
+        ),
+    },
+    ok: true,
+  };
+}
+
+export async function readCustomerAppNotificationsForStagingEvidence(
+  request: Request,
+): Promise<CustomerInAppNotificationReadEvidenceResult> {
+  const gate = resolveCustomerInAppNotificationReadEvidenceGate();
+
+  if (!gate.ok) {
+    if (gate.status === 403) {
+      return customerInAppNotificationReadNotHandled();
+    }
+
+    return customerInAppNotificationReadError(gate.error, gate.status);
+  }
+
+  const boundary = resolveCustomerInAppNotificationReadBoundary(
+    request,
+    gate.data.staging_reference,
+  );
+
+  if (!boundary.ok) {
+    return customerInAppNotificationReadError(boundary.error, boundary.status);
+  }
+
+  const result = await loadCustomerAppNotificationsForStagingReference(
+    request,
+    boundary.data.booking_reference,
+  );
+
+  if (!result.ok) {
+    return customerInAppNotificationReadError(result.error, result.status);
+  }
+
+  return customerInAppNotificationReadHandled(200, {
+    delivery_surface: "customer_app",
+    external_send: false,
+    notification_count: result.data.notifications.length,
+    notifications: result.data.notifications,
+    ok: true,
+    provider_send: false,
+    version: customerInAppNotificationReadEvidenceVersion,
+  });
 }
 
 export function parseCustomerDriverAppNotificationCreatePayload(

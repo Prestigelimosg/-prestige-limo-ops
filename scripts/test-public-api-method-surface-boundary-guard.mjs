@@ -78,7 +78,8 @@ const methodSurfaceChecks = [
     requiredFragments: [
       "function safeCustomerAuthRequiredResponse()",
       "customerAppNotificationsRequireAuthResult",
-      "export async function GET() {\n  return safeCustomerAuthRequiredResponse();\n}",
+      "readCustomerAppNotificationsForStagingEvidence",
+      "export async function GET(request: Request)",
       "export async function PATCH() {\n  return safeCustomerAuthRequiredResponse();\n}",
     ],
   },

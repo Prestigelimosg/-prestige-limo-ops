@@ -297,7 +297,8 @@ const ledgerSection = sectionBetween(
 for (const phrase of [
   "Public customer/driver app notification surfaces are guarded across `/api/customer-app-notifications`, `/api/driver-job/[token]/notifications`, `/api/admin-customer-driver-app-notifications`, `lib/customer-driver-app-notification-persistence.ts`, and public client pages.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth activation, or new shims.",
-  "`/api/customer-app-notifications` must remain blocked for GET and PATCH by the customer auth-required result until approved customer auth exists; it must not parse request bodies, read env, create Supabase clients, set cookies, or execute DB reads/writes.",
+  "`/api/customer-app-notifications` must remain blocked for GET and PATCH by the customer auth-required result by default; the only allowed customer GET read is the disabled-by-default staging evidence path after the customer in-app read gate, staging reference, same-origin customer portal headers, and existing saved-bookings session boundary pass.",
+  "`/api/customer-app-notifications` must not parse request bodies, directly read env, create Supabase clients in the route, set cookies, or execute DB writes; any future customer GET evidence DB read must stay isolated in the gated server helper after the route boundary passes.",
   "`/api/driver-job/[token]/notifications` must remain limited to token-scoped GET and PATCH, with PATCH forced to `delivery_surface: \"driver_app\"` before persistence update.",
   "Driver notification reads and updates must verify the hashed driver job token, reject revoked/expired/outside-window links, scope rows to `driver_app`, booking reference, queued status, and the matching driver job link id or booking-wide null link id, then return safe notification records only.",
   "`/api/admin-customer-driver-app-notifications` must keep GET, POST, and PATCH behind the internal admin/dispatcher boundary, with create/read/update mediated by `lib/customer-driver-app-notification-persistence.ts`.",
@@ -329,8 +330,9 @@ for (const fragment of [
   'export const dynamic = "force-dynamic";',
   "function safeCustomerAuthRequiredResponse()",
   "customerAppNotificationsRequireAuthResult()",
+  "readCustomerAppNotificationsForStagingEvidence",
   "Customer app notifications require secure customer account auth.",
-  "export async function GET() {\n  return safeCustomerAuthRequiredResponse();\n}",
+  "export async function GET(request: Request)",
   "export async function PATCH() {\n  return safeCustomerAuthRequiredResponse();\n}",
 ]) {
   assertIncludes(customerNotificationsRoute, fragment, `customer notifications route boundary ${fragment}`);
@@ -425,6 +427,12 @@ for (const fragment of [
   "Customer app notifications require secure customer account auth before saved notifications can be read.",
   "Customer/driver app notification includes fields outside the approved safe display scope.",
   "process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== \"true\"",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE",
+  "readCustomerAppNotificationsForStagingEvidence",
+  "resolveCustomerInAppNotificationReadEvidenceGate",
+  "loadCustomerAppNotificationsForStagingReference",
   "checkAdminBookingPersistenceStagingConfigReadiness()",
   "process.env.SUPABASE_URL",
   "process.env.SUPABASE_SERVICE_ROLE_KEY",

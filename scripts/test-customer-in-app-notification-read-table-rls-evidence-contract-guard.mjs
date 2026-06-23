@@ -62,7 +62,9 @@ const evidenceSection = sectionBetween(
 for (const phrase of [
   "This is a docs/test-only guard for a future separately approved Customer In-App Notification read/table-RLS evidence pass.",
   "Customer In-App Notification runtime/read and customer in-app button remain blocked.",
-  "`GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` until the owner approves the bounded evidence window.",
+  "`GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` by default.",
+  "The only allowed customer notification read path is the disabled-by-default staging evidence path behind `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE`, the existing saved-bookings customer session boundary, and server-side Supabase credentials read only after that gate passes.",
+  "`PATCH /api/customer-app-notifications` remains fail-closed and cannot read or write notification rows.",
   "Future evidence requires table/RLS proof for `public.customer_driver_app_notification_outbox` before any customer-visible notification read can be considered.",
   "Future evidence may create exactly one fake staging `customer_app` notification row and must clean it up.",
   "Future evidence must prove anonymous, missing-session, wrong-session, wrong-customer, cross-origin, and wrong-referer paths are blocked.",
@@ -111,8 +113,9 @@ assertIncludes(
 
 for (const fragment of [
   "customerAppNotificationsRequireAuthResult",
+  "readCustomerAppNotificationsForStagingEvidence",
   "safeCustomerAuthRequiredResponse",
-  "export async function GET()",
+  "export async function GET(request: Request)",
   "export async function PATCH()",
 ]) {
   assertIncludes(customerRoute, fragment, `customer route fail-closed fragment ${fragment}`);
@@ -122,7 +125,6 @@ for (const fragment of [
   "process.env",
   "createClient",
   ".from(",
-  "loadCustomerDriverAppNotifications",
   "createCustomerDriverAppNotification",
   "updateCustomerDriverAppNotificationStatus",
   "request.json",
@@ -139,6 +141,11 @@ for (const fragment of [
   'customerDriverAppNotificationSurfaces = ["customer_app", "driver_app"]',
   "Customer app notifications require secure customer account auth before saved notifications can be read.",
   "customerAppNotificationsRequireAuthResult",
+  "readCustomerAppNotificationsForStagingEvidence",
+  "resolveCustomerInAppNotificationReadEvidenceGate",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE",
+  "loadCustomerAppNotificationsForStagingReference",
   "customer_driver_app_notification_outbox",
   "delivery_surface",
   "safe_title",

@@ -62,8 +62,10 @@ const prereqSection = sectionBetween(
 for (const phrase of [
   "This is a docs/test-only guard for the prerequisites required before Customer In-App Notification runtime, customer read, or a customer in-app button can be considered.",
   "Customer In-App Notification read/runtime remains blocked.",
-  "`GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` until secure customer auth/portal proof is separately approved.",
-  "The customer route must not parse request bodies, read env, create Supabase clients, set cookies, create sessions, create tokens, read notification rows, write notification rows, or expose notification records while this lock is active.",
+  "`GET/PATCH /api/customer-app-notifications` must stay fail-closed through `customerAppNotificationsRequireAuthResult` by default.",
+  "`GET /api/customer-app-notifications` may only use the disabled-by-default staging evidence read path after `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED=true`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE=staging`, the approved staging reference, same-origin customer portal headers, and the existing saved-bookings customer session boundary all pass.",
+  "`PATCH /api/customer-app-notifications` remains fail-closed and must not read or write notification rows.",
+  "The customer route itself must not parse request bodies, directly read env, create Supabase clients, set cookies, create sessions, create tokens, or write notification rows; Supabase reads must remain isolated to the gated staging evidence helper after the gate and customer boundary pass.",
   "A customer in-app button must not be added before customer read proof.",
   "Customer notification writes for `customer_app` must not be enabled before customer read/isolation proof.",
   "Future proof must include customer auth/session proof, customer portal/read path proof, `customer_driver_app_notification_outbox` table/RLS proof, customer row isolation proof, customer-safe booking projection proof, `customer_access_accounts` and audit proof if applicable, and rollback/disable proof.",
@@ -102,8 +104,9 @@ assertIncludes(
 
 for (const fragment of [
   "customerAppNotificationsRequireAuthResult",
+  "readCustomerAppNotificationsForStagingEvidence",
   "safeCustomerAuthRequiredResponse",
-  "export async function GET()",
+  "export async function GET(request: Request)",
   "export async function PATCH()",
 ]) {
   assertIncludes(customerRoute, fragment, `customer route fail-closed fragment ${fragment}`);
@@ -113,7 +116,6 @@ for (const fragment of [
   "process.env",
   "createClient",
   ".from(",
-  "loadCustomerDriverAppNotifications",
   "createCustomerDriverAppNotification",
   "updateCustomerDriverAppNotificationStatus",
   "request.json",
@@ -130,6 +132,9 @@ for (const fragment of [
   'customerDriverAppNotificationSurfaces = ["customer_app", "driver_app"]',
   "Customer app notifications require secure customer account auth before saved notifications can be read.",
   "customerAppNotificationsRequireAuthResult",
+  "readCustomerAppNotificationsForStagingEvidence",
+  "resolveCustomerInAppNotificationReadEvidenceGate",
+  "loadCustomerAppNotificationsForStagingReference",
   "customer_driver_app_notification_outbox",
   "safe_title",
   "safe_message",

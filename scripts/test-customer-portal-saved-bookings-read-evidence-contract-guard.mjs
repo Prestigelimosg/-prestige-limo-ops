@@ -330,8 +330,9 @@ assertExcludes(
 
 for (const fragment of [
   "customerAppNotificationsRequireAuthResult",
+  "readCustomerAppNotificationsForStagingEvidence",
   "safeCustomerAuthRequiredResponse",
-  "export async function GET()",
+  "export async function GET(request: Request)",
   "export async function PATCH()",
 ]) {
   assertIncludes(customerNotificationRoute, fragment, `customer app notifications fail-closed fragment ${fragment}`);
@@ -344,7 +345,6 @@ for (const fragment of [
   "request.json",
   "cookies(",
   "Set-Cookie",
-  "loadCustomerDriverAppNotifications",
   "createCustomerDriverAppNotification",
   "updateCustomerDriverAppNotificationStatus",
 ]) {

@@ -5,6 +5,7 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const runnerPath = "scripts/run-customer-in-app-notification-staging-read-evidence.mjs";
 const customerRoutePath = "app/api/customer-app-notifications/route.ts";
+const persistencePath = "lib/customer-driver-app-notification-persistence.ts";
 const appPagePath = "app/page.tsx";
 const guardScript =
   "scripts/test-customer-in-app-notification-staging-read-evidence-runner-guard.mjs";
@@ -30,11 +31,12 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
-const [ledger, preactivationSuite, runner, customerRoute, appPage] = await Promise.all([
+const [ledger, preactivationSuite, runner, customerRoute, persistence, appPage] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
   readFile(runnerPath, "utf8"),
   readFile(customerRoutePath, "utf8"),
+  readFile(persistencePath, "utf8"),
   readFile(appPagePath, "utf8"),
 ]);
 
@@ -52,15 +54,15 @@ for (const phrase of [
   "The runner is staging-only and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_TARGET_URL` or its default.",
   "The runner does not open gates, close gates, edit Vercel env, deploy, run evidence automatically, or print env values.",
   "`pre-window` and `post-rollback` perform blocked/no-read route proof only and do not read/write the database.",
-  "The current `read-window` scaffold fails safely with `customer_in_app_notification_read_path_not_implemented_safely` until a separately approved gated customer notification read route/helper exists.",
+  "The `read-window` path is implemented as a disabled-by-default gated staging evidence path and must not run unless the explicit runner approval, phase, staging target, read gate, saved-bookings customer session boundary, Supabase env names, and staging reference are present.",
   "Future `read-window` evidence requires env names only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE`, and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE`.",
-  "Future `read-window` evidence may create exactly one fake staging customer/account reference and exactly one fake staging `customer_app` notification row only.",
+  "Future `read-window` evidence may create exactly one fake staging `customer_app` notification row for the approved staging reference only, then must clean it up.",
   "Future evidence must prove anonymous, missing-session, wrong-session, wrong-customer, cross-origin, wrong-referer, customer row isolation, safe payload projection, audit/access logging, cleanup/zero-row rollback, and closed-gate/no-read behavior after rollback.",
   "Customer-safe notification fields remain limited to delivery surface, notification type/status, priority, safe title, safe message, safe context, workflow area, safe booking reference/context, and created/updated timestamps.",
   "Customer-visible in-app notification payloads must exclude pricing, payout, PayNow, payout preferences/comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/driver GPS unless separately approved, and OTS/photo/storage unless separately approved.",
-  "The customer route remains fail-closed by default; this scaffold does not activate customer in-app runtime, customer auth/session, customer portal behavior, notification row writes, DB reads/writes, provider sends, maps, FlightAware, UI buttons, env changes, deploys, or production.",
+  "The customer route remains fail-closed by default; this gated evidence path does not activate customer in-app runtime, customer auth/session, customer portal behavior, notification row writes outside the one fake future evidence fixture, provider sends, maps, FlightAware, UI buttons, env changes, deploys, or production.",
   "The runner output is normalized and must not print secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data.",
-  "A future evidence pass still requires separate owner approval for gated route/helper implementation if needed, staging env/gate/deploy window, runner execution, rollback/disable proof, docs evidence recording, and staging promotion.",
+  "A future evidence pass still requires separate owner approval for staging env/gate/deploy window, runner execution, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.",
   "This guard adds `scripts/test-customer-in-app-notification-staging-read-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(runnerSection, phrase, `customer in-app runner ledger phrase: ${phrase}`);
@@ -96,13 +98,11 @@ for (const fragment of [
   "verifyBlockedCustomerNotificationRoute",
   "anonymous_get_blocked",
   "anonymous_patch_blocked",
-  "customer_in_app_notification_read_path_not_implemented_safely",
   "createFakeCustomerNotificationFixture",
-  "verifyAnonymousBlocked",
-  "verifyWrongCustomerBlocked",
-  "verifyCustomerRowIsolation",
-  "verifyAuditProof",
+  "readCorrectCustomerNotification",
+  "verifyBlockedReadRequest",
   "cleanupEvidenceRows",
+  "verifyZeroMatchingRows",
   "zero_matching_rows",
   'delivery_surface: "customer_app"',
   'notification_type: "trip_update"',
@@ -115,14 +115,16 @@ for (const fragment of [
   "forbiddenPayloadFragments",
   "customer_in_app_notification_payload_forbidden_field",
   "missing_required_read_window_env_names_safely",
+  "customer_in_app_notification_staging_read_window_evidence_passed",
 ]) {
   assertIncludes(runner, fragment, `runner evidence scaffold fragment ${fragment}`);
 }
 
 for (const fragment of [
   "customerAppNotificationsRequireAuthResult",
+  "readCustomerAppNotificationsForStagingEvidence",
   "safeCustomerAuthRequiredResponse",
-  "export async function GET()",
+  "export async function GET(request: Request)",
   "export async function PATCH()",
 ]) {
   assertIncludes(customerRoute, fragment, `customer route fail-closed fragment ${fragment}`);
@@ -132,7 +134,6 @@ for (const fragment of [
   "process.env",
   "createClient",
   ".from(",
-  "loadCustomerDriverAppNotifications",
   "createCustomerDriverAppNotification",
   "updateCustomerDriverAppNotificationStatus",
   "request.json",
@@ -144,6 +145,29 @@ for (const fragment of [
 ]) {
   assertExcludes(customerRoute, fragment, "customer route must remain fail-closed");
 }
+
+for (const fragment of [
+  "customerInAppNotificationReadEvidenceVersion",
+  "resolveCustomerInAppNotificationReadEvidenceGate",
+  "resolveCustomerInAppNotificationReadBoundary",
+  "loadCustomerAppNotificationsForStagingReference",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE",
+  "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE",
+  "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "customerInAppNotificationReadSelect",
+  ".eq(\"delivery_surface\", \"customer_app\")",
+  ".eq(\"booking_reference\", stagingReference)",
+]) {
+  assertIncludes(persistence, fragment, `gated customer read helper fragment ${fragment}`);
+}
+
+const gateIndex = persistence.indexOf("resolveCustomerInAppNotificationReadEvidenceGate()");
+const loadIndex = persistence.indexOf("loadCustomerAppNotificationsForStagingReference(");
+const clientIndex = persistence.indexOf("getCustomerInAppNotificationReadClient()");
+assert.equal(gateIndex >= 0 && loadIndex > gateIndex, true, "read helper must resolve gate before loading rows");
+assert.equal(clientIndex >= 0 && clientIndex > gateIndex, true, "Supabase client helper must appear after gated read helpers");
 
 for (const fragment of [
   'deliverySurface: "customer_app"',
@@ -162,7 +186,7 @@ for (const forbiddenPattern of [
   /new\s+Resend|resend\.|api\.telegram\.org|sendMessage|sendMail|twilio|whatsapp|sms/i,
   /maps\.googleapis\.com|routes\.googleapis\.com|places\.googleapis\.com/i,
   /www\.onemap\.gov\.sg|ONEMAP_TOKEN|FlightAware|AeroAPI|AEROAPI/i,
-  /\.from\(|createClient|SUPABASE_SERVICE_ROLE_KEY.*console|row_id|customer_id.*console|auth_user_id.*console/i,
+  /SUPABASE_SERVICE_ROLE_KEY.*console|row_id|customer_id.*console|auth_user_id.*console/i,
   /production deploy|manual deploy/i,
 ]) {
   assertExcludes(runner, forbiddenPattern, "runner forbidden side-effect surface");

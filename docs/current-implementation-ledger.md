@@ -4929,6 +4929,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No provider send, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, shim, production deploy, all-customer activation, free-form customer message, fallback, blast, scheduler, or retry occurred.
 - The exact-2 small-allowlist production pilot evidence is complete; broad/all-customer runtime activation, free-form customer messaging, provider sends, and finance/billing/payment/PDF/payout lanes remain blocked until separately approved.
 
+### Small Live Customer Production Runtime Allowlist Window Runner Guard Lock
+- This is a disabled-by-default guard plus no-side-effect runner scaffold for a future separately approved small live Customer Portal + Customer In-App production allowlist window.
+- The runner is `scripts/run-small-live-customer-runtime-production-window.mjs`.
+- The runner requires `PRESTIGE_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_APPROVED=small-live-customer-runtime-window-approved` and `PRESTIGE_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_PHASE=preflight-only` before it emits a live-window preflight packet.
+- This scaffold does not open production gates, edit Vercel env, edit env files, deploy, read or write the database, create customer access mappings, create notification rows, run provider calls, or activate runtime.
+- The live-window scope remains exactly two hidden active production customer accounts, with one latest active booking per allowlisted account.
+- Future live-window gate names are names-only/no-values: `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_MODE`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_TOKEN`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE`, and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST`.
+- Customer Portal live-window visibility must stay limited to safe saved-booking fields only.
+- Customer In-App live-window visibility must stay limited to safe customer-app notification fields only.
+- Admin `Send In-App` remains fixed-template only: title `Driver details ready`; message `Your Prestige Limo driver details are ready in your customer app.`
+- The future live window must prove production root health, exact allowlist scope, customer portal read for both allowlisted customers, customer in-app read for both allowlisted customers, admin Send In-App for both allowlisted customers, anonymous/missing-session/wrong-session/wrong-customer/cross-origin/wrong-referer blocks, audit/monitoring proof, rollback proof, and post-rollback blocked/no-read proof.
+- Stop conditions include any out-of-allowlist read, wrong-customer read, forbidden field exposure, provider send attempt, billing/payment/PDF/payout activation, secret/private-data print risk, or inability to prove rollback immediately.
+- Provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, billing/payment/PDF/invoice, pricing/rates/customer_rates, payout/PayNow/driver_payout_rules, parser/debug/internal/admin notes, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, live-location/driver GPS, OTS/photo/storage, free-form customer messages, fallback/blast/scheduler/retry, and all-customer activation remain blocked.
+- A future actual live allowlist window requires separate owner approval after this scaffold promotion; this lock is not approval to open or keep production runtime live.
+- The guard is `scripts/test-small-live-customer-runtime-production-window-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

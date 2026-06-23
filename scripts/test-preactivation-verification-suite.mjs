@@ -607,6 +607,10 @@ const guardChecks = [
     script: "scripts/test-small-allowlist-customer-runtime-production-pilot-runner-guard.mjs",
   },
   {
+    label: "Small live customer production runtime allowlist window runner guard",
+    script: "scripts/test-small-live-customer-runtime-production-window-runner-guard.mjs",
+  },
+  {
     label: "Customer In-App Notification read prerequisite contract guard",
     script: "scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs",
   },

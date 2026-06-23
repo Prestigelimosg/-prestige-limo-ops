@@ -238,6 +238,8 @@ for (const fragment of [
   '.from("bookings")',
   ".select(customerSavedBookingsSelect)",
   '.eq("customer_id", customerAccountReference)',
+  "parsed.data.booking_reference && rawRows.length === 0",
+  "Targeted booking lookups are isolation checks: a ref outside this account must hard-block.",
 ]) {
   assertIncludes(savedBookingsRead, fragment, `customer saved-bookings read fragment ${fragment}`);
 }

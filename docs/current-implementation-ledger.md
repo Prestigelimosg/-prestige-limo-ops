@@ -4950,6 +4950,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock is not approval to run the live window or keep production runtime live; the execution phase still requires a separate owner approval immediately before use.
 - The guard is `scripts/test-small-live-customer-runtime-production-window-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Small Live Customer Production Runtime Window Blocked Attempt Record
+- Attempt reference: `SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW-BLOCKED-20260623`.
+- Production app URL setup completed for `app.prestigelimo.sg`; root health returned HTTP 200 and title `Prestige Limo Ops`.
+- The bounded exact-2 live-window runner was attempted once after owner approval using two hidden active production customers and one latest active booking each.
+- The runner stopped before accepting evidence because the wrong-customer targeted Customer Portal saved-booking proof returned HTTP 200 instead of the required HTTP 403.
+- The observed issue was response-boundary semantics only: a session targeting another customer's booking reference must hard-block as unauthorized rather than return an empty successful read.
+- This blocked attempt is not accepted live-window evidence.
+- Safety proof after the blocked attempt: production gates were closed, production root remained HTTP 200, `GET /api/customer-saved-bookings` returned HTTP 403, `GET /api/customer-app-notifications` returned HTTP 403, and zero temporary `customer_app` notification rows matching the live-window event-key prefix remained.
+- No provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, billing/payment/PDF/invoice, pricing/rates/customer_rates, payout/PayNow/driver_payout_rules, parser/debug/internal/admin notes, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, live-location/driver GPS, OTS/photo/storage, free-form customer messages, fallback, blast, scheduler, retry, broad/all-customer activation, or private customer data exposure occurred.
+- Customer Portal targeted booking-reference reads are now hardened so a requested booking reference outside the session customer's scoped account returns the existing safe HTTP 403 auth-required response.
+- The exact-2 small live production runtime window remains blocked until this hardening is reviewed, promoted, and a fresh owner-approved live-window run is requested.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

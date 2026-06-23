@@ -903,7 +903,14 @@ export async function loadCustomerSavedBookings(
     return safeAdapterFailure(customerSavedBookingsReadError, 500, bookingError);
   }
 
-  const rows = asArray(bookingRows)
+  const rawRows = asArray(bookingRows);
+
+  if (parsed.data.booking_reference && rawRows.length === 0) {
+    // Targeted booking lookups are isolation checks: a ref outside this account must hard-block.
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  const rows = rawRows
     .map(asRecord)
     .map(toCustomerSavedBookingRecord)
     .filter((record): record is CustomerSavedBookingRecord => Boolean(record));

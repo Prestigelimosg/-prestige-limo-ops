@@ -723,6 +723,31 @@ try {
   );
 
   validEnv({
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: [
+      customerAccountReference,
+      "55555555-5555-4555-8555-555555555555",
+    ].join(","),
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE: "small-allowlist",
+  });
+  const wrongCustomerTargetMock = installMockClient(seedSavedBookingRows());
+  const wrongCustomerTargetResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=OTHER-CUSTOMER-001", {
+      headers: validHeaders(),
+    }),
+  );
+  const wrongCustomerTargetBody = await json(wrongCustomerTargetResponse);
+  assert.equal(
+    wrongCustomerTargetResponse.status,
+    403,
+    "Targeted booking references outside the session customer account must hard-block.",
+  );
+  assert.deepEqual(wrongCustomerTargetMock.client.selectHistory[1].filters, [
+    { column: "customer_id", value: customerAccountReference },
+    { column: "booking_reference", value: "OTHER-CUSTOMER-001" },
+  ]);
+  assertSafeApiBody(wrongCustomerTargetBody, "wrong-customer targeted booking body");
+
+  validEnv({
     PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: "55555555-5555-4555-8555-555555555555",
   });
   const outOfAllowlistMock = installMockClient(seedSavedBookingRows());

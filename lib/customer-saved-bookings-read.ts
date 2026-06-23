@@ -775,7 +775,14 @@ export function resolveCustomerSavedBookingsBoundary(
     return customerSavedBookingsAuthRequiredResult();
   }
 
+  const runtimeGate = resolveControlledCustomerPortalRuntimeGate();
+
+  if (!runtimeGate.ok) {
+    return runtimeGate;
+  }
+
   const mappedSession = resolveExactTwoCustomerRuntimeSessionMap({
+    expectedEntryCount: runtimeGate.data.account_allowlist.size,
     mapValue: process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
     providedToken: providedToken.token,
   });
@@ -802,12 +809,6 @@ export function resolveCustomerSavedBookingsBoundary(
     if (!validServerCredential(expectedToken) || providedToken.token !== expectedToken || !authUserId) {
       return customerSavedBookingsAuthRequiredResult();
     }
-  }
-
-  const runtimeGate = resolveControlledCustomerPortalRuntimeGate();
-
-  if (!runtimeGate.ok) {
-    return runtimeGate;
   }
 
   if (

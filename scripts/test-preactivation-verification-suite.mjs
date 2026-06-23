@@ -611,6 +611,10 @@ const guardChecks = [
     script: "scripts/test-small-live-customer-runtime-production-window-runner-guard.mjs",
   },
   {
+    label: "Exact-3 small live customer production runtime window runner guard",
+    script: "scripts/test-exact-three-small-live-customer-runtime-production-window-runner-guard.mjs",
+  },
+  {
     label: "Exact-2 customer runtime session map guard",
     script: "scripts/test-exact-two-customer-runtime-session-map-guard.mjs",
   },

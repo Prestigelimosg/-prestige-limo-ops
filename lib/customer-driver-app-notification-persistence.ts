@@ -1123,6 +1123,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   }
 
   const mappedSession = resolveExactTwoCustomerRuntimeSessionMap({
+    expectedEntryCount: runtimeGate.account_allowlist.size,
     mapValue: process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
     providedToken: providedToken.token,
   });

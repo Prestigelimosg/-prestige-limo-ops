@@ -17,6 +17,18 @@ const deployApprovalValue = "small-live-customer-runtime-window-deploy-approved"
 const targetUrlEnvName = "PRESTIGE_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_TARGET_URL";
 const expectedMaskedProductionProjectRef = "kvv...atm";
 const exactAllowlistSize = 2;
+const exactThreeApprovalEnvName =
+  "PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_APPROVED";
+const exactThreeApprovalValue = "exact-3-small-live-customer-runtime-window-approved";
+const exactThreePhaseEnvName =
+  "PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_PHASE";
+const exactThreeDeployApprovalEnvName =
+  "PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_DEPLOY_APPROVED";
+const exactThreeDeployApprovalValue =
+  "exact-3-small-live-customer-runtime-window-deploy-approved";
+const exactThreeTargetUrlEnvName =
+  "PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_TARGET_URL";
+const exactThreeAllowlistSize = 3;
 const candidateEnvFileNames = [".env.production.local", ".env.local", ".env.stage4a388.local"];
 const notificationTable = "customer_driver_app_notification_outbox";
 const customerPortalPurpose = "customer-saved-bookings-read";
@@ -68,6 +80,21 @@ const requiredProofChecklist = [
   "rollback proof with gates closed",
   "post-rollback blocked/no-read proof",
 ];
+const exactThreeRequiredProofChecklist = [
+  "production root health proof before window",
+  "exactly three hidden active production customer account references approved privately",
+  "exactly three customer sessions mapped privately with no token values printed",
+  "exactly three private customer sessions to exactly three allowlisted customer accounts",
+  "one latest active booking per allowlisted customer account",
+  "customer portal read proof for all three allowlisted customers",
+  "customer in-app read proof for all three allowlisted customers",
+  "admin Send In-App fixed-template proof for all three allowlisted customers",
+  "anonymous, missing-session, wrong-session, wrong-customer, cross-origin, and wrong-referer block proof",
+  "audit or access-log proof without private values",
+  "monitoring proof during the window",
+  "rollback proof with gates closed",
+  "post-rollback blocked/no-read proof",
+];
 
 const safeCustomerVisibleFields = [
   "booking reference",
@@ -107,6 +134,77 @@ const forbiddenSurfaces = [
   "fallback/blast/scheduler/retry",
   "all-customer activation",
 ];
+
+function exactThreeProfileRequested() {
+  return Boolean(
+    process.env[exactThreeApprovalEnvName] ||
+      process.env[exactThreePhaseEnvName] ||
+      process.env[exactThreeDeployApprovalEnvName] ||
+      process.env[exactThreeTargetUrlEnvName],
+  );
+}
+
+function activeApprovalEnvName() {
+  return exactThreeProfileRequested() ? exactThreeApprovalEnvName : approvalEnvName;
+}
+
+function activeApprovalValue() {
+  return exactThreeProfileRequested() ? exactThreeApprovalValue : approvalValue;
+}
+
+function activePhaseEnvName() {
+  return exactThreeProfileRequested() ? exactThreePhaseEnvName : phaseEnvName;
+}
+
+function activeDeployApprovalEnvName() {
+  return exactThreeProfileRequested() ? exactThreeDeployApprovalEnvName : deployApprovalEnvName;
+}
+
+function activeDeployApprovalValue() {
+  return exactThreeProfileRequested() ? exactThreeDeployApprovalValue : deployApprovalValue;
+}
+
+function activeTargetUrlEnvName() {
+  return exactThreeProfileRequested() ? exactThreeTargetUrlEnvName : targetUrlEnvName;
+}
+
+function activeExactAllowlistSize() {
+  return exactThreeProfileRequested() ? exactThreeAllowlistSize : exactAllowlistSize;
+}
+
+function activeNumberWord() {
+  return exactThreeProfileRequested() ? "three" : "two";
+}
+
+function activeTargetScope() {
+  return `${activeNumberWord()} hidden active production customer accounts`;
+}
+
+function activeBookingScope() {
+  return `exactly ${activeNumberWord()} latest active hidden production customer bookings`;
+}
+
+function activeProofChecklist() {
+  return exactThreeProfileRequested() ? exactThreeRequiredProofChecklist : requiredProofChecklist;
+}
+
+function activePreflightStage() {
+  return exactThreeProfileRequested()
+    ? "exact-3-small-live-customer-runtime-production-window-preflight"
+    : "small-live-customer-runtime-production-window-preflight";
+}
+
+function activeExecuteStage() {
+  return exactThreeProfileRequested()
+    ? "exact-3-small-live-customer-runtime-production-window-execute"
+    : "small-live-customer-runtime-production-window-execute";
+}
+
+function activeEvidencePrefix() {
+  return exactThreeProfileRequested()
+    ? "EXACT-3-SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW"
+    : "SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW";
+}
 
 const safePortalFields = new Set([
   "booking_month",
@@ -432,7 +530,7 @@ async function queryOrFail(query, label) {
   return Array.isArray(data) ? data : [];
 }
 
-async function selectExactTwoLiveWindowTargets(client) {
+async function selectLiveWindowTargets(client, exactSize, targetScope) {
   const customerCandidates = await queryOrFail(
     client
       .from("customers")
@@ -512,14 +610,36 @@ async function selectExactTwoLiveWindowTargets(client) {
 
   rankedTargets.sort((left, right) => right.latestTimestamp - left.latestTimestamp);
 
-  if (rankedTargets.length < exactAllowlistSize) {
+  if (rankedTargets.length < exactSize) {
     failSafely("small_live_customer_runtime_window_target_not_found", {
-      exactAllowlistSize,
-      target_scope: "two hidden active production customer accounts",
+      exactAllowlistSize: exactSize,
+      target_scope: targetScope,
     });
   }
 
-  return rankedTargets.slice(0, exactAllowlistSize);
+  return rankedTargets.slice(0, exactSize);
+}
+
+async function selectExactTwoLiveWindowTargets(client) {
+  return selectLiveWindowTargets(
+    client,
+    exactAllowlistSize,
+    "two hidden active production customer accounts",
+  );
+}
+
+async function selectExactThreeLiveWindowTargets(client) {
+  return selectLiveWindowTargets(
+    client,
+    exactThreeAllowlistSize,
+    "three hidden active production customer accounts",
+  );
+}
+
+async function selectActiveLiveWindowTargets(client) {
+  return exactThreeProfileRequested()
+    ? selectExactThreeLiveWindowTargets(client)
+    : selectExactTwoLiveWindowTargets(client);
 }
 
 function buildFixtures(targets) {
@@ -679,11 +799,12 @@ async function runVercelDeploy(envOverrides, label) {
 }
 
 function normalizedTargetUrl() {
-  const raw = normalizedEnvValue(process.env[targetUrlEnvName]);
+  const targetEnvName = activeTargetUrlEnvName();
+  const raw = normalizedEnvValue(process.env[targetEnvName]);
 
   if (!raw) {
     failSafely("small_live_customer_runtime_window_target_url_missing", {
-      required_env_name: targetUrlEnvName,
+      required_env_name: targetEnvName,
     });
   }
 
@@ -692,14 +813,14 @@ function normalizedTargetUrl() {
 
     if (parsed.protocol !== "https:" || /vercel\.app$/i.test(parsed.hostname)) {
       failSafely("small_live_customer_runtime_window_target_url_not_production_safe", {
-        required_env_name: targetUrlEnvName,
+        required_env_name: targetEnvName,
       });
     }
 
     return parsed.origin;
   } catch {
     failSafely("small_live_customer_runtime_window_target_url_invalid", {
-      required_env_name: targetUrlEnvName,
+      required_env_name: targetEnvName,
     });
   }
 }
@@ -1000,15 +1121,15 @@ async function provePostRollbackBlocked(targetOrigin, fixture) {
 function runPreflightOnly() {
   emit({
     ok: true,
-    stage: "small-live-customer-runtime-production-window-preflight",
+    stage: activePreflightStage(),
     activation_run: false,
-    exact_allowlist_size: exactAllowlistSize,
-    target_scope: "two hidden active production customer accounts",
+    exact_allowlist_size: activeExactAllowlistSize(),
+    target_scope: activeTargetScope(),
     booking_scope: "one latest active booking per allowlisted customer",
     supported_phases: [preflightPhase, executePhase],
     execute_window_requires: [
-      deployApprovalEnvName,
-      targetUrlEnvName,
+      activeDeployApprovalEnvName(),
+      activeTargetUrlEnvName(),
       "existing local production Supabase/admin env names",
     ],
     required_production_gate_env_names: requiredProductionGateEnvNames,
@@ -1017,7 +1138,7 @@ function runPreflightOnly() {
       safe_message: fixedCustomerInAppMessage,
       safe_title: fixedCustomerInAppTitle,
     },
-    proof_checklist: requiredProofChecklist,
+    proof_checklist: activeProofChecklist(),
     rollback_plan: [
       "deploy closed Customer Portal runtime gate",
       "deploy closed Customer In-App runtime gate",
@@ -1045,17 +1166,20 @@ function runPreflightOnly() {
 }
 
 async function runExecuteWindow() {
-  if (process.env[deployApprovalEnvName] !== deployApprovalValue) {
+  const activeDeployEnvName = activeDeployApprovalEnvName();
+  const activeDeployValue = activeDeployApprovalValue();
+
+  if (process.env[activeDeployEnvName] !== activeDeployValue) {
     failSafely("small_live_customer_runtime_window_deploy_not_approved", {
-      required_env_name: deployApprovalEnvName,
-      required_value_name_only: deployApprovalValue,
+      required_env_name: activeDeployEnvName,
+      required_value_name_only: activeDeployValue,
     });
   }
 
   const targetOrigin = normalizedTargetUrl();
   const validation = await loadAndValidateEnv();
   const client = createSupabaseClientFromEnv(validation.env);
-  const targets = await selectExactTwoLiveWindowTargets(client);
+  const targets = await selectActiveLiveWindowTargets(client);
   const fixtures = buildFixtures(targets);
   const openOverrides = deploymentEnvOverrides(validation, fixtures, true);
   const closedOverrides = deploymentEnvOverrides(validation, fixtures, false);
@@ -1111,7 +1235,7 @@ async function runExecuteWindow() {
   }
 
   emit({
-    booking_scope: "exactly two latest active hidden production customer bookings",
+    booking_scope: activeBookingScope(),
     cleanup: {
       all_zero_matching_rows: cleanups.every((cleanup) => cleanup.zero_matching_rows),
       checked_customer_count: cleanups.length,
@@ -1139,7 +1263,7 @@ async function runExecuteWindow() {
       requiredProductionGateEnvNames,
       valuesPrinted: false,
     },
-    evidence_reference: `SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW-${new Date()
+    evidence_reference: `${activeEvidencePrefix()}-${new Date()
       .toISOString()
       .replace(/[-:.TZ]/g, "")
       .slice(0, 14)}`,
@@ -1170,21 +1294,25 @@ async function runExecuteWindow() {
       ),
     },
     rowIdsPrinted: false,
-    stage: "small-live-customer-runtime-production-window-execute",
-    target_label: "two hidden active production customers",
+    stage: activeExecuteStage(),
+    target_label: `${activeNumberWord()} hidden active production customers`,
   });
 }
 
 async function main() {
-  if (process.env[approvalEnvName] !== approvalValue) {
+  const activeApprovalName = activeApprovalEnvName();
+  const activeApprovalRequiredValue = activeApprovalValue();
+  const activePhaseName = activePhaseEnvName();
+
+  if (process.env[activeApprovalName] !== activeApprovalRequiredValue) {
     failSafely("small_live_customer_runtime_window_not_approved", {
-      required_env_name: approvalEnvName,
-      required_value_name_only: approvalValue,
+      required_env_name: activeApprovalName,
+      required_value_name_only: activeApprovalRequiredValue,
       supported_phase: preflightPhase,
     });
   }
 
-  const phase = process.env[phaseEnvName];
+  const phase = process.env[activePhaseName];
 
   if (phase === preflightPhase) {
     runPreflightOnly();
@@ -1197,7 +1325,7 @@ async function main() {
   }
 
   failSafely("small_live_customer_runtime_window_phase_not_allowed", {
-    required_env_name: phaseEnvName,
+    required_env_name: activePhaseName,
     supported_phases: [preflightPhase, executePhase],
   });
 }

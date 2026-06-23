@@ -3,6 +3,7 @@ import "server-only";
 export const customerRuntimeSessionMapEnvName =
   "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP";
 export const exactCustomerRuntimeSessionMapEntryCount = 2;
+export const exactThreeCustomerRuntimeSessionMapEntryCount = 3;
 
 export type ExactCustomerRuntimeSessionMapResolution =
   | {
@@ -118,9 +119,11 @@ function validServerCredential(value: string | null) {
 }
 
 export function resolveExactTwoCustomerRuntimeSessionMap({
+  expectedEntryCount = exactCustomerRuntimeSessionMapEntryCount,
   mapValue,
   providedToken,
 }: {
+  expectedEntryCount?: number;
   mapValue: string | undefined;
   providedToken: string | null;
 }): ExactCustomerRuntimeSessionMapResolution {
@@ -139,7 +142,34 @@ export function resolveExactTwoCustomerRuntimeSessionMap({
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-  if (entries.length !== exactCustomerRuntimeSessionMapEntryCount) {
+  const supportedEntryCounts = [
+    exactCustomerRuntimeSessionMapEntryCount,
+    exactThreeCustomerRuntimeSessionMapEntryCount,
+  ];
+
+  if (!supportedEntryCounts.includes(expectedEntryCount)) {
+    return {
+      configured: true,
+      ok: false,
+      reason: "invalid_config",
+    };
+  }
+
+  if (
+    expectedEntryCount === exactCustomerRuntimeSessionMapEntryCount &&
+    entries.length !== exactCustomerRuntimeSessionMapEntryCount
+  ) {
+    return {
+      configured: true,
+      ok: false,
+      reason: "invalid_config",
+    };
+  }
+
+  if (
+    expectedEntryCount !== exactCustomerRuntimeSessionMapEntryCount &&
+    entries.length !== expectedEntryCount
+  ) {
     return {
       configured: true,
       ok: false,
@@ -170,10 +200,25 @@ export function resolveExactTwoCustomerRuntimeSessionMap({
   const uniqueTokens = new Set(validEntries.map((entry) => entry.session_token));
 
   if (
-    validEntries.length !== exactCustomerRuntimeSessionMapEntryCount ||
-    uniqueAuthUsers.size !== exactCustomerRuntimeSessionMapEntryCount ||
-    uniqueCustomerAccounts.size !== exactCustomerRuntimeSessionMapEntryCount ||
-    uniqueTokens.size !== exactCustomerRuntimeSessionMapEntryCount
+    expectedEntryCount === exactCustomerRuntimeSessionMapEntryCount &&
+    (validEntries.length !== exactCustomerRuntimeSessionMapEntryCount ||
+      uniqueAuthUsers.size !== exactCustomerRuntimeSessionMapEntryCount ||
+      uniqueCustomerAccounts.size !== exactCustomerRuntimeSessionMapEntryCount ||
+      uniqueTokens.size !== exactCustomerRuntimeSessionMapEntryCount)
+  ) {
+    return {
+      configured: true,
+      ok: false,
+      reason: "invalid_config",
+    };
+  }
+
+  if (
+    expectedEntryCount !== exactCustomerRuntimeSessionMapEntryCount &&
+    (validEntries.length !== expectedEntryCount ||
+      uniqueAuthUsers.size !== expectedEntryCount ||
+      uniqueCustomerAccounts.size !== expectedEntryCount ||
+      uniqueTokens.size !== expectedEntryCount)
   ) {
     return {
       configured: true,

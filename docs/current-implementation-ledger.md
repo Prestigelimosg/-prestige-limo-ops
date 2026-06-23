@@ -4984,6 +4984,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The exact-2 small live production runtime window evidence is complete.
 - Production Customer Portal + Customer In-App broad/all-customer runtime remains blocked; keeping any customer runtime live, expanding the allowlist, adding free-form customer messages, or enabling provider/billing/payment/PDF/payout lanes requires separate owner approval and a fresh bounded lane.
 
+### Exact-3 Small Live Customer Production Runtime Window Runner Guard Lock
+- This is a disabled-by-default exact-3 extension of the small live Customer Portal + Customer In-App production allowlist window runner.
+- The runner remains `scripts/run-small-live-customer-runtime-production-window.mjs`; the exact-3 profile is selected only by exact-3 approval/window env names.
+- The exact-2 live-window evidence history remains preserved: `SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW-20260623161907` remains the completed exact-2 evidence record and is not reclassified or replaced by this lock.
+- The exact-3 profile requires `PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_APPROVED=exact-3-small-live-customer-runtime-window-approved` and `PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_PHASE=preflight-only` for no-side-effect preflight.
+- The exact-3 execution phase is disabled by default and additionally requires `PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_PHASE=execute-window`, `PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_DEPLOY_APPROVED=exact-3-small-live-customer-runtime-window-deploy-approved`, and `PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_TARGET_URL` before it can open any live window.
+- The exact-3 live-window scope is exactly three hidden active production customer accounts, with one latest active booking per allowlisted account.
+- Execution mode can deploy a bounded production window using Vercel deployment-time environment overrides only; it must not edit Vercel project env, local env files, source files, or persistent saved env values.
+- Execution mode must use `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP` to map exactly three private customer sessions to exactly three allowlisted customer accounts without printing token values.
+- The Customer Portal and Customer In-App runtime boundaries now validate the private session map against the active runtime allowlist size, restricted to the guarded exact-2 or exact-3 counts; unclear mappings, broad counts, duplicate auth users, duplicate customer accounts, duplicate tokens, and unmatched tokens remain blocked.
+- Execution mode selects the three targets internally and must not print customer names, customer IDs, account references, booking references, auth user IDs, row IDs, phone/email/contact data, session tokens, cookies, API keys, DB URLs, env values, or private customer data.
+- Execution mode may create exactly one temporary `customer_app` notification row per allowlisted customer through the existing admin `Send In-App` route, then must delete only those matching temporary event-key rows and prove zero matching rows remain.
+- Execution mode must prove production root health, pre-window blocked routes, customer portal read for all three allowlisted customers, customer in-app read for all three allowlisted customers, admin Send In-App for all three allowlisted customers, anonymous/missing-session/wrong-session/wrong-customer/cross-origin/wrong-referer blocks, cleanup, rollback deployment, and post-rollback blocked/no-read proof.
+- Customer Portal exact-3 live-window visibility must stay limited to safe saved-booking fields only.
+- Customer In-App exact-3 live-window visibility must stay limited to safe customer-app notification fields only.
+- Admin `Send In-App` remains fixed-template only: title `Driver details ready`; message `Your Prestige Limo driver details are ready in your customer app.`
+- Stop conditions include any out-of-allowlist read, wrong-customer read, forbidden field exposure, provider send attempt, billing/payment/PDF/payout activation, secret/private-data print risk, failure to clean up temporary rows, inability to prove zero matching rows remain, or inability to prove rollback immediately.
+- Provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, billing/payment/PDF/invoice, pricing/rates/customer_rates, payout/PayNow/driver_payout_rules, parser/debug/internal/admin notes, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, live-location/driver GPS, OTS/photo/storage, free-form customer messages, fallback/blast/scheduler/retry, and all-customer activation remain blocked.
+- This lock is not approval to run the exact-3 live window or keep production runtime live; the execution phase still requires separate owner approval immediately before use.
+- The guard is `scripts/test-exact-three-small-live-customer-runtime-production-window-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

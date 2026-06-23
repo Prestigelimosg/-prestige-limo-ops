@@ -4864,6 +4864,29 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data were printed or recorded.
 - Controlled one-customer staging runtime pilot evidence is complete for fake staging data; broader customer runtime activation, real customer access, all-customer activation, production activation, free-form customer messages, and provider sends remain blocked until separately approved.
 
+### Ritz Carlton Controlled Customer Portal + Customer In-App Pilot Evidence Record
+- Evidence reference: `RITZ-CONTROLLED-PILOT-20260623085715`.
+- Staging target commit: `93d54e2 Record controlled customer runtime pilot evidence`.
+- The selected pilot label was `Ritz Carlton Controlled Pilot`.
+- Precheck found no existing Ritz customer/account or Ritz booking candidate in staging, so the evidence used a temporary fake controlled pilot fixture only.
+- The bounded pilot created exactly one fake customer/account, one matching fake saved booking, and one fake `customer_app` notification row for the evidence window.
+- No real customer data was used.
+- Pre-window closed proof passed with staging root HTTP 200/title `Prestige Limo Ops`, `GET /api/customer-saved-bookings` blocked with HTTP 403, and `GET/PATCH /api/customer-app-notifications` blocked with HTTP 403.
+- Temporary runtime gates were opened only for the bounded evidence window using names-only/no-values handling: `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE`, `PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE`, `PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_MODE`, `PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_TOKEN`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE`, and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST`.
+- Customer portal read proof passed through `GET /api/customer-saved-bookings` with HTTP 200 and exactly one safe saved-booking row for the fake controlled pilot account.
+- Customer portal safe projection contained only approved customer-facing fields and exposed ten safe fields.
+- Customer portal boundary proof passed for missing session, wrong session, wrong referer, and wrong customer/reference paths, all blocked with HTTP 403.
+- Admin `Send In-App` proof passed through `POST /api/admin-customer-driver-app-notifications` with HTTP 200 using the approved fixed safe customer template only: title `Driver details ready` and message `Your Prestige Limo driver details are ready in your customer app.`
+- Customer in-app read proof passed through `GET /api/customer-app-notifications` with HTTP 200 and exactly one safe `customer_app` notification row for the fake controlled pilot account.
+- Customer in-app safe projection contained only approved customer-facing notification fields and exposed eleven safe fields.
+- Customer in-app boundary proof passed for anonymous, missing-session, wrong-session, wrong-referer, and wrong-customer/reference paths, all blocked with HTTP 403.
+- Cleanup proof passed with fake access account rows `0`, fake audit rows `0`, fake booking rows `0`, fake customer rows `0`, fake customer notification rows `0`, and `zero_matching_rows: true`.
+- Rollback proof passed after a closed staging redeploy with no temporary gate overrides: staging root HTTP 200/title `Prestige Limo Ops`, `GET /api/customer-saved-bookings` HTTP 403, `GET/PATCH /api/customer-app-notifications` HTTP 403, and admin customer-app POST blocked with HTTP 403 and no write after rollback.
+- The temporary fake controlled pilot fixture was cleaned up and left no matching customer/account, booking, audit, or notification rows.
+- No provider send, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, shim, production activation, or production deploy occurred.
+- No secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data were printed or recorded.
+- Ritz Carlton controlled pilot evidence is complete for a fake controlled staging fixture; real Ritz/customer access, all-customer activation, production activation, free-form customer messages, and provider sends remain blocked until separately approved.
+
 ### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved bounded Customer Portal saved-bookings authenticated read evidence pass using one staging-safe customer account/reference.
 - This lock does not activate customer auth, customer portal live read, session creation, cookie creation, token creation, env changes, DB reads/writes, notification row writes, customer in-app runtime/buttons, provider sends, Google Maps/OneMap/FlightAware calls, deploy, or production activation.

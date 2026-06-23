@@ -4962,6 +4962,28 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Portal targeted booking-reference reads are now hardened so a requested booking reference outside the session customer's scoped account returns the existing safe HTTP 403 auth-required response.
 - The exact-2 small live production runtime window remains blocked until this hardening is reviewed, promoted, and a fresh owner-approved live-window run is requested.
 
+### Small Live Customer Production Runtime Window Evidence Record
+- Evidence reference: `SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW-20260623161907`.
+- Source-of-truth commit before the window: `ace1d25 Harden customer portal targeted booking isolation`.
+- Production target label: two hidden active production customers.
+- Booking scope: exactly two latest active hidden production customer bookings, one per selected customer.
+- The bounded live-window runner completed successfully after the targeted booking isolation hardening was promoted.
+- The window opened only deployment-time gate overrides through the runner; it did not edit Vercel project env, local env files, source files, or persistent saved env values.
+- Gate/window proof: `opened_by_runner: true`, `closed_after: true`, `gate_overrides_only: true`, and `persistent_vercel_env_changed: false`.
+- Pre-window blocked proof passed: Customer Portal route HTTP 403 and Customer In-App route HTTP 403 before the temporary window opened.
+- Customer Portal live-window read proof passed for both hidden allowlisted customers: HTTP 200 for both, using safe saved-booking projection only.
+- Customer In-App live-window read proof passed for both hidden allowlisted customers: HTTP 200 for both, using safe `customer_app` notification projection only.
+- Admin `Send In-App` proof passed for both hidden allowlisted customers: HTTP 200 for both, fixed safe template only.
+- The approved fixed customer in-app template remained: title `Driver details ready`; message `Your Prestige Limo driver details are ready in your customer app.`
+- Wrong/anonymous/cross-customer and rollback proof passed through the runner's blocked-route checks; post-rollback Customer Portal and Customer In-App statuses were HTTP 403 for both selected customer contexts.
+- Cleanup proof passed: selected customer count `2`, checked customer count `2`, temporary notification rows remaining `0`, total matching notification rows remaining `0`, and `all_zero_matching_rows: true`.
+- Production DB was touched only for the approved temporary evidence fixtures: one temporary `customer_app` notification row per allowlisted customer and cleanup of only matching temporary event-key rows.
+- No real customer rows were deleted.
+- No customer names, customer IDs, account references, booking references, auth user IDs, row IDs, phone/email/contact data, session tokens, cookies, API keys, DB URLs, env values, full project ref, or private customer data were printed.
+- No provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, billing/payment/PDF/invoice, pricing/rates/customer_rates, payout/PayNow/driver_payout_rules, parser/debug/internal/admin notes, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, live-location/driver GPS, OTS/photo/storage, free-form customer messages, fallback, blast, scheduler, retry, or broad/all-customer activation occurred.
+- The exact-2 small live production runtime window evidence is complete.
+- Production Customer Portal + Customer In-App broad/all-customer runtime remains blocked; keeping any customer runtime live, expanding the allowlist, adding free-form customer messages, or enabling provider/billing/payment/PDF/payout lanes requires separate owner approval and a fresh bounded lane.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

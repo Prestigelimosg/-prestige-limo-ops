@@ -611,6 +611,10 @@ const guardChecks = [
     script: "scripts/test-small-live-customer-runtime-production-window-runner-guard.mjs",
   },
   {
+    label: "Exact-2 customer runtime session map guard",
+    script: "scripts/test-exact-two-customer-runtime-session-map-guard.mjs",
+  },
+  {
     label: "Customer In-App Notification read prerequisite contract guard",
     script: "scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs",
   },

@@ -19,6 +19,7 @@ import {
   isProductionDriverJobLinkMode,
   productionDriverJobLinksConfigured,
 } from "./driver-job-link-mode";
+import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerDriverAppNotificationPersistenceVersion =
   "stage-customer-driver-app-notification-api-v1";
@@ -1054,6 +1055,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
 ): AdminBookingResult<{
   auth_user_id: string;
   booking_reference: string;
+  customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
   runtime_gate: ControlledCustomerRuntimeGate;
 }> {
@@ -1115,14 +1117,48 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
   const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
   const providedToken = readCustomerSavedBookingsSessionToken(request);
-  const authUserId = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
+
+  if (mode !== "server-session-token") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const mappedSession = resolveExactTwoCustomerRuntimeSessionMap({
+    mapValue: process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
+    providedToken: providedToken.token,
+  });
+
+  let authUserId: string | null = null;
+  let customerAccountReference: string | null = null;
+
+  if (mappedSession.configured) {
+    if (!mappedSession.ok) {
+      return mappedSession.reason === "invalid_config"
+        ? {
+            error: customerInAppRuntimeConfigError,
+            ok: false,
+            status: 503,
+          }
+        : customerAppNotificationsRequireAuthResult();
+    }
+
+    authUserId = mappedSession.auth_user_id;
+    customerAccountReference = mappedSession.customer_account_reference;
+  } else {
+    authUserId = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
+
+    if (
+      !validServerCredential(expectedToken) ||
+      providedToken.token !== expectedToken ||
+      !authUserId ||
+      !uuidPattern.test(authUserId)
+    ) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+  }
 
   if (
-    mode !== "server-session-token" ||
-    !validServerCredential(expectedToken) ||
-    providedToken.token !== expectedToken ||
-    !authUserId ||
-    !uuidPattern.test(authUserId)
+    customerAccountReference &&
+    !customerAccountAllowedByControlledRuntime(customerAccountReference, runtimeGate)
   ) {
     return customerAppNotificationsRequireAuthResult();
   }
@@ -1131,6 +1167,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
     data: {
       auth_user_id: authUserId,
       booking_reference: bookingReference,
+      customer_account_reference: customerAccountReference,
       mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
       runtime_gate: runtimeGate,
     },
@@ -1334,15 +1371,24 @@ async function verifyControlledCustomerBookingReference(
 function customerAppNotificationUsesApprovedRuntimeTemplate(
   input: CustomerDriverAppNotificationInput,
 ) {
-  return (
+  const driverDetailsReadyTemplate =
     input.delivery_surface === "customer_app" &&
     input.notification_type === "trip_update" &&
     input.notification_status === "queued" &&
     input.priority === "normal" &&
     input.safe_title === "Driver details ready" &&
     input.safe_message === "Your Prestige Limo driver details are ready in your customer app." &&
-    input.workflow_area === "customer_app_updates"
-  );
+    input.workflow_area === "customer_app_updates";
+  const bookingRequestConfirmedTemplate =
+    input.delivery_surface === "customer_app" &&
+    input.notification_type === "booking_status" &&
+    input.notification_status === "queued" &&
+    input.priority === "normal" &&
+    input.safe_title === "Booking request confirmed" &&
+    input.safe_message === "Your booking request has been confirmed by Prestige Limo." &&
+    input.workflow_area === "customer_request_review";
+
+  return driverDetailsReadyTemplate || bookingRequestConfirmedTemplate;
 }
 
 async function assertControlledCustomerAppNotificationWriteAllowed(
@@ -1407,6 +1453,7 @@ async function loadCustomerAppNotificationsForControlledRuntime(
   boundary: {
     auth_user_id: string;
     booking_reference: string;
+    customer_account_reference?: string | null;
     runtime_gate: ControlledCustomerRuntimeGate;
   },
 ): Promise<AdminBookingResult<{
@@ -1418,10 +1465,19 @@ async function loadCustomerAppNotificationsForControlledRuntime(
     return clientResult;
   }
 
-  const accountReference = await loadControlledCustomerAccountReference(
-    clientResult.data,
-    boundary.auth_user_id,
+  const mappedAccountReference = safeIdentifier(
+    boundary.customer_account_reference,
+    maxBookingReferenceLength,
   );
+  const accountReference = mappedAccountReference
+    ? {
+        data: mappedAccountReference,
+        ok: true as const,
+      }
+    : await loadControlledCustomerAccountReference(
+        clientResult.data,
+        boundary.auth_user_id,
+      );
 
   if (!accountReference.ok) {
     return accountReference;

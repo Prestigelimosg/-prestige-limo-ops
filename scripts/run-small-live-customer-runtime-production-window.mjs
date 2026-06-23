@@ -10,6 +10,7 @@ const requiredProductionGateEnvNames = [
   "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE",
   "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID",
   "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN",
+  "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP",
   "PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_ENABLED",
   "PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_MODE",
   "PRESTIGE_CUSTOMER_PORTAL_SESSION_ISSUE_TOKEN",
@@ -24,6 +25,8 @@ const requiredProductionGateEnvNames = [
 const requiredProofChecklist = [
   "production root health proof before window",
   "exactly two hidden active production customer account references approved privately",
+  "exactly two customer sessions mapped privately with no token values printed",
+  "exactly two private customer sessions to exactly two allowlisted customer accounts",
   "one latest active booking per allowlisted customer account",
   "customer portal read proof for both allowlisted customers",
   "customer in-app read proof for both allowlisted customers",

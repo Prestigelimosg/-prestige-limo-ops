@@ -37,6 +37,7 @@ const sourceFiles = [
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
+  "lib/customer-runtime-session-map.ts",
   "lib/customer-driver-app-notification-persistence.ts",
   "lib/driver-job-link.ts",
   "lib/driver-job-link-mode.ts",
@@ -865,6 +866,9 @@ try {
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
+    PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: "1",
+    PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: "true",
+    PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: "one-customer",
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
     SUPABASE_URL: supabaseUrlSentinel,
   });

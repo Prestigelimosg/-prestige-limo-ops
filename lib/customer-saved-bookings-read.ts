@@ -6,12 +6,14 @@ import type {
   AdminBookingPersistenceSafeErrorCategory,
   AdminBookingResult,
 } from "./admin-booking-persistence";
+import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerSavedBookingsReadVersion =
   "stage-customer-saved-bookings-read-api-v1";
 
 export type CustomerSavedBookingsBoundaryContext = {
   auth_user_id: string;
+  customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
   runtime_gate: ControlledCustomerRuntimeGate;
   source_surface: "customer_api";
@@ -768,15 +770,38 @@ export function resolveCustomerSavedBookingsBoundary(
   const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
   const providedToken = readCustomerSavedBookingsSessionToken(request);
   const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
-  const authUserId = safeUuid(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
 
-  if (
-    mode !== "server-session-token" ||
-    !validServerCredential(expectedToken) ||
-    providedToken.token !== expectedToken ||
-    !authUserId
-  ) {
+  if (mode !== "server-session-token") {
     return customerSavedBookingsAuthRequiredResult();
+  }
+
+  const mappedSession = resolveExactTwoCustomerRuntimeSessionMap({
+    mapValue: process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
+    providedToken: providedToken.token,
+  });
+
+  let authUserId: string | null = null;
+  let customerAccountReference: string | null = null;
+
+  if (mappedSession.configured) {
+    if (!mappedSession.ok) {
+      return mappedSession.reason === "invalid_config"
+        ? {
+            error: customerSavedBookingsConfigError,
+            ok: false,
+            status: 503,
+          }
+        : customerSavedBookingsAuthRequiredResult();
+    }
+
+    authUserId = mappedSession.auth_user_id;
+    customerAccountReference = mappedSession.customer_account_reference;
+  } else {
+    authUserId = safeUuid(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
+
+    if (!validServerCredential(expectedToken) || providedToken.token !== expectedToken || !authUserId) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
   }
 
   const runtimeGate = resolveControlledCustomerPortalRuntimeGate();
@@ -785,9 +810,17 @@ export function resolveCustomerSavedBookingsBoundary(
     return runtimeGate;
   }
 
+  if (
+    customerAccountReference &&
+    !customerAccountAllowedByControlledRuntime(customerAccountReference, runtimeGate.data)
+  ) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
   return {
     data: {
       auth_user_id: authUserId,
+      customer_account_reference: customerAccountReference,
       mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
       runtime_gate: runtimeGate.data,
       source_surface: "customer_api",
@@ -812,20 +845,24 @@ export async function loadCustomerSavedBookings(
     return clientResult;
   }
 
-  const { data: accountRows, error: accountError } = await clientResult.data
-    .from("customer_access_accounts")
-    .select(customerAccountSelect)
-    .eq("auth_user_id", context.auth_user_id)
-    .eq("account_status", "active")
-    .limit(1);
+  let customerAccountReference = validBookingReference(context.customer_account_reference);
 
-  if (accountError) {
-    return safeAdapterFailure(customerSavedBookingsReadError, 500, accountError);
+  if (!customerAccountReference) {
+    const { data: accountRows, error: accountError } = await clientResult.data
+      .from("customer_access_accounts")
+      .select(customerAccountSelect)
+      .eq("auth_user_id", context.auth_user_id)
+      .eq("account_status", "active")
+      .limit(1);
+
+    if (accountError) {
+      return safeAdapterFailure(customerSavedBookingsReadError, 500, accountError);
+    }
+
+    customerAccountReference = validBookingReference(
+      asRecord(asArray(accountRows)[0]).customer_account_reference,
+    );
   }
-
-  const customerAccountReference = validBookingReference(
-    asRecord(asArray(accountRows)[0]).customer_account_reference,
-  );
 
   if (!customerAccountReference) {
     return {

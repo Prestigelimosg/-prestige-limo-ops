@@ -139,9 +139,8 @@ for (const fragment of [
   'onClick={checkAdminCustomerDriverDetailsEmailDisabledSend}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}',
-  "Review Email",
-  "Review WhatsApp",
-  "Review SMS",
+  "Providers off",
+  "Email gate off",
 ]) {
   assertIncludes(appPage, fragment, `existing app Customer Copy fragment ${fragment}`);
 }

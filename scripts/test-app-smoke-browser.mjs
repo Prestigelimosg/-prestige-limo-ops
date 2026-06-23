@@ -6169,11 +6169,11 @@ async function runChromeTest() {
         assert.deepEqual(
           state.customerEmailReviewItem,
           {
-            action: "Review Email",
+            action: "Email",
             label: "Customer driver details ready",
             readyState: "blocked",
             readyStatus: "Blocked",
-            sendState: "Setup-only / send disabled, sendingEnabled false, external_send false",
+            sendState: "Providers off",
             visible: true,
           },
           `${viewport.label}: expected compact setup-only customer driver details email review row in Customer Copy`,

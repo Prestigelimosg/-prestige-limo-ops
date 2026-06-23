@@ -1716,7 +1716,7 @@ function assertBookingUiState(state) {
   assert.deepEqual(
     state.customerCopyEmailReviewItem,
     {
-      action: "Review Email",
+      action: "Email",
       actionDisabled: true,
       disabledSendActionState: "idle",
       disabledSendExternalSend: "false",
@@ -1727,7 +1727,7 @@ function assertBookingUiState(state) {
       readState: "idle",
       readyState: "blocked",
       readyStatus: "Blocked",
-      sendState: "Setup-only / send disabled, sendingEnabled false, external_send false",
+      sendState: "Providers off",
       visible: true,
     },
     "Expected compact customer driver details email review row to start in Customer Copy setup-only and blocked",
@@ -15407,7 +15407,7 @@ async function runChromeTest() {
             .trim() || "";
           const requests = window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [];
 
-          return status.includes("Setup-only / send disabled") && requests.length === 1
+          return status.includes("Providers off") && requests.length === 1
             ? {
                 externalSend: item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-external-send") || "",
                 loadedReference:
@@ -15424,7 +15424,7 @@ async function runChromeTest() {
     );
     assert.equal(
       customerCopyEmailDisabledSendState.status,
-      "Setup-only / send disabled, sendingEnabled false, external_send false",
+      "Providers off",
     );
     assert.equal(customerCopyEmailDisabledSendState.externalSend, "false");
     assert.equal(customerCopyEmailDisabledSendState.sendingEnabled, "false");

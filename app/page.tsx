@@ -17140,14 +17140,14 @@ export default function Home() {
       : "Send Customer In-App";
   const adminCustomerDriverDetailsCustomerInAppStatusText =
     adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loading"
-      ? "Customer In-App sending"
+      ? "Sending"
       : adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loaded"
-        ? "Customer In-App queued"
+        ? "Queued"
         : adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "error"
-          ? "Customer In-App blocked"
+          ? "Blocked"
           : dispatchReleaseCustomerCopyReady
-            ? "Customer In-App ready"
-            : "Customer In-App needs copy";
+            ? "In-App ready"
+            : "Needs copy";
   const adminCustomerDriverDetailsDriverInAppStateMatchesReference =
     adminCustomerDriverDetailsDriverInAppActionState.loadedReference ===
     adminCustomerDriverDetailsEmailReviewBookingReference;
@@ -17173,9 +17173,11 @@ export default function Home() {
           : activeAdminDriverJobLink
             ? "Driver In-App ready"
             : "Driver In-App needs link";
-  const adminCustomerDriverDetailsMultiChannelDisabledStatusText =
+  const adminCustomerDriverDetailsMultiChannelDisabledStatusDetail =
     "Setup-only / send disabled, sendingEnabled false, external_send false";
+  const adminCustomerDriverDetailsMultiChannelDisabledStatusText = "Providers off";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusTitle = [
+    adminCustomerDriverDetailsMultiChannelDisabledStatusDetail,
     `Email: ${adminCustomerDriverDetailsEmailDisabledSendStatusText}`,
     `WhatsApp: ${adminCustomerDriverDetailsWhatsAppDisabledSendStatusText}`,
     `SMS: ${adminCustomerDriverDetailsSmsDisabledSendStatusText}`,
@@ -17195,7 +17197,7 @@ export default function Home() {
       ? adminEmailActivationPreflightBlockedRequirements.join("/")
       : "provider/env/approval"
   } blocked`;
-  const adminEmailActivationPreflightStatusText =
+  const adminEmailActivationPreflightStatusDetail =
     adminEmailActivationPreflightDisplayState.status === "loading"
       ? "Preflight checking"
       : `Preflight: activationReady ${
@@ -17205,6 +17207,20 @@ export default function Home() {
         }, external_send ${
           adminEmailActivationPreflightDisplayState.external_send ? "true" : "false"
         }, ${adminEmailActivationPreflightBlockedText}`;
+  const adminEmailActivationPreflightStatusText =
+    adminEmailActivationPreflightDisplayState.status === "loading"
+      ? "Email checking"
+      : adminEmailActivationPreflightDisplayState.activationReady &&
+          adminEmailActivationPreflightDisplayState.liveSendingEnabled &&
+          adminEmailActivationPreflightDisplayState.external_send
+        ? "Email gate ready"
+        : "Email gate off";
+  const adminEmailActivationPreflightStatusTitle = [
+    adminEmailActivationPreflightStatusDetail,
+    adminEmailActivationPreflightDisplayState.message,
+  ]
+    .filter(Boolean)
+    .join(" | ");
   const driverAcknowledgementFollowUpStatusLabel =
     driverAcknowledgementFollowUpStatus === "acknowledged"
       ? "Acknowledged locally"
@@ -31505,7 +31521,7 @@ export default function Home() {
                   adminEmailActivationPreflightDisplayState.status
                 }
               >
-                <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <span
                       className="block truncate font-semibold"
@@ -31514,10 +31530,10 @@ export default function Home() {
                       {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
                         "Customer driver details ready"}
                     </span>
-                    <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5 sm:flex-nowrap">
+                    <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5">
                       <button
                         aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
                         data-admin-customer-driver-details-email-disabled-send-action="true"
                         data-admin-customer-driver-details-email-review-action="true"
                         disabled={!adminCustomerDriverDetailsEmailDisabledSendCanCall}
@@ -31528,11 +31544,11 @@ export default function Home() {
                         {adminCustomerDriverDetailsEmailDisabledSendDisplayState.actionStatus ===
                         "loading"
                           ? "Checking Email"
-                          : "Review Email"}
+                          : "Email"}
                       </button>
                       <button
                         aria-label="Customer driver details WhatsApp - Review WhatsApp to customer"
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
                         data-admin-customer-driver-details-whatsapp-disabled-send-action="true"
                         data-admin-customer-driver-details-whatsapp-disabled-send-action-state={
                           adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus
@@ -31560,11 +31576,11 @@ export default function Home() {
                         {adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus ===
                         "loading"
                           ? "Checking WhatsApp"
-                          : "Review WhatsApp"}
+                          : "WhatsApp"}
                       </button>
                       <button
                         aria-label="Customer driver details SMS - Review SMS to customer"
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
                         data-admin-customer-driver-details-sms-disabled-send-action="true"
                         data-admin-customer-driver-details-sms-disabled-send-action-state={
                           adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus
@@ -31592,11 +31608,11 @@ export default function Home() {
                         {adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus ===
                         "loading"
                           ? "Checking SMS"
-                          : "Review SMS"}
+                          : "SMS"}
                       </button>
                       <button
                         aria-label="Send Customer In-App update to the customer"
-                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
                         data-admin-customer-driver-details-customer-in-app-send-action="true"
                         data-admin-customer-driver-details-customer-in-app-send-action-state={
                           adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus
@@ -31624,9 +31640,9 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:max-w-sm sm:justify-end">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 lg:max-w-sm lg:justify-end">
                     <span
-                      className={`max-w-full break-words rounded-full px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase ${
+                      className={`max-w-full whitespace-nowrap rounded-full px-1.5 py-0.5 text-left text-[10px] font-semibold uppercase ${
                         adminCustomerDriverDetailsEmailReviewReady
                           ? "bg-emerald-100 text-emerald-900"
                           : adminCustomerDriverDetailsEmailReviewDisplayState === "loading"
@@ -31638,7 +31654,7 @@ export default function Home() {
                       {adminCustomerDriverDetailsEmailReviewReadyLabel}
                     </span>
                     <span
-                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
+                      className="max-w-full whitespace-nowrap rounded-full bg-white px-1.5 py-0.5 text-left text-[10px] font-semibold uppercase text-slate-700"
                       data-admin-customer-driver-details-email-disabled-send-status="true"
                       data-admin-customer-driver-details-email-review-send-state="true"
                       data-admin-customer-driver-details-sms-disabled-send-status="true"
@@ -31648,14 +31664,14 @@ export default function Home() {
                       {adminCustomerDriverDetailsMultiChannelDisabledStatusText}
                     </span>
                     <span
-                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
+                      className="max-w-full whitespace-nowrap rounded-full bg-white px-1.5 py-0.5 text-left text-[10px] font-semibold uppercase text-slate-700"
                       data-admin-email-activation-preflight-status="true"
-                      title={adminEmailActivationPreflightDisplayState.message}
+                      title={adminEmailActivationPreflightStatusTitle}
                     >
                       {adminEmailActivationPreflightStatusText}
                     </span>
                     <span
-                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
+                      className="max-w-full whitespace-nowrap rounded-full bg-white px-1.5 py-0.5 text-left text-[10px] font-semibold uppercase text-slate-700"
                       data-admin-customer-driver-details-customer-in-app-send-status="true"
                       title={adminCustomerDriverDetailsCustomerInAppDisplayState.message}
                     >

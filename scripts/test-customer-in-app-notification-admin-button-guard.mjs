@@ -66,7 +66,9 @@ for (const phrase of [
   "This is a bounded runtime implementation in the existing Customer Copy section after completed Customer In-App Notification read/table evidence.",
   "It reuses the existing compact Customer Copy action row and does not add a new UI sector, card, provider-send panel, route, helper, or shim.",
   "The compact visible button label is `Send In-App` with an accessible Customer In-App label.",
-  "The button is placed beside the existing Customer Copy `Review Email`, `Review WhatsApp`, and `Review SMS` controls.",
+  "The button is placed beside the existing compact Customer Copy `Email`, `WhatsApp`, and `SMS` controls.",
+  "Customer Copy status polish keeps the same route, gate, payload, and no-provider-send behavior while replacing long visible technical labels with compact admin labels: `Providers off`, `Email gate off`, and `Needs copy` / `In-App ready`.",
+  "The longer technical safety details for provider send disabled state, email activation preflight, and Customer In-App readiness remain available in title/status metadata for review and guards; they are no longer forced into the visible admin row.",
   "The button is admin-selected only and sends no automatic fallback, no automatic multi-channel blast, and no provider message.",
   "The button requires a loaded saved booking reference and complete customer copy readiness for the current booking.",
   "The customer target is the currently selected booking's customer app notification surface; no free-form customer selection is introduced.",
@@ -100,16 +102,23 @@ for (const fragment of [
   'data-admin-customer-driver-details-customer-in-app-send-external-send="false"',
   'data-admin-customer-driver-details-customer-in-app-send-no-provider-send="true"',
   'data-admin-customer-driver-details-customer-in-app-send-status="true"',
+  "Providers off",
+  "Email gate off",
+  "Needs copy",
   "Send In-App",
 ]) {
   assertIncludes(appPage, fragment, `customer in-app admin button app fragment: ${fragment}`);
 }
 
 assert.equal(
-  customerCopyUi.indexOf("Review Email") <
-    customerCopyUi.indexOf("Review WhatsApp") &&
-    customerCopyUi.indexOf("Review WhatsApp") < customerCopyUi.indexOf("Review SMS") &&
-    customerCopyUi.indexOf("Review SMS") <
+  customerCopyUi.indexOf('data-admin-customer-driver-details-email-disabled-send-action="true"') <
+    customerCopyUi.indexOf(
+      'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
+    ) &&
+    customerCopyUi.indexOf(
+      'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
+    ) < customerCopyUi.indexOf('data-admin-customer-driver-details-sms-disabled-send-action="true"') &&
+    customerCopyUi.indexOf('data-admin-customer-driver-details-sms-disabled-send-action="true"') <
       customerCopyUi.indexOf('data-admin-customer-driver-details-customer-in-app-send-action="true"'),
   true,
   "Customer In-App button must stay in the existing compact Customer Copy action row after review controls.",

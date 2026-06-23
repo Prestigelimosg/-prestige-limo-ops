@@ -4756,6 +4756,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A future evidence pass still requires separate owner approval for staging env/gate/deploy window, runner execution, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
 - This guard adds `scripts/test-customer-in-app-notification-staging-read-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer In-App Notification Staging Read Evidence Record
+- Evidence reference: `CUSTOMER-IN-APP-NOTIFICATION-STAGING-READ-20260623115215`.
+- Evidence was run once on staging through `scripts/run-customer-in-app-notification-staging-read-evidence.mjs`.
+- Staging target commit: `8e87f01 Add customer in-app notification read evidence path`.
+- The evidence used one fake staging customer/account reference and one fake `customer_app` notification row only.
+- No real customer data was used.
+- Pre-window closed proof passed with staging root HTTP 200 and `GET/PATCH /api/customer-app-notifications` blocked for anonymous access.
+- Temporary staging read-window env/gate names were opened only for the bounded evidence window: `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID`, `PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE`, and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_STAGING_REFERENCE`.
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` were used only by the local evidence runner and deployed server-side environment for the bounded fixture/read/cleanup window; values were never printed, logged, committed, or recorded.
+- Boundary proof during the read window returned HTTP 403 for anonymous, cross-origin, missing-session, wrong-referer, wrong-session, and wrong-customer/reference paths.
+- Correct fake customer read proof returned HTTP 200 with exactly one safe `customer_app` notification row.
+- Safe projection proof passed with `safe_fields_only: true` and field count `11`.
+- Audit proof passed with `read_route_does_not_write_audit_rows: true`.
+- Cleanup proof passed: the fake notification row was deleted and zero matching rows remained afterward.
+- Rollback proof passed after a no-override staging redeploy closed the temporary gates: staging root HTTP 200 and `GET/PATCH /api/customer-app-notifications` blocked for anonymous access.
+- Local temporary evidence env/key files were removed after the evidence window.
+- No customer in-app button, customer notification send UI, customer portal production activation, real customer auth/session creation, provider send, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, parser, Save Booking, `/api/admin-saved-bookings`, shim, production activation, or production deploy occurred.
+- No secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data were printed or recorded.
+- Customer In-App Notification read/table evidence is complete for the bounded staging-safe read lane, but customer in-app runtime button/write activation, production activation, and real customer data access remain blocked until separately approved.
+
 ### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved bounded Customer Portal saved-bookings authenticated read evidence pass using one staging-safe customer account/reference.
 - This lock does not activate customer auth, customer portal live read, session creation, cookie creation, token creation, env changes, DB reads/writes, notification row writes, customer in-app runtime/buttons, provider sends, Google Maps/OneMap/FlightAware calls, deploy, or production activation.

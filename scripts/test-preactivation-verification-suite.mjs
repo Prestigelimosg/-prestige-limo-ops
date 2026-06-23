@@ -587,6 +587,10 @@ const guardChecks = [
     script: "scripts/test-driver-in-app-notification-admin-button-guard.mjs",
   },
   {
+    label: "Customer In-App Notification admin button guard",
+    script: "scripts/test-customer-in-app-notification-admin-button-guard.mjs",
+  },
+  {
     label: "Customer In-App Notification read prerequisite contract guard",
     script: "scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs",
   },

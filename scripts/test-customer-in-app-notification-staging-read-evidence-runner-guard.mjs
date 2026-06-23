@@ -6,7 +6,6 @@ const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mj
 const runnerPath = "scripts/run-customer-in-app-notification-staging-read-evidence.mjs";
 const customerRoutePath = "app/api/customer-app-notifications/route.ts";
 const persistencePath = "lib/customer-driver-app-notification-persistence.ts";
-const appPagePath = "app/page.tsx";
 const guardScript =
   "scripts/test-customer-in-app-notification-staging-read-evidence-runner-guard.mjs";
 
@@ -31,13 +30,12 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
-const [ledger, preactivationSuite, runner, customerRoute, persistence, appPage] = await Promise.all([
+const [ledger, preactivationSuite, runner, customerRoute, persistence] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
   readFile(runnerPath, "utf8"),
   readFile(customerRoutePath, "utf8"),
   readFile(persistencePath, "utf8"),
-  readFile(appPagePath, "utf8"),
 ]);
 
 const runnerSection = sectionBetween(
@@ -168,16 +166,6 @@ const loadIndex = persistence.indexOf("loadCustomerAppNotificationsForStagingRef
 const clientIndex = persistence.indexOf("getCustomerInAppNotificationReadClient()");
 assert.equal(gateIndex >= 0 && loadIndex > gateIndex, true, "read helper must resolve gate before loading rows");
 assert.equal(clientIndex >= 0 && clientIndex > gateIndex, true, "Supabase client helper must appear after gated read helpers");
-
-for (const fragment of [
-  'deliverySurface: "customer_app"',
-  'delivery_surface: "customer_app"',
-  "Send Customer In-App",
-  "data-admin-customer-in-app",
-  "customer-in-app-send",
-]) {
-  assertExcludes(appPage, fragment, "customer in-app button/runtime remains blocked");
-}
 
 for (const forbiddenPattern of [
   /console\.log\s*\([^)]*process\.env/i,

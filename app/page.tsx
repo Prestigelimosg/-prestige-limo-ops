@@ -935,6 +935,17 @@ type AdminCustomerDriverDetailsDisabledSendActionState = {
 type AdminCustomerDriverDetailsEmailDisabledSendActionState =
   AdminCustomerDriverDetailsDisabledSendActionState;
 
+type AdminCustomerDriverDetailsCustomerInAppActionState = {
+  actionStatus: "idle" | "loading" | "loaded" | "error";
+  deliverySurface: "customer_app";
+  external_send: false;
+  loadedReference: string;
+  message: string;
+  noProviderSend: true;
+  notificationStatus: "queued" | "blocked";
+  notificationType: "trip_update";
+};
+
 type AdminCustomerDriverDetailsDriverInAppActionState = {
   actionStatus: "idle" | "loading" | "loaded" | "error";
   deliverySurface: "driver_app";
@@ -997,6 +1008,21 @@ function adminCustomerDriverDetailsEmailDisabledSendFallbackState(
   message = "Disabled email send is setup-only.",
 ): AdminCustomerDriverDetailsEmailDisabledSendActionState {
   return adminCustomerDriverDetailsDisabledSendFallbackState(message);
+}
+
+function adminCustomerDriverDetailsCustomerInAppFallbackState(
+  message = "Load a saved booking with customer copy ready before sending Customer In-App.",
+): AdminCustomerDriverDetailsCustomerInAppActionState {
+  return {
+    actionStatus: "idle",
+    deliverySurface: "customer_app",
+    external_send: false,
+    loadedReference: "",
+    message,
+    noProviderSend: true,
+    notificationStatus: "blocked",
+    notificationType: "trip_update",
+  };
 }
 
 function adminCustomerDriverDetailsDriverInAppFallbackState(
@@ -9023,6 +9049,12 @@ export default function Home() {
     adminCustomerDriverDetailsDisabledSendFallbackState("Disabled SMS send is setup-only."),
   );
   const [
+    adminCustomerDriverDetailsCustomerInAppActionState,
+    setAdminCustomerDriverDetailsCustomerInAppActionState,
+  ] = useState<AdminCustomerDriverDetailsCustomerInAppActionState>(() =>
+    adminCustomerDriverDetailsCustomerInAppFallbackState(),
+  );
+  const [
     adminCustomerDriverDetailsDriverInAppActionState,
     setAdminCustomerDriverDetailsDriverInAppActionState,
   ] = useState<AdminCustomerDriverDetailsDriverInAppActionState>(() =>
@@ -16872,6 +16904,85 @@ export default function Home() {
     }
   }
 
+  async function sendAdminCustomerDriverDetailsCustomerInAppNotification() {
+    const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
+
+    if (!bookingReference || !dispatchReleaseCustomerCopyReady) {
+      setAdminCustomerDriverDetailsCustomerInAppActionState({
+        ...adminCustomerDriverDetailsCustomerInAppFallbackState(
+          "Load a saved booking with complete customer copy before sending Customer In-App.",
+        ),
+        actionStatus: "error",
+        loadedReference: bookingReference,
+      });
+      return;
+    }
+
+    setAdminCustomerDriverDetailsCustomerInAppActionState({
+      ...adminCustomerDriverDetailsCustomerInAppFallbackState(
+        `Sending one Customer In-App update for ${bookingReference}...`,
+      ),
+      actionStatus: "loading",
+      loadedReference: bookingReference,
+      notificationStatus: "queued",
+    });
+
+    try {
+      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+        body: JSON.stringify({
+          booking_reference: bookingReference,
+          delivery_surface: "customer_app",
+          driver_job_link_id: null,
+          event_key: `${bookingReference}:customer-in-app:driver-details-ready`,
+          notification_status: "queued",
+          notification_type: "trip_update",
+          priority: "normal",
+          safe_context: {
+            action: "admin_selected",
+            message_template: "driver_details_ready",
+            provider_send: false,
+            source: "customer_copy_compact_row",
+          },
+          safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+          safe_title: "Driver details ready",
+          workflow_area: "customer_app_updates",
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(result?.error || "Customer In-App update failed safely.");
+      }
+
+      setAdminCustomerDriverDetailsCustomerInAppActionState({
+        actionStatus: "loaded",
+        deliverySurface: "customer_app",
+        external_send: false,
+        loadedReference: bookingReference,
+        message: `Customer In-App update queued for ${bookingReference}.`,
+        noProviderSend: true,
+        notificationStatus: "queued",
+        notificationType: "trip_update",
+      });
+    } catch (error) {
+      const errorText =
+        error instanceof Error
+          ? error.message
+          : "Customer In-App update failed safely.";
+
+      setAdminCustomerDriverDetailsCustomerInAppActionState({
+        ...adminCustomerDriverDetailsCustomerInAppFallbackState(errorText),
+        actionStatus: "error",
+        loadedReference: bookingReference,
+      });
+    }
+  }
+
   async function sendAdminCustomerDriverDetailsDriverInAppNotification() {
     const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
     const driverJobLinkId = clean(activeAdminDriverJobLink?.id);
@@ -17012,6 +17123,31 @@ export default function Home() {
       adminCustomerDriverDetailsSmsDisabledSendDisplayState,
       "Setup-only / send disabled, sendingEnabled false, external_send false",
     );
+  const adminCustomerDriverDetailsCustomerInAppStateMatchesReference =
+    adminCustomerDriverDetailsCustomerInAppActionState.loadedReference ===
+    adminCustomerDriverDetailsEmailReviewBookingReference;
+  const adminCustomerDriverDetailsCustomerInAppDisplayState =
+    adminCustomerDriverDetailsCustomerInAppStateMatchesReference
+      ? adminCustomerDriverDetailsCustomerInAppActionState
+      : adminCustomerDriverDetailsCustomerInAppFallbackState();
+  const adminCustomerDriverDetailsCustomerInAppCanSend =
+    Boolean(adminCustomerDriverDetailsEmailReviewBookingReference) &&
+    dispatchReleaseCustomerCopyReady &&
+    adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus !== "loading";
+  const adminCustomerDriverDetailsCustomerInAppActionLabel =
+    adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loading"
+      ? "Sending Customer In-App"
+      : "Send Customer In-App";
+  const adminCustomerDriverDetailsCustomerInAppStatusText =
+    adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loading"
+      ? "Customer In-App sending"
+      : adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loaded"
+        ? "Customer In-App queued"
+        : adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "error"
+          ? "Customer In-App blocked"
+          : dispatchReleaseCustomerCopyReady
+            ? "Customer In-App ready"
+            : "Customer In-App needs copy";
   const adminCustomerDriverDetailsDriverInAppStateMatchesReference =
     adminCustomerDriverDetailsDriverInAppActionState.loadedReference ===
     adminCustomerDriverDetailsEmailReviewBookingReference;
@@ -31458,6 +31594,34 @@ export default function Home() {
                           ? "Checking SMS"
                           : "Review SMS"}
                       </button>
+                      <button
+                        aria-label="Send Customer In-App update to the customer"
+                        className="inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border border-emerald-200 bg-white px-2 py-1 text-left font-semibold text-emerald-800 transition hover:border-emerald-300 hover:text-emerald-950 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500"
+                        data-admin-customer-driver-details-customer-in-app-send-action="true"
+                        data-admin-customer-driver-details-customer-in-app-send-action-state={
+                          adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus
+                        }
+                        data-admin-customer-driver-details-customer-in-app-send-delivery-surface={
+                          adminCustomerDriverDetailsCustomerInAppDisplayState.deliverySurface
+                        }
+                        data-admin-customer-driver-details-customer-in-app-send-external-send="false"
+                        data-admin-customer-driver-details-customer-in-app-send-loaded-reference={
+                          adminCustomerDriverDetailsCustomerInAppDisplayState.loadedReference
+                        }
+                        data-admin-customer-driver-details-customer-in-app-send-no-provider-send="true"
+                        data-admin-customer-driver-details-customer-in-app-send-notification-status={
+                          adminCustomerDriverDetailsCustomerInAppDisplayState.notificationStatus
+                        }
+                        disabled={!adminCustomerDriverDetailsCustomerInAppCanSend}
+                        onClick={sendAdminCustomerDriverDetailsCustomerInAppNotification}
+                        title={adminCustomerDriverDetailsCustomerInAppActionLabel}
+                        type="button"
+                      >
+                        {adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus ===
+                        "loading"
+                          ? "Sending In-App"
+                          : "Send In-App"}
+                      </button>
                     </div>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:max-w-sm sm:justify-end">
@@ -31489,6 +31653,13 @@ export default function Home() {
                       title={adminEmailActivationPreflightDisplayState.message}
                     >
                       {adminEmailActivationPreflightStatusText}
+                    </span>
+                    <span
+                      className="max-w-full break-words rounded-full bg-white px-1.5 py-0.5 text-left text-[9px] font-semibold uppercase text-slate-700"
+                      data-admin-customer-driver-details-customer-in-app-send-status="true"
+                      title={adminCustomerDriverDetailsCustomerInAppDisplayState.message}
+                    >
+                      {adminCustomerDriverDetailsCustomerInAppStatusText}
                     </span>
                   </div>
                 </div>

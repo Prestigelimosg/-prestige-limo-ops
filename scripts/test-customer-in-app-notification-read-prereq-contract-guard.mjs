@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
-const appPagePath = "app/page.tsx";
 const customerRoutePath = "app/api/customer-app-notifications/route.ts";
 const adminRoutePath = "app/api/admin-customer-driver-app-notifications/route.ts";
 const driverRoutePath = "app/api/driver-job/[token]/notifications/route.ts";
@@ -37,7 +36,6 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n### ") {
 const [
   ledger,
   preactivationSuite,
-  appPage,
   customerRoute,
   adminRoute,
   driverRoute,
@@ -46,7 +44,6 @@ const [
 ] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
-  readFile(appPagePath, "utf8"),
   readFile(customerRoutePath, "utf8"),
   readFile(adminRoutePath, "utf8"),
   readFile(driverRoutePath, "utf8"),
@@ -169,16 +166,6 @@ for (const fragment of [
   "Driver access must go through the server-only hashed-token API.",
 ]) {
   assertIncludes(migration, fragment, `notification table/RLS foundation fragment ${fragment}`);
-}
-
-for (const fragment of [
-  'deliverySurface: "customer_app"',
-  'delivery_surface: "customer_app"',
-  "Send Customer In-App",
-  "data-admin-customer-in-app",
-  "customer-in-app-send",
-]) {
-  assertExcludes(appPage, fragment, "customer in-app button or runtime app wiring");
 }
 
 const routeAndHelperSources = `${customerRoute}\n${adminRoute}\n${driverRoute}\n${persistence}`;

@@ -4776,6 +4776,25 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, or real customer data were printed or recorded.
 - Customer In-App Notification read/table evidence is complete for the bounded staging-safe read lane, but customer in-app runtime button/write activation, production activation, and real customer data access remain blocked until separately approved.
 
+### Customer In-App Notification Compact Admin Button Lock
+- This is a bounded runtime implementation in the existing Customer Copy section after completed Customer In-App Notification read/table evidence.
+- It reuses the existing compact Customer Copy action row and does not add a new UI sector, card, provider-send panel, route, helper, or shim.
+- The compact visible button label is `Send In-App` with an accessible Customer In-App label.
+- The button is placed beside the existing Customer Copy `Review Email`, `Review WhatsApp`, and `Review SMS` controls.
+- The button is admin-selected only and sends no automatic fallback, no automatic multi-channel blast, and no provider message.
+- The button requires a loaded saved booking reference and complete customer copy readiness for the current booking.
+- The customer target is the currently selected booking's customer app notification surface; no free-form customer selection is introduced.
+- The first message template is fixed: safe title `Driver details ready` and safe message `Your Prestige Limo driver details are ready in your customer app.`
+- The created notification uses `delivery_surface: "customer_app"`, `notification_type: "trip_update"`, `notification_status: "queued"`, `priority: "normal"`, and `workflow_area: "customer_app_updates"`.
+- The click action uses the existing `POST /api/admin-customer-driver-app-notifications` route and existing `lib/customer-driver-app-notification-persistence.ts` boundary.
+- The route remains behind the existing admin/dispatcher boundary and admin persistence gate.
+- No free-text message body, template menu, batch send, retry, polling, scheduler, fallback, or blast is introduced.
+- No Email, Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, provider-send, or external-call path is introduced.
+- Customer read remains gated by `/api/customer-app-notifications`; this button only queues the approved safe customer_app notification row.
+- Customer-visible in-app content remains forbidden from exposing pricing, billing, invoice/payment/PDF, payout, PayNow, payout preferences/comparisons, `driver_payout_rules`, `customer_rates`, internal/admin/finance notes, parser/debug fields, secrets/tokens, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, auth/session/cookie/JWT values, live location, and OTS/photo/storage unless separately approved.
+- Production activation, real customer notification evidence, customer portal production activation, env changes, deploy, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, pricing/rates/customer_rates changes, `driver_payout_rules` changes, payout/payment/PDF/billing/invoice changes, auth/session/cookie changes, OTS/photo/storage changes, calendar changes, UI sector/card expansion, and shim changes remain separate lanes.
+- Guard: `scripts/test-customer-in-app-notification-admin-button-guard.mjs`; suite registration in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved bounded Customer Portal saved-bookings authenticated read evidence pass using one staging-safe customer account/reference.
 - This lock does not activate customer auth, customer portal live read, session creation, cookie creation, token creation, env changes, DB reads/writes, notification row writes, customer in-app runtime/buttons, provider sends, Google Maps/OneMap/FlightAware calls, deploy, or production activation.

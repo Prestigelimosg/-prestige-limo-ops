@@ -4888,6 +4888,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No provider send, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, shim, production deploy, all-customer activation, free-form customer message, fallback, blast, scheduler, or retry occurred.
 - The production pilot evidence is complete for one hidden active customer candidate only; broad/all-customer runtime activation, free-form customer messaging, provider sends, and finance/billing/payment/PDF/payout lanes remain blocked until separately approved.
 
+### Controlled Small-Allowlist Customer Production Runtime Pilot Runner Guard Lock
+- This is a disabled-by-default production evidence runner guard for the separately approved small-allowlist customer production pilot.
+- The runner is `scripts/run-small-allowlist-customer-runtime-production-pilot.mjs`.
+- The runner requires `PRESTIGE_SMALL_ALLOWLIST_CUSTOMER_PRODUCTION_PILOT_APPROVED=small-allowlist-customer-production-pilot-approved` before it can run.
+- The runner selects at least two and at most four hidden active production customer candidates internally, with one latest active booking for each customer/account.
+- The runner uses `small-allowlist` runtime mode for both Customer Portal and Customer In-App gates and keeps the allowlist account-scoped.
+- The runner intentionally does not print customer names, customer IDs, auth user IDs, booking references, booking row IDs, row IDs, tokens, cookies, env values, phone/email/contacts, or private customer data.
+- The runner uses production Supabase credentials only from existing local env files and validates the masked production project ref `kvv...atm`; no values are printed.
+- The runner opens runtime gates only in the local process harness and does not edit env files, Vercel env, or deploy.
+- The runner creates one temporary `customer_access_accounts` mapping and one temporary `customer_app` notification row per allowlisted customer, then deletes them and verifies zero matching rows remain.
+- The runner proves customer portal read, customer in-app read, admin `Send In-App`, blocked missing/wrong session, out-of-scope booking isolation, and post-rollback blocked behavior for every allowlisted customer.
+- The runner is forbidden from provider sends, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, billing/payment/PDF/invoice, pricing, payout, `customer_rates`, `driver_payout_rules`, parser, Save Booking, `/api/admin-saved-bookings`, UI changes, deploy, or broad/all-customer runtime activation.
+- The runner output must not print secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, booking references, customer names, phone/email, contacts, or private customer data.
+- The runner guard is `scripts/test-small-allowlist-customer-runtime-production-pilot-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
+- This lock does not run the production pilot, open production Vercel gates, change env, deploy, write DB rows, create notification rows, or activate customer runtime by itself.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

@@ -4835,6 +4835,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future activation evidence must prove rollback/disable by closing gates, removing temporary env exposure if any, redeploying closed when needed, and verifying blocked/no-read/no-write behavior after rollback.
 - Driver In-App, Driver Details Email, Google Maps, OneMap retirement, FlightAware locks, and provider-send evidence do not unlock customer portal runtime or customer in-app runtime.
 - This guard adds `scripts/test-controlled-customer-runtime-activation-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+- The disabled-by-default controlled runtime gate scaffold is now implemented in `lib/customer-saved-bookings-read.ts`, `lib/customer-driver-app-notification-persistence.ts`, and `app/api/customer-app-notifications/route.ts`.
+- The scaffold defaults closed unless the relevant runtime gate is explicitly enabled, mode is `one-customer` or `small-allowlist`, and the customer account reference is present in the allowlist.
+- Customer Portal saved-bookings reads require the existing customer saved-bookings session boundary plus `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE`, and `PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST` before reading booking rows.
+- Customer In-App notification runtime reads require the existing saved-bookings session boundary plus `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE`, and `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST`, then verify the booking belongs to the allowlisted customer account before reading notifications.
+- Customer In-App `customer_app` writes require the existing admin/dispatcher boundary, the approved fixed `Driver details ready` template, a safe booking reference, and the controlled customer in-app account allowlist before inserting a row.
+- `driver_app` notification writes remain separate from customer runtime activation and are not unlocked or blocked by the customer allowlist scaffold.
 
 ### Customer Portal Saved-Bookings Authenticated Read Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved bounded Customer Portal saved-bookings authenticated read evidence pass using one staging-safe customer account/reference.

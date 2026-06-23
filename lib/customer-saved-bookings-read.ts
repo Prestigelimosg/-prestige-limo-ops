@@ -13,7 +13,15 @@ export const customerSavedBookingsReadVersion =
 export type CustomerSavedBookingsBoundaryContext = {
   auth_user_id: string;
   mode: "server-session-cookie" | "server-session-token";
+  runtime_gate: ControlledCustomerRuntimeGate;
   source_surface: "customer_api";
+};
+
+type ControlledCustomerRuntimeMode = "one-customer" | "small-allowlist";
+
+type ControlledCustomerRuntimeGate = {
+  account_allowlist: Set<string>;
+  mode: ControlledCustomerRuntimeMode;
 };
 
 export type CustomerSavedBookingsReadParams = {
@@ -71,6 +79,10 @@ const customerSavedBookingsConfigError =
   "Customer saved bookings read configuration is not ready.";
 const customerSavedBookingsReadError =
   "Customer saved bookings read failed safely.";
+const customerPortalRuntimeDisabledError =
+  "Controlled customer portal runtime is not enabled for this customer.";
+const customerPortalRuntimeConfigError =
+  "Controlled customer portal runtime configuration is not ready.";
 const customerSavedBookingsSessionCookieName =
   "prestige_customer_saved_bookings_session";
 const customerSavedBookingsFallbackSessionCookieName =
@@ -87,6 +99,11 @@ const allowedCustomerStatuses = new Set([
   "received",
   "completed",
 ]);
+const controlledCustomerRuntimeModes = new Set<ControlledCustomerRuntimeMode>([
+  "one-customer",
+  "small-allowlist",
+]);
+const maxControlledCustomerRuntimeAllowlistEntries = 5;
 const forbiddenCustomerSavedBookingsFragments = [
   "admin_finance",
   "admin_internal_status",
@@ -207,6 +224,83 @@ function validBookingReference(value: unknown) {
     !includesForbiddenFragment(cleaned)
     ? cleaned
     : null;
+}
+
+function parseControlledCustomerRuntimeMode(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  return cleaned && controlledCustomerRuntimeModes.has(cleaned as ControlledCustomerRuntimeMode)
+    ? (cleaned as ControlledCustomerRuntimeMode)
+    : null;
+}
+
+function parseControlledCustomerAccountAllowlist(value: unknown) {
+  const raw = textOrNull(value);
+
+  if (!raw) {
+    return null;
+  }
+
+  const entries = raw
+    .split(/[\s,]+/)
+    .map((entry) => validBookingReference(entry))
+    .filter((entry): entry is string => Boolean(entry));
+  const uniqueEntries = [...new Set(entries)];
+
+  if (
+    uniqueEntries.length === 0 ||
+    uniqueEntries.length > maxControlledCustomerRuntimeAllowlistEntries
+  ) {
+    return null;
+  }
+
+  return new Set(uniqueEntries);
+}
+
+function resolveControlledCustomerPortalRuntimeGate(): AdminBookingResult<ControlledCustomerRuntimeGate> {
+  if (process.env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED !== "true") {
+    return {
+      error: customerPortalRuntimeDisabledError,
+      ok: false,
+      status: 403,
+    };
+  }
+
+  const mode = parseControlledCustomerRuntimeMode(process.env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE);
+  const accountAllowlist = parseControlledCustomerAccountAllowlist(
+    process.env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST,
+  );
+
+  if (!mode || !accountAllowlist) {
+    return {
+      error: customerPortalRuntimeConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  if (mode === "one-customer" && accountAllowlist.size !== 1) {
+    return {
+      error: customerPortalRuntimeConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  return {
+    data: {
+      account_allowlist: accountAllowlist,
+      mode,
+    },
+    ok: true,
+  };
+}
+
+function customerAccountAllowedByControlledRuntime(
+  customerAccountReference: string,
+  gate: ControlledCustomerRuntimeGate,
+) {
+  return gate.account_allowlist.has(customerAccountReference);
 }
 
 function validLimit(value: unknown) {
@@ -685,10 +779,17 @@ export function resolveCustomerSavedBookingsBoundary(
     return customerSavedBookingsAuthRequiredResult();
   }
 
+  const runtimeGate = resolveControlledCustomerPortalRuntimeGate();
+
+  if (!runtimeGate.ok) {
+    return runtimeGate;
+  }
+
   return {
     data: {
       auth_user_id: authUserId,
       mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
+      runtime_gate: runtimeGate.data,
       source_surface: "customer_api",
     },
     ok: true,
@@ -740,6 +841,10 @@ export async function loadCustomerSavedBookings(
       },
       ok: true,
     };
+  }
+
+  if (!customerAccountAllowedByControlledRuntime(customerAccountReference, context.runtime_gate)) {
+    return customerSavedBookingsAuthRequiredResult();
   }
 
   const offset = (parsed.data.page - 1) * parsed.data.limit;

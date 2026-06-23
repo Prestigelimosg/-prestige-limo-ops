@@ -155,8 +155,10 @@ for (const fragment of [
   "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN",
   "SUPABASE_SERVICE_ROLE_KEY",
   "customerInAppNotificationReadSelect",
+  "loadCustomerAppNotificationsForBookingReference",
   ".eq(\"delivery_surface\", \"customer_app\")",
-  ".eq(\"booking_reference\", stagingReference)",
+  ".eq(\"booking_reference\", bookingReference)",
+  "stagingReference",
 ]) {
   assertIncludes(persistence, fragment, `gated customer read helper fragment ${fragment}`);
 }

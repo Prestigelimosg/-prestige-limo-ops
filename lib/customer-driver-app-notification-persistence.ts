@@ -24,6 +24,8 @@ export const customerDriverAppNotificationPersistenceVersion =
   "stage-customer-driver-app-notification-api-v1";
 export const customerInAppNotificationReadEvidenceVersion =
   "stage-customer-in-app-notification-read-evidence-v1";
+export const customerInAppNotificationRuntimeVersion =
+  "stage-customer-in-app-notification-runtime-v1";
 
 export const customerDriverAppNotificationSurfaces = ["customer_app", "driver_app"] as const;
 export const customerDriverAppNotificationTypes = [
@@ -146,6 +148,12 @@ type CustomerSavedBookingsSessionTokenSource =
   | "missing"
   | "request-cookie"
   | "request-header";
+type ControlledCustomerRuntimeMode = "one-customer" | "small-allowlist";
+
+type ControlledCustomerRuntimeGate = {
+  account_allowlist: Set<string>;
+  mode: ControlledCustomerRuntimeMode;
+};
 
 type DriverLinkScope = {
   booking_reference: string;
@@ -153,6 +161,8 @@ type DriverLinkScope = {
 };
 
 const notificationTable = "customer_driver_app_notification_outbox";
+const customerAccountSelect = "customer_account_reference, account_status";
+const bookingCustomerScopeSelect = "booking_reference, customer_id";
 const driverJobLinkSelect = "id, booking_reference, link_status, expires_at, revoked_at";
 const notificationSelect =
   "id, notification_type, notification_status, priority, delivery_surface, event_key, booking_reference, driver_job_link_id, workflow_area, safe_title, safe_message, safe_context, source_surface, actor_role, actor_label, created_at, updated_at";
@@ -190,6 +200,12 @@ const safeCustomerInAppReadConfigError =
   "Customer app notification read evidence configuration is not ready.";
 const safeCustomerInAppReadError =
   "Customer app notification read failed safely.";
+const customerInAppRuntimeDisabledError =
+  "Controlled customer in-app notification runtime is not enabled for this customer.";
+const customerInAppRuntimeConfigError =
+  "Controlled customer in-app notification runtime configuration is not ready.";
+const customerInAppRuntimeWriteTemplateError =
+  "Customer app notification write is limited to the approved driver details ready template.";
 const safeNotificationUpdateError = "Customer/driver app notification status update failed safely.";
 const customerSavedBookingsSessionCookieName =
   "prestige_customer_saved_bookings_session";
@@ -213,6 +229,11 @@ const allowedCustomerInAppNotificationReadQueryParams = new Set([
   "limit",
   "page",
 ]);
+const controlledCustomerRuntimeModes = new Set<ControlledCustomerRuntimeMode>([
+  "one-customer",
+  "small-allowlist",
+]);
+const maxControlledCustomerRuntimeAllowlistEntries = 5;
 const allowedCreateFields = new Set([
   "booking_reference",
   "delivery_surface",
@@ -369,6 +390,85 @@ function safeIdentifier(value: unknown, maxLength: number) {
   }
 
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(cleaned) ? cleaned : null;
+}
+
+function parseControlledCustomerRuntimeMode(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  return cleaned && controlledCustomerRuntimeModes.has(cleaned as ControlledCustomerRuntimeMode)
+    ? (cleaned as ControlledCustomerRuntimeMode)
+    : null;
+}
+
+function parseControlledCustomerAccountAllowlist(value: unknown) {
+  const raw = textOrNull(value);
+
+  if (!raw) {
+    return null;
+  }
+
+  const entries = raw
+    .split(/[\s,]+/)
+    .map((entry) => safeIdentifier(entry, maxBookingReferenceLength))
+    .filter((entry): entry is string => Boolean(entry));
+  const uniqueEntries = [...new Set(entries)];
+
+  if (
+    uniqueEntries.length === 0 ||
+    uniqueEntries.length > maxControlledCustomerRuntimeAllowlistEntries
+  ) {
+    return null;
+  }
+
+  return new Set(uniqueEntries);
+}
+
+function resolveControlledCustomerInAppNotificationRuntimeGate(): AdminBookingResult<ControlledCustomerRuntimeGate> {
+  if (process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED !== "true") {
+    return {
+      error: customerInAppRuntimeDisabledError,
+      ok: false,
+      status: 403,
+    };
+  }
+
+  const mode = parseControlledCustomerRuntimeMode(
+    process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE,
+  );
+  const accountAllowlist = parseControlledCustomerAccountAllowlist(
+    process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST,
+  );
+
+  if (!mode || !accountAllowlist) {
+    return {
+      error: customerInAppRuntimeConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  if (mode === "one-customer" && accountAllowlist.size !== 1) {
+    return {
+      error: customerInAppRuntimeConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  return {
+    data: {
+      account_allowlist: accountAllowlist,
+      mode,
+    },
+    ok: true,
+  };
+}
+
+function customerAccountAllowedByControlledRuntime(
+  customerAccountReference: string,
+  gate: ControlledCustomerRuntimeGate,
+) {
+  return gate.account_allowlist.has(customerAccountReference);
 }
 
 function safeUuidOrNull(value: unknown) {
@@ -948,6 +1048,96 @@ function resolveCustomerInAppNotificationReadBoundary(
   };
 }
 
+function resolveCustomerInAppNotificationRuntimeBoundary(
+  request: Request,
+  runtimeGate: ControlledCustomerRuntimeGate,
+): AdminBookingResult<{
+  auth_user_id: string;
+  booking_reference: string;
+  mode: "server-session-cookie" | "server-session-token";
+  runtime_gate: ControlledCustomerRuntimeGate;
+}> {
+  const requestUrl = new URL(request.url);
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const purpose = request.headers.get("x-prestige-customer-purpose");
+
+  if (purpose !== "customer-in-app-notification-read") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (origin && origin !== requestUrl.origin) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (!referer) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  try {
+    const refererUrl = new URL(referer);
+
+    if (refererUrl.origin !== requestUrl.origin || refererUrl.pathname !== "/my-bookings") {
+      return customerAppNotificationsRequireAuthResult();
+    }
+  } catch {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const unsafeParams = [...requestUrl.searchParams.entries()].filter(
+    ([key, value]) =>
+      !allowedCustomerInAppNotificationReadQueryParams.has(key) ||
+      includesForbiddenFragment(key) ||
+      includesForbiddenFragment(value),
+  );
+
+  if (unsafeParams.length > 0) {
+    return {
+      error: "Customer app notification read includes fields outside the approved read scope.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const bookingReference = safeIdentifier(
+    requestUrl.searchParams.get("booking_reference"),
+    maxBookingReferenceLength,
+  );
+
+  if (!bookingReference) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
+  const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
+  const authUserId = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
+
+  if (
+    mode !== "server-session-token" ||
+    !validServerCredential(expectedToken) ||
+    providedToken.token !== expectedToken ||
+    !authUserId ||
+    !uuidPattern.test(authUserId)
+  ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  return {
+    data: {
+      auth_user_id: authUserId,
+      booking_reference: bookingReference,
+      mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
+      runtime_gate: runtimeGate,
+    },
+    ok: true,
+  };
+}
+
 function parseCustomerInAppNotificationReadLimit(value: string | null) {
   const parsed = value === null || value === "" ? defaultCustomerInAppNotificationReadLimit : Number(value);
 
@@ -1023,9 +1213,10 @@ function toCustomerInAppNotificationReadEvidenceRecord(
   };
 }
 
-async function loadCustomerAppNotificationsForStagingReference(
+async function loadCustomerAppNotificationsForBookingReference(
+  client: NotificationClient,
   request: Request,
-  stagingReference: string,
+  bookingReference: string,
 ): Promise<AdminBookingResult<{
   notifications: CustomerInAppNotificationReadEvidenceRecord[];
 }>> {
@@ -1040,17 +1231,11 @@ async function loadCustomerAppNotificationsForStagingReference(
     };
   }
 
-  const clientResult = getCustomerInAppNotificationReadClient();
-
-  if (!clientResult.ok) {
-    return clientResult;
-  }
-
-  const { data, error } = await clientResult.data
+  const { data, error } = await client
     .from(notificationTable)
     .select(customerInAppNotificationReadSelect)
     .eq("delivery_surface", "customer_app")
-    .eq("booking_reference", stagingReference)
+    .eq("booking_reference", bookingReference)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -1068,6 +1253,238 @@ async function loadCustomerAppNotificationsForStagingReference(
     },
     ok: true,
   };
+}
+
+async function loadCustomerAppNotificationsForStagingReference(
+  request: Request,
+  stagingReference: string,
+): Promise<AdminBookingResult<{
+  notifications: CustomerInAppNotificationReadEvidenceRecord[];
+}>> {
+  const clientResult = getCustomerInAppNotificationReadClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  return loadCustomerAppNotificationsForBookingReference(
+    clientResult.data,
+    request,
+    stagingReference,
+  );
+}
+
+async function loadControlledCustomerAccountReference(
+  client: NotificationClient,
+  authUserId: string,
+): Promise<AdminBookingResult<string | null>> {
+  const { data, error } = await client
+    .from("customer_access_accounts")
+    .select(customerAccountSelect)
+    .eq("auth_user_id", authUserId)
+    .eq("account_status", "active")
+    .limit(1);
+
+  if (error) {
+    return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
+  }
+
+  const customerAccountReference = safeIdentifier(
+    asRecord(asArray(data)[0]).customer_account_reference,
+    maxBookingReferenceLength,
+  );
+
+  return {
+    data: customerAccountReference,
+    ok: true,
+  };
+}
+
+async function verifyControlledCustomerBookingReference(
+  client: NotificationClient,
+  bookingReference: string,
+  customerAccountReference: string,
+): Promise<AdminBookingResult<null>> {
+  const { data, error } = await client
+    .from("bookings")
+    .select(bookingCustomerScopeSelect)
+    .eq("customer_id", customerAccountReference)
+    .eq("booking_reference", bookingReference)
+    .limit(1);
+
+  if (error) {
+    return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
+  }
+
+  const matchedBookingReference = safeIdentifier(
+    asRecord(asArray(data)[0]).booking_reference,
+    maxBookingReferenceLength,
+  );
+
+  if (matchedBookingReference !== bookingReference) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  return {
+    data: null,
+    ok: true,
+  };
+}
+
+function customerAppNotificationUsesApprovedRuntimeTemplate(
+  input: CustomerDriverAppNotificationInput,
+) {
+  return (
+    input.delivery_surface === "customer_app" &&
+    input.notification_type === "trip_update" &&
+    input.notification_status === "queued" &&
+    input.priority === "normal" &&
+    input.safe_title === "Driver details ready" &&
+    input.safe_message === "Your Prestige Limo driver details are ready in your customer app." &&
+    input.workflow_area === "customer_app_updates"
+  );
+}
+
+async function assertControlledCustomerAppNotificationWriteAllowed(
+  client: NotificationClient,
+  input: CustomerDriverAppNotificationInput,
+): Promise<AdminBookingResult<null>> {
+  if (input.delivery_surface !== "customer_app") {
+    return {
+      data: null,
+      ok: true,
+    };
+  }
+
+  if (!customerAppNotificationUsesApprovedRuntimeTemplate(input)) {
+    return {
+      error: customerInAppRuntimeWriteTemplateError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const gate = resolveControlledCustomerInAppNotificationRuntimeGate();
+
+  if (!gate.ok) {
+    return gate;
+  }
+
+  if (!input.booking_reference) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const { data, error } = await client
+    .from("bookings")
+    .select(bookingCustomerScopeSelect)
+    .eq("booking_reference", input.booking_reference)
+    .limit(1);
+
+  if (error) {
+    return safeAdapterFailure(safeNotificationCreateError, 500, error);
+  }
+
+  const customerAccountReference = safeIdentifier(
+    asRecord(asArray(data)[0]).customer_id,
+    maxBookingReferenceLength,
+  );
+
+  if (
+    !customerAccountReference ||
+    !customerAccountAllowedByControlledRuntime(customerAccountReference, gate.data)
+  ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  return {
+    data: null,
+    ok: true,
+  };
+}
+
+async function loadCustomerAppNotificationsForControlledRuntime(
+  request: Request,
+  boundary: {
+    auth_user_id: string;
+    booking_reference: string;
+    runtime_gate: ControlledCustomerRuntimeGate;
+  },
+): Promise<AdminBookingResult<{
+  notifications: CustomerInAppNotificationReadEvidenceRecord[];
+}>> {
+  const clientResult = getCustomerInAppNotificationReadClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const accountReference = await loadControlledCustomerAccountReference(
+    clientResult.data,
+    boundary.auth_user_id,
+  );
+
+  if (!accountReference.ok) {
+    return accountReference;
+  }
+
+  if (
+    !accountReference.data ||
+    !customerAccountAllowedByControlledRuntime(accountReference.data, boundary.runtime_gate)
+  ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const bookingScope = await verifyControlledCustomerBookingReference(
+    clientResult.data,
+    boundary.booking_reference,
+    accountReference.data,
+  );
+
+  if (!bookingScope.ok) {
+    return bookingScope;
+  }
+
+  return loadCustomerAppNotificationsForBookingReference(
+    clientResult.data,
+    request,
+    boundary.booking_reference,
+  );
+}
+
+export async function readCustomerAppNotificationsForControlledRuntime(
+  request: Request,
+): Promise<CustomerInAppNotificationReadEvidenceResult> {
+  const gate = resolveControlledCustomerInAppNotificationRuntimeGate();
+
+  if (!gate.ok) {
+    if (gate.error === customerInAppRuntimeDisabledError) {
+      return customerInAppNotificationReadNotHandled();
+    }
+
+    return customerInAppNotificationReadError(gate.error, gate.status);
+  }
+
+  const boundary = resolveCustomerInAppNotificationRuntimeBoundary(request, gate.data);
+
+  if (!boundary.ok) {
+    return customerInAppNotificationReadError(boundary.error, boundary.status);
+  }
+
+  const result = await loadCustomerAppNotificationsForControlledRuntime(request, boundary.data);
+
+  if (!result.ok) {
+    return customerInAppNotificationReadError(result.error, result.status);
+  }
+
+  return customerInAppNotificationReadHandled(200, {
+    delivery_surface: "customer_app",
+    external_send: false,
+    notification_count: result.data.notifications.length,
+    notifications: result.data.notifications,
+    ok: true,
+    provider_send: false,
+    version: customerInAppNotificationRuntimeVersion,
+  });
 }
 
 export async function readCustomerAppNotificationsForStagingEvidence(
@@ -1312,6 +1729,15 @@ export async function createCustomerDriverAppNotification(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  const customerAppWriteGate = await assertControlledCustomerAppNotificationWriteAllowed(
+    clientResult.data,
+    input,
+  );
+
+  if (!customerAppWriteGate.ok) {
+    return customerAppWriteGate;
   }
 
   const payload = {

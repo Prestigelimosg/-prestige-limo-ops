@@ -1,5 +1,6 @@
 import {
   customerAppNotificationsRequireAuthResult,
+  readCustomerAppNotificationsForControlledRuntime,
   readCustomerAppNotificationsForStagingEvidence,
 } from "../../../lib/customer-driver-app-notification-persistence";
 
@@ -29,6 +30,12 @@ function safeCustomerAuthRequiredResponse() {
 
 export async function GET(request: Request) {
   try {
+    const runtimeReadResult = await readCustomerAppNotificationsForControlledRuntime(request);
+
+    if (runtimeReadResult.handled) {
+      return Response.json(runtimeReadResult.body, { status: runtimeReadResult.status });
+    }
+
     const readResult = await readCustomerAppNotificationsForStagingEvidence(request);
 
     if (readResult.handled) {

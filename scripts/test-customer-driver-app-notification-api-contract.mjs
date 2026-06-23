@@ -52,6 +52,12 @@ const originalEnv = {
     process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN,
   PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED:
     process.env.PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED,
+  PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST:
+    process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST,
+  PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED:
+    process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED,
+  PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE:
+    process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   SUPABASE_URL: process.env.SUPABASE_URL,
 };
@@ -90,6 +96,10 @@ function validEnv() {
     PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
     PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
+    PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST:
+      "customer-runtime-account-001",
+    PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: "true",
+    PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: "one-customer",
     PRESTIGE_DRIVER_JOB_LINKS_PRODUCTION_ENABLED: "true",
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
     SUPABASE_URL: supabaseUrlSentinel,
@@ -323,6 +333,8 @@ class MockSupabaseClient {
     this.selectHistory = [];
     this.tables = {
       [notificationTable]: [],
+      bookings: [],
+      customer_access_accounts: [],
       driver_job_links: [],
     };
     this.updateHistory = [];
@@ -513,16 +525,19 @@ function safeNotificationPayload(overrides = {}) {
   return {
     booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
     delivery_surface: "customer_app",
-    event_key: "BOOK-CUST-DRIVER-NOTIFY-001:customer:queued",
+    event_key: "BOOK-CUST-DRIVER-NOTIFY-001:customer-in-app:driver-details-ready",
     notification_status: "queued",
-    notification_type: "booking_status",
+    notification_type: "trip_update",
     priority: "normal",
     safe_context: {
-      next_action: "Open the app notification drawer.",
+      action: "admin_selected",
+      message_template: "driver_details_ready",
+      provider_send: false,
+      source: "customer_copy_compact_row",
     },
-    safe_message: "Your booking request is being reviewed by dispatch.",
-    safe_title: "Booking request received",
-    workflow_area: "customer_booking_request",
+    safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+    safe_title: "Driver details ready",
+    workflow_area: "customer_app_updates",
     ...overrides,
   };
 }
@@ -555,7 +570,14 @@ try {
 
   try {
     setEnv(validEnv());
-    const postMock = installMockClient();
+    const postMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+    });
     const postResult = await responseJson(
       await adminRoute.POST(
         new Request("http://localhost/api/admin-customer-driver-app-notifications", {
@@ -581,10 +603,15 @@ try {
         booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
         delivery_surface: "customer_app",
         notification_status: "queued",
-        notification_type: "booking_status",
-        safe_title: "Booking request received",
+        notification_type: "trip_update",
+        safe_title: "Driver details ready",
       },
       "Expected admin POST to create a customer-app notification",
+    );
+    assert.deepEqual(
+      postMock.client.selectHistory[0].filters,
+      [{ column: "booking_reference", type: "eq", value: "BOOK-CUST-DRIVER-NOTIFY-001" }],
+      "Expected customer-app admin POST to verify the booking before insert.",
     );
     assert.deepEqual(
       Object.keys(postMock.client.insertHistory[0].payload).sort(),
@@ -612,6 +639,61 @@ try {
       false,
       "Expected admin POST response to omit link internals, actors, finance, auth, parser, and send fields",
     );
+
+    setEnv({
+      ...validEnv(),
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: undefined,
+    });
+    const runtimeClosedPostMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const runtimeClosedPost = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(safeNotificationPayload()),
+          headers: validAdminHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+    assert.equal(runtimeClosedPost.status, 403);
+    assert.equal(runtimeClosedPostMock.client.insertHistory.length, 0, "Runtime-closed customer_app write must not insert.");
+
+    setEnv(validEnv());
+    const wrongTemplatePostMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const wrongTemplatePost = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              safe_title: "Booking request received",
+            }),
+          ),
+          headers: validAdminHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+    assert.equal(wrongTemplatePost.status, 400);
+    assert.equal(wrongTemplatePostMock.client.insertHistory.length, 0, "Wrong customer_app template must not insert.");
 
     setEnv(validEnv());
     const driverPostMock = installMockClient();

@@ -46,6 +46,12 @@ const originalEnv = {
     process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_COOKIE_NAME,
   PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN:
     process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN,
+  PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST,
+  PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED,
+  PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE:
+    process.env.PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   SUPABASE_URL: process.env.SUPABASE_URL,
 };
@@ -82,6 +88,9 @@ function validEnv(overrides = {}) {
     PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE: "server-session-token",
     PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID: authUserId,
     PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN: sessionToken,
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: customerAccountReference,
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED: "true",
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE: "one-customer",
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
     SUPABASE_URL: supabaseUrlSentinel,
     ...overrides,
@@ -505,6 +514,23 @@ try {
   assert.equal(disabledBody.error, customerAuthRequiredMessage);
   assertSafeApiBody(disabledBody, "default-off route body");
 
+  validEnv({
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: undefined,
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ENABLED: undefined,
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_MODE: undefined,
+  });
+  const runtimeClosedMock = installMockClient(seedSavedBookingRows());
+  const runtimeClosedResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validHeaders(),
+    }),
+  );
+  const runtimeClosedBody = await json(runtimeClosedResponse);
+  assert.equal(runtimeClosedResponse.status, 403, "Existing customer auth gates alone must not open runtime.");
+  assert.equal(runtimeClosedBody.error, "Controlled customer portal runtime is not enabled for this customer.");
+  assert.equal(runtimeClosedMock.createdClients.length, 0, "Runtime-closed route must not create Supabase client.");
+  assertSafeApiBody(runtimeClosedBody, "runtime-closed route body");
+
   validEnv();
   installMockClient(seedSavedBookingRows());
   for (const [label, request] of [
@@ -694,6 +720,20 @@ try {
     false,
     "Select columns should avoid private customer/admin/finance/payout/parser fields.",
   );
+
+  validEnv({
+    PRESTIGE_CUSTOMER_PORTAL_RUNTIME_ACCOUNT_ALLOWLIST: "55555555-5555-4555-8555-555555555555",
+  });
+  const outOfAllowlistMock = installMockClient(seedSavedBookingRows());
+  const outOfAllowlistResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-saved-bookings?booking_reference=CUST-SAVED-001", {
+      headers: validHeaders(),
+    }),
+  );
+  const outOfAllowlistBody = await json(outOfAllowlistResponse);
+  assert.equal(outOfAllowlistResponse.status, 403, "Out-of-allowlist customer account must be blocked.");
+  assert.equal(outOfAllowlistMock.client.selectHistory.length, 1, "Out-of-allowlist read must stop before bookings query.");
+  assertSafeApiBody(outOfAllowlistBody, "out-of-allowlist route body");
 
   validEnv();
   const cookieRouteMock = installMockClient(seedSavedBookingRows());

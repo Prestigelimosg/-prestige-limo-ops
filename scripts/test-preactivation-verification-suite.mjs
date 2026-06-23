@@ -591,6 +591,10 @@ const guardChecks = [
     script: "scripts/test-customer-in-app-notification-admin-button-guard.mjs",
   },
   {
+    label: "Controlled Customer Portal + Customer In-App runtime activation contract guard",
+    script: "scripts/test-controlled-customer-runtime-activation-contract-guard.mjs",
+  },
+  {
     label: "Customer In-App Notification read prerequisite contract guard",
     script: "scripts/test-customer-in-app-notification-read-prereq-contract-guard.mjs",
   },

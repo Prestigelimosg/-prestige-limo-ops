@@ -4,6 +4,7 @@ export const customerRuntimeSessionMapEnvName =
   "PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP";
 export const exactCustomerRuntimeSessionMapEntryCount = 2;
 export const exactThreeCustomerRuntimeSessionMapEntryCount = 3;
+export const exactFiveCustomerRuntimeSessionMapEntryCount = 5;
 
 export type ExactCustomerRuntimeSessionMapResolution =
   | {
@@ -145,6 +146,7 @@ export function resolveExactTwoCustomerRuntimeSessionMap({
   const supportedEntryCounts = [
     exactCustomerRuntimeSessionMapEntryCount,
     exactThreeCustomerRuntimeSessionMapEntryCount,
+    exactFiveCustomerRuntimeSessionMapEntryCount,
   ];
 
   if (!supportedEntryCounts.includes(expectedEntryCount)) {

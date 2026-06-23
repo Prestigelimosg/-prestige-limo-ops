@@ -29,6 +29,18 @@ const exactThreeDeployApprovalValue =
 const exactThreeTargetUrlEnvName =
   "PRESTIGE_EXACT3_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_TARGET_URL";
 const exactThreeAllowlistSize = 3;
+const exactFiveApprovalEnvName =
+  "PRESTIGE_EXACT5_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_APPROVED";
+const exactFiveApprovalValue = "exact-5-small-live-customer-runtime-window-approved";
+const exactFivePhaseEnvName =
+  "PRESTIGE_EXACT5_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_PHASE";
+const exactFiveDeployApprovalEnvName =
+  "PRESTIGE_EXACT5_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_DEPLOY_APPROVED";
+const exactFiveDeployApprovalValue =
+  "exact-5-small-live-customer-runtime-window-deploy-approved";
+const exactFiveTargetUrlEnvName =
+  "PRESTIGE_EXACT5_SMALL_LIVE_CUSTOMER_RUNTIME_WINDOW_TARGET_URL";
+const exactFiveAllowlistSize = 5;
 const candidateEnvFileNames = [".env.production.local", ".env.local", ".env.stage4a388.local"];
 const notificationTable = "customer_driver_app_notification_outbox";
 const customerPortalPurpose = "customer-saved-bookings-read";
@@ -95,6 +107,21 @@ const exactThreeRequiredProofChecklist = [
   "rollback proof with gates closed",
   "post-rollback blocked/no-read proof",
 ];
+const exactFiveRequiredProofChecklist = [
+  "production root health proof before window",
+  "exactly five hidden active production customer account references approved privately",
+  "exactly five customer sessions mapped privately with no token values printed",
+  "exactly five private customer sessions to exactly five allowlisted customer accounts",
+  "one latest active booking per allowlisted customer account",
+  "customer portal read proof for all five allowlisted customers",
+  "customer in-app read proof for all five allowlisted customers",
+  "admin Send In-App fixed-template proof for all five allowlisted customers",
+  "anonymous, missing-session, wrong-session, wrong-customer, cross-origin, and wrong-referer block proof",
+  "audit or access-log proof without private values",
+  "monitoring proof during the window",
+  "rollback proof with gates closed",
+  "post-rollback blocked/no-read proof",
+];
 
 const safeCustomerVisibleFields = [
   "booking reference",
@@ -144,35 +171,76 @@ function exactThreeProfileRequested() {
   );
 }
 
+function exactFiveProfileRequested() {
+  return Boolean(
+    process.env[exactFiveApprovalEnvName] ||
+      process.env[exactFivePhaseEnvName] ||
+      process.env[exactFiveDeployApprovalEnvName] ||
+      process.env[exactFiveTargetUrlEnvName],
+  );
+}
+
 function activeApprovalEnvName() {
+  if (exactFiveProfileRequested()) {
+    return exactFiveApprovalEnvName;
+  }
+
   return exactThreeProfileRequested() ? exactThreeApprovalEnvName : approvalEnvName;
 }
 
 function activeApprovalValue() {
+  if (exactFiveProfileRequested()) {
+    return exactFiveApprovalValue;
+  }
+
   return exactThreeProfileRequested() ? exactThreeApprovalValue : approvalValue;
 }
 
 function activePhaseEnvName() {
+  if (exactFiveProfileRequested()) {
+    return exactFivePhaseEnvName;
+  }
+
   return exactThreeProfileRequested() ? exactThreePhaseEnvName : phaseEnvName;
 }
 
 function activeDeployApprovalEnvName() {
+  if (exactFiveProfileRequested()) {
+    return exactFiveDeployApprovalEnvName;
+  }
+
   return exactThreeProfileRequested() ? exactThreeDeployApprovalEnvName : deployApprovalEnvName;
 }
 
 function activeDeployApprovalValue() {
+  if (exactFiveProfileRequested()) {
+    return exactFiveDeployApprovalValue;
+  }
+
   return exactThreeProfileRequested() ? exactThreeDeployApprovalValue : deployApprovalValue;
 }
 
 function activeTargetUrlEnvName() {
+  if (exactFiveProfileRequested()) {
+    return exactFiveTargetUrlEnvName;
+  }
+
   return exactThreeProfileRequested() ? exactThreeTargetUrlEnvName : targetUrlEnvName;
 }
 
 function activeExactAllowlistSize() {
+  if (exactFiveProfileRequested()) {
+    return exactFiveAllowlistSize;
+  }
+
   return exactThreeProfileRequested() ? exactThreeAllowlistSize : exactAllowlistSize;
 }
 
 function activeNumberWord() {
+  if (exactFiveProfileRequested()) {
+    return "five";
+  }
+
   return exactThreeProfileRequested() ? "three" : "two";
 }
 
@@ -185,22 +253,38 @@ function activeBookingScope() {
 }
 
 function activeProofChecklist() {
+  if (exactFiveProfileRequested()) {
+    return exactFiveRequiredProofChecklist;
+  }
+
   return exactThreeProfileRequested() ? exactThreeRequiredProofChecklist : requiredProofChecklist;
 }
 
 function activePreflightStage() {
+  if (exactFiveProfileRequested()) {
+    return "exact-5-small-live-customer-runtime-production-window-preflight";
+  }
+
   return exactThreeProfileRequested()
     ? "exact-3-small-live-customer-runtime-production-window-preflight"
     : "small-live-customer-runtime-production-window-preflight";
 }
 
 function activeExecuteStage() {
+  if (exactFiveProfileRequested()) {
+    return "exact-5-small-live-customer-runtime-production-window-execute";
+  }
+
   return exactThreeProfileRequested()
     ? "exact-3-small-live-customer-runtime-production-window-execute"
     : "small-live-customer-runtime-production-window-execute";
 }
 
 function activeEvidencePrefix() {
+  if (exactFiveProfileRequested()) {
+    return "EXACT-5-SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW";
+  }
+
   return exactThreeProfileRequested()
     ? "EXACT-3-SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW"
     : "SMALL-LIVE-CUSTOMER-RUNTIME-WINDOW";
@@ -636,7 +720,19 @@ async function selectExactThreeLiveWindowTargets(client) {
   );
 }
 
+async function selectExactFiveLiveWindowTargets(client) {
+  return selectLiveWindowTargets(
+    client,
+    exactFiveAllowlistSize,
+    "five hidden active production customer accounts",
+  );
+}
+
 async function selectActiveLiveWindowTargets(client) {
+  if (exactFiveProfileRequested()) {
+    return selectExactFiveLiveWindowTargets(client);
+  }
+
   return exactThreeProfileRequested()
     ? selectExactThreeLiveWindowTargets(client)
     : selectExactTwoLiveWindowTargets(client);

@@ -4913,6 +4913,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Because the owner approval was for exactly two hidden active production customers, this three-customer safe run is not accepted as the completed small-allowlist production pilot evidence.
 - The runner is now locked to exactly two candidates before any separately approved rerun.
 
+### Exact-2 Small-Allowlist Customer Production Runtime Pilot Evidence Record
+- Evidence reference: `SMALL-ALLOWLIST-CUSTOMER-PRODUCTION-PILOT-20260623131644`.
+- Production target proof used the masked Supabase project ref `kvv...atm`; no full project ref, API key, DB URL, env value, token, cookie, customer ID, auth user ID, booking reference, booking row ID, row ID, phone/email/contact, customer name, or private customer data was printed or recorded.
+- The owner-approved scope was exactly two hidden active production customer candidates selected internally, with one latest active booking for each customer/account.
+- The runner skipped candidates with existing `customer_access_accounts` mappings so current production access rows were not overwritten, reused, or collided with.
+- Runtime gates were opened only in the local process harness and were closed afterward; no Vercel env was changed, no env file was edited, and no deploy occurred.
+- Customer portal read proof passed through `GET /api/customer-saved-bookings` with HTTP 200 for both selected customers, using safe saved-booking projection only.
+- Customer in-app read proof passed through `GET /api/customer-app-notifications` with HTTP 200 for both selected customers, using safe `customer_app` notification projection only.
+- Admin `Send In-App` proof passed through `POST /api/admin-customer-driver-app-notifications` with HTTP 200 for both selected customers, using the approved fixed safe customer template only: title `Driver details ready` and message `Your Prestige Limo driver details are ready in your customer app.`
+- Out-of-scope booking isolation proof passed with zero out-of-scope portal rows.
+- Temporary DB write scope was limited to one `customer_access_accounts` mapping and one `customer_app` notification row per selected customer for the evidence window.
+- Cleanup proof passed: selected customer count `2`, access mapping rows remaining `0`, notification rows remaining `0`, and `all_zero_matching_rows: true`.
+- Safe field proof passed for customer portal and customer in-app projections; no pricing, payout, PayNow, `customer_rates`, `driver_payout_rules`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/driver GPS, OTS/photo/storage, or private customer/contact fields were exposed.
+- No provider send, Email/Resend, Telegram, WhatsApp, SMS, Google Maps, OneMap, FlightAware, live-location, driver GPS, OTS/photo/storage, billing/payment/PDF/invoice, pricing/rates/customer_rates, `driver_payout_rules`, payout execution, parser, Save Booking, `/api/admin-saved-bookings`, shim, production deploy, all-customer activation, free-form customer message, fallback, blast, scheduler, or retry occurred.
+- The exact-2 small-allowlist production pilot evidence is complete; broad/all-customer runtime activation, free-form customer messaging, provider sends, and finance/billing/payment/PDF/payout lanes remain blocked until separately approved.
+
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.
 - Staging target commit: `25e22a7 Add controlled customer runtime gate scaffold`.

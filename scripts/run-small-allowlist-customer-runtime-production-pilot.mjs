@@ -14,11 +14,11 @@ const expectedMaskedProductionProjectRef = "kvv...atm";
 const candidateEnvFileNames = [".env.production.local", ".env.local", ".env.stage4a388.local"];
 const liveAttemptMarkerPath = path.join(
   os.tmpdir(),
-  "prestige-small-allowlist-customer-runtime-production-pilot-attempted.marker",
+  "prestige-small-allowlist-customer-runtime-production-pilot-attempted-v3.marker",
 );
 const targetLabel = "small allowlist customer";
 const minSmallAllowlistSize = 2;
-const maxSmallAllowlistSize = 4;
+const maxSmallAllowlistSize = 2;
 const customerPortalPurpose = "customer-saved-bookings-read";
 const customerInAppPurpose = "customer-in-app-notification-read";
 const customerPortalSessionIssuePurpose = "customer-portal-session-issue";
@@ -588,6 +588,19 @@ async function findSmallAllowlistTargets(client) {
       continue;
     }
 
+    const existingAccessMappings = await queryOrFail(
+      client
+        .from("customer_access_accounts")
+        .select("customer_account_reference")
+        .eq("customer_account_reference", customerAccountReference)
+        .limit(1),
+      "select existing customer access mapping guard",
+    );
+
+    if (existingAccessMappings.length > 0) {
+      continue;
+    }
+
     const bookingRows = await queryOrFail(
       client
         .from("bookings")
@@ -1046,7 +1059,7 @@ async function main() {
     }
 
     emitEvidence({
-      booking_scope: "up to four latest active small-allowlist production customer bookings",
+      booking_scope: "exactly two latest active small-allowlist production customer bookings",
       cleanup: {
         all_zero_matching_rows: cleanups.every((cleanup) => cleanup.zero_matching_rows),
         checked_customer_count: cleanups.length,

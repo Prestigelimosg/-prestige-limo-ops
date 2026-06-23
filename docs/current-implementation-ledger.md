@@ -4892,7 +4892,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This is a disabled-by-default production evidence runner guard for the separately approved small-allowlist customer production pilot.
 - The runner is `scripts/run-small-allowlist-customer-runtime-production-pilot.mjs`.
 - The runner requires `PRESTIGE_SMALL_ALLOWLIST_CUSTOMER_PRODUCTION_PILOT_APPROVED=small-allowlist-customer-production-pilot-approved` before it can run.
-- The runner selects at least two and at most four hidden active production customer candidates internally, with one latest active booking for each customer/account.
+- The runner selects exactly two hidden active production customer candidates internally, with one latest active booking for each customer/account.
+- The runner skips customer/account candidates that already have an existing `customer_access_accounts` mapping so it does not overwrite, reuse, or collide with current production access rows.
 - The runner uses `small-allowlist` runtime mode for both Customer Portal and Customer In-App gates and keeps the allowlist account-scoped.
 - The runner intentionally does not print customer names, customer IDs, auth user IDs, booking references, booking row IDs, row IDs, tokens, cookies, env values, phone/email/contacts, or private customer data.
 - The runner uses production Supabase credentials only from existing local env files and validates the masked production project ref `kvv...atm`; no values are printed.
@@ -4903,6 +4904,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The runner output must not print secrets, cookies, session tokens, API keys, DB URLs, env values, row IDs, auth user IDs, customer IDs, booking references, customer names, phone/email, contacts, or private customer data.
 - The runner guard is `scripts/test-small-allowlist-customer-runtime-production-pilot-runner-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 - This lock does not run the production pilot, open production Vercel gates, change env, deploy, write DB rows, create notification rows, or activate customer runtime by itself.
+
+### Small-Allowlist Customer Production Runtime Pilot Safe Attempt Note
+- A bounded production pilot attempt on `2026-06-23` initially selected three hidden active production customer candidates because the staged runner still allowed up to four candidates.
+- The attempt printed no customer names, customer IDs, auth user IDs, booking references, booking row IDs, row IDs, tokens, cookies, env values, phone/email/contacts, or private customer data.
+- The attempt reported customer portal read HTTP 200 for all selected customers, customer in-app read HTTP 200 for all selected customers, admin `Send In-App` HTTP 200 for all selected customers, safe field projection proof, zero out-of-scope portal rows, no provider sends, no billing/payment/PDF/payout, no Google Maps/OneMap/FlightAware calls, and no secrets printed.
+- Cleanup proof passed: all temporary `customer_access_accounts` mappings and `customer_app` notification rows were deleted and zero matching rows remained.
+- Because the owner approval was for exactly two hidden active production customers, this three-customer safe run is not accepted as the completed small-allowlist production pilot evidence.
+- The runner is now locked to exactly two candidates before any separately approved rerun.
 
 ### Controlled Customer Portal + Customer In-App Staging Runtime Pilot Evidence Record
 - Evidence record reference: `CONTROLLED-CUSTOMER-RUNTIME-PILOT-20260623-STATUS-VERIFIED`.

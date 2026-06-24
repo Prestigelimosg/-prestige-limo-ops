@@ -5615,6 +5615,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Runtime env names are names-only and values must never be recorded: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `PRESTIGE_DRIVER_LIVE_LOCATION_TABLE_RLS_EVIDENCE_REFERENCE`.
 - This guard adds `scripts/test-driver-live-location-gated-runtime-path-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Admin-Controlled Runtime Gate Readiness Lock
+- This is a docs/test-only readiness lock for replacing temporary deploy-time live-location evidence gates with a future admin-controlled runtime gate.
+- Normal live operation must not depend on Vercel CLI gate flips, repeated redeploys, or locally injected evidence env values.
+- Future production operation should install stable server env names once, then use an admin/dispatcher-controlled runtime setting to open or close Driver Live Location without a redeploy.
+- The current app remains closed by default and this lane does not add a live admin toggle, does not open GPS capture, does not open admin active-jobs map reads, does not write/read location rows, does not change env, and does not deploy.
+- Future admin-controlled runtime gate must be disabled by default, admin/dispatcher-only, same-origin protected, audited, scoped to explicit booking/job references or a small approved allowlist, and rollbackable without a deploy.
+- Future driver sharing must still require explicit driver consent from the job-token-scoped driver page and must never auto-start from page load, OTW, OTS, POB, Completed, customer copy, email, in-app, Telegram, WhatsApp, or SMS actions.
+- Future admin active-jobs map reads must still require the internal admin/dispatcher boundary and must never expose driver coordinates to customers until the separate customer live-location lane is approved.
+- Future admin gate UI must be compact and live in the existing admin dispatch/live-location area, not a new giant card, not Customer Copy, and not a duplicate sector.
+- Future admin gate write path must prove server-session admin/dispatcher auth, exact setting row scope, audit event, wrong-admin blocked proof, rollback/disable proof, and no broad all-driver activation.
+- Future evidence must prove the admin gate can open and close runtime without Vercel CLI, without changing env during the evidence window, and without leaving gates open after rollback.
+- Future stable install env names are names-only and values must not be printed: `PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED`, `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED`, `PRESTIGE_DRIVER_LIVE_LOCATION_MODE`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`.
+- Future admin-controlled setting names are names-only and values must not be printed: `driver_live_location_capture_enabled`, `admin_active_jobs_map_enabled`, `driver_live_location_mode`, `driver_live_location_allowed_job_references`, `driver_live_location_stale_after_seconds`, and `driver_live_location_retention_minutes`.
+- No provider sends, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware calls, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, shim work, customer live map, free-form chat, or production activation is approved by this readiness lock.
+- This guard adds `scripts/test-driver-live-location-admin-runtime-gate-readiness-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

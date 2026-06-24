@@ -715,6 +715,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-admin-runtime-gate-evidence-runner-guard.mjs",
   },
   {
+    label: "Driver Live Location runtime settings migration guard",
+    script: "scripts/test-driver-live-location-runtime-settings-migration-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

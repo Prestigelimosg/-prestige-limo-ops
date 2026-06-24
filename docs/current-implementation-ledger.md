@@ -5489,6 +5489,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future admin map UI remains admin/dispatcher-only and may show only approved operational marker/status fields; customer live map links remain separately blocked.
 - This guard adds `scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location POB Auto-Stop Readiness Contract Guard Lock
+- This is a docs/test-only guard for future Driver Live Location stop behavior after POB or Job Completed.
+- This lock does not activate GPS capture, start/stop live-location runtime, open live-location gates, write/read location rows, apply migrations, change env, deploy, call providers, send messages, activate customer live map links, or activate production.
+- Current state remains closed: no browser GPS capture, no location row persistence, no active admin map, no customer live map, no polling loop, and no background auto-stop worker.
+- Future auto-stop must use persisted driver job status evidence from `driver_job_status_events`, not local UI state, demo state, mock state, localStorage, customer status text, or untrusted browser-submitted status history.
+- Future auto-stop may stop sharing when the resolved assigned job reaches persisted `pob` or `completed`, using the guarded `driver_otw -> ots -> pob -> completed` workflow.
+- Future POB stop policy must be bounded and names-only; the default planning value remains 5 minutes after persisted POB unless owner separately approves a different value.
+- Future Job Completed stop policy must stop sharing immediately or at the approved bounded grace window; it must not leave indefinite tracking active after terminal completion.
+- Future auto-stop must be scoped to the resolved driver job token and assigned job only; one driver's POB/completed event must not stop or expose another driver/job location.
+- Future auto-stop implementation must be server-side verified, admin/dispatcher auditable, and must not rely on client-only timers as the source of truth.
+- Future auto-stop may use a bounded timer or scheduler only after separate owner approval; no indefinite polling loop, retry storm, fallback send, queue, cron, or multi-channel blast is approved by this guard.
+- Future auto-stop evidence must prove closed gates, fake/staging-safe status events first, wrong-driver blocked, wrong-admin blocked, stop after persisted POB/completed, stale/offline state, cleanup zero temporary rows, rollback disabled, and no customer live map.
+- Future stop/audit rows must include only safe operational fields and must not include pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.
+- Future auto-stop remains separate from Telegram True Live Location, Email/WhatsApp/SMS provider sends, Customer In-App, Driver In-App, Customer Copy, Driver Details Email, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
+- This guard adds `scripts/test-driver-live-location-pob-auto-stop-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

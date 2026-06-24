@@ -703,6 +703,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-browser-map-key-readiness-contract-guard.mjs",
   },
   {
+    label: "Driver Live Location POB auto-stop readiness contract guard",
+    script: "scripts/test-driver-live-location-pob-auto-stop-readiness-contract-guard.mjs",
+  },
+  {
     label: "Google Maps admin map evidence contract guard",
     script: "scripts/test-google-maps-admin-map-evidence-contract-guard.mjs",
   },

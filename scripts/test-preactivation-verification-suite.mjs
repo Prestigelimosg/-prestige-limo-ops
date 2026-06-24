@@ -711,6 +711,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-stale-offline-readiness-contract-guard.mjs",
   },
   {
+    label: "Customer Live Location link readiness contract guard",
+    script: "scripts/test-customer-live-location-link-readiness-contract-guard.mjs",
+  },
+  {
     label: "Google Maps admin map evidence contract guard",
     script: "scripts/test-google-maps-admin-map-evidence-contract-guard.mjs",
   },

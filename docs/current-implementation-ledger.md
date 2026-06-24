@@ -5518,6 +5518,19 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future stale/offline fields must be limited to safe operational fields and must not include pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, customer messages, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.
 - This guard adds `scripts/test-driver-live-location-stale-offline-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Live Location Link Readiness Contract Guard Lock
+- This is a docs/test-only guard for future customer-visible live-location link/readiness behavior.
+- This lock does not activate customer live map links, GPS capture, live-location runtime, admin active-jobs map runtime, route/helper reads or writes, table writes, migration application, env changes, deploy, provider calls, provider sends, billing/payment/PDF/payout, or production activation.
+- Current state remains closed: Customer Copy may show eligibility/help text only, must not generate or copy a live-location URL, customer visibility is false, and no customer map link is active.
+- Future customer live-location links require separate owner approval after driver GPS capture, table/RLS/retention evidence, admin active-jobs map evidence, browser map key readiness, stale/offline proof, POB auto-stop proof, customer access proof, rollback proof, and no-forbidden-field proof.
+- Future customer live-location links are not approved for MNG/Arrival bookings; eligible future service families remain DEP/DEPARTURE, TRF/TRANSFER, DSP, and HOURLY only after separate approval.
+- Future customer link window remains 30 minutes before pickup by default and must fail closed outside the window or when secure driver live-location setup is incomplete.
+- Future customer map/link runtime must never expose raw driver job tokens, raw booking IDs, admin/internal notes, pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.
+- Future customer map/link must show only customer-safe trip and location context needed for tracking and must hide admin-only active-jobs controls, other drivers/jobs, stale/offline implementation details, and evidence/debug fields.
+- Future evidence must prove no link for Arrival/MNG, no fake link inside eligibility window while setup is incomplete, blocked anonymous/wrong-customer access, customer-safe link scope, stale/offline handling, POB/completed stop behavior, cleanup zero rows, rollback disabled, and no provider sends.
+- Future customer live-location link remains separate from Driver Details Email, Customer Copy manual send, Customer In-App, Driver In-App, Telegram True Live Location, Email/WhatsApp/SMS provider sends, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
+- This guard adds `scripts/test-customer-live-location-link-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

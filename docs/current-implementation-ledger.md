@@ -5845,6 +5845,26 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future customer live-location link remains separate from Driver Details Email, Customer Copy manual send, Customer In-App, Driver In-App, Telegram True Live Location, Email/WhatsApp/SMS provider sends, Google Maps admin search/route estimates, OneMap, FlightAware, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
 - This guard adds `scripts/test-customer-live-location-link-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer Live Location Link/Map Scaffold Guard Lock
+- This adds a disabled-by-default Customer Live Location link/map scaffold and evidence runner.
+- The customer map route is `GET /api/customer-live-location-map` and remains closed by default.
+- The scaffold helper is `lib/customer-live-location-map-scaffold.ts`.
+- The disabled runner is `scripts/run-customer-live-location-link-map-staging-evidence.mjs`.
+- No runtime activation occurred, no env was changed, no database read/write occurred, no GPS capture was activated, no provider send occurred, and no customer live map was exposed.
+- The route requires same-origin customer headers and a customer session token before returning even the closed scaffold response.
+- Anonymous, cross-origin, missing-session, and write-method access must remain blocked.
+- Even with a customer boundary, the default response is closed/no-op with `customerVisible false`, `liveMapEnabled false`, `gpsCaptureEnabled false`, `locationStorageEnabled false`, `external_send false`, and zero markers.
+- If future gates are accidentally opened before runtime implementation, the route must fail safely with `customer_live_location_map_runtime_not_implemented_safely`.
+- Future eligible service families remain DEP/DEPARTURE, TRF/TRANSFER, DSP, and HOURLY only; MNG/Arrival remains blocked unless separately approved.
+- Future evidence must prove customer/account/booking scope, no link for Arrival/MNG, same-customer access only, wrong-customer blocked, stale/offline handling, POB/completed stop behavior, cleanup zero rows, rollback disabled, and no provider sends.
+- Future customer-visible fields are limited to safe trip label/status, driver sharing state, stale/offline state, last updated time, and map marker context required for tracking.
+- The scaffold must not expose pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, raw driver job tokens, raw booking IDs, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.
+- The runner requires `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_APPROVED=customer-live-location-link-map-staging-evidence-approved` and `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_PHASE` set to `pre-window`, `runtime-window`, or `post-rollback`.
+- The runner is staging-only and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_TARGET_URL` or its default.
+- `pre-window` and `post-rollback` prove blocked/closed customer route behavior without database access.
+- `runtime-window` is intentionally blocked until a separately approved customer-visible map runtime exists.
+- This guard adds `scripts/test-customer-live-location-link-map-scaffold-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

@@ -5407,6 +5407,18 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Next activation blockers remain: table/RLS/retention proof for live position storage, driver consent UI, admin active-jobs map UI, browser-safe domain-restricted map key plan if a browser map is needed, closed-gate evidence, fake/staging-safe evidence, cleanup proof, rollback proof, and owner approval.
 - This scaffold adds `lib/driver-live-location-scaffold.ts`, `POST/DELETE /api/driver-job/[token]/live-location`, `GET /api/admin-active-jobs-map-locations`, `scripts/test-driver-live-location-disabled-scaffold-guard.mjs`, and preactivation suite registration.
 
+### Driver Live Location Closed-Gate Route Smoke Guard Lock
+- This is a local docs/test-only in-process smoke guard for the disabled Driver Live Location route scaffold.
+- This lock does not activate GPS capture, live-location runtime, admin active-jobs map runtime, customer live map links, route/helper writes, table reads/writes, migration application, env changes, deploy, provider calls, provider sends, billing/payment/PDF/payout, or production activation.
+- The guard calls `POST /api/driver-job/[token]/live-location` through a temporary harness and requires HTTP 503 safe no-op with `action: "share"`, `gpsCaptureEnabled: false`, `locationStorageEnabled: false`, `liveMapEnabled: false`, `customerVisible: false`, `external_send: false`, and `sharing_state: "inactive"`.
+- The guard calls `DELETE /api/driver-job/[token]/live-location` through a temporary harness and requires HTTP 503 safe no-op with `action: "stop"` and the same disabled/no-op flags.
+- The guard calls `GET /api/admin-active-jobs-map-locations` anonymously and requires HTTP 403 before any active-jobs payload is returned.
+- The guard calls `GET /api/admin-active-jobs-map-locations` with the same-origin admin surface boundary and requires HTTP 503 safe no-op with `active_jobs: []`, `map_rendered: false`, and `marker_count: 0`.
+- The guard must not print or return driver job tokens, Supabase URLs, service-role keys, anon keys, row IDs, booking references, private customer data, live coordinates, cookies, JWTs, API keys, env values, or secrets.
+- The guard must not parse coordinate request bodies, call browser GPS APIs, create a Supabase client, read/write location rows, render a map, read map/provider keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, run timers/schedulers/polling/retries, or touch billing/payment/PDF/payout.
+- This smoke guard is not live evidence and does not replace future separately approved fake/staging-safe table/RLS, GPS capture, admin map, stale/offline, POB auto-stop, customer access, cleanup, and rollback evidence.
+- This guard adds `scripts/test-driver-live-location-closed-gate-route-smoke-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Table/RLS/Retention Evidence Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location table/RLS/retention evidence.
 - This lock does not create migrations, tables, RLS policies, coordinate storage, GPS capture, runtime DB reads/writes, admin active-jobs map runtime, customer live map links, env changes, deploy, provider calls, or production activation.

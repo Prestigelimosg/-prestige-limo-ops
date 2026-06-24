@@ -683,6 +683,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },
   {
+    label: "Driver Live Location closed-gate route smoke guard",
+    script: "scripts/test-driver-live-location-closed-gate-route-smoke-guard.mjs",
+  },
+  {
     label: "Driver Live Location table/RLS/retention contract guard",
     script: "scripts/test-driver-live-location-table-rls-retention-contract-guard.mjs",
   },

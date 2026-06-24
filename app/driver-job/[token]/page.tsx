@@ -809,12 +809,12 @@ export default function DriverJobPage() {
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
-      <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-5 sm:max-w-lg md:max-w-2xl md:py-8">
-        <header className="space-y-2 border-b border-stone-200 pb-4">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6">
+        <header className="space-y-1 border-b border-stone-200 pb-3">
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
-          <h1 className="text-2xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
+          <h1 className="text-xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
           <p
-            className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium leading-6 text-sky-950"
+            className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
             data-driver-job-mobile-web-note="true"
           >
             Mobile web driver card. Keep this link private and use it only for this assigned job.
@@ -824,7 +824,7 @@ export default function DriverJobPage() {
         {pageState.kind === "loading" ? (
           <section
             aria-live="polite"
-            className="rounded-md border border-stone-200 bg-white px-4 py-5 text-sm font-semibold text-slate-700"
+            className="rounded-md border border-stone-200 bg-white px-3 py-4 text-sm font-semibold text-slate-700"
           >
             Loading driver job...
           </section>
@@ -833,7 +833,7 @@ export default function DriverJobPage() {
         {pageState.kind === "blocked" ? (
           <section
             aria-live="polite"
-            className="space-y-2 rounded-md border border-rose-200 bg-rose-50 px-4 py-5 text-rose-900"
+            className="space-y-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-4 text-rose-900"
             data-driver-job-blocked="true"
           >
             <h2 className="text-base font-semibold">Driver job link unavailable</h2>
@@ -844,7 +844,7 @@ export default function DriverJobPage() {
         {pageState.kind === "ready" ? (
           <>
             <section
-              className="order-1 space-y-3"
+              className="order-1 space-y-2"
               aria-labelledby="driver-job-summary-heading"
               data-driver-primary-step="job-summary"
             >
@@ -862,7 +862,7 @@ export default function DriverJobPage() {
 
               <dl className="divide-y divide-stone-200 rounded-md border border-stone-200 bg-white">
                 {detailRows(pageState.job).map((detail) => (
-                  <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-3 text-sm" key={detail.label}>
+                  <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-2 text-sm" key={detail.label}>
                     <dt className="font-semibold text-slate-500">{detail.label}</dt>
                     <dd className="min-w-0 break-words text-slate-950">{displayValue(detail.value)}</dd>
                   </div>
@@ -871,7 +871,7 @@ export default function DriverJobPage() {
             </section>
 
             <details
-              className="order-[88] rounded-md border border-stone-200 bg-white p-3"
+              className="order-[88] rounded-md border border-stone-200 bg-white p-2.5"
               data-driver-job-workflow-handoff="true"
             >
               <summary
@@ -881,27 +881,27 @@ export default function DriverJobPage() {
                 How this page works
               </summary>
               <p
-                className="mt-3 text-sm font-medium leading-6 text-slate-600"
+                className="mt-2 text-sm font-medium leading-6 text-slate-600"
                 data-driver-job-workflow-handoff-helper="true"
               >
                 This is the driver page for this assigned job.
               </p>
               <ul
-                className="mt-3 grid gap-2 text-sm font-medium leading-6 text-slate-700"
+                className="mt-2 grid gap-1.5 text-sm font-medium leading-6 text-slate-700"
                 data-driver-job-workflow-handoff-list="true"
               >
-                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                <li className="border-l-2 border-slate-200 pl-3">
                   Review pickup time, pickup place, drop-off, route, and job notes before starting.
                 </li>
-                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                <li className="border-l-2 border-slate-200 pl-3">
                   Confirm driver and vehicle details once, then use the status buttons only when ready.
                 </li>
-                <li className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                <li className="border-l-2 border-slate-200 pl-3">
                   Use Report Issue when admin needs an in-app alert.
                 </li>
               </ul>
               <p
-                className="mt-3 text-sm font-semibold leading-6 text-slate-700"
+                className="mt-2 text-sm font-semibold leading-6 text-slate-700"
                 data-driver-job-workflow-handoff-boundary="true"
               >
                 Private account and internal compensation details are not shown here.
@@ -909,20 +909,20 @@ export default function DriverJobPage() {
             </details>
 
             <section
-              className="order-[90] space-y-3"
+              className="order-[90] space-y-2"
               aria-labelledby="driver-app-updates-heading"
               data-driver-job-app-updates="true"
             >
               <h2 id="driver-app-updates-heading" className="text-base font-semibold text-slate-900">
                 App Updates
               </h2>
-              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+              <div className="space-y-2 rounded-md border border-stone-200 bg-white p-2.5">
                 <p className="text-sm font-medium leading-6 text-slate-600">
                   Saved dispatch updates for this job link. External messages are not sent from this page.
                 </p>
                 <p
                   aria-live="polite"
-                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${driverAppUpdateStateClassName(driverAppUpdates.kind)}`}
+                  className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${driverAppUpdateStateClassName(driverAppUpdates.kind)}`}
                   data-driver-job-app-updates-feedback="true"
                   data-driver-job-app-updates-state={driverAppUpdates.kind}
                 >
@@ -931,10 +931,10 @@ export default function DriverJobPage() {
                     : driverAppUpdates.feedback?.text || "Saved app updates are ready to check."}
                 </p>
                 {driverAppUpdates.updates.length > 0 ? (
-                  <ol className="space-y-2" data-driver-job-app-updates-list="true">
+                  <ol className="space-y-1.5" data-driver-job-app-updates-list="true">
                     {driverAppUpdates.updates.map((update, index) => (
                       <li
-                        className="space-y-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+                        className="space-y-1.5 rounded-md bg-slate-50 px-2.5 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
                         data-driver-job-app-update-row="true"
                         key={update.id || `${update.safe_title || "driver-app-update"}-${index}`}
                       >
@@ -974,25 +974,25 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="order-2 space-y-3"
+              className="order-2 space-y-2"
               aria-labelledby="driver-details-heading"
               data-driver-primary-step="confirm-details"
             >
               <h2 id="driver-details-heading" className="text-base font-semibold text-slate-900">
                 Driver Details
               </h2>
-              <div className="space-y-3 rounded-md border border-stone-200 bg-white p-3">
+              <div className="space-y-2.5 rounded-md border border-stone-200 bg-white p-2.5">
                 <p
-                  className="rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                  className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-acknowledged-state="true"
                 >
                   {acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
                 </p>
-                <div className="grid gap-3">
+                <div className="grid gap-2">
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Paste Driver Details</span>
                     <textarea
-                      className="min-h-20 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-sm leading-6 text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="min-h-16 w-full resize-y rounded-md border border-stone-300 bg-white px-3 py-2 text-sm leading-6 text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-details-raw="true"
                       onChange={(event) => {
                         setDriverDetailsRaw(event.target.value);
@@ -1003,7 +1003,7 @@ export default function DriverJobPage() {
                   </label>
                   <div className="space-y-2">
                     <button
-                      className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
+                      className="h-10 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700"
                       data-driver-job-parse-details="true"
                       onClick={parsePastedDriverDetails}
                       type="button"
@@ -1013,7 +1013,7 @@ export default function DriverJobPage() {
                     {parseDetailsFeedback ? (
                       <p
                         aria-live="polite"
-                        className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(parseDetailsFeedback.tone)}`}
+                        className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(parseDetailsFeedback.tone)}`}
                         data-driver-job-parse-details-message="true"
                       >
                         {parseDetailsFeedback.text}
@@ -1021,11 +1021,11 @@ export default function DriverJobPage() {
                     ) : null}
                   </div>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-2.5 md:grid-cols-2">
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Driver name</span>
                     <input
-                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-name="true"
                       onChange={(event) => updateDriverDetail("name", event.target.value)}
                       type="text"
@@ -1035,7 +1035,7 @@ export default function DriverJobPage() {
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Contact / Mobile number</span>
                     <input
-                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-contact="true"
                       inputMode="tel"
                       onChange={(event) => updateDriverDetail("contact", event.target.value)}
@@ -1047,7 +1047,7 @@ export default function DriverJobPage() {
                     <span>Car plate</span>
                     <input
                       autoCapitalize="characters"
-                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-plate="true"
                       onChange={(event) => updateDriverDetail("plate", event.target.value)}
                       type="text"
@@ -1057,7 +1057,7 @@ export default function DriverJobPage() {
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Vehicle model</span>
                     <input
-                      className="h-11 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                       data-driver-job-detail-vehicle-model="true"
                       onChange={(event) => updateDriverDetail("vehicleModel", event.target.value)}
                       type="text"
@@ -1078,7 +1078,7 @@ export default function DriverJobPage() {
                   {detailsFeedback ? (
                     <p
                       aria-live="polite"
-                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(detailsFeedback.tone)}`}
+                      className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(detailsFeedback.tone)}`}
                       data-driver-job-details-message="true"
                     >
                       {detailsFeedback.text}
@@ -1087,7 +1087,7 @@ export default function DriverJobPage() {
                 </div>
                 {savedDriverDetails ? (
                   <div
-                    className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900"
+                    className="space-y-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900"
                     data-driver-job-saved-details="true"
                   >
                     <p className="font-semibold">Confirmed driver and vehicle details</p>
@@ -1115,19 +1115,19 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="order-[82] space-y-3"
+              className="order-[82] space-y-2"
               aria-labelledby="driver-live-location-heading"
               data-driver-live-location-consent-ui="disabled"
               data-driver-primary-step="live-location-consent"
             >
-              <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2.5">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h2 id="driver-live-location-heading" className="text-base font-semibold text-slate-900">
                       Live Location
                     </h2>
                     <p
-                      className="mt-1 text-sm font-medium leading-6 text-slate-600"
+                      className="mt-1 text-sm font-medium leading-5 text-slate-600"
                       data-driver-live-location-helper="true"
                     >
                       Location sharing is not active for this job.
@@ -1142,7 +1142,7 @@ export default function DriverJobPage() {
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
-                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
                     data-driver-live-location-share-button="disabled"
                     disabled
                     type="button"
@@ -1150,7 +1150,7 @@ export default function DriverJobPage() {
                     Share Location
                   </button>
                   <button
-                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="h-10 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
                     data-driver-live-location-stop-button="disabled"
                     disabled
                     type="button"
@@ -1158,20 +1158,20 @@ export default function DriverJobPage() {
                     Stop Sharing
                   </button>
                 </div>
-                <dl className="grid gap-2 text-xs font-semibold text-slate-600 sm:grid-cols-3">
-                  <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                <dl className="grid gap-1.5 text-xs font-semibold text-slate-600 sm:grid-cols-3">
+                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
                     <dt className="uppercase text-slate-500">Permission</dt>
                     <dd className="mt-1 text-slate-800" data-driver-live-location-permission-state="not_requested">
                       Not requested
                     </dd>
                   </div>
-                  <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
                     <dt className="uppercase text-slate-500">Last shared</dt>
                     <dd className="mt-1 text-slate-800" data-driver-live-location-last-shared="not_shared">
                       Not shared
                     </dd>
                   </div>
-                  <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
                     <dt className="uppercase text-slate-500">State</dt>
                     <dd className="mt-1 text-slate-800" data-driver-live-location-stale-state="inactive">
                       Not active
@@ -1181,19 +1181,19 @@ export default function DriverJobPage() {
               </div>
             </section>
 
-            <section className="order-[84] space-y-3" aria-labelledby="driver-activity-log-heading">
+            <section className="order-[84] space-y-2" aria-labelledby="driver-activity-log-heading">
               <h2 id="driver-activity-log-heading" className="text-base font-semibold text-slate-900">
                 Driver Activity Log
               </h2>
               <div
-                className="space-y-3 rounded-md border border-stone-200 bg-white p-3"
+                className="space-y-2 rounded-md border border-stone-200 bg-white p-2.5"
                 data-driver-job-activity-log="true"
               >
                 {activityLog.length > 0 ? (
-                  <ol className="space-y-2">
+                  <ol className="space-y-1.5">
                     {activityLog.map((event) => (
                       <li
-                        className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+                        className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200"
                         data-driver-job-activity-log-item="true"
                         key={event.id}
                       >
@@ -1214,18 +1214,18 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="order-3 flex flex-col gap-3 pb-6"
+              className="order-3 flex flex-col gap-2 pb-4"
               aria-labelledby="driver-status-heading"
               data-driver-primary-step="status-workflow"
             >
               <h2 id="driver-status-heading" className="text-base font-semibold text-slate-900">
                 Job Status
               </h2>
-              <div className="order-1 grid gap-3 md:grid-cols-4" data-driver-primary-step="status-buttons">
+              <div className="order-1 grid gap-2 md:grid-cols-4" data-driver-primary-step="status-buttons">
                 {statusActions.map((statusAction) => (
                   <div className="space-y-2" key={statusAction.label}>
                     <button
-                      className="h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-base font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                       data-driver-job-status={statusAction.label}
                       disabled={Boolean(updatingStatus)}
                       onClick={() => updateStatus(statusAction.value, statusAction.label)}
@@ -1236,7 +1236,7 @@ export default function DriverJobPage() {
                     {statusFeedback?.target === statusAction.label ? (
                       <p
                         aria-live="polite"
-                        className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(statusFeedback.tone)}`}
+                        className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(statusFeedback.tone)}`}
                         data-driver-job-status-message={statusAction.label}
                       >
                         {statusFeedback.text}
@@ -1246,7 +1246,7 @@ export default function DriverJobPage() {
                 ))}
               </div>
               <div
-                className="order-2 space-y-2 rounded-md border border-slate-200 bg-white p-3"
+                className="order-2 space-y-2 rounded-md border border-slate-200 bg-white p-2.5"
                 data-driver-job-status-timing-evidence="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1255,10 +1255,10 @@ export default function DriverJobPage() {
                     Read-only
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
                   {driverStatusTimingRows.map((timingRow) => (
                     <div
-                      className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-slate-200"
+                      className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200"
                       data-driver-job-status-timing-row={timingRow.key}
                       data-driver-job-status-timing-state={timingRow.occurredAt ? "recorded" : "pending"}
                       key={timingRow.key}
@@ -1293,7 +1293,7 @@ export default function DriverJobPage() {
                 </p>
               </div>
               <div
-                className="order-3 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3"
+                className="order-3 space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"
                 data-driver-job-report-issue="true"
                 data-driver-primary-step="report-issue"
               >
@@ -1306,7 +1306,7 @@ export default function DriverJobPage() {
                 <label className="block space-y-1 text-sm font-semibold text-amber-950">
                   <span>Issue type</span>
                   <select
-                    className="h-11 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                    className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                     data-driver-job-report-issue-select="true"
                     onChange={(event) => {
                       setSelectedDriverIssue(event.target.value);
@@ -1324,7 +1324,7 @@ export default function DriverJobPage() {
                 </label>
                 <div className="space-y-2">
                   <button
-                    className="h-11 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-10 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
                     data-driver-job-report-issue-submit="true"
                     disabled={reportingDriverIssue}
                     onClick={reportDriverIssue}
@@ -1335,7 +1335,7 @@ export default function DriverJobPage() {
                   {driverIssueFeedback ? (
                     <p
                       aria-live="polite"
-                      className={`rounded-md border px-3 py-2 text-sm font-semibold ${feedbackClassName(driverIssueFeedback.tone)}`}
+                      className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverIssueFeedback.tone)}`}
                       data-driver-job-report-issue-message="true"
                     >
                       {driverIssueFeedback.text}
@@ -1347,7 +1347,7 @@ export default function DriverJobPage() {
                 </p>
               </div>
               <div
-                className="order-4 space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                className="order-4 space-y-2 rounded-md border border-slate-200 bg-white p-2.5"
                 data-driver-job-saved-status-history="true"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1357,10 +1357,10 @@ export default function DriverJobPage() {
                   </span>
                 </div>
                 {savedStatusHistory.length > 0 ? (
-                  <ol className="space-y-2" data-driver-job-saved-status-history-list="true">
+                  <ol className="space-y-1.5" data-driver-job-saved-status-history-list="true">
                     {savedStatusHistory.map((event, index) => (
                       <li
-                        className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200"
+                        className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200"
                         data-driver-job-saved-status-history-row="true"
                         key={`${event.status}-${event.occurredAt}-${index}`}
                       >
@@ -1388,7 +1388,7 @@ export default function DriverJobPage() {
                   </ol>
                 ) : (
                   <p
-                    className="rounded-md bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600 ring-1 ring-slate-200"
+                    className="rounded-md bg-slate-50 px-2.5 py-1.5 text-sm font-medium text-slate-600 ring-1 ring-slate-200"
                     data-driver-job-saved-status-history-empty="true"
                   >
                     No saved status history for this link yet.

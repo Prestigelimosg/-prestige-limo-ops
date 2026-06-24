@@ -4700,6 +4700,17 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future quick-reply evidence remains separate and must prove customer-to-driver send/read, driver-to-customer send/read, admin/dispatch visibility, audit proof, wrong-customer blocked, wrong-driver blocked, wrong-booking blocked, anonymous blocked, post-POB blocked, cleanup/zero-row proof, and rollback disabled proof before any live use.
 - This scaffold is guarded by `scripts/test-customer-driver-quick-replies-runtime-scaffold-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Customer/Driver App Compact Surface Polish Lock
+- This lane compacts the existing Customer Portal and Driver Job app surfaces only.
+- No runtime route, helper, DB, env, provider-send, GPS/location, billing/payment/PDF/payout, or production activation behavior is changed.
+- Customer Portal keeps the same `/my-bookings` request, search, pagination, detail expansion, and local review controls.
+- Driver Job keeps the same job summary, driver detail acknowledgement, App Updates, Live Location disabled controls, activity log, status workflow, Report Issue, and status history controls.
+- The customer header/guidance and section tabs are compact bands/rows rather than giant cards.
+- The driver status, live-location, updates, and detail sections use compact spacing and shorter controls.
+- No new sector, feature card, free-form chat surface, provider-send panel, map activation, or notification runtime is introduced.
+- Customer and driver forbidden fields remain blocked by the existing privacy guards.
+- This polish is guarded by `scripts/test-customer-driver-app-compact-surface-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver In-App Notification Staging Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved Driver In-App Notification staging evidence pass.
 - This lock is distinct from the Customer/Driver In-App Notification Admin-Selected Channel Contract Lock; it locks the exact future one-row staging evidence window for driver notifications.

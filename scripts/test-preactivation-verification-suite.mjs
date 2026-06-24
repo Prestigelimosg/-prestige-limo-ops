@@ -591,6 +591,10 @@ const guardChecks = [
     script: "scripts/test-customer-driver-quick-replies-runtime-scaffold-guard.mjs",
   },
   {
+    label: "Customer/Driver app compact surface guard",
+    script: "scripts/test-customer-driver-app-compact-surface-guard.mjs",
+  },
+  {
     label: "Driver In-App Notification staging evidence contract guard",
     script: "scripts/test-driver-in-app-notification-staging-evidence-contract-guard.mjs",
   },

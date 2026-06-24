@@ -675,6 +675,10 @@ const guardChecks = [
     script: "scripts/test-driver-location-pob-evidence-contract-guard.mjs",
   },
   {
+    label: "Driver Live Location Capture + Admin Active Jobs Map contract guard",
+    script: "scripts/test-driver-live-location-active-jobs-map-contract-guard.mjs",
+  },
+  {
     label: "Google Maps admin map evidence contract guard",
     script: "scripts/test-google-maps-admin-map-evidence-contract-guard.mjs",
   },

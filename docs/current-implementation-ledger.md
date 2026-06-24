@@ -5368,6 +5368,31 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Current live-location surfaces remain setup-only/disabled with no driver browser GPS capture, no customer map link, no admin live map, no external map tracking, and no database read/write.
 - This guard adds `scripts/test-driver-location-pob-evidence-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Capture + Admin Active Jobs Map Contract Guard Lock
+- This is a docs/test-only guard for future separately approved Driver Live Location Capture and Admin Active Jobs Map implementation.
+- This lock does not activate driver browser GPS capture, driver location write/read APIs, admin active-jobs map runtime, customer live map links, location storage, table/RLS changes, env changes, deploy, provider sends, Google Maps browser key exposure, OneMap retry, Telegram live-location sends, WhatsApp/Email/SMS fallback, billing/payment/PDF/payout, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, UI sector/card expansion, shims, or production activation.
+- Current state remains setup-only/disabled: no driver GPS capture, no coordinate persistence, no admin active-jobs map, no customer live map link, no external map tracking, and no database read/write.
+- The exact-2/exact-3/exact-5 customer runtime pilots are customer portal/in-app allowlist scopes only; they are not driver live-location capacity limits.
+- Future admin active-jobs map must support multiple simultaneous active jobs by showing one admin-only marker per actively sharing driver/job, with stale/offline state instead of hiding failure.
+- Future driver capture must be explicit opt-in from the existing driver job link, require browser location permission, show clear sharing state to the driver, and provide an explicit stop control.
+- Future capture must be scoped to the current driver job token and assigned job only; one driver token must not see or write another driver/job location.
+- Future admin map read must be admin/dispatcher-only and same-origin/admin-boundary protected.
+- Future customer visibility is not approved by this lane; any customer live map link remains a separate later approval.
+- Future base-map rendering must not expose the existing server-side Google Maps key. Any browser map key requires a separately approved, domain-restricted, names-only env plan before use.
+- Future provider/base-map env names are names-only and must not print values: `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED`, `PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED`, `PRESTIGE_DRIVER_LIVE_LOCATION_MODE`, `PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES`, `PRESTIGE_DRIVER_LIVE_LOCATION_UPDATE_INTERVAL_SECONDS`, `PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS`, `PRESTIGE_DRIVER_LIVE_LOCATION_RETENTION_MINUTES`, and a separately approved browser-safe map key name if needed.
+- Closed gates must not call `navigator.geolocation`, must not read map/provider keys, must not create a DB client, must not write coordinates, and must not render an active admin map.
+- Future safe admin-visible location fields are limited to driver display label, assigned job label/reference, driver job status, vehicle/plate label if already assigned, latest latitude/longitude, accuracy, heading/speed if browser provides them, last updated time, stale/offline flag, and sharing state.
+- Future driver-visible fields are limited to the current job location-sharing state, permission state, last shared time, and stop/share controls.
+- Future location rows must not include pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, customer contact details, customer messages, OTS/photo/storage, or calendar data unless separately approved.
+- Future persistence requires a separately approved table/RLS/retention proof before live coordinates are stored.
+- Future persistence must prefer latest-location state plus bounded audit events over unbounded coordinate history unless owner separately approves retention.
+- Future cleanup/retention proof must define how test/evidence rows are removed and how stale production rows expire.
+- Future POB/job-complete stop behavior must use persisted driver status events from the guarded `driver_otw -> ots -> pob -> completed` workflow, not local/demo/mock state.
+- Future auto-stop must be bounded, must not create an indefinite polling loop, and must stop capture after the approved POB/job-complete policy window.
+- Future evidence must begin with closed-gate proof, use fake/staging-safe jobs first, prove anonymous/wrong-driver/wrong-admin blocked paths, prove no forbidden fields, prove rollback/disable, and prove zero matching temporary location rows remain after cleanup.
+- Future runtime must remain separate from Telegram True Live Location, Email/WhatsApp/SMS provider sends, Google Maps admin search/route estimates, OneMap, FlightAware, customer portal/in-app runtime, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, and shim work.
+- This guard adds `scripts/test-driver-live-location-active-jobs-map-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

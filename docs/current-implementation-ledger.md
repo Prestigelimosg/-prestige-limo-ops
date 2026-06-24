@@ -5438,6 +5438,22 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A later separately approved route/helper evidence lane must prove server-side driver job token resolution, driver write isolation, admin read isolation, stale cleanup, evidence cleanup, zero temporary rows, rollback disabled state, and no customer live map before GPS capture or active map runtime is enabled.
 - This lane adds `supabase/migrations/202606240001_driver_live_location_table_rls_retention_foundation.sql`, `scripts/test-driver-live-location-table-rls-migration-scaffold-guard.mjs`, updates the table/RLS/retention contract guard for the new migration-scaffold state, and registers the new guard in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Table/RLS Evidence Runner Guard Lock
+- This adds a disabled-by-default runner scaffold for future Driver Live Location table/RLS/retention evidence.
+- The runner is `scripts/run-driver-live-location-table-rls-retention-evidence.mjs`.
+- The runner is not executed by this commit, no migration was applied, and no database read/write occurred.
+- The runner requires `PRESTIGE_DRIVER_LIVE_LOCATION_TABLE_RLS_EVIDENCE_APPROVED=driver-live-location-table-rls-retention-evidence-approved` before any phase runs.
+- The runner requires `PRESTIGE_DRIVER_LIVE_LOCATION_TABLE_RLS_EVIDENCE_PHASE` to be one of `pre-window`, `db-window`, or `post-rollback`.
+- The runner is staging-only by default and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_DRIVER_LIVE_LOCATION_TABLE_RLS_EVIDENCE_TARGET_URL` or its default.
+- `pre-window` and `post-rollback` prove the driver capture and admin active-jobs routes are blocked/closed without database access.
+- `db-window` requires env names only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `PRESTIGE_DRIVER_LIVE_LOCATION_TABLE_RLS_EVIDENCE_REFERENCE`, `PRESTIGE_DRIVER_LIVE_LOCATION_EVIDENCE_DRIVER_JOB_LINK_ID`, and `PRESTIGE_DRIVER_LIVE_LOCATION_EVIDENCE_BOOKING_REFERENCE`.
+- Future `db-window` evidence may write exactly one fake latest-position row and one fake audit row for a staging-safe driver job link, then must clean them up and prove zero matching rows remain.
+- Future proof must show anonymous table access is blocked, service-role fixture cleanup succeeds, routes are closed before and after the window, no customer live map is enabled, and no provider sends occur.
+- The runner output is normalized and must not print Supabase URLs, service-role keys, anon keys, driver job tokens, row IDs, booking references, private customer data, coordinates from real users, cookies, JWTs, API keys, or env values.
+- This runner does not open gates, edit Vercel env, deploy, apply migrations, activate GPS capture, activate admin active-jobs map runtime, activate customer live map links, call Google Maps/OneMap/FlightAware, send provider messages, or touch billing/payment/PDF/payout.
+- A future evidence pass still requires separate owner approval for migration application state, staging-safe driver job target, DB evidence window, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
+- This guard adds `scripts/test-driver-live-location-table-rls-retention-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.

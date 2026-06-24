@@ -691,6 +691,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-table-rls-migration-scaffold-guard.mjs",
   },
   {
+    label: "Driver Live Location table/RLS evidence runner guard",
+    script: "scripts/test-driver-live-location-table-rls-retention-evidence-runner-guard.mjs",
+  },
+  {
     label: "Google Maps admin map evidence contract guard",
     script: "scripts/test-google-maps-admin-map-evidence-contract-guard.mjs",
   },

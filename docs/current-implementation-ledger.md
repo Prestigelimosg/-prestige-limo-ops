@@ -5734,6 +5734,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This guard adds `scripts/test-driver-live-location-share-stop-runtime-wiring-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 - A no-behavior-change alias guard `scripts/test-driver-live-location-share-stop-runtime-scaffold-guard.mjs` runs the same wiring guard so promotion checklists using the scaffold name remain covered without changing runtime code.
 
+### Driver Live Location Share/Stop Staging Evidence Runner Guard Lock
+- This adds a disabled-by-default runner scaffold for future Driver Live Location Share/Stop staging evidence.
+- The runner is `scripts/run-driver-live-location-share-stop-staging-evidence.mjs`.
+- The runner is not executed by this commit, no env was changed, no database read/write occurred, no GPS capture was activated, and no provider send occurred.
+- The runner requires `PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_STAGING_EVIDENCE_APPROVED=driver-live-location-share-stop-staging-evidence-approved` before any phase runs.
+- The runner requires `PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_STAGING_EVIDENCE_PHASE` to be one of `pre-window`, `runtime-window`, or `post-rollback`.
+- The runner is staging-only by default and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_STAGING_EVIDENCE_TARGET_URL` or its default.
+- `pre-window` and `post-rollback` prove driver Share/Stop and admin active-jobs map routes are blocked/closed without database access.
+- `runtime-window` requires env names only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN`, `PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_STAGING_EVIDENCE_REFERENCE`, `PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_STAGING_DRIVER_JOB_LINK_TOKEN`, and `PRESTIGE_DRIVER_LIVE_LOCATION_SHARE_STOP_STAGING_BOOKING_REFERENCE`.
+- Future `runtime-window` evidence may create exactly one temporary fake `driver_job_links` row, one temporary runtime setting row, one fake latest-position row through Share Location, and audit rows produced by Share/Stop and admin read paths.
+- The runner must prove Share Location, admin active-jobs map sees one safe fake marker, wrong-origin admin block, missing-admin block, wrong-driver block, Stop Sharing, admin active-jobs map drops back to zero markers, cleanup zero rows, and rollback/closed proof.
+- The runner must restore the previous `driver_live_location_runtime_settings` row or delete the temporary row if none existed, then clean up temporary driver link, latest-position, and audit rows and prove zero matching evidence rows remain.
+- The runner output is normalized and must not print Supabase URLs, service-role keys, admin session tokens, raw driver tokens, token hashes, row IDs, booking references, private customer data, real coordinates, cookies, JWTs, API keys, or env values.
+- This runner does not edit Vercel env, deploy, apply migrations, activate browser GPS automatically, activate customer live map links, call Google Maps/OneMap/FlightAware, send provider messages, or touch billing/payment/PDF/payout.
+- A future evidence pass still requires separate owner approval for stable server env gate state, staging-safe fake driver job token/reference, runtime DB window, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
+- This guard adds `scripts/test-driver-live-location-share-stop-staging-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not activate GPS capture by default, open live-location gates by default, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

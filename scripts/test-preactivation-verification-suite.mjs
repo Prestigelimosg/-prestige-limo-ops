@@ -735,6 +735,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-share-stop-runtime-scaffold-guard.mjs",
   },
   {
+    label: "Driver Live Location Share/Stop staging evidence runner guard",
+    script: "scripts/test-driver-live-location-share-stop-staging-evidence-runner-guard.mjs",
+  },
+  {
     label: "Driver Live Location disabled scaffold guard",
     script: "scripts/test-driver-live-location-disabled-scaffold-guard.mjs",
   },

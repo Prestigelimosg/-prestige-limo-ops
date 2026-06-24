@@ -5751,6 +5751,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A future evidence pass still requires separate owner approval for stable server env gate state, staging-safe fake driver job token/reference, runtime DB window, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
 - This guard adds `scripts/test-driver-live-location-share-stop-staging-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Share/Stop Staging Evidence Record
+- Evidence reference: `DRIVER-LIVE-LOCATION-SHARE-STOP-STAGING-20260624`.
+- Source-of-truth at evidence time: `8b78f23 Add driver live location share stop evidence runner`.
+- Stable server env gates and admin dispatcher auth env names were present in Vercel Production env for the staging project before evidence; admin dispatcher auth values were synced to the local evidence values and staging was redeployed before the accepted pass.
+- No Supabase URL value, service-role key, admin session token, raw driver token, token hash, row ID, booking reference, customer/driver private data, real coordinates, cookie, JWT, API key, or env value was printed or recorded.
+- Pre-window closed proof passed: driver Share Location returned HTTP 503, driver Stop Sharing returned HTTP 503, and admin active-jobs map returned HTTP 403 before the runtime setting window.
+- Runtime-window proof used one fake/staging-safe driver job link token/reference and one fake booking reference only.
+- Share Location proof passed through `POST /api/driver-job/[token]/live-location` with HTTP 200, `sharing_state active`, `customer_visible false`, and `external_send false`.
+- Admin active-jobs map proof after Share Location passed through `GET /api/admin-active-jobs-map-locations` with HTTP 200, marker count `1`, `customer_visible false`, and `external_send false`.
+- Boundary proof passed: missing admin was blocked HTTP 403, wrong origin was blocked HTTP 403, and wrong driver token was blocked HTTP 401.
+- Stop Sharing proof passed through `DELETE /api/driver-job/[token]/live-location` with HTTP 200, `sharing_state stopped`, `customer_visible false`, and `external_send false`.
+- Admin active-jobs map proof after Stop Sharing passed with HTTP 200 and marker count `0`.
+- Cleanup proof passed: the temporary fake driver-job link, latest-position row, audit rows, and runtime evidence rows were cleaned up, and zero matching evidence rows remained.
+- Runtime setting rollback proof passed: the previous `driver_live_location_runtime_settings` state was restored or the temporary setting was removed.
+- Post-rollback closed proof passed: driver Share Location returned HTTP 503, driver Stop Sharing returned HTTP 503, and admin active-jobs map returned HTTP 403 after the runtime window.
+- No real GPS, browser geolocation, real driver/customer data, customer live map, provider send, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware call, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work was activated.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not activate GPS capture by default, open live-location gates by default, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

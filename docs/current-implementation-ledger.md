@@ -5487,6 +5487,16 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No customer live map link, admin active-jobs map runtime, browser map key, DB write, env change, deploy, provider send, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, auth expansion, or shim work is activated.
 - Next live-location lane remains a separately approved gated runtime implementation/evidence pass with explicit driver consent, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.
 
+### Driver Live Location Admin Active Jobs Map Disabled Scaffold Implementation
+- This adds a compact disabled Admin Active Jobs Map scaffold inside the existing Day-of-Trip Dispatch Monitor admin surface.
+- The scaffold is a local UI status strip only; it shows future admin-only marker count, sharing state, and stale/offline state with all values disabled/off by default.
+- The scaffold does not render a base map, map canvas, map script, or provider widget.
+- The scaffold does not call `GET /api/admin-active-jobs-map-locations`, does not call `navigator.geolocation`, does not read map/browser keys, does not create a Supabase client, and does not read or write location rows.
+- The scaffold does not expose driver coordinates, customer live map links, customer visibility, browser map keys, raw provider payloads, row IDs, tokens, secrets, or env values.
+- No driver GPS capture, admin active-jobs map runtime, customer live map, DB read/write, env change, deploy, provider send, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware call, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, auth expansion, or shim work is activated.
+- The scaffold remains colocated with the existing Day-of-Trip Dispatch Monitor and does not add a new UI sector/card.
+- Next live-location lane remains separately approved gated runtime/evidence with explicit driver consent, table/RLS/retention proof already recorded as prerequisite, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

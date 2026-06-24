@@ -29432,6 +29432,50 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+              <div
+                aria-label="Admin Active Jobs Map disabled scaffold"
+                className="mt-1.5 rounded-md border border-lime-200 bg-white/75 p-1.5 text-[10px] leading-3 text-lime-950 sm:text-[11px] sm:leading-4"
+                data-admin-active-jobs-map-scaffold="disabled"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <p className="font-semibold leading-3 sm:leading-4">
+                    Active Jobs Map
+                  </p>
+                  <span
+                    className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[8px] font-semibold uppercase text-slate-700 sm:px-2 sm:text-[9px]"
+                    data-admin-active-jobs-map-state="disabled"
+                  >
+                    Off
+                  </span>
+                </div>
+                <div className="mt-1 grid grid-cols-3 gap-1">
+                  <p
+                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
+                    data-admin-active-jobs-map-marker-count="0"
+                  >
+                    Markers: 0
+                  </p>
+                  <p
+                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
+                    data-admin-active-jobs-map-sharing-state="inactive"
+                  >
+                    Sharing: off
+                  </p>
+                  <p
+                    className="min-w-0 rounded bg-lime-50 px-1 py-0.5 font-semibold"
+                    data-admin-active-jobs-map-stale-state="not-active"
+                  >
+                    Stale: off
+                  </p>
+                </div>
+                <p
+                  className="mt-1 break-words border-t border-lime-100 pt-1 text-[9px] leading-3 text-lime-900 sm:text-[10px]"
+                  data-admin-active-jobs-map-boundary="true"
+                >
+                  Disabled until driver consent, location storage, admin map gates, and browser-safe map key are
+                  separately approved.
+                </p>
+              </div>
               <p
                 className="mt-2 border-t border-lime-200 pt-2 text-[11px] leading-4 text-lime-900 md:text-[10px] md:leading-3"
                 data-admin-day-of-trip-dispatch-monitor-boundary="true"

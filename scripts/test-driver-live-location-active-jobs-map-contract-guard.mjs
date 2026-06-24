@@ -13,6 +13,7 @@ const liveLocationPreviewRoutePath =
   "app/api/admin-live-location-window-policy-preview-readiness-setup/route.ts";
 const driverJobPagePath = "app/driver-job/[token]/page.tsx";
 const driverJobDemoPath = "app/driver-job-demo/page.tsx";
+const adminPagePath = "app/page.tsx";
 const mapLocationSearchPath = "lib/admin-map-location-search.ts";
 const mapRouteEstimatesPath = "lib/admin-map-route-estimates.ts";
 const driverStatusWorkflowPath = "lib/driver-job-status-workflow.ts";
@@ -48,6 +49,7 @@ const [
   liveLocationPreviewRoute,
   driverJobPage,
   driverJobDemo,
+  adminPage,
   mapLocationSearch,
   mapRouteEstimates,
   driverStatusWorkflow,
@@ -61,6 +63,7 @@ const [
   readFile(liveLocationPreviewRoutePath, "utf8"),
   readFile(driverJobPagePath, "utf8"),
   readFile(driverJobDemoPath, "utf8"),
+  readFile(adminPagePath, "utf8"),
   readFile(mapLocationSearchPath, "utf8"),
   readFile(mapRouteEstimatesPath, "utf8"),
   readFile(driverStatusWorkflowPath, "utf8"),
@@ -170,6 +173,87 @@ for (const forbiddenPattern of [
     currentLiveLocationSource,
     forbiddenPattern,
     "current live-location setup-only routes/helpers",
+  );
+}
+
+const adminActiveJobsScaffoldSection = sectionBetween(
+  ledger,
+  "### Driver Live Location Admin Active Jobs Map Disabled Scaffold Implementation",
+);
+
+for (const phrase of [
+  "This adds a compact disabled Admin Active Jobs Map scaffold inside the existing Day-of-Trip Dispatch Monitor admin surface.",
+  "The scaffold is a local UI status strip only; it shows future admin-only marker count, sharing state, and stale/offline state with all values disabled/off by default.",
+  "The scaffold does not render a base map, map canvas, map script, or provider widget.",
+  "The scaffold does not call `GET /api/admin-active-jobs-map-locations`, does not call `navigator.geolocation`, does not read map/browser keys, does not create a Supabase client, and does not read or write location rows.",
+  "The scaffold does not expose driver coordinates, customer live map links, customer visibility, browser map keys, raw provider payloads, row IDs, tokens, secrets, or env values.",
+  "No driver GPS capture, admin active-jobs map runtime, customer live map, DB read/write, env change, deploy, provider send, Email/Telegram/WhatsApp/SMS, Google Maps/OneMap/FlightAware call, billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, OTS/photo/storage, calendar, auth expansion, or shim work is activated.",
+  "The scaffold remains colocated with the existing Day-of-Trip Dispatch Monitor and does not add a new UI sector/card.",
+  "Next live-location lane remains separately approved gated runtime/evidence with explicit driver consent, table/RLS/retention proof already recorded as prerequisite, wrong-driver/wrong-admin blocked proof, cleanup zero rows, rollback proof, and no customer visibility unless separately approved.",
+]) {
+  assertIncludes(
+    adminActiveJobsScaffoldSection,
+    phrase,
+    `Driver live-location admin active-jobs scaffold phrase: ${phrase}`,
+  );
+}
+
+const activeJobsScaffoldStart = adminPage.indexOf(
+  'aria-label="Admin Active Jobs Map disabled scaffold"',
+);
+assert.notEqual(activeJobsScaffoldStart, -1, "Missing disabled admin active-jobs map scaffold.");
+const activeJobsScaffoldEnd = adminPage.indexOf(
+  'data-admin-day-of-trip-dispatch-monitor-boundary="true"',
+  activeJobsScaffoldStart,
+);
+assert.notEqual(activeJobsScaffoldEnd, -1, "Missing disabled admin active-jobs scaffold end boundary.");
+const activeJobsScaffoldSource = adminPage.slice(activeJobsScaffoldStart, activeJobsScaffoldEnd);
+
+for (const fragment of [
+  'aria-label="Admin Active Jobs Map disabled scaffold"',
+  'data-admin-active-jobs-map-scaffold="disabled"',
+  'data-admin-active-jobs-map-state="disabled"',
+  'data-admin-active-jobs-map-marker-count="0"',
+  'data-admin-active-jobs-map-sharing-state="inactive"',
+  'data-admin-active-jobs-map-stale-state="not-active"',
+  'data-admin-active-jobs-map-boundary="true"',
+  "Active Jobs Map",
+  "Markers: 0",
+  "Sharing: off",
+  "Stale: off",
+  "Disabled until driver consent, location storage, admin map gates, and browser-safe map key are",
+]) {
+  assertIncludes(activeJobsScaffoldSource, fragment, `admin active-jobs disabled UI fragment ${fragment}`);
+}
+
+const dayOfTripMonitorStart = adminPage.indexOf('data-admin-day-of-trip-dispatch-monitor="true"');
+const dayOfTripExceptionStart = adminPage.indexOf(
+  'data-admin-day-of-trip-exception-escalation="true"',
+  dayOfTripMonitorStart,
+);
+assert.notEqual(dayOfTripMonitorStart, -1, "Missing existing Day-of-Trip Dispatch Monitor section.");
+assert.notEqual(dayOfTripExceptionStart, -1, "Missing Day-of-Trip Exception section boundary.");
+const dayOfTripMonitorSource = adminPage.slice(dayOfTripMonitorStart, dayOfTripExceptionStart);
+assertIncludes(
+  dayOfTripMonitorSource,
+  'data-admin-active-jobs-map-scaffold="disabled"',
+  "admin active-jobs scaffold must remain inside existing Day-of-Trip Dispatch Monitor area",
+);
+
+for (const forbiddenPattern of [
+  /\/api\/admin-active-jobs-map-locations/i,
+  /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
+  /google\.maps|maps\.google|Map\(|mapCanvas|map-canvas|<canvas/i,
+  /PRESTIGE_GOOGLE_MAPS|PRESTIGE_ADMIN_ACTIVE_JOBS_MAP|NEXT_PUBLIC/i,
+  /createClient|supabase|\.from\(|insert\s*\(|upsert\s*\(|update\s*\(|delete\s*\(/i,
+  /latitude|longitude|coords|coordinate/i,
+  /driver_payout|customer_rates|PayNow|billing|invoice|payment|payout/i,
+  /internal\/admin|internal admin|parser\/debug|debug internals|service_role|api_key/i,
+]) {
+  assertExcludes(
+    activeJobsScaffoldSource,
+    forbiddenPattern,
+    "disabled admin active-jobs UI scaffold",
   );
 }
 

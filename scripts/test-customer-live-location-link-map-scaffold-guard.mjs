@@ -49,6 +49,9 @@ const ledgerSection = sectionBetween(
 const runnerWithoutDenylist = runner.replace(
   /const forbiddenSafeTextPattern =[\s\S]*?;\n\nclass EvidenceFailure/,
   "class EvidenceFailure",
+).replace(
+  /function assertNoForbiddenRuntimeFields[\s\S]*?\n}\n\nfunction assertSafeClosedBody/,
+  "function assertSafeClosedBody",
 );
 
 for (const phrase of [
@@ -60,7 +63,7 @@ for (const phrase of [
   "The route requires same-origin customer headers and a customer session token before returning even the closed scaffold response.",
   "Anonymous, cross-origin, missing-session, and write-method access must remain blocked.",
   "Even with a customer boundary, the default response is closed/no-op with `customerVisible false`, `liveMapEnabled false`, `gpsCaptureEnabled false`, `locationStorageEnabled false`, `external_send false`, and zero markers.",
-  "If future gates are accidentally opened before runtime implementation, the route must fail safely with `customer_live_location_map_runtime_not_implemented_safely`.",
+  "If future gates are accidentally opened before runtime evidence setup is ready, the route must fail safely with `customer_live_location_map_runtime_config_not_ready`, `customer_live_location_map_runtime_gate_closed`, or `customer_live_location_map_scope_blocked`.",
   "Future eligible service families remain DEP/DEPARTURE, TRF/TRANSFER, DSP, and HOURLY only; MNG/Arrival remains blocked unless separately approved.",
   "Future evidence must prove customer/account/booking scope, no link for Arrival/MNG, same-customer access only, wrong-customer blocked, stale/offline handling, POB/completed stop behavior, cleanup zero rows, rollback disabled, and no provider sends.",
   "Future customer-visible fields are limited to safe trip label/status, driver sharing state, stale/offline state, last updated time, and map marker context required for tracking.",
@@ -68,7 +71,7 @@ for (const phrase of [
   "The runner requires `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_APPROVED=customer-live-location-link-map-staging-evidence-approved` and `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_PHASE` set to `pre-window`, `runtime-window`, or `post-rollback`.",
   "The runner is staging-only and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_TARGET_URL` or its default.",
   "`pre-window` and `post-rollback` prove blocked/closed customer route behavior without database access.",
-  "`runtime-window` is intentionally blocked until a separately approved customer-visible map runtime exists.",
+  "`runtime-window` is disabled by default and may only write one fake staging driver link row and one fake staging latest-position row after explicit runner approval, then must prove customer map read, wrong/anonymous/cross-origin block, cleanup zero rows, and rollback.",
   "This guard adds `scripts/test-customer-live-location-link-map-scaffold-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger customer live-location map phrase ${phrase}`);
@@ -91,7 +94,6 @@ for (const fragment of [
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_BROWSER_ALLOWED_ORIGINS",
   "buildCustomerLiveLocationMapScaffoldResponse",
   "customer_live_location_map_scaffold_closed",
-  "customer_live_location_map_runtime_not_implemented_safely",
   "customerVisible: false",
   "external_send: false",
   "gpsCaptureEnabled: false",
@@ -109,9 +111,9 @@ for (const fragment of [
 
 for (const fragment of [
   "buildCustomerLiveLocationMapScaffoldResponse",
-  "buildCustomerLiveLocationMapRuntimeNotImplementedResponse",
   "isCustomerLiveLocationMapRequestBoundaryPresent",
   "isCustomerLiveLocationMapRuntimeGateOpen",
+  "handleCustomerLiveLocationMapRuntimeRequest",
   "customer_live_location_map_boundary_blocked",
   "customer_live_location_map_method_blocked",
   "customer_live_location_map_scaffold_failed_safely",
@@ -134,7 +136,10 @@ for (const fragment of [
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_CUSTOMER_SESSION_TOKEN",
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_ACCOUNT_REFERENCE",
   "PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_BOOKING_REFERENCE",
-  "customer_live_location_link_map_runtime_window_not_implemented",
+  "PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_REFERENCE",
+  "fake_driver_job_link_rows_written: 1",
+  "fake_latest_position_rows_written: 1",
+  "cleanup_zero_rows: true",
   "customer_live_map: false",
   "db_write: false",
   "gps_activation: false",
@@ -145,7 +150,6 @@ for (const fragment of [
 }
 
 for (const forbiddenPattern of [
-  /createClient|@supabase\/supabase-js|\.from\(|\.(?:insert|upsert|update|delete|select)\s*\(/i,
   /navigator\.geolocation|getCurrentPosition|watchPosition|clearWatch|GeolocationPosition/i,
   /google\.maps|maps\.google|maps\.googleapis\.com|OneMap|ONEMAP|FlightAware|AeroAPI/i,
   /new\s+Resend|sendMail|sendSms|sendMessage|api\.telegram\.org|twilio|whatsapp/i,

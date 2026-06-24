@@ -1,5 +1,4 @@
 import {
-  buildCustomerLiveLocationMapRuntimeNotImplementedResponse,
   buildCustomerLiveLocationMapScaffoldResponse,
   customerLiveLocationMapScaffoldVersion,
   isCustomerLiveLocationMapRequestBoundaryPresent,
@@ -42,22 +41,6 @@ function closedResponse(
   );
 }
 
-function runtimeNotImplementedResponse(
-  boundary: ReturnType<typeof isCustomerLiveLocationMapRequestBoundaryPresent>,
-) {
-  return Response.json(
-    {
-      ok: false,
-      result: buildCustomerLiveLocationMapRuntimeNotImplementedResponse({
-        bookingReferencePresent: boundary.bookingReferencePresent,
-        sessionPresent: boundary.sessionPresent,
-      }),
-      version: customerLiveLocationMapScaffoldVersion,
-    },
-    { status: 503 },
-  );
-}
-
 function methodBlockedResponse() {
   return Response.json(
     {
@@ -78,7 +61,15 @@ export async function GET(request: Request) {
     }
 
     if (isCustomerLiveLocationMapRuntimeGateOpen()) {
-      return runtimeNotImplementedResponse(boundary);
+      const { handleCustomerLiveLocationMapRuntimeRequest } = await import(
+        "../../../lib/customer-live-location-map-runtime"
+      );
+      const result = await handleCustomerLiveLocationMapRuntimeRequest({
+        boundary,
+        request,
+      });
+
+      return Response.json(result.body, { status: result.status });
     }
 
     return closedResponse(boundary);

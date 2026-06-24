@@ -5854,7 +5854,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The route requires same-origin customer headers and a customer session token before returning even the closed scaffold response.
 - Anonymous, cross-origin, missing-session, and write-method access must remain blocked.
 - Even with a customer boundary, the default response is closed/no-op with `customerVisible false`, `liveMapEnabled false`, `gpsCaptureEnabled false`, `locationStorageEnabled false`, `external_send false`, and zero markers.
-- If future gates are accidentally opened before runtime implementation, the route must fail safely with `customer_live_location_map_runtime_not_implemented_safely`.
+- If future gates are accidentally opened before runtime evidence setup is ready, the route must fail safely with `customer_live_location_map_runtime_config_not_ready`, `customer_live_location_map_runtime_gate_closed`, or `customer_live_location_map_scope_blocked`.
 - Future eligible service families remain DEP/DEPARTURE, TRF/TRANSFER, DSP, and HOURLY only; MNG/Arrival remains blocked unless separately approved.
 - Future evidence must prove customer/account/booking scope, no link for Arrival/MNG, same-customer access only, wrong-customer blocked, stale/offline handling, POB/completed stop behavior, cleanup zero rows, rollback disabled, and no provider sends.
 - Future customer-visible fields are limited to safe trip label/status, driver sharing state, stale/offline state, last updated time, and map marker context required for tracking.
@@ -5862,8 +5862,21 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The runner requires `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_APPROVED=customer-live-location-link-map-staging-evidence-approved` and `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_PHASE` set to `pre-window`, `runtime-window`, or `post-rollback`.
 - The runner is staging-only and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_TARGET_URL` or its default.
 - `pre-window` and `post-rollback` prove blocked/closed customer route behavior without database access.
-- `runtime-window` is intentionally blocked until a separately approved customer-visible map runtime exists.
+- `runtime-window` is disabled by default and may only write one fake staging driver link row and one fake staging latest-position row after explicit runner approval, then must prove customer map read, wrong/anonymous/cross-origin block, cleanup zero rows, and rollback.
 - This guard adds `scripts/test-customer-live-location-link-map-scaffold-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Customer Live Location Map Runtime Guard Lock
+- This adds a disabled-by-default Customer Live Location map runtime implementation behind `GET /api/customer-live-location-map`.
+- The runtime helper is `lib/customer-live-location-map-runtime.ts` and is loaded only after `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ENABLED=true` and `PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_MODE` is `evidence` or `runtime`.
+- Default state remains closed/no-op; no env was changed, no database read/write occurred, no GPS capture was activated, no provider send occurred, no customer live map was exposed, and no evidence was run in this lane.
+- Runtime reads require same-origin customer headers, `x-prestige-customer-purpose: customer-live-location-map-read`, a customer session token, `x-prestige-customer-account-reference`, an allowlisted customer account, and an allowlisted booking reference.
+- The runtime reads only `driver_live_location_latest_positions` through the server-side Supabase service role after the customer map gate, same-origin boundary, account allowlist, and booking allowlist pass.
+- Customer-visible runtime fields are limited to `active_driver_marker` map coordinates, accuracy, heading, speed, sharing state, stale/offline status, captured/updated/stale timestamps, scoped booking label, marker count, and safe runtime flags.
+- Customer-visible runtime output must not expose driver job link ids, raw driver job tokens, token hashes, raw booking IDs, pricing, payout, PayNow, payout preferences, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, customer contact details, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, calendar data, or mock QA/dev archive.
+- The evidence runner remains staging-only. Its `runtime-window` path requires explicit approval and `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_EVIDENCE_REFERENCE`, `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_ACCOUNT_REFERENCE`, `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_BOOKING_REFERENCE`, and `PRESTIGE_CUSTOMER_LIVE_LOCATION_LINK_MAP_STAGING_CUSTOMER_SESSION_TOKEN` names only.
+- Future runtime evidence must use fake/staging-safe data only, write exactly one fake `driver_job_links` row and one fake `driver_live_location_latest_positions` row, prove a single customer map marker read, prove wrong-customer/anonymous/cross-origin blocked access, clean up fake rows, prove zero matching rows remain, and prove rollback disabled.
+- The runtime does not call Google Maps, OneMap, FlightAware, Telegram, WhatsApp, SMS, Email, Resend, or any provider API; browser map rendering and real GPS remain separate lanes.
+- This guard adds `scripts/test-customer-live-location-map-runtime-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 

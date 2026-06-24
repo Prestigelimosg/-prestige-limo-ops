@@ -5644,6 +5644,23 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No pricing, payout, PayNow, billing/payment/PDF, internal/admin notes, parser/debug, secrets/tokens, raw provider payloads, customer contact data, phone numbers, OTS/photo/storage, or mock QA/dev archive fields are exposed.
 - This guard adds `scripts/test-driver-live-location-admin-runtime-gate-scaffold-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Admin-Controlled Runtime Gate Evidence Runner Guard Lock
+- This adds a disabled-by-default runner scaffold for future Driver Live Location admin-controlled runtime gate evidence.
+- The runner is `scripts/run-driver-live-location-admin-runtime-gate-evidence.mjs`.
+- The runner is not executed by this commit, no env was changed, no database read/write occurred, no GPS capture was activated, and no provider send occurred.
+- The runner requires `PRESTIGE_DRIVER_LIVE_LOCATION_ADMIN_RUNTIME_EVIDENCE_APPROVED=driver-live-location-admin-runtime-evidence-approved` before any phase runs.
+- The runner requires `PRESTIGE_DRIVER_LIVE_LOCATION_ADMIN_RUNTIME_EVIDENCE_PHASE` to be one of `pre-window`, `runtime-window`, or `post-rollback`.
+- The runner is staging-only by default and must target `https://prestige-limo-ops-staging.vercel.app` through `PRESTIGE_DRIVER_LIVE_LOCATION_ADMIN_RUNTIME_EVIDENCE_TARGET_URL` or its default.
+- `pre-window` and `post-rollback` prove driver capture and admin active-jobs map routes are blocked/closed without database access.
+- `runtime-window` requires env names only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN`, `PRESTIGE_DRIVER_LIVE_LOCATION_ADMIN_RUNTIME_EVIDENCE_REFERENCE`, `PRESTIGE_DRIVER_LIVE_LOCATION_ADMIN_RUNTIME_DRIVER_JOB_LINK_TOKEN`, and `PRESTIGE_DRIVER_LIVE_LOCATION_ADMIN_RUNTIME_BOOKING_REFERENCE`.
+- Future `runtime-window` evidence may create exactly one temporary fake `driver_job_links` row, one temporary admin runtime setting row, one fake latest-position row through the driver route, and audit rows produced by the runtime path.
+- The runner must restore the previous `driver_live_location_runtime_settings` row or delete the temporary row if none existed, then clean up temporary driver link, latest-position, and audit rows and prove zero matching evidence rows remain.
+- The runner must prove correct driver share, admin active-jobs map read, wrong-origin admin block, missing-admin block, wrong-driver block, customer visibility false, external_send false, and rollback/closed proof.
+- The runner output is normalized and must not print Supabase URLs, service-role keys, admin session tokens, raw driver tokens, token hashes, row IDs, booking references, private customer data, coordinates from real users, cookies, JWTs, API keys, or env values.
+- This runner does not edit Vercel env, deploy, apply migrations, activate browser GPS automatically, activate customer live map links, call Google Maps/OneMap/FlightAware, send provider messages, or touch billing/payment/PDF/payout.
+- A future evidence pass still requires separate owner approval for stable server env gate state, staging-safe fake driver job token/reference, runtime DB window, cleanup/zero-row proof, rollback/disable proof, docs evidence recording, and staging promotion.
+- This guard adds `scripts/test-driver-live-location-admin-runtime-gate-evidence-runner-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Driver Live Location Consent UI Readiness Contract Guard Lock
 - This is a docs/test-only guard for future Driver Live Location driver consent UI and compact Admin Active Jobs Map UI readiness.
 - This lock does not implement UI, activate GPS capture, open live-location routes, write/read location rows, apply migrations, change env, deploy, expose browser map keys, call Google Maps/OneMap/FlightAware, send Email/Telegram/WhatsApp/SMS, activate customer live map visibility, or touch billing/payment/PDF/payout, parser, Save Booking, `/api/admin-saved-bookings`, auth expansion, OTS/photo/storage, calendar, or shim work.

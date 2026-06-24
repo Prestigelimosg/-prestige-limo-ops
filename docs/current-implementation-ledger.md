@@ -1192,7 +1192,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This lock adds `scripts/test-public-api-logging-error-boundary-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Public API Runtime Gate Boundary Guard Lock
-- Public customer/driver API runtime gate and dependency boundaries are guarded across customer booking request, customer portal session issue, customer saved bookings, customer booking memory, customer booking status, customer app notifications, driver job, driver job status, driver notifications, driver issue-alert, driver flight ETA setup, driver flight ETA acknowledgement setup, and driver bidding routes.
+- Public customer/driver API runtime gate and dependency boundaries are guarded across customer booking request, customer portal session issue, customer saved bookings, customer booking memory, customer booking status, customer app notifications, customer-driver quick replies, driver job, driver job status, driver notifications, driver quick replies, driver issue-alert, driver flight ETA setup, driver flight ETA acknowledgement setup, and driver bidding routes.
 - This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.
 - Public API route files must not directly read env, create Supabase clients, import Supabase, or execute direct database query/write methods; runtime dependencies must stay mediated through existing helpers and gates.
 - Customer portal session issue must remain default-off and token/purpose/origin/referer gated before issuing a secure cookie.
@@ -4678,6 +4678,27 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future quick-reply evidence must prove customer-to-driver send/read, driver-to-customer send/read, admin/dispatch visibility, audit proof, wrong-customer blocked, wrong-driver blocked, wrong-booking blocked, anonymous blocked, post-POB blocked, cleanup/zero-row proof, and rollback disabled proof.
 - Forbidden fields remain pricing, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/GPS coordinates, OTS/photo/storage, calendar, customer/driver phone numbers, customer/driver private contact data, chat IDs, device identifiers, and mock QA/dev archive fields.
 - This guard adds `scripts/test-customer-driver-quick-replies-readiness-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
+### Customer/Driver Quick Replies Disabled Runtime Scaffold Lock
+- This lane adds a disabled-by-default runtime scaffold for fixed Customer/Driver Quick Replies only.
+- This lane does not run quick-reply evidence, open env gates, change env values, deploy, activate runtime, add UI, write DB rows, activate GPS/location, send providers, send Email/Telegram/WhatsApp/SMS, activate billing/payment/PDF/payout, expose secrets/private data, or activate production.
+- Quick replies remain closed unless `PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED=true` and `PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE=controlled-runtime`.
+- The customer runtime/account gates remain required: `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE`, `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST`, existing customer saved-bookings session env names, `PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`.
+- Closed quick-reply gate returns a safe no-op response with `external_send: false`, `provider_send: false`, no provider send, no notification row write, and no Supabase client access.
+- Customer -> Driver route scaffold: `POST /api/customer-driver-quick-replies`.
+- Customer -> Driver requires same-origin `/my-bookings`, `x-prestige-customer-purpose: customer-driver-quick-reply`, existing customer saved-bookings session/account boundary, controlled-runtime account allowlist, and a booking reference scoped to that customer/account.
+- Customer -> Driver can later write only one `driver_app` outbox notification through `customer_driver_app_notification_outbox` with fixed safe title `Passenger reply`.
+- Customer -> Driver fixed templates are exactly: `I am at the lobby.`, `I am running 5 minutes late.`, `Please wait at pickup point.`, and `I cannot find the car.`
+- Driver -> Customer route scaffold: `POST /api/driver-job/[token]/quick-replies`.
+- Driver -> Customer requires the existing driver job token boundary, the token-scoped booking reference, controlled-runtime customer account allowlist, and the customer/account mapped to that booking.
+- Driver -> Customer can later write only one `customer_app` outbox notification through `customer_driver_app_notification_outbox` with fixed safe title `Driver reply`.
+- Driver -> Customer fixed templates are exactly: `I am on the way.`, `I have arrived.`, `Please meet me at pickup point.`, and `I am waiting nearby.`
+- Both directions are in-app only, job/booking scoped, customer/account scoped, admin/dispatch visible through approved admin notification surfaces, and audited with safe operational metadata only.
+- Both directions must check the latest persisted `driver_job_status_events` status and block when the job has reached `pob` or `completed`.
+- No free-form message composer, textarea, customer-driver chat box, phone number exposure, customer/driver private contact exposure, WhatsApp/Telegram/SMS/Email provider fallback, scheduler, retry, polling, or blast is approved.
+- Forbidden fields remain pricing, payout, PayNow, payout preferences, payout comparisons, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin/finance notes, parser/debug fields, secrets/tokens/cookies/JWTs, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, provider-send payloads, live-location/GPS coordinates, OTS/photo/storage, calendar, customer/driver phone numbers, customer/driver private contact data, chat IDs, device identifiers, and mock QA/dev archive fields.
+- Future quick-reply evidence remains separate and must prove customer-to-driver send/read, driver-to-customer send/read, admin/dispatch visibility, audit proof, wrong-customer blocked, wrong-driver blocked, wrong-booking blocked, anonymous blocked, post-POB blocked, cleanup/zero-row proof, and rollback disabled proof before any live use.
+- This scaffold is guarded by `scripts/test-customer-driver-quick-replies-runtime-scaffold-guard.mjs` and registered in `scripts/test-preactivation-verification-suite.mjs`.
 
 ### Driver In-App Notification Staging Evidence Contract Guard Lock
 - This is a docs/test-only guard for a future separately approved Driver In-App Notification staging evidence pass.

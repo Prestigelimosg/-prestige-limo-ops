@@ -13,9 +13,11 @@ const publicApiRoutePaths = [
   "app/api/customer-booking-memory/route.ts",
   "app/api/customer-booking-statuses/route.ts",
   "app/api/customer-app-notifications/route.ts",
+  "app/api/customer-driver-quick-replies/route.ts",
   "app/api/driver-job/[token]/route.ts",
   "app/api/driver-job/[token]/status/route.ts",
   "app/api/driver-job/[token]/notifications/route.ts",
+  "app/api/driver-job/[token]/quick-replies/route.ts",
   "app/api/driver-job/[token]/issue-alert/route.ts",
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",
   "app/api/driver-job/[token]/flight-eta-acknowledgement-setup/route.ts",
@@ -77,6 +79,8 @@ const helperEnvAllowlist = new Map([
     "lib/customer-driver-app-notification-persistence.ts",
     [
       "PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED",
+      "PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED",
+      "PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE",
       "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST",
       "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_ENABLED",
       "PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_READ_MODE",
@@ -255,7 +259,7 @@ const preactivationSuite = files[preactivationSuitePath];
 const ledgerSection = sectionBetween(ledger, "### Public API Runtime Gate Boundary Guard Lock");
 
 for (const phrase of [
-  "Public customer/driver API runtime gate and dependency boundaries are guarded across customer booking request, customer portal session issue, customer saved bookings, customer booking memory, customer booking status, customer app notifications, driver job, driver job status, driver notifications, driver issue-alert, driver flight ETA setup, driver flight ETA acknowledgement setup, and driver bidding routes.",
+  "Public customer/driver API runtime gate and dependency boundaries are guarded across customer booking request, customer portal session issue, customer saved bookings, customer booking memory, customer booking status, customer app notifications, customer-driver quick replies, driver job, driver job status, driver notifications, driver quick replies, driver issue-alert, driver flight ETA setup, driver flight ETA acknowledgement setup, and driver bidding routes.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "Public API route files must not directly read env, create Supabase clients, import Supabase, or execute direct database query/write methods; runtime dependencies must stay mediated through existing helpers and gates.",
   "Customer portal session issue must remain default-off and token/purpose/origin/referer gated before issuing a secure cookie.",

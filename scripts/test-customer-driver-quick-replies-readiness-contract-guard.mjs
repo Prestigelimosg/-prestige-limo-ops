@@ -5,6 +5,8 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript =
   "scripts/test-customer-driver-quick-replies-readiness-contract-guard.mjs";
+const runtimeScaffoldGuardPath =
+  "scripts/test-customer-driver-quick-replies-runtime-scaffold-guard.mjs";
 const channelGuardPath =
   "scripts/test-customer-driver-in-app-notification-channel-contract-guard.mjs";
 const statusCustomerInAppGuardPath =
@@ -120,6 +122,7 @@ for (const forbidden of [
 
 for (const registeredGuard of [
   guardScript,
+  runtimeScaffoldGuardPath,
   channelGuardPath,
   statusCustomerInAppGuardPath,
   customerReadGuardPath,
@@ -204,19 +207,6 @@ for (const fragment of [
 }
 
 const runtimeSource = `${notificationPersistence}\n${adminNotificationRoute}\n${customerNotificationRoute}\n${driverNotificationRoute}`;
-
-for (const template of [
-  "I am at the lobby.",
-  "I am running 5 minutes late.",
-  "Please wait at pickup point.",
-  "I cannot find the car.",
-  "I am on the way.",
-  "I have arrived.",
-  "Please meet me at pickup point.",
-  "I am waiting nearby.",
-]) {
-  assertExcludes(runtimeSource, template, "quick reply template must not be live in runtime yet");
-}
 
 for (const forbiddenPattern of [
   /from\s+["'](?:resend|nodemailer|@sendgrid\/mail|mailgun\.js|twilio)["']|require\(\s*["'](?:resend|nodemailer|@sendgrid\/mail|mailgun\.js|twilio)["']\s*\)|new\s+Resend|sendMail\s*\(|messages\.send|client\.messages\.create|fetch\s*\(\s*["']https?:\/\/(?:api\.telegram\.org|[^"']*twilio|[^"']*whatsapp)/i,

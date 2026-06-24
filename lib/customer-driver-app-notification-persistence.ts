@@ -27,6 +27,8 @@ export const customerInAppNotificationReadEvidenceVersion =
   "stage-customer-in-app-notification-read-evidence-v1";
 export const customerInAppNotificationRuntimeVersion =
   "stage-customer-in-app-notification-runtime-v1";
+export const customerDriverQuickRepliesRuntimeVersion =
+  "stage-customer-driver-quick-replies-runtime-v1";
 
 export const customerDriverAppNotificationSurfaces = ["customer_app", "driver_app"] as const;
 export const customerDriverAppNotificationTypes = [
@@ -107,6 +109,21 @@ export type CustomerDriverAppNotificationSafeRecord = Omit<
   "actor_label" | "actor_role" | "driver_job_link_id" | "event_key" | "source_surface"
 >;
 
+export type CustomerDriverQuickReplyTemplateKey =
+  | "customer_at_lobby"
+  | "customer_running_late"
+  | "customer_wait_pickup"
+  | "customer_cannot_find_car"
+  | "driver_on_the_way"
+  | "driver_arrived"
+  | "driver_meet_pickup"
+  | "driver_waiting_nearby";
+
+export type CustomerDriverQuickReplyResult = {
+  body: Record<string, unknown>;
+  status: number;
+};
+
 export type CustomerDriverAppNotificationPagination = {
   has_next_page: boolean;
   has_previous_page: boolean;
@@ -150,6 +167,7 @@ type CustomerSavedBookingsSessionTokenSource =
   | "request-cookie"
   | "request-header";
 type ControlledCustomerRuntimeMode = "one-customer" | "small-allowlist";
+type CustomerDriverQuickReplyDirection = "customer_to_driver" | "driver_to_customer";
 
 type ControlledCustomerRuntimeGate = {
   account_allowlist: Set<string>;
@@ -165,6 +183,7 @@ const notificationTable = "customer_driver_app_notification_outbox";
 const customerAccountSelect = "customer_account_reference, account_status";
 const bookingCustomerScopeSelect = "booking_reference, customer_id";
 const driverJobLinkSelect = "id, booking_reference, link_status, expires_at, revoked_at";
+const driverJobStatusEventQuickReplySelect = "status_value, occurred_at";
 const notificationSelect =
   "id, notification_type, notification_status, priority, delivery_surface, event_key, booking_reference, driver_job_link_id, workflow_area, safe_title, safe_message, safe_context, source_surface, actor_role, actor_label, created_at, updated_at";
 const customerInAppNotificationReadSelect =
@@ -207,6 +226,15 @@ const customerInAppRuntimeConfigError =
   "Controlled customer in-app notification runtime configuration is not ready.";
 const customerInAppRuntimeWriteTemplateError =
   "Customer app notification write is limited to the approved driver details ready template.";
+const quickReplyDisabledError =
+  "Customer/driver quick replies are not enabled on this server.";
+const quickReplyConfigError =
+  "Customer/driver quick replies configuration is not ready.";
+const quickReplyMalformedError =
+  "Customer/driver quick reply details are malformed.";
+const quickReplyPostPobDisabledError =
+  "Customer/driver quick replies are disabled after POB.";
+const quickReplyCreateError = "Customer/driver quick reply create failed safely.";
 const safeNotificationUpdateError = "Customer/driver app notification status update failed safely.";
 const customerSavedBookingsSessionCookieName =
   "prestige_customer_saved_bookings_session";
@@ -234,6 +262,25 @@ const controlledCustomerRuntimeModes = new Set<ControlledCustomerRuntimeMode>([
   "one-customer",
   "small-allowlist",
 ]);
+const customerDriverQuickRepliesMode = "controlled-runtime";
+const customerToDriverQuickReplyTemplates = {
+  customer_at_lobby: "I am at the lobby.",
+  customer_cannot_find_car: "I cannot find the car.",
+  customer_running_late: "I am running 5 minutes late.",
+  customer_wait_pickup: "Please wait at pickup point.",
+} as const;
+const driverToCustomerQuickReplyTemplates = {
+  driver_arrived: "I have arrived.",
+  driver_meet_pickup: "Please meet me at pickup point.",
+  driver_on_the_way: "I am on the way.",
+  driver_waiting_nearby: "I am waiting nearby.",
+} as const;
+const customerToDriverQuickReplyTemplateKeys = new Set<string>(
+  Object.keys(customerToDriverQuickReplyTemplates),
+);
+const driverToCustomerQuickReplyTemplateKeys = new Set<string>(
+  Object.keys(driverToCustomerQuickReplyTemplates),
+);
 const maxControlledCustomerRuntimeAllowlistEntries = 5;
 const allowedCreateFields = new Set([
   "booking_reference",
@@ -470,6 +517,36 @@ function customerAccountAllowedByControlledRuntime(
   gate: ControlledCustomerRuntimeGate,
 ) {
   return gate.account_allowlist.has(customerAccountReference);
+}
+
+function resolveCustomerDriverQuickRepliesRuntimeGate(): AdminBookingResult<{
+  mode: typeof customerDriverQuickRepliesMode;
+}> {
+  if (process.env.PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED !== "true") {
+    return {
+      error: quickReplyDisabledError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  if (
+    configValueOrNull(process.env.PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE) !==
+    customerDriverQuickRepliesMode
+  ) {
+    return {
+      error: quickReplyConfigError,
+      ok: false,
+      status: 503,
+    };
+  }
+
+  return {
+    data: {
+      mode: customerDriverQuickRepliesMode,
+    },
+    ok: true,
+  };
 }
 
 function safeUuidOrNull(value: unknown) {
@@ -926,6 +1003,29 @@ function customerInAppNotificationReadError(
   return customerInAppNotificationReadHandled(status, {
     error,
     ok: false,
+  });
+}
+
+function customerDriverQuickReplyResult(
+  status: number,
+  body: Record<string, unknown>,
+): CustomerDriverQuickReplyResult {
+  return {
+    body,
+    status,
+  };
+}
+
+function customerDriverQuickReplyError(
+  error: string,
+  status: number,
+): CustomerDriverQuickReplyResult {
+  return customerDriverQuickReplyResult(status, {
+    error,
+    external_send: false,
+    no_op: true,
+    ok: false,
+    provider_send: false,
   });
 }
 
@@ -1583,6 +1683,578 @@ export async function readCustomerAppNotificationsForStagingEvidence(
     ok: true,
     provider_send: false,
     version: customerInAppNotificationReadEvidenceVersion,
+  });
+}
+
+function parseCustomerDriverQuickReplyPayload(
+  value: unknown,
+  direction: CustomerDriverQuickReplyDirection,
+): AdminBookingResult<{
+  booking_reference: string | null;
+  safe_message: string;
+  template_key: CustomerDriverQuickReplyTemplateKey;
+}> {
+  const record = asRecord(value);
+  const allowedFields =
+    direction === "customer_to_driver"
+      ? new Set(["booking_reference", "template_key"])
+      : new Set(["template_key"]);
+
+  if (
+    unknownKeys(record, allowedFields).length > 0 ||
+    findForbiddenFieldNames(record).length > 0 ||
+    findForbiddenTextValues(record).length > 0
+  ) {
+    return {
+      error: quickReplyMalformedError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const templateKey = safeIdentifier(
+    record.template_key,
+    maxWorkflowAreaLength,
+  ) as CustomerDriverQuickReplyTemplateKey | null;
+  const bookingReference = safeIdentifier(
+    record.booking_reference,
+    maxBookingReferenceLength,
+  );
+
+  if (!templateKey) {
+    return {
+      error: quickReplyMalformedError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (
+    direction === "customer_to_driver" &&
+    (!bookingReference || !customerToDriverQuickReplyTemplateKeys.has(templateKey))
+  ) {
+    return {
+      error: quickReplyMalformedError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (
+    direction === "driver_to_customer" &&
+    !driverToCustomerQuickReplyTemplateKeys.has(templateKey)
+  ) {
+    return {
+      error: quickReplyMalformedError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const safeMessage =
+    direction === "customer_to_driver"
+      ? customerToDriverQuickReplyTemplates[
+          templateKey as keyof typeof customerToDriverQuickReplyTemplates
+        ]
+      : driverToCustomerQuickReplyTemplates[
+          templateKey as keyof typeof driverToCustomerQuickReplyTemplates
+        ];
+
+  return {
+    data: {
+      booking_reference: bookingReference,
+      safe_message: safeMessage,
+      template_key: templateKey,
+    },
+    ok: true,
+  };
+}
+
+function resolveCustomerQuickReplyRuntimeBoundary(
+  request: Request,
+  runtimeGate: ControlledCustomerRuntimeGate,
+  bookingReference: string,
+): AdminBookingResult<{
+  auth_user_id: string;
+  booking_reference: string;
+  customer_account_reference?: string | null;
+  mode: "server-session-cookie" | "server-session-token";
+  runtime_gate: ControlledCustomerRuntimeGate;
+}> {
+  const requestUrl = new URL(request.url);
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const purpose = request.headers.get("x-prestige-customer-purpose");
+
+  if (purpose !== "customer-driver-quick-reply") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (origin && origin !== requestUrl.origin) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if (!referer) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  try {
+    const refererUrl = new URL(referer);
+
+    if (refererUrl.origin !== requestUrl.origin || refererUrl.pathname !== "/my-bookings") {
+      return customerAppNotificationsRequireAuthResult();
+    }
+  } catch {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  if ([...requestUrl.searchParams.entries()].length > 0) {
+    return {
+      error: quickReplyMalformedError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const mode = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_MODE);
+  const expectedToken = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_TOKEN);
+  const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  if (mode !== "server-session-token") {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const mappedSession = resolveExactTwoCustomerRuntimeSessionMap({
+    expectedEntryCount: runtimeGate.account_allowlist.size,
+    mapValue: process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_SESSION_MAP,
+    providedToken: providedToken.token,
+  });
+
+  let authUserId: string | null = null;
+  let customerAccountReference: string | null = null;
+
+  if (mappedSession.configured) {
+    if (!mappedSession.ok) {
+      return mappedSession.reason === "invalid_config"
+        ? {
+            error: customerInAppRuntimeConfigError,
+            ok: false,
+            status: 503,
+          }
+        : customerAppNotificationsRequireAuthResult();
+    }
+
+    authUserId = mappedSession.auth_user_id;
+    customerAccountReference = mappedSession.customer_account_reference;
+  } else {
+    authUserId = configValueOrNull(process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_USER_ID);
+
+    if (
+      !validServerCredential(expectedToken) ||
+      providedToken.token !== expectedToken ||
+      !authUserId ||
+      !uuidPattern.test(authUserId)
+    ) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+  }
+
+  if (
+    customerAccountReference &&
+    !customerAccountAllowedByControlledRuntime(customerAccountReference, runtimeGate)
+  ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  return {
+    data: {
+      auth_user_id: authUserId,
+      booking_reference: bookingReference,
+      customer_account_reference: customerAccountReference,
+      mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
+      runtime_gate: runtimeGate,
+    },
+    ok: true,
+  };
+}
+
+async function loadCustomerAccountReferenceForBooking(
+  client: NotificationClient,
+  bookingReference: string,
+): Promise<AdminBookingResult<string>> {
+  const { data, error } = await client
+    .from("bookings")
+    .select(bookingCustomerScopeSelect)
+    .eq("booking_reference", bookingReference)
+    .limit(1);
+
+  if (error) {
+    return safeAdapterFailure(quickReplyCreateError, 500, error);
+  }
+
+  const row = asRecord(asArray(data)[0]);
+  const matchedBookingReference = safeIdentifier(
+    row.booking_reference,
+    maxBookingReferenceLength,
+  );
+  const customerAccountReference = safeIdentifier(
+    row.customer_id,
+    maxBookingReferenceLength,
+  );
+
+  if (matchedBookingReference !== bookingReference || !customerAccountReference) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  return {
+    data: customerAccountReference,
+    ok: true,
+  };
+}
+
+async function assertQuickReplyCustomerBookingScope(
+  client: NotificationClient,
+  boundary: {
+    auth_user_id: string;
+    booking_reference: string;
+    customer_account_reference?: string | null;
+    runtime_gate: ControlledCustomerRuntimeGate;
+  },
+): Promise<AdminBookingResult<string>> {
+  const mappedAccountReference = safeIdentifier(
+    boundary.customer_account_reference,
+    maxBookingReferenceLength,
+  );
+  const accountReference = mappedAccountReference
+    ? {
+        data: mappedAccountReference,
+        ok: true as const,
+      }
+    : await loadControlledCustomerAccountReference(
+        client,
+        boundary.auth_user_id,
+      );
+
+  if (!accountReference.ok) {
+    return accountReference;
+  }
+
+  if (
+    !accountReference.data ||
+    !customerAccountAllowedByControlledRuntime(accountReference.data, boundary.runtime_gate)
+  ) {
+    return customerAppNotificationsRequireAuthResult();
+  }
+
+  const bookingScope = await verifyControlledCustomerBookingReference(
+    client,
+    boundary.booking_reference,
+    accountReference.data,
+  );
+
+  if (!bookingScope.ok) {
+    return bookingScope;
+  }
+
+  return {
+    data: accountReference.data,
+    ok: true,
+  };
+}
+
+async function assertQuickReplyBeforePob(
+  client: NotificationClient,
+  bookingReference: string,
+): Promise<AdminBookingResult<null>> {
+  const { data, error } = await client
+    .from("driver_job_status_events")
+    .select(driverJobStatusEventQuickReplySelect)
+    .eq("booking_reference", bookingReference)
+    .order("occurred_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    return safeAdapterFailure(quickReplyCreateError, 500, error);
+  }
+
+  const latestStatus = textOrNull(asRecord(asArray(data)[0]).status_value);
+
+  if (latestStatus === "pob" || latestStatus === "completed") {
+    return {
+      error: quickReplyPostPobDisabledError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  return {
+    data: null,
+    ok: true,
+  };
+}
+
+async function insertQuickReplyNotification(
+  client: NotificationClient,
+  input: CustomerDriverAppNotificationInput,
+  actor: {
+    actor_label: string;
+    actor_role: CustomerDriverAppNotificationRecord["actor_role"];
+    source_surface: CustomerDriverAppNotificationRecord["source_surface"];
+  },
+): Promise<AdminBookingResult<CustomerDriverAppNotificationSafeRecord>> {
+  const payload = {
+    actor_label: actor.actor_label,
+    actor_role: actor.actor_role,
+    booking_reference: input.booking_reference,
+    delivery_surface: input.delivery_surface,
+    driver_job_link_id: input.driver_job_link_id,
+    event_key: input.event_key,
+    notification_status: input.notification_status,
+    notification_type: input.notification_type,
+    priority: input.priority,
+    safe_context: input.safe_context,
+    safe_message: input.safe_message,
+    safe_title: input.safe_title,
+    source_surface: actor.source_surface,
+    updated_at: new Date().toISOString(),
+    workflow_area: input.workflow_area,
+  };
+
+  if (
+    findForbiddenFieldNames(payload).length > 0 ||
+    findForbiddenTextValues(payload).length > 0
+  ) {
+    return unsafeNotificationResult();
+  }
+
+  const { data, error } = await client
+    .from(notificationTable)
+    .insert(payload)
+    .select(notificationSelect)
+    .single();
+
+  if (error) {
+    return safeAdapterFailure(quickReplyCreateError, 500, error);
+  }
+
+  const notification = normalizeRecord(data);
+
+  if (!notification.id || notification.delivery_surface !== input.delivery_surface) {
+    return {
+      error: quickReplyCreateError,
+      ok: false,
+      status: 500,
+    };
+  }
+
+  return {
+    data: toSafeRecord(notification),
+    ok: true,
+  };
+}
+
+function quickReplyInput(
+  direction: CustomerDriverQuickReplyDirection,
+  templateKey: CustomerDriverQuickReplyTemplateKey,
+  safeMessage: string,
+  bookingReference: string,
+  driverJobLinkId: string | null,
+): CustomerDriverAppNotificationInput {
+  return {
+    booking_reference: bookingReference,
+    delivery_surface: direction === "customer_to_driver" ? "driver_app" : "customer_app",
+    driver_job_link_id: driverJobLinkId,
+    event_key: `customer_driver_quick_reply:${direction}:${templateKey}`,
+    notification_status: "queued",
+    notification_type: "trip_update",
+    priority: "normal",
+    safe_context: {
+      direction,
+      template_key: templateKey,
+    },
+    safe_message: safeMessage,
+    safe_title: direction === "customer_to_driver" ? "Passenger reply" : "Driver reply",
+    workflow_area: "customer_driver_quick_replies",
+  };
+}
+
+export async function sendCustomerQuickReplyToDriver(
+  request: Request,
+  rawBody: unknown,
+): Promise<CustomerDriverQuickReplyResult> {
+  const quickReplyGate = resolveCustomerDriverQuickRepliesRuntimeGate();
+
+  if (!quickReplyGate.ok) {
+    return customerDriverQuickReplyError(quickReplyGate.error, quickReplyGate.status);
+  }
+
+  const parsed = parseCustomerDriverQuickReplyPayload(rawBody, "customer_to_driver");
+
+  if (!parsed.ok || !parsed.data.booking_reference) {
+    return customerDriverQuickReplyError(
+      parsed.ok ? quickReplyMalformedError : parsed.error,
+      parsed.ok ? 400 : parsed.status,
+    );
+  }
+
+  const runtimeGate = resolveControlledCustomerInAppNotificationRuntimeGate();
+
+  if (!runtimeGate.ok) {
+    return customerDriverQuickReplyError(runtimeGate.error, runtimeGate.status);
+  }
+
+  const boundary = resolveCustomerQuickReplyRuntimeBoundary(
+    request,
+    runtimeGate.data,
+    parsed.data.booking_reference,
+  );
+
+  if (!boundary.ok) {
+    return customerDriverQuickReplyError(boundary.error, boundary.status);
+  }
+
+  const clientResult = getCustomerInAppNotificationReadClient();
+
+  if (!clientResult.ok) {
+    return customerDriverQuickReplyError(clientResult.error, clientResult.status);
+  }
+
+  const scope = await assertQuickReplyCustomerBookingScope(clientResult.data, boundary.data);
+
+  if (!scope.ok) {
+    return customerDriverQuickReplyError(scope.error, scope.status);
+  }
+
+  const statusGate = await assertQuickReplyBeforePob(
+    clientResult.data,
+    boundary.data.booking_reference,
+  );
+
+  if (!statusGate.ok) {
+    return customerDriverQuickReplyError(statusGate.error, statusGate.status);
+  }
+
+  const created = await insertQuickReplyNotification(
+    clientResult.data,
+    quickReplyInput(
+      "customer_to_driver",
+      parsed.data.template_key,
+      parsed.data.safe_message,
+      boundary.data.booking_reference,
+      null,
+    ),
+    {
+      actor_label: "verified_customer_account",
+      actor_role: "customer",
+      source_surface: "customer_api",
+    },
+  );
+
+  if (!created.ok) {
+    return customerDriverQuickReplyError(created.error, created.status);
+  }
+
+  return customerDriverQuickReplyResult(200, {
+    delivery_surface: "driver_app",
+    direction: "customer_to_driver",
+    external_send: false,
+    no_provider_send: true,
+    notification: created.data,
+    ok: true,
+    provider_send: false,
+    version: customerDriverQuickRepliesRuntimeVersion,
+  });
+}
+
+export async function sendDriverQuickReplyToCustomer(
+  token: string,
+  rawBody: unknown,
+): Promise<CustomerDriverQuickReplyResult> {
+  const quickReplyGate = resolveCustomerDriverQuickRepliesRuntimeGate();
+
+  if (!quickReplyGate.ok) {
+    return customerDriverQuickReplyError(quickReplyGate.error, quickReplyGate.status);
+  }
+
+  const parsed = parseCustomerDriverQuickReplyPayload(rawBody, "driver_to_customer");
+
+  if (!parsed.ok) {
+    return customerDriverQuickReplyError(parsed.error, parsed.status);
+  }
+
+  const runtimeGate = resolveControlledCustomerInAppNotificationRuntimeGate();
+
+  if (!runtimeGate.ok) {
+    return customerDriverQuickReplyError(runtimeGate.error, runtimeGate.status);
+  }
+
+  const clientResult = getDriverNotificationClient();
+
+  if (!clientResult.ok) {
+    return customerDriverQuickReplyError(clientResult.error, clientResult.status);
+  }
+
+  const linkResult = await resolveDriverLinkScope(clientResult.data, token);
+
+  if (!linkResult.ok) {
+    return customerDriverQuickReplyError(linkResult.error, linkResult.status);
+  }
+
+  const accountReference = await loadCustomerAccountReferenceForBooking(
+    clientResult.data,
+    linkResult.data.booking_reference,
+  );
+
+  if (!accountReference.ok) {
+    return customerDriverQuickReplyError(accountReference.error, accountReference.status);
+  }
+
+  if (!customerAccountAllowedByControlledRuntime(accountReference.data, runtimeGate.data)) {
+    return customerDriverQuickReplyError(customerAuthRequiredError, 403);
+  }
+
+  const statusGate = await assertQuickReplyBeforePob(
+    clientResult.data,
+    linkResult.data.booking_reference,
+  );
+
+  if (!statusGate.ok) {
+    return customerDriverQuickReplyError(statusGate.error, statusGate.status);
+  }
+
+  const created = await insertQuickReplyNotification(
+    clientResult.data,
+    quickReplyInput(
+      "driver_to_customer",
+      parsed.data.template_key,
+      parsed.data.safe_message,
+      linkResult.data.booking_reference,
+      linkResult.data.id,
+    ),
+    {
+      actor_label: "verified_driver_job_link",
+      actor_role: "driver",
+      source_surface: "driver_api",
+    },
+  );
+
+  if (!created.ok) {
+    return customerDriverQuickReplyError(created.error, created.status);
+  }
+
+  return customerDriverQuickReplyResult(200, {
+    delivery_surface: "customer_app",
+    direction: "driver_to_customer",
+    external_send: false,
+    no_provider_send: true,
+    notification: created.data,
+    ok: true,
+    provider_send: false,
+    version: customerDriverQuickRepliesRuntimeVersion,
   });
 }
 

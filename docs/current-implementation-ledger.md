@@ -5407,6 +5407,24 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Next activation blockers remain: table/RLS/retention proof for live position storage, driver consent UI, admin active-jobs map UI, browser-safe domain-restricted map key plan if a browser map is needed, closed-gate evidence, fake/staging-safe evidence, cleanup proof, rollback proof, and owner approval.
 - This scaffold adds `lib/driver-live-location-scaffold.ts`, `POST/DELETE /api/driver-job/[token]/live-location`, `GET /api/admin-active-jobs-map-locations`, `scripts/test-driver-live-location-disabled-scaffold-guard.mjs`, and preactivation suite registration.
 
+### Driver Live Location Table/RLS/Retention Evidence Contract Guard Lock
+- This is a docs/test-only guard for future Driver Live Location table/RLS/retention evidence.
+- This lock does not create migrations, tables, RLS policies, coordinate storage, GPS capture, runtime DB reads/writes, admin active-jobs map runtime, customer live map links, env changes, deploy, provider calls, or production activation.
+- `driver_live_location_latest_positions` is the future latest-position state table name only; it is not created in this lane.
+- `driver_live_location_audit_events` is the future bounded audit-event table name only; it is not created in this lane.
+- Future latest-position rows are limited to driver job link reference, booking reference, driver display label, assigned job label, job status, vehicle/plate label if assigned, latitude, longitude, accuracy meters, heading degrees, speed meters per second, captured at, stale after, sharing state, source surface, evidence reference when applicable, and updated at.
+- Future audit-event rows are limited to event type, driver job link reference, booking reference, occurred at, safe event context, source surface, actor role, evidence reference when applicable, and created at.
+- Future driver write isolation must resolve the current driver job token server-side, must not accept arbitrary booking references from the browser, and must allow writes only for the resolved active assigned driver job.
+- Future admin read isolation must require the internal admin/dispatcher boundary, same-origin admin surface, and gate approval before any active-jobs map rows are read.
+- Future direct table access must block anonymous, customer, wrong-driver, wrong-token, and non-admin paths through RLS or equivalent database policy proof.
+- Future retention must prefer one latest-position row per active sharing driver/job plus bounded audit events, not unbounded coordinate history.
+- Future stale cleanup must define stale/offline thresholds, retention minutes, evidence row cleanup, and zero matching temporary rows after evidence.
+- Future evidence must prove closed gates, fake/staging-safe rows first, wrong-driver blocked, wrong-admin blocked, forbidden fields absent, cleanup zero rows, rollback disabled, and no customer live map.
+- Future table rows must not contain raw driver job tokens, token hashes, cookies, JWTs, API keys, service-role keys, customer contact details, customer messages, pricing, payout, PayNow, `driver_payout_rules`, `customer_rates`, billing/payment/PDF/invoice, internal/admin notes, parser/debug fields, raw provider payloads, Save Booking internals, `/api/admin-saved-bookings` internals, OTS/photo/storage, or calendar data.
+- Future gate/env names are names-only and values must not be printed: `PRESTIGE_DRIVER_LIVE_LOCATION_CAPTURE_ENABLED`, `PRESTIGE_ADMIN_ACTIVE_JOBS_MAP_ENABLED`, `PRESTIGE_DRIVER_LIVE_LOCATION_MODE`, `PRESTIGE_DRIVER_LIVE_LOCATION_ALLOWED_JOB_REFERENCES`, `PRESTIGE_DRIVER_LIVE_LOCATION_UPDATE_INTERVAL_SECONDS`, `PRESTIGE_DRIVER_LIVE_LOCATION_STALE_AFTER_SECONDS`, and `PRESTIGE_DRIVER_LIVE_LOCATION_RETENTION_MINUTES`.
+- This guard keeps the current disabled scaffold closed until a separately approved table/RLS migration scaffold is reviewed and promoted.
+- This guard adds `scripts/test-driver-live-location-table-rls-retention-contract-guard.mjs` and registers it in `scripts/test-preactivation-verification-suite.mjs`.
+
 ### Blocked OneMap Admin Map Staging Evidence Safe Failure Record
 
 - Evidence reference: `ONEMAP-ADMIN-MAP-STAGING-BLOCKED-20260621222308`.
